@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS-Automation</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="mdi mdi-nodejs"></i> JS-Automation</h2>
+            <div style="display:flex; gap:5px">
+                <button onclick="createNewScript()" style="background:var(--accent); width:auto; padding:0 8px;"><i class="mdi mdi-plus"></i></button>
+                <button onclick="loadScripts()" style="background:transparent; width:auto;"><i class="mdi mdi-refresh"></i></button>
+            </div>
+        </div>
+        <div id="script-list" class="script-list"></div>
+    </div>
+
+    <div class="main">
+        <div class="console-header">
+            <h3>Protokoll</h3>
+            <button onclick="document.getElementById('console-output').innerHTML=''" style="width:auto; padding:0 10px;"><i class="mdi mdi-delete-sweep"></i></button>
+        </div>
+        <div class="console" id="console-output"></div>
+    </div>
+
+    <!-- Editor Overlay -->
+    <div id="editor-overlay">
+        <div class="editor-toolbar">
+            <div id="editor-title" style="font-weight:bold; color:var(--accent);"></div>
+            <div style="display:flex; gap:10px;">
+                <button onclick="saveCurrentScript()" style="background:var(--success); width:auto; padding:0 20px;"><i class="mdi mdi-content-save"></i> Speichern</button>
+                <button onclick="closeEditor()" style="background:var(--danger); width:auto; padding:0 10px;"><i class="mdi mdi-close"></i></button>
+            </div>
+        </div>
+        <div id="monaco-container" style="flex:1;"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

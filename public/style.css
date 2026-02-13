@@ -1,0 +1,205 @@
+:root {
+    --bg-color: #111;
+    --sidebar-bg: #1c1c1c;
+    --card-bg: #282828;
+    --card-border: #333;
+    --text-main: #e1e1e1;
+    --text-dim: #9b9b9b;
+    --accent: #03a9f4;
+    --success: #4caf50;
+    --danger: #ff5252;
+}
+
+body { 
+    background-color: var(--bg-color); 
+    color: var(--text-main); 
+    font-family: 'Roboto', sans-serif; 
+    margin: 0; 
+    display: flex; 
+    height: 100vh; 
+    overflow: hidden;
+}
+
+/* SIDEBAR */
+.sidebar { 
+    width: 360px; 
+    background: var(--sidebar-bg); 
+    border-right: 1px solid var(--card-border); 
+    display: flex; 
+    flex-direction: column; 
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sidebar-header h2 { margin: 0; font-size: 1.2rem; font-weight: 500; }
+
+.script-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+/* SCRIPT CARD */
+.script-card { 
+    background: var(--card-bg); 
+    border-radius: 8px; 
+    border: 1px solid var(--card-border);
+    margin-bottom: 15px; 
+    display: flex; 
+    flex-direction: column; 
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.script-card:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    border-color: #555;
+}
+
+.card-header {
+    padding: 15px;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.script-icon-wrapper {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.script-icon { font-size: 28px; color: var(--accent); }
+
+.script-meta { flex: 1; min-width: 0; }
+
+.script-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #fff;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.script-filename {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: monospace;
+    background: rgba(0,0,0,0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.card-actions {
+    background: rgba(0,0,0,0.2);
+    padding: 10px 15px;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: var(--text-dim);
+}
+
+.status-dot { 
+    width: 8px; height: 8px; border-radius: 50%; background: #444; 
+}
+.status-dot.running { background: var(--success); box-shadow: 0 0 6px var(--success); }
+
+.btn-group { display: flex; gap: 8px; }
+
+button { 
+    background: #333; border: 1px solid #444; color: var(--text-main); 
+    width: 32px; height: 32px; border-radius: 4px; cursor: pointer; 
+    display: flex; align-items: center; justify-content: center;
+}
+button:hover:not(:disabled) { background: #444; color: #fff; border-color: #666; }
+button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.btn-play:hover { color: var(--success); border-color: var(--success); }
+.btn-stop:hover { color: var(--danger); border-color: var(--danger); }
+.btn-delete:hover { color: var(--danger); border-color: var(--danger); }
+
+/* MAIN AREA & CONSOLE */
+.main { flex: 1; display: flex; flex-direction: column; padding: 20px; background: #000; }
+
+.console-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.console-header h3 { margin: 0; color: var(--text-dim); font-size: 0.9rem; text-transform: uppercase; }
+
+.console { 
+    flex: 1; background: #0a0a0a; border-radius: 6px; padding: 15px; 
+    font-family: 'Consolas', monospace; font-size: 0.9rem;
+    overflow-y: auto; border: 1px solid #333; color: #ccc;
+}
+
+.log-entry { margin-bottom: 4px; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; }
+.log-time { color: #555; font-size: 0.75rem; margin-right: 10px; }
+
+/* EDITOR OVERLAY */
+#editor-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column;
+}
+
+.editor-toolbar {
+    padding: 15px; background: #252525; display: flex; 
+    justify-content: space-between; align-items: center; border-bottom: 1px solid #333;
+}
+
+
+/* Die Menü-Box selbst */
+.monaco-editor .suggest-widget {
+    background-color: #252525 !important;
+    border: 1px solid #03a9f4 !important;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5) !important;
+}
+
+/* Die Liste der Einträge */
+.monaco-editor .suggest-widget .monaco-list-row {
+    background-color: #252525 !important;
+}
+
+/* Der Text der Einträge */
+.monaco-editor .suggest-widget .monaco-list-row .label-name {
+    color: #ffffff !important;
+}
+
+/* Das Icon neben dem Eintrag */
+.monaco-editor .suggest-widget .monaco-list-row .icon {
+    filter: brightness(1.5) !important;
+}
+
+/* Der Fokus / Die Auswahl */
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+    background-color: #03a9f4 !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row.focused .label-name {
+    color: #000000 !important;
+}
+
+/* Scrollbar Fix */
+.monaco-editor .suggest-widget .monaco-scrollable-element .scrollbar.vertical .slider {
+    background: rgba(255, 255, 255, 0.2) !important;
+}

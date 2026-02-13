@@ -1,0 +1,27 @@
+
+Generell:
+- neuer Name: "JS Automations". Den führen wir nach und nach ein. 
+- axios und cron generell einbauen? Andere Pakete? Dann anstatt cron.schedule(...) nur ein schedule(...)
+- Globale Variablen? Mit speichern, welche Scripte die nutzen und in den Prune einbeziehen?
+- Prune einführen. Nach jedem Löschen eines Scriptes schauen, ob ein npm Paket noch irgendwo anders genutzt wird und ggf. deinstallieren?
+- Eine Skript-entität anlegen, über die das Skript gestartet / gestoppt werden kann. 
+
+
+Lifecycle:
+- wenn ich ein laufendes Skript editiere und speichere, ist es gestoppt. Mein Vorschlag: Während des editierens auf gestoppt, nach speichern wieder den gespeicherten Zustand annehmen. ggf also neustarten
+
+UI:
+- Wir müssen die Karten der Skripte kompakter gestalten, weil wir ja viele Skripte haben können.
+- Die "LED" und die info "running" können wir einsparen, in dem wir die ICON-Farbe nutzen. Blau=running, dunkelgrau=gestoppt, gelb oder rot=gecrashed
+- Das Addon quasselt noch zu viel. Lass uns einen LOG-Level für die einzelnen Skipte einführen
+- description ist noch ungenutzt. Müssen wir irgendwie einbinden: (i) mit Tooltip? Oder ein Klicke erweitert die Ansicht.
+- Tooltipps an allen Knöpfen.
+- Speichern und abbrechen sind mir zu grell und zu weit rechts.
+- Skript-Reload sollte die gleiche Größe, wie "neues Skript" haben.
+- Tabs zum Öffnen mehrerer Skripts einführen. 
+- Können wir Hotkeys nutzen STRG+W, STRG+S ...
+- Können wir im Header noch weitere Werte einführen? Bereich, Label, Raum, Dateiname.
+- bei "neues Skript": Das Eingabefeld ist hässlich. Modal einführen, bei dem auch direkt die Headerwerte abgefragt werden können.
+- Wenn wir viele Skripte haben: Eher eine Listenansicht? Gestoppte Skripte immer weiter unten? Gecrashte weiter oben? NAch bereichen, Label, Räumen , Skriptnamen filtern
+- Wenn das Editfenster geöffnet ist, könnte das protokoll nach unten verkleinert werden. Speichern, schließt das Edit fenster nicht automatisch, so könnte man testen und sich die logs anschauen. LOG-Filter auf das aktuelle Skripte setzbar?
+

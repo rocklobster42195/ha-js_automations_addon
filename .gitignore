@@ -1,0 +1,37 @@
+# --- Dependencies (NPM) ---
+# Das installiert jeder User/Docker selbst neu
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# --- Sicherheit / Secrets ---
+# WICHTIG: Enthält URL und Token -> NIEMALS committen!
+.env
+
+# --- Laufzeit-Daten & Status ---
+# Der Merkzettel, welche Skripte gerade laufen
+state.json
+
+# --- Generierte Dateien im Scripts-Ordner ---
+# Diese Dateien werden vom Addon automatisch erzeugt
+scripts/entities.d.ts
+scripts/node_modules/
+scripts/package-lock.json
+# scripts/package.json # Optional: Falls du die Dependencies deiner Skripte tracken willst, lass dies auskommentiert.
+
+# --- System-Dateien ---
+.DS_Store
+Thumbs.db
+
+# --- IDE Einstellungen ---
+.vscode/
+.idea/
+
+# --- Optional: User-Skripte ignorieren? ---
+# Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
+# möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
+# Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
+# scripts/*.js
+
+# ...aber behalte vielleicht ein Beispiel:
+# !scripts/example.js

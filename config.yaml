@@ -1,0 +1,17 @@
+name: "JS-Automation"
+version: "1.0.2"
+slug: "js_automation"
+description: "JavaScript Automations-Engine"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: "services"
+boot: "auto"
+ingress: true
+ingress_port: 3000
+panel_icon: "mdi:nodejs"
+homeassistant_api: true
+hassio_role: manager
+map:
+  - config:rw
