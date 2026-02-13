@@ -18,6 +18,9 @@ async function testConnection() {
         ha.log(`✅ Erfolg! Status: ${res.status}`);
         ha.log(`   Daten: ${JSON.stringify(res.data)}`);
 
+        const temp = 22.5; 
+ha.store.set('outdoor_temp', temp);
+
     } catch (err) {
         ha.error(`❌ Verbindung gescheitert: ${err.message}`);
         
