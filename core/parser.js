@@ -10,6 +10,7 @@ class ScriptParser {
             description: /@description\s+(.*)/,
             area: /@area\s+(.*)/,
             label: /@label\s+(.*)/,
+            loglevel: /@loglevel\s+(.*)/, // NEU
             npm: /@npm\s+(.*)/
         };
         const metadata = {
@@ -20,6 +21,7 @@ class ScriptParser {
             description: '',
             area: '',
             label: '',
+            loglevel: 'info', // Standard
             dependencies: []
         };
         for (const [key, regex] of Object.entries(patterns)) {

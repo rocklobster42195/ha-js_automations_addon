@@ -39,11 +39,17 @@
         <main class="main-content">
             <div id="editor-section" class="hidden">
                 <div class="editor-toolbar">
-                    <span id="editor-title"></span>
-                    <div class="toolbar-btns">
-                        <button class="btn-save" onclick="saveCurrentScript()">SPEICHERN</button>
-                        <button class="btn-close" onclick="closeEditor()"><i class="mdi mdi-close"></i></button>
-                    </div>
+                     <!-- NEUER WRAPPER FÜR LINKS -->
+    <div class="editor-info">
+        <i id="editor-icon" class="mdi mdi-script-text"></i>
+        <span id="editor-title">datei.js</span>
+    </div>
+
+    <!-- RECHTE SEITE (Buttons) -->
+    <div class="toolbar-btns">
+        <button class="btn-save" onclick="saveCurrentScript()">SPEICHERN</button>
+        <button class="btn-close" onclick="closeEditor()"><i class="mdi mdi-close"></i></button>
+    </div>
                 </div>
                 <div id="monaco-container"></div>
             </div>
@@ -71,9 +77,45 @@
                     <input type="text" id="new-script-name" placeholder="Name">
                 </div>
                 <div class="form-group">
-                    <label>Icon</label>
-                    <input type="text" id="new-script-icon" value="mdi:script-text">
-                </div>
+    <label>Icon</label>
+    <div class="icon-input-container">
+        <!-- Live Vorschau Links -->
+        <i id="modal-icon-preview" class="mdi mdi-script-text"></i>
+        
+        <!-- Input mit Datalist verknüpft -->
+        <input type="text" id="new-script-icon" value="mdi:script-text" 
+               list="mdi-suggestions" 
+               oninput="updateModalIconPreview()" 
+               placeholder="mdi:...">
+    </div>
+    
+    <!-- "IntelliSense" Light: Die häufigsten Icons -->
+    <datalist id="mdi-suggestions">
+        <option value="mdi:script-text">
+        <option value="mdi:home-automation">
+        <option value="mdi:lightbulb">
+        <option value="mdi:power-plug">
+        <option value="mdi:thermometer">
+        <option value="mdi:weather-sunny">
+        <option value="mdi:motion-sensor">
+        <option value="mdi:battery">
+        <option value="mdi:wifi">
+        <option value="mdi:network">
+        <option value="mdi:server">
+        <option value="mdi:robot">
+        <option value="mdi:clock-outline">
+        <option value="mdi:alert-circle">
+        <option value="mdi:check-circle">
+        <option value="mdi:play">
+        <option value="mdi:stop">
+        <option value="mdi:restart">
+        <option value="mdi:blinds">
+        <option value="mdi:fan">
+        <option value="mdi:lock">
+        <option value="mdi:door">
+        <option value="mdi:garage">
+    </datalist>
+</div>
                 <div class="form-group">
                     <label>Bereich (Area)</label>
                     <select id="new-script-area">
@@ -86,6 +128,15 @@
                         <option value="">Kein Label</option>
                     </select>
                 </div>
+                <div class="form-group">
+        <label>Log Level</label>
+        <select id="new-script-loglevel">
+            <option value="debug">Debug (Alles)</option>
+            <option value="info" selected>Info (Standard)</option>
+            <option value="warn">Warnungen</option>
+            <option value="error">Nur Fehler</option>
+        </select>
+    </div>
                 <div class="form-group full-width">
                     <label>Beschreibung</label>
                     <textarea id="new-script-desc" placeholder="Kurze Beschreibung..."></textarea>

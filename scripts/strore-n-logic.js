@@ -10,7 +10,7 @@ async function run() {
     // 2. Auf Event warten
     ha.on('switch.*', (e) => {
         const currentMode = ha.store.val.test_status;
-
+        ha.log(e.entity_id)
         if (currentMode === 'aktiv' && e.state === 'on') {
             ha.log(`🚀 Schalter ${e.entity_id} gedrückt! Modus: ${currentMode}`);
         }

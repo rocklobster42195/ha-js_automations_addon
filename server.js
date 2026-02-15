@@ -89,36 +89,34 @@ app.get('/api/scripts', (req, res) => {
 app.get('/api/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
 
 app.post('/api/scripts', async (req, res) => {
-    try {
-        const { name, icon, description, area, label } = req.body;
-        console.log(`[API] Erstelle Skript: ${name}`);
+    const { name, icon, description, area, label, loglevel } = req.body; // <--- loglevel dazu
+    
+    const safeName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'script';
+    const filename = `${safeName}.js`;
+    const fullPath = path.join(SCRIPTS_DIR, filename);
 
-        if (!name) return res.status(400).json({ error: "Name fehlt" });
+    if (fs.existsSync(fullPath)) return res.status(400).json({ error: "Exists" });
 
-        const safeName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'script';
-        const filename = `${safeName}.js`;
-        const fullPath = path.join(SCRIPTS_DIR, filename);
-
-        if (fs.existsSync(fullPath)) return res.status(400).json({ error: "Datei existiert bereits" });
-
-        const template = `/**
+    // TEMPLATE MIT LOGLEVEL
+    const template = `/**
  * @name ${name}
  * @icon ${icon || 'mdi:script-text'}
  * @description ${description || ''}
  * @area ${area || ''}
  * @label ${label || ''}
+ * @loglevel ${loglevel || 'info'}
  */
 
-ha.log("Script '${name}' gestartet.");
+ha.log("Automation '${name}' gestartet.");
 `;
 
-        fs.writeFileSync(fullPath, template, 'utf8');
-        console.log(`[API] ✅ Datei geschrieben: ${fullPath}`);
-        res.json({ filename });
-    } catch (err) {
-        console.error("[API] ❌ Fehler beim Erstellen:", err.message);
-        res.status(500).json({ error: err.message });
-    }
+    fs.writeFileSync(fullPath, template, 'utf8');
+    
+    // Helper erstellen und Sync
+    if (connector.createInputBoolean) await connector.createInputBoolean(name); // Falls v1.6.1 Logik
+    if (typeof syncScriptToHA === 'function') await syncScriptToHA(filename, false);
+    
+    res.json({ filename });
 });
 
 app.post('/api/scripts/control', async (req, res) => {

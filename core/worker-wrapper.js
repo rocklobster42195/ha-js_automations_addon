@@ -1,7 +1,3 @@
-/**
- * JS AUTOMATIONS - Worker Wrapper (v1.5.0)
- * Fully Synchronous Cache & Store API
- */
 const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
 const axios = require('axios');
@@ -13,7 +9,16 @@ if (process.env.SUPERVISOR_TOKEN) module.paths.push('/app/node_modules');
 
 parentPort.unref();
 
-// --- INITIAL CACHE SETUP ---
+// --- LOG LEVEL LOGIK ---
+const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;
+
+const sendLog = (level, msg) => {
+    if (LOG_LEVELS[level] >= scriptLevel) {
+        parentPort.postMessage({ type: 'log', level, message: msg });
+    }
+};
+
 const states = workerData.initialStates || {};
 const storeValues = workerData.initialStore || {};
 const subscriptionCallbacks = [];
@@ -23,74 +28,48 @@ function ensureMessageListener() {
     if (isListening) return;
     isListening = true;
     parentPort.on('message', (msg) => {
-        // Synchroner HA-Status Update
         if (msg.type === 'state_update') {
             if (msg.state) states[msg.entity_id] = msg.state;
             else delete states[msg.entity_id];
         }
-
-        // Synchroner Store Update (von anderen Skripten)
         if (msg.type === 'store_update') {
             if (msg.value === undefined) delete storeValues[msg.key];
             else storeValues[msg.key] = msg.value;
         }
-
-        // Event Trigger (ha.on)
         if (msg.type === 'ha_event') {
             subscriptionCallbacks.forEach(sub => sub.callback({
-                entity_id: msg.entity_id,
-                state: msg.state.state,
-                old_state: msg.old_state?.state,
-                attributes: msg.state.attributes
+                entity_id: msg.entity_id, state: msg.state.state,
+                old_state: msg.old_state?.state, attributes: msg.state.attributes
             }));
         }
     });
 }
 
 const ha = {
-    log: (msg) => parentPort.postMessage({ type: 'log', level: 'info', message: msg }),
-    error: (msg) => parentPort.postMessage({ type: 'log', level: 'error', message: msg }),
-    callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
-    updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
-
-    // --- API ---
+    debug: (m) => sendLog('debug', m),
+    log: (m) => sendLog('info', m),
+    warn: (m) => sendLog('warn', m),
+    error: (m) => sendLog('error', m),
+    callService: (d, s, data) => parentPort.postMessage({ type: 'call_service', domain: d, service: s, data }),
+    updateState: (id, s, a) => parentPort.postMessage({ type: 'update_state', entityId: id, state: s, attributes: a }),
     states: states,
-
-    on: (pattern, callback) => {
-        parentPort.ref();
-        ensureMessageListener();
-        parentPort.postMessage({ type: 'subscribe', pattern });
-        subscriptionCallbacks.push({ pattern, callback });
-    },
-
+    on: (p, cb) => { parentPort.ref(); ensureMessageListener(); parentPort.postMessage({ type: 'subscribe', pattern: p }); subscriptionCallbacks.push({ pattern: p, callback: cb }); },
     store: {
-        val: storeValues, // Direkter Zugriff: ha.store.val.meinKey
-        set: (key, value) => {
-            storeValues[key] = value; // Lokal sofort setzen
-            parentPort.postMessage({ type: 'store_set', key, value });
-        },
-        delete: (key) => {
-            delete storeValues[key]; // Lokal sofort löschen
-            parentPort.postMessage({ type: 'store_delete', key });
-        }
+        val: storeValues,
+        set: (k, v) => { storeValues[k] = v; parentPort.postMessage({ type: 'store_set', key: k, value: v }); },
+        delete: (k) => { delete storeValues[k]; parentPort.postMessage({ type: 'store_delete', key: k }); }
     }
 };
 
 global.ha = ha;
 global.axios = axios;
-global.schedule = (exp, cb) => { parentPort.ref(); ensureMessageListener(); return cron.schedule(exp, cb); };
-global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
+global.schedule = (e, cb) => { parentPort.ref(); ensureMessageListener(); return cron.schedule(e, cb); };
+global.sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 try {
     delete require.cache[require.resolve(workerData.path)];
     require(workerData.path);
 } catch (err) {
-    ha.error(`Runtime Error: ${err.message}`);
-    console.error(`[JS Automations] Crash in ${workerData.name}:`, err);
-
-    // WICHTIG: Den Prozess mit Fehler-Code 1 beenden, 
-    // damit der Manager den Status "error" setzen kann.
-    setTimeout(() => {
-        process.exit(1);
-    }, 100); // Kurze
+    sendLog('error', `Runtime Error: ${err.message}`);
+    setTimeout(() => process.exit(1), 100);
 }
