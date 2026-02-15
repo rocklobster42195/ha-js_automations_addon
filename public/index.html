@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
     <meta charset="UTF-8">
     <title>JS Automations</title>
@@ -11,6 +12,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 </head>
+
 <body>
     <div class="app-wrapper">
         <aside class="sidebar">
@@ -24,7 +26,7 @@
                     <button onclick="loadScripts()" title="Refresh List"><i class="mdi mdi-refresh"></i></button>
                 </div>
             </div>
-            
+
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="Suchen..." oninput="filterScripts()">
             </div>
@@ -45,7 +47,7 @@
                 </div>
                 <div id="monaco-container"></div>
             </div>
-            
+
             <div class="log-section">
                 <div class="log-header">
                     <span>PROTOKOLL</span>
@@ -61,38 +63,44 @@
     <!-- Modal for New Script -->
     <div id="new-script-modal" class="modal-overlay hidden" style="display:none;">
         <div class="modal">
-            <h3>Neue Automation erstellen</h3>
-            <div class="form-row">
-                <div class="form-group" style="flex:2;">
+            <h3>Neue Automation</h3>
+
+            <div class="form-grid">
+                <div class="form-group">
                     <label>Name</label>
-                    <input type="text" id="new-script-name" placeholder="z.B. Bitcoin Alarm">
+                    <input type="text" id="new-script-name" placeholder="Name">
                 </div>
                 <div class="form-group">
                     <label>Icon</label>
                     <input type="text" id="new-script-icon" value="mdi:script-text">
                 </div>
-            </div>
-            <div class="form-row">
                 <div class="form-group">
-                    <label>Bereich (HA Area)</label>
-                    <select id="new-script-area"><option value="">Lade...</option></select>
+                    <label>Bereich (Area)</label>
+                    <select id="new-script-area">
+                        <option value="">Kein Bereich</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Label (HA Label)</label>
-                    <select id="new-script-label"><option value="">Lade...</option></select>
+                    <label>Label</label>
+                    <select id="new-script-label">
+                        <option value="">Kein Label</option>
+                    </select>
+                </div>
+                <div class="form-group full-width">
+                    <label>Beschreibung</label>
+                    <textarea id="new-script-desc" placeholder="Kurze Beschreibung..."></textarea>
                 </div>
             </div>
-            <div class="form-group">
-                <label>Beschreibung</label>
-                <textarea id="new-script-desc" placeholder="Wofür ist dieses Skript?"></textarea>
-            </div>
+
             <div class="modal-btns">
-                <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
+                <button class="btn-text" onclick="closeModal()">ABBRECHEN</button>
                 <button class="btn-primary" onclick="submitNewScript()">ERSTELLEN</button>
             </div>
         </div>
     </div>
 
+
     <script src="app.js"></script>
 </body>
+
 </html>

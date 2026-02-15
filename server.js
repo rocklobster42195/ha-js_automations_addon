@@ -89,10 +89,36 @@ app.get('/api/scripts', (req, res) => {
 app.get('/api/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
 
 app.post('/api/scripts', async (req, res) => {
-    const { name, icon, description, area, label } = req.body;
-    const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
-    fs.writeFileSync(path.join(SCRIPTS_DIR, filename), `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n */\n\nha.log("Ready.");\n`, 'utf8');
-    res.json({ filename });
+    try {
+        const { name, icon, description, area, label } = req.body;
+        console.log(`[API] Erstelle Skript: ${name}`);
+
+        if (!name) return res.status(400).json({ error: "Name fehlt" });
+
+        const safeName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'script';
+        const filename = `${safeName}.js`;
+        const fullPath = path.join(SCRIPTS_DIR, filename);
+
+        if (fs.existsSync(fullPath)) return res.status(400).json({ error: "Datei existiert bereits" });
+
+        const template = `/**
+ * @name ${name}
+ * @icon ${icon || 'mdi:script-text'}
+ * @description ${description || ''}
+ * @area ${area || ''}
+ * @label ${label || ''}
+ */
+
+ha.log("Script '${name}' gestartet.");
+`;
+
+        fs.writeFileSync(fullPath, template, 'utf8');
+        console.log(`[API] ✅ Datei geschrieben: ${fullPath}`);
+        res.json({ filename });
+    } catch (err) {
+        console.error("[API] ❌ Fehler beim Erstellen:", err.message);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.post('/api/scripts/control', async (req, res) => {

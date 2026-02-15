@@ -49,16 +49,18 @@ function renderScripts(scripts, updateGlobal = true) {
         const toggleIcon = (s.status === 'running') ? 'mdi-stop' : 'mdi-play';
 
         row.innerHTML = `
-            <div class="script-icon"><i class="mdi mdi-${icon} ${statusClass}"></i></div>
-            <div class="script-meta">
-                <span class="script-name">${s.name}</span>
-                <span class="script-filename">${s.filename}</span>
-            </div>
-            <div class="row-actions">
-                <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')"><i class="mdi ${toggleIcon}"></i></button>
-                <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" ${s.status !== 'running'?'disabled':''}><i class="mdi mdi-restart"></i></button>
-                <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')"><i class="mdi mdi-delete-outline"></i></button>
-            </div>`;
+    <div class="script-meta">
+        <div class="script-icon"><i class="mdi mdi-${icon} ${statusClass}"></i></div>
+        <div class="script-details">
+            <span class="script-name">${s.name}</span>
+            <span class="script-filename">${s.filename}</span>
+        </div>
+    </div>
+    <div class="row-actions">
+        <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')"><i class="mdi ${s.running?'mdi-stop':'mdi-play'}"></i></button>
+        <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" ${!s.running?'disabled':''}><i class="mdi mdi-restart"></i></button>
+        <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')"><i class="mdi mdi-delete-outline"></i></button>
+    </div>`;
         list.appendChild(row);
     });
 }
@@ -88,14 +90,91 @@ function filterScripts() {
 }
 
 function closeEditor() { document.getElementById('editor-section').classList.add('hidden'); }
-function closeModal() { document.getElementById('new-script-modal').style.display = 'none'; document.getElementById('new-script-modal').classList.add('hidden'); }
-function createNewScript() { document.getElementById('new-script-modal').classList.remove('hidden'); document.getElementById('new-script-modal').style.display = 'flex'; }
+// public/app.js
 
+async function createNewScript() {
+    console.log("🚩 1. Erster Schritt: Modal finden");
+    const modal = document.getElementById('new-script-modal');
+    
+    if (!modal) {
+        console.error("❌ Fehler: Modal 'new-script-modal' nicht im HTML gefunden!");
+        return;
+    }
+
+    // --- SOFORT ANZEIGEN ---
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    console.log("🚩 2. Modal wird jetzt angezeigt (display: flex)");
+
+    // Felder leeren
+    document.getElementById('new-script-name').value = '';
+    document.getElementById('new-script-desc').value = '';
+
+    // --- JETZT ERST NETZWERK (Optional) ---
+    console.log("🚩 3. Starte Hintergrund-Laden der HA-Daten...");
+    try {
+        const res = await apiFetch('api/ha/metadata');
+        if (res.ok) {
+            const { areas, labels } = await res.json();
+            console.log("🚩 4. Daten erhalten:", areas.length, "Bereiche");
+            
+            const areaSelect = document.getElementById('new-script-area');
+            const labelSelect = document.getElementById('new-script-label');
+            
+            if (areaSelect) {
+                areaSelect.innerHTML = '<option value="">Kein Bereich</option>' + 
+                    (areas || []).map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+            }
+            if (labelSelect) {
+                labelSelect.innerHTML = '<option value="">Kein Label</option>' + 
+                    (labels || []).map(l => `<option value="${l.name}">${l.name}</option>`).join('');
+            }
+        }
+    } catch (e) {
+        console.warn("🚩 Hintergrund-Laden fehlgeschlagen, aber das Modal ist ja schon offen.");
+    }
+}
+
+// Hilfsfunktion zum Schließen
+function closeModal() {
+    const modal = document.getElementById('new-script-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    }
+}
+
+// Sendet die Daten
 async function submitNewScript() {
     const name = document.getElementById('new-script-name').value;
-    if (!name) return;
-    await apiFetch('api/scripts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name, icon: document.getElementById('new-script-icon').value, description: document.getElementById('new-script-desc').value }) });
-    closeModal(); loadScripts();
+    if (!name) return alert("Name erforderlich");
+
+    const payload = {
+        name: name,
+        icon: document.getElementById('new-script-icon').value,
+        description: document.getElementById('new-script-desc').value,
+        area: document.getElementById('new-script-area').value,
+        label: document.getElementById('new-script-label').value
+    };
+
+    console.log("Sende Payload:", payload);
+
+    const res = await apiFetch('api/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+        const data = await res.json();
+        console.log("Erfolgreich erstellt:", data.filename);
+        closeModal();
+        await loadScripts(); // Liste neu laden
+        openEditor(data.filename); // Editor direkt öffnen
+    } else {
+        const err = await res.json();
+        alert("Fehler: " + err.error);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
