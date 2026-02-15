@@ -1,6 +1,3 @@
-/**
- * JS AUTOMATIONS - HA Connector (v1.7.0)
- */
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
@@ -9,24 +6,22 @@ class HAConnector {
     constructor(url, token, scriptsDir) {
         this.isAddon = !!process.env.SUPERVISOR_TOKEN;
         this.scriptsDir = scriptsDir;
-        if (this.isAddon) {
-            this.baseUrl = "http://supervisor/core";
-            this.url = "ws://supervisor/core/api/websocket";
-            this.token = process.env.SUPERVISOR_TOKEN;
-        } else {
-            this.baseUrl = url.replace(/\/$/, '');
-            this.url = this.baseUrl.replace('http', 'ws').replace('https', 'wss') + '/api/websocket';
-            this.token = token;
-        }
+        this.baseUrl = this.isAddon ? "http://supervisor/core" : url.replace(/\/$/, '');
+        this.url = this.isAddon ? "ws://supervisor/core/api/websocket" : this.baseUrl.replace('http', 'ws').replace('https', 'wss') + '/api/websocket';
+        this.token = this.isAddon ? process.env.SUPERVISOR_TOKEN : token;
+        
         this.ws = null;
         this.msgId = 1;
         this.isReady = false;
         this.onEventCallback = null;
+        
+        // --- DER ZUSTANDS CACHE ---
+        this.states = {}; 
     }
 
     connect() {
         return new Promise((resolve, reject) => {
-            console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
+            console.log(`🔌 WebSocket: Connecting...`);
             this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
             this.ws.on('message', (data) => {
                 try {
@@ -46,14 +41,38 @@ class HAConnector {
             console.log("✅ WebSocket: Authenticated.");
             this.isReady = true;
             this.subscribeEvents();
-            resolve();
+            // Initialen Dump aller Zustände holen bevor wir "bereit" sind
+            this.fetchInitialStates().then(resolve);
         } else if (msg.type === 'event') {
+            // Cache im Hauptprozess aktuell halten
+            if (msg.event.event_type === 'state_changed') {
+                const { entity_id, new_state } = msg.event.data;
+                if (new_state) this.states[entity_id] = new_state;
+                else delete this.states[entity_id];
+            }
             if (this.onEventCallback) this.onEventCallback(msg.event);
         }
     }
 
-    send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data)); }
+    async fetchInitialStates() {
+        const id = this.msgId++;
+        this.send({ id, type: 'get_states' });
+        return new Promise((res) => {
+            const handler = (data) => {
+                const m = JSON.parse(data);
+                if (m.id === id) {
+                    m.result.forEach(s => this.states[s.entity_id] = s);
+                    this.ws.removeListener('message', handler);
+                    console.log(`📦 Cache: ${m.result.length} entities loaded.`);
+                    res();
+                }
+            };
+            this.ws.on('message', handler);
+        });
+    }
 
+    send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data)); }
+    
     subscribeEvents() {
         this.send({ id: this.msgId++, type: 'subscribe_events', event_type: 'state_changed' });
     }
@@ -73,21 +92,24 @@ class HAConnector {
 
     async getHAMetadata() {
         if (!this.isReady) return { areas: [], labels: [] };
-        const idAreas = this.msgId++;
-        const idLabels = this.msgId++;
-        this.send({ id: idAreas, type: 'config/area_registry/list' });
-        this.send({ id: idLabels, type: 'config/label_registry/list' });
-        return new Promise((resolve) => {
-            const metadata = { areas: [], labels: [] };
-            let count = 0;
-            const h = (data) => {
-                const m = JSON.parse(data);
-                if (m.id === idAreas) { metadata.areas = m.result || []; count++; }
-                if (m.id === idLabels) { metadata.labels = m.result || []; count++; }
-                if (count === 2) { this.ws.removeListener('message', h); resolve(metadata); }
+        const idA = this.msgId++; const idL = this.msgId++;
+        this.send({ id: idA, type: 'config/area_registry/list' });
+        this.send({ id: idL, type: 'config/label_registry/list' });
+        return new Promise((res) => {
+            const out = { areas: [], labels: [] }; let c = 0;
+            const h = (d) => {
+                const m = JSON.parse(d);
+                if (m.id === idA) { out.areas = m.result; c++; }
+                if (m.id === idL) { out.labels = m.result; c++; }
+                if (c === 2) { this.ws.removeListener('message', h); res(out); }
             };
             this.ws.on('message', h);
         });
+    }
+
+    async callService(domain, service, data) {
+        if (!this.isReady) return;
+        this.send({ id: this.msgId++, type: 'call_service', domain, service, service_data: data });
     }
 }
 module.exports = HAConnector;

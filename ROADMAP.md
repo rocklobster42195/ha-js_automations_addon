@@ -1,38 +1,20 @@
-# 🗺️ JS-Automation Roadmap
+# 🗺️ JS Automations Roadmap
 
-This document outlines the journey of **JS-Automation**, from a simple script runner to a full-blown Home Assistant IDE.
+Current Version: **v2.12.0 (Stable)**
 
-## ✅ Phase 1: The Core Engine (Completed)
-- [x] **File Metadata Parser:** Ability to read `@name`, `@icon`, and `@npm` from script headers.
-- [x] **Native WebSocket Connector:** High-performance, library-free connection to Home Assistant.
-- [x] **Worker Thread Isolation:** Every script runs in its own thread to prevent system crashes.
-- [x] **Reactive API:** Implementation of `ha.onStateChange` for real-time automation.
-- [x] **NPM Dependency Manager:** Automatic installation of packages into `/config/js-automation/node_modules`.
-- [x] **State API:** Implementation of `ha.updateState` to create virtual sensors in HA.
+## 🟦 Short Term (v2.13 - v2.15)
+- [ ] **onStop Hook:** Allow scripts to clean up resources (custom timers, db connections) when stopped.
+- [ ] **Astro Triggers:** Native support for `astro:sunset`, `astro:sunrise` with offsets.
+- [ ] **Log Levels:** Support for `@loglevel` (debug, info, error) to reduce console noise.
+- [ ] **Global Folder:** A `/global` directory for shared utility functions automatically available in all scripts.
 
-## ✅ Phase 2: User Interface & Integration (Completed)
-- [x] **Responsive Dashboard:** Sleek card-based UI with Material Design Icons.
-- [x] **Ingress Integration:** Secure access via Home Assistant Sidebar without opening ports.
-- [x] **Live Logging:** Real-time log streaming from worker threads to the browser via Socket.io.
-- [x] **Zero-Config Add-on:** Automatic authentication via HA Supervisor Token.
-- [x] **Persistent Storage:** Scripts and states are saved in the official HA `/config` directory.
+## 🟨 Mid Term (v2.20 - v3.0)
+- [ ] **Multi-Tab Editor:** Switch between multiple open scripts in the Dashboard.
+- [ ] **Git Integration:** Built-in UI to pull/push scripts from a GitHub repository.
+- [ ] **NPM Prune:** Automatically remove unused NPM packages when scripts are deleted.
+- [ ] **Visual Selectors:** `ha.select({area: 'Living Room'})` for bulk actions on entities.
 
-## 🏗️ Phase 3: The Web IDE (In Progress)
-- [x] **Monaco Editor Integration:** In-browser code editing (VS Code core).
-- [x] **Script Management:** Create, delete, toggle, and restart scripts via UI.
-- [x] **Entity Type Generation:** Dynamic `entities.d.ts` generation for 1000+ entities.
-- [ ] **Rock-solid IntelliSense:** Finalizing the CSS/Theme fixes for the suggestion widget behind HA Ingress.
-- [ ] **Multi-Tab Editing:** Ability to keep multiple scripts open.
-
-## 🚀 Phase 4: Advanced Features (Planned)
-- [ ] **Visual Automation (Blockly):** A drag-and-drop layer that generates JavaScript code.
-- [ ] **Git Integration:** Sync scripts with GitHub/GitLab directly from the UI.
-- [ ] **Cron / Scheduler:** A built-in UI to trigger scripts at specific times (cron-style).
-- [ ] **Template Gallery:** One-click blueprints for common tasks (Bitcoin trackers, Light sync, etc.).
-- [ ] **Global Store:** A shared memory space for scripts to exchange data without using HA entities.
-
-## 🛡️ Phase 5: Production & Polish
-- [ ] **Resource Monitoring:** Show CPU/RAM usage per script in the dashboard.
-- [ ] **Error Notifications:** Send HA persistent notifications if a script crashes repeatedly.
-- [ ] **Backup Integration:** Full compatibility with Home Assistant's native backup system.
-- [ ] **Community Release:** Publishing as a repository for easy installation via HACS or as an official Add-on.
+## 🟧 Long Term (v3.0+)
+- [ ] **Blockly Integration:** Drag-and-drop visual programming layer that generates JS code.
+- [ ] **Dashboard Widgets:** Custom UI components for scripts to show specific data in the sidebar.
+- [ ] **Resource Monitoring:** Real-time CPU and RAM usage tracking per script.

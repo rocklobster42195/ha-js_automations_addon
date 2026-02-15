@@ -1,6 +1,5 @@
 /**
- * JS AUTOMATIONS - Main Server (v1.8.0)
- * Clean Core Version - No HA Mirroring
+ * JS AUTOMATIONS - Main Server (v2.12.0)
  */
 require('dotenv').config();
 const express = require('express');
@@ -41,30 +40,25 @@ async function startSystem() {
         workerManager.setConnector(connector);
         workerManager.setStore(storeManager);
         
-        // State-Verteilung an laufende Skripte
         connector.onEvent(async (event) => {
             if (event.event_type === 'state_changed') {
-                const { entity_id, new_state } = event.data;
-                for (const worker of workerManager.workers.values()) {
-                    worker.postMessage({ type: 'state_changed', entities: { [entity_id]: new_state } });
-                }
+                const { entity_id, new_state, old_state } = event.data;
+                workerManager.dispatchStateChange(entity_id, new_state, old_state);
             }
         });
 
         workerManager.on('script_exit', (d) => {
-            if (d.reason.includes('finished') || d.reason.includes('by user') || d.reason.includes('crashed')) {
+            if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('by user')) {
                 stateManager.saveScriptStopped(d.filename);
             }
-            io.emit('log', { message: `[System] ${d.filename} ${d.reason}` });
+            io.emit('log', { message: `[System] ${d.filename} ${d.reason}`, type: d.type });
             io.emit('status_update');
         });
 
         workerManager.on('log', (msg) => io.emit('log', { message: msg }));
 
-        // Autostart
         const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
         const enabled = stateManager.getEnabledScripts();
-
         for (const file of files) {
             if (enabled.includes(file)) {
                 const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, file));
@@ -72,29 +66,32 @@ async function startSystem() {
                 workerManager.startScript(meta);
             }
         }
-
         server.listen(PORT, '0.0.0.0', () => console.log(`🌍 JS Automations Dashboard ready`));
     } catch (err) { console.error(err); }
 }
 
-// API
 app.get('/api/scripts', (req, res) => {
-    const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
-    res.json(files.map(f => {
-        const m = ScriptParser.parse(path.join(SCRIPTS_DIR, f));
-        m.running = workerManager.workers.has(f);
-        return m;
-    }));
+    try {
+        const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
+        res.json(files.map(f => {
+            const m = ScriptParser.parse(path.join(SCRIPTS_DIR, f));
+            
+            // Status-Logik
+            let status = 'stopped';
+            if (workerManager.workers.has(f)) status = 'running';
+            else if (workerManager.lastExitState.get(f) === 'error') status = 'error';
+
+            return { ...m, status, running: status === 'running' };
+        }));
+    } catch (e) { res.status(500).json([]); }
 });
 
 app.get('/api/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
 
 app.post('/api/scripts', async (req, res) => {
     const { name, icon, description, area, label } = req.body;
-    const safe = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    const filename = `${safe}.js`;
-    const template = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n */\n\nha.log("Hello!");\n`;
-    fs.writeFileSync(path.join(SCRIPTS_DIR, filename), template, 'utf8');
+    const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+    fs.writeFileSync(path.join(SCRIPTS_DIR, filename), `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n */\n\nha.log("Ready.");\n`, 'utf8');
     res.json({ filename });
 });
 
@@ -116,6 +113,7 @@ app.post('/api/scripts/control', async (req, res) => {
             const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, filename));
             if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
             workerManager.startScript(meta);
+            stateManager.saveScriptStarted(filename);
             io.emit('status_update');
         }, 500);
     }
@@ -125,15 +123,23 @@ app.post('/api/scripts/control', async (req, res) => {
 
 app.delete('/api/scripts/:filename', (req, res) => {
     workerManager.stopScript(req.params.filename, 'deleted');
-    stateManager.saveScriptStopped(req.params.filename);
     fs.unlinkSync(path.join(SCRIPTS_DIR, req.params.filename));
     io.emit('status_update');
     res.json({ ok: true });
 });
 
 app.get('/api/scripts/:filename/content', (req, res) => res.json({ content: fs.readFileSync(path.join(SCRIPTS_DIR, req.params.filename), 'utf8') }));
-app.post('/api/scripts/:filename/content', (req, res) => {
-    fs.writeFileSync(path.join(SCRIPTS_DIR, req.params.filename), req.body.content, 'utf8');
+app.post('/api/scripts/:filename/content', async (req, res) => {
+    const filename = req.params.filename;
+    const fullPath = path.join(SCRIPTS_DIR, filename);
+    fs.writeFileSync(fullPath, req.body.content, 'utf8');
+    if (workerManager.workers.has(filename)) {
+        workerManager.stopScript(filename, 'hot-reload');
+        setTimeout(async () => {
+            workerManager.startScript(ScriptParser.parse(fullPath));
+            io.emit('status_update');
+        }, 500);
+    }
     res.json({ ok: true });
 });
 
