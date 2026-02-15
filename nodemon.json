@@ -1,0 +1,16 @@
+{
+  "verbose": true,
+  "ignore": [
+    "scripts/*",
+    "node_modules",
+    "state.json",
+    "store.json",
+    ".git"
+  ],
+  "watch": [
+    "server.js",
+    "core/",
+    "public/"
+  ],
+  "ext": "js,json,html,css"
+}

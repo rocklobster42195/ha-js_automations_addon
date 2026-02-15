@@ -2,47 +2,95 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JS-Automation</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <title>JS Automations</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-
+    <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 </head>
 <body>
-
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <h2><i class="mdi mdi-nodejs"></i> JS-Automation</h2>
-            <div style="display:flex; gap:5px">
-                <button onclick="createNewScript()" style="background:var(--accent); width:auto; padding:0 8px;"><i class="mdi mdi-plus"></i></button>
-                <button onclick="loadScripts()" style="background:transparent; width:auto;"><i class="mdi mdi-refresh"></i></button>
+    <div class="app-wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <i class="mdi mdi-nodejs"></i>
+                    <span>JS AUTOMATIONS</span>
+                </div>
+                <div class="header-actions">
+                    <button onclick="createNewScript()" title="New Script"><i class="mdi mdi-plus"></i></button>
+                    <button onclick="loadScripts()" title="Refresh List"><i class="mdi mdi-refresh"></i></button>
+                </div>
             </div>
-        </div>
-        <div id="script-list" class="script-list"></div>
+            
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Suchen..." oninput="filterScripts()">
+            </div>
+
+            <div id="script-list" class="script-list">
+                <!-- Scripts will be injected here -->
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div id="editor-section" class="hidden">
+                <div class="editor-toolbar">
+                    <span id="editor-title"></span>
+                    <div class="toolbar-btns">
+                        <button class="btn-save" onclick="saveCurrentScript()">SPEICHERN</button>
+                        <button class="btn-close" onclick="closeEditor()"><i class="mdi mdi-close"></i></button>
+                    </div>
+                </div>
+                <div id="monaco-container"></div>
+            </div>
+            
+            <div class="log-section">
+                <div class="log-header">
+                    <span>PROTOKOLL</span>
+                    <button onclick="document.getElementById('console-output').innerHTML=''" title="Clear Logs">
+                        <i class="mdi mdi-delete-sweep"></i>
+                    </button>
+                </div>
+                <div id="console-output" class="console"></div>
+            </div>
+        </main>
     </div>
 
-    <div class="main">
-        <div class="console-header">
-            <h3>Protokoll</h3>
-            <button onclick="document.getElementById('console-output').innerHTML=''" style="width:auto; padding:0 10px;"><i class="mdi mdi-delete-sweep"></i></button>
-        </div>
-        <div class="console" id="console-output"></div>
-    </div>
-
-    <!-- Editor Overlay -->
-    <div id="editor-overlay">
-        <div class="editor-toolbar">
-            <div id="editor-title" style="font-weight:bold; color:var(--accent);"></div>
-            <div style="display:flex; gap:10px;">
-                <button onclick="saveCurrentScript()" style="background:var(--success); width:auto; padding:0 20px;"><i class="mdi mdi-content-save"></i> Speichern</button>
-                <button onclick="closeEditor()" style="background:var(--danger); width:auto; padding:0 10px;"><i class="mdi mdi-close"></i></button>
+    <!-- Modal for New Script -->
+    <div id="new-script-modal" class="modal-overlay hidden" style="display:none;">
+        <div class="modal">
+            <h3>Neue Automation erstellen</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Name</label>
+                    <input type="text" id="new-script-name" placeholder="z.B. Bitcoin Alarm">
+                </div>
+                <div class="form-group">
+                    <label>Icon</label>
+                    <input type="text" id="new-script-icon" value="mdi:script-text">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Bereich (HA Area)</label>
+                    <select id="new-script-area"><option value="">Lade...</option></select>
+                </div>
+                <div class="form-group">
+                    <label>Label (HA Label)</label>
+                    <select id="new-script-label"><option value="">Lade...</option></select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Beschreibung</label>
+                <textarea id="new-script-desc" placeholder="Wofür ist dieses Skript?"></textarea>
+            </div>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
+                <button class="btn-primary" onclick="submitNewScript()">ERSTELLEN</button>
             </div>
         </div>
-        <div id="monaco-container" style="flex:1;"></div>
     </div>
 
     <script src="app.js"></script>

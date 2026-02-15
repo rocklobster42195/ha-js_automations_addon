@@ -1,6 +1,6 @@
 /**
- * JS AUTOMATIONS - Main Server (v1.3.0)
- * Orchestrates HA connection, worker threads, and global storage.
+ * JS AUTOMATIONS - Main Server (v1.8.0)
+ * Clean Core Version - No HA Mirroring
  */
 require('dotenv').config();
 const express = require('express');
@@ -9,7 +9,6 @@ const { Server } = require("socket.io");
 const path = require('path');
 const fs = require('fs');
 
-// Core Components
 const HAConnector = require('./core/ha-connection');
 const ScriptParser = require('./core/parser');
 const workerManager = require('./core/worker-manager');
@@ -17,22 +16,15 @@ const DependencyManager = require('./core/dependency-manager');
 const StateManager = require('./core/state-manager');
 const StoreManager = require('./core/store-manager');
 
-// --- PATHS & MODES ---
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const SCRIPTS_DIR = IS_ADDON ? '/config/js-automation' : path.join(__dirname, 'scripts');
 const PORT = process.env.PORT || 3000;
 
-if (!fs.existsSync(SCRIPTS_DIR)) {
-    fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
-}
+if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
 
-// --- INITIALIZATION ---
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { 
-    path: '/socket.io', 
-    cors: { origin: "*" } 
-});
+const io = new Server(server, { path: '/socket.io', cors: { origin: "*" } });
 
 const connector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, SCRIPTS_DIR);
 const depManager = new DependencyManager(SCRIPTS_DIR);
@@ -42,164 +34,106 @@ const storeManager = new StoreManager(SCRIPTS_DIR);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-/**
- * Main Startup Logic
- */
 async function startSystem() {
-    console.log(`🚀 Starting JS Automations Hub (Add-on: ${IS_ADDON})`);
-    
+    console.log(`🚀 Starting JS Automations Hub...`);
     try {
         await connector.connect();
-        
-        // Link Managers
         workerManager.setConnector(connector);
         workerManager.setStore(storeManager);
-
-        // --- LIFECYCLE EVENT HANDLERS ---
-        workerManager.on('script_exit', (data) => {
-            const { filename, reason, type } = data;
-            
-            // Persistent state update: remove if finished or crashed
-            if (reason.includes('finished') || reason.includes('by user') || reason.includes('crashed')) {
-                stateManager.saveScriptStopped(filename);
+        
+        // State-Verteilung an laufende Skripte
+        connector.onEvent(async (event) => {
+            if (event.event_type === 'state_changed') {
+                const { entity_id, new_state } = event.data;
+                for (const worker of workerManager.workers.values()) {
+                    worker.postMessage({ type: 'state_changed', entities: { [entity_id]: new_state } });
+                }
             }
+        });
 
-            // User friendly logs
-            let icon = 'ℹ️';
-            if (type === 'success') icon = '✅';
-            if (type === 'error') icon = '❌';
-            if (reason.includes('by user')) icon = '🛑';
-
-            io.emit('log', { message: `[System] ${filename} ${reason} ${icon}` });
+        workerManager.on('script_exit', (d) => {
+            if (d.reason.includes('finished') || d.reason.includes('by user') || d.reason.includes('crashed')) {
+                stateManager.saveScriptStopped(d.filename);
+            }
+            io.emit('log', { message: `[System] ${d.filename} ${d.reason}` });
             io.emit('status_update');
         });
 
-        workerManager.on('log', (msg) => {
-            io.emit('log', { message: msg });
-        });
+        workerManager.on('log', (msg) => io.emit('log', { message: msg }));
 
-        // --- AUTOSTART ---
+        // Autostart
+        const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
         const enabled = stateManager.getEnabledScripts();
-        if (enabled.length > 0) {
-            console.log(`♻️ Restoring ${enabled.length} scripts...`);
-            for (const file of enabled) {
-                const fullPath = path.join(SCRIPTS_DIR, file);
-                if (fs.existsSync(fullPath)) {
-                    const meta = ScriptParser.parse(fullPath);
-                    if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-                    workerManager.startScript(meta);
-                }
+
+        for (const file of files) {
+            if (enabled.includes(file)) {
+                const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, file));
+                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
+                workerManager.startScript(meta);
             }
         }
 
-        server.listen(PORT, '0.0.0.0', () => {
-            console.log(`🌍 JS Automations Dashboard ready on port ${PORT}`);
-        });
-
-    } catch (err) {
-        console.error("❌ Fatal System Error:", err);
-    }
+        server.listen(PORT, '0.0.0.0', () => console.log(`🌍 JS Automations Dashboard ready`));
+    } catch (err) { console.error(err); }
 }
 
-// --- API ENDPOINTS ---
-
-// List Scripts
+// API
 app.get('/api/scripts', (req, res) => {
-    try {
-        const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
-        const scripts = files.map(file => {
-            const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, file));
-            return {
-                filename: file,
-                name: meta.name,
-                icon: meta.icon,
-                running: workerManager.workers.has(file)
-            };
-        });
-        res.json(scripts);
-    } catch (e) { res.status(500).json([]); }
+    const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
+    res.json(files.map(f => {
+        const m = ScriptParser.parse(path.join(SCRIPTS_DIR, f));
+        m.running = workerManager.workers.has(f);
+        return m;
+    }));
 });
 
-// Control (Start/Stop/Restart)
+app.get('/api/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
+
+app.post('/api/scripts', async (req, res) => {
+    const { name, icon, description, area, label } = req.body;
+    const safe = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const filename = `${safe}.js`;
+    const template = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n */\n\nha.log("Hello!");\n`;
+    fs.writeFileSync(path.join(SCRIPTS_DIR, filename), template, 'utf8');
+    res.json({ filename });
+});
+
 app.post('/api/scripts/control', async (req, res) => {
     const { filename, action } = req.body;
-    const fullPath = path.join(SCRIPTS_DIR, filename);
-
-    if (!fs.existsSync(fullPath)) return res.status(404).end();
-
     if (action === 'toggle') {
         if (workerManager.workers.has(filename)) {
             workerManager.stopScript(filename, 'by user');
+            stateManager.saveScriptStopped(filename);
         } else {
-            const meta = ScriptParser.parse(fullPath);
+            const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, filename));
             if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
             workerManager.startScript(meta);
             stateManager.saveScriptStarted(filename);
         }
-    } 
-    else if (action === 'restart') {
+    } else if (action === 'restart') {
         workerManager.stopScript(filename, 'restarting');
         setTimeout(async () => {
-            const meta = ScriptParser.parse(fullPath);
+            const meta = ScriptParser.parse(path.join(SCRIPTS_DIR, filename));
             if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-            workerManager.startScript(meta);
-            stateManager.saveScriptStarted(filename);
-            io.emit('status_update');
-        }, 800);
-    }
-
-    io.emit('status_update');
-    res.json({ ok: true });
-});
-
-// Script Content
-app.get('/api/scripts/:filename/content', (req, res) => {
-    const fullPath = path.join(SCRIPTS_DIR, req.params.filename);
-    if (fs.existsSync(fullPath)) {
-        res.json({ content: fs.readFileSync(fullPath, 'utf8') });
-    } else res.status(404).end();
-});
-
-// Save Content
-app.post('/api/scripts/:filename/content', (req, res) => {
-    const filename = req.params.filename;
-    const fullPath = path.join(SCRIPTS_DIR, filename);
-    fs.writeFileSync(fullPath, req.body.content, 'utf8');
-
-    // Hot Reload if running
-    if (workerManager.workers.has(filename)) {
-        workerManager.stopScript(filename, 'hot-reload');
-        setTimeout(() => {
-            const meta = ScriptParser.parse(fullPath);
             workerManager.startScript(meta);
             io.emit('status_update');
         }, 500);
     }
+    io.emit('status_update');
     res.json({ ok: true });
 });
 
-// Create Script
-app.post('/api/scripts', (req, res) => {
-    const { name } = req.body;
-    const safeName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'script';
-    const filename = `${safeName}.js`;
-    const fullPath = path.join(SCRIPTS_DIR, filename);
-
-    if (fs.existsSync(fullPath)) return res.status(400).json({ error: "Exists" });
-
-    const template = `/**\n * @name ${name}\n * @icon mdi:script-text\n */\n\nha.log("Ready to automate!");\n`;
-    fs.writeFileSync(fullPath, template, 'utf8');
-    res.json({ filename });
+app.delete('/api/scripts/:filename', (req, res) => {
+    workerManager.stopScript(req.params.filename, 'deleted');
+    stateManager.saveScriptStopped(req.params.filename);
+    fs.unlinkSync(path.join(SCRIPTS_DIR, req.params.filename));
+    io.emit('status_update');
+    res.json({ ok: true });
 });
 
-// Delete Script
-app.delete('/api/scripts/:filename', (req, res) => {
-    const filename = req.params.filename;
-    workerManager.stopScript(filename, 'deleted');
-    stateManager.saveScriptStopped(filename);
-    const fullPath = path.join(SCRIPTS_DIR, filename);
-    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-    io.emit('status_update');
+app.get('/api/scripts/:filename/content', (req, res) => res.json({ content: fs.readFileSync(path.join(SCRIPTS_DIR, req.params.filename), 'utf8') }));
+app.post('/api/scripts/:filename/content', (req, res) => {
+    fs.writeFileSync(path.join(SCRIPTS_DIR, req.params.filename), req.body.content, 'utf8');
     res.json({ ok: true });
 });
 
