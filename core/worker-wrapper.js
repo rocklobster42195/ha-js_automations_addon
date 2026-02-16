@@ -1,31 +1,32 @@
 /**
- * JS AUTOMATIONS - Worker Wrapper (v1.8.0)
- * Logic: Synchronous State Cache, Global Store, Log-Levels, 
- * Graceful Shutdown and Entity Selectors.
+ * JS AUTOMATIONS - Worker Wrapper (v2.16.x)
+ * Features: Local Cache, Sync Store, Graceful Shutdown, Global Libraries.
  */
 const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
 const Module = require('module');
 
-// --- 1. MODULE PATH RESOLUTION ---
+// --- 1. MODULE PATH INJECTION ---
 if (workerData.storageDir) {
     const nodeModulesPath = path.resolve(workerData.storageDir, 'node_modules');
+    // Inject into global search paths
     Module.globalPaths.push(nodeModulesPath);
     module.paths.unshift(nodeModulesPath);
     process.env.NODE_PATH = nodeModulesPath;
+    // Force Node.js to re-evaluate paths
     if (typeof Module._initPaths === 'function') {
         Module._initPaths();
     }
 }
 
-// Load built-in global libraries
+// Load built-in libraries
 const axios = require('axios');
 const cron = require('node-cron');
 
-// Default: Allow worker to exit if idle
+// Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
-// --- 2. LOG LEVEL LOGIC ---
+// --- 2. LOGGING LOGIC ---
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;
 
@@ -35,7 +36,7 @@ const sendLog = (level, msg) => {
     }
 };
 
-// --- 3. STATE & STORE CACHE ---
+// --- 3. CACHE & SYNC ---
 const states = workerData.initialStates || {};
 const storeValues = workerData.initialStore || {};
 const subscriptionCallbacks = [];
@@ -43,62 +44,26 @@ const stopCallbacks = [];
 let isListening = false;
 
 /**
- * EntitySelector Class for bulk actions
+ * Ensures the worker is listening for updates from the master.
  */
-class EntitySelector {
-    constructor(entities, parentHa) {
-        this.list = entities; // Array of HA State objects
-        this.ha = parentHa;
-    }
-
-    /** Returns the number of entities in the current selection */
-    get count() { return this.list.length; }
-
-    /** Filters the current selection using a callback function */
-    where(callback) {
-        return new EntitySelector(this.list.filter(callback), this.ha);
-    }
-
-    /** Executes a function for each entity in the selection */
-    each(callback) {
-        this.list.forEach(callback);
-        return this;
-    }
-
-    /** Calls a service for all entities in the selection */
-    call(service, data = {}) {
-        this.list.forEach(entity => {
-            const domain = entity.entity_id.split('.')[0];
-            this.ha.callService(domain, service, { ...data, entity_id: entity.entity_id });
-        });
-        return this;
-    }
-
-    /** Shortcut to turn all selected entities ON */
-    turnOn(data = {}) { return this.call('turn_on', data); }
-
-    /** Shortcut to turn all selected entities OFF */
-    turnOff(data = {}) { return this.call('turn_off', data); }
-
-    /** Returns the raw array of state objects */
-    toArray() { return this.list; }
-}
-
 function ensureMessageListener() {
     if (isListening) return;
     isListening = true;
+
     parentPort.on('message', async (msg) => {
-        // Sync Home Assistant States
+        // Real-time state cache sync
         if (msg.type === 'state_update') {
             if (msg.state) states[msg.entity_id] = msg.state;
             else delete states[msg.entity_id];
         }
-        // Sync Global Store
+
+        // Real-time global store sync
         if (msg.type === 'store_update') {
             if (msg.value === undefined) delete storeValues[msg.key];
             else storeValues[msg.key] = msg.value;
         }
-        // Handle Subscriptions (ha.on)
+
+        // Handle ha.on() triggers
         if (msg.type === 'ha_event') {
             subscriptionCallbacks.forEach(sub => sub.callback({
                 entity_id: msg.entity_id,
@@ -107,55 +72,37 @@ function ensureMessageListener() {
                 attributes: msg.state.attributes
             }));
         }
-        // Handle Graceful Stop
+
+        // Handle master request to stop gracefully
         if (msg.type === 'stop_request') {
-            for (const callback of stopCallbacks) {
-                try { await callback(); } catch (e) { console.error("Error in onStop:", e); }
+            for (const cb of stopCallbacks) {
+                try { await cb(); } catch (e) { console.error("onStop Error:", e); }
             }
             process.exit(0);
         }
     });
 }
 
-// --- 4. THE GLOBAL HA API ---
+// --- 4. THE GLOBAL API ---
 const ha = {
+    // Logging
     debug: (m) => sendLog('debug', m),
     log: (m) => sendLog('info', m),
     warn: (m) => sendLog('warn', m),
     error: (m) => sendLog('error', m),
     
+    // Commands
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
-    updateState: (id, s, a) => parentPort.postMessage({ type: 'update_state', entityId: id, state: s, attributes: a }),
+    updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
     
+    // Real-time Data
     states: states,
-
-    /** Selects entities based on a pattern (String, Wildcard, Regex, Array) */
-    select: (pattern) => {
-        const allIds = Object.keys(states);
-        let matchedIds = [];
-
-        if (typeof pattern === 'string') {
-            if (pattern.includes('*')) {
-                const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
-                matchedIds = allIds.filter(id => regex.test(id));
-            } else {
-                matchedIds = allIds.filter(id => id === pattern);
-            }
-        } else if (pattern instanceof RegExp) {
-            matchedIds = allIds.filter(id => pattern.test(id));
-        } else if (Array.isArray(pattern)) {
-            matchedIds = allIds.filter(id => pattern.includes(id));
-        }
-
-        const matchedStates = matchedIds.map(id => states[id]);
-        return new EntitySelector(matchedStates, ha);
-    },
-
-    on: (p, cb) => { 
-        parentPort.ref(); 
-        ensureMessageListener(); 
-        parentPort.postMessage({ type: 'subscribe', pattern: p }); 
-        subscriptionCallbacks.push({ pattern: p, callback: cb }); 
+    
+    on: (pattern, callback) => {
+        parentPort.ref(); // Keep alive
+        ensureMessageListener();
+        parentPort.postMessage({ type: 'subscribe', pattern });
+        subscriptionCallbacks.push({ pattern, callback });
     },
     
     onStop: (cb) => {
@@ -163,30 +110,38 @@ const ha = {
         stopCallbacks.push(cb);
     },
 
+    // Persistent Store
     store: {
         val: storeValues,
-        set: (k, v) => { storeValues[k] = v; parentPort.postMessage({ type: 'store_set', key: k, value: v }); },
-        delete: (k) => { delete storeValues[k]; parentPort.postMessage({ type: 'store_delete', key: k }); },
-        get: (k) => { 
-            sendLog('warn', `ha.store.get('${k}') is deprecated. Use sync: ha.store.val.${k}`);
-            return storeValues[k]; 
+        set: (key, value) => {
+            storeValues[key] = value;
+            parentPort.postMessage({ type: 'store_set', key, value });
+        },
+        delete: (key) => {
+            delete storeValues[key];
+            parentPort.postMessage({ type: 'store_delete', key });
         }
     }
 };
 
-// --- 5. GLOBAL INJECTIONS ---
+// Injection
 global.ha = ha;
 global.axios = axios;
-global.schedule = (e, cb) => { parentPort.ref(); ensureMessageListener(); return cron.schedule(e, cb); };
-global.sleep = (ms) => new Promise(r => setTimeout(r, ms));
+global.schedule = (exp, cb) => {
+    parentPort.ref(); // Keep alive for cron
+    ensureMessageListener();
+    return cron.schedule(exp, cb);
+};
+global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-// --- 6. EXECUTION ---
+// --- 5. EXECUTION ---
 try {
-    const scriptResolved = require.resolve(workerData.path);
-    delete require.cache[scriptResolved];
-    require(scriptResolved);
+    const scriptPath = require.resolve(workerData.path);
+    delete require.cache[scriptPath]; // Avoid stale code
+    require(scriptPath);
 } catch (err) {
-    sendLog('error', `Runtime Error: ${err.message}`);
+    ha.error(`Runtime Error: ${err.message}`);
     console.error(`[Worker Error] ${workerData.filename}:`, err);
+    // Exit after a short delay to allow log delivery
     setTimeout(() => process.exit(1), 100);
 }

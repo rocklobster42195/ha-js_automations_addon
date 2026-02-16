@@ -2,7 +2,7 @@
  * @name NPM Test
  * @icon mdi:script-text
  * @description 
- * @area 
+ * @area REG77
  * @npm random
  * @label 
  * @loglevel info

@@ -1,7 +1,3 @@
-Here is a significantly expanded **README.md** for **JS Automations**. It is designed to be a complete manual for users, covering everything from basic logging to complex mass-actions and persistent data management.
-
-***
-
 # ⚡ JS Automations for Home Assistant
 
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
@@ -16,6 +12,7 @@ Here is a significantly expanded **README.md** for **JS Automations**. It is des
 *   **🧠 Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
 *   **📦 Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
 *   **🚥 Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
+*   **🏷️ Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
 
 ---
 

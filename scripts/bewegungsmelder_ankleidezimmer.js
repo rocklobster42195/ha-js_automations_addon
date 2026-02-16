@@ -3,6 +3,8 @@
  * @icon mdi:motion-sensor
  * @description Schaltet Licht bei Bewegung (wenn wach) und nach 2 Min Inaktivität aus.
  * @loglevel error
+ * @area Schlafzimmer
+ * @label Haustür REG77
  */
 
 // Speicher für den Ausschalttimer

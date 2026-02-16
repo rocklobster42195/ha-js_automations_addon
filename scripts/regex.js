@@ -2,7 +2,7 @@
  * @name RegEx
  * @icon mdi:script-text
  * @description 
- * @area 
+ * @area REG77
  * @label 
  */
 

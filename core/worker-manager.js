@@ -1,10 +1,11 @@
 /**
- * JS AUTOMATIONS - Worker Manager (v1.8.0)
- * Graceful Stop Logic
+ * JS AUTOMATIONS - Worker Manager (v2.16.x)
+ * Handles lifecycle, message routing, and event subscriptions.
  */
 const { Worker } = require('worker_threads');
 const path = require('path');
 const EventEmitter = require('events');
+const fs = require('fs');
 
 class WorkerManager extends EventEmitter {
     constructor() {
@@ -14,21 +15,29 @@ class WorkerManager extends EventEmitter {
         this.lastExitState = new Map();
         this.haConnector = null;
         this.storeManager = null;
-        this.subscriptions = new Map();
-        this.storageDir = '';
+        this.subscriptions = new Map(); // filename -> patterns[]
+        this.storageDir = ''; 
     }
 
     setConnector(connector) { this.haConnector = connector; }
     setStore(store) { this.storeManager = store; }
     setStorageDir(dir) { this.storageDir = dir; }
 
+    /**
+     * Starts a script in an isolated thread.
+     */
     startScript(scriptMeta) {
         const { filename, name } = scriptMeta;
-        if (this.workers.has(filename)) this.stopScript(filename, 'restarting');
+        
+        // Restart if already running
+        if (this.workers.has(filename)) {
+            this.stopScript(filename, 'restarting');
+        }
 
         this.lastExitState.delete(filename);
         this.subscriptions.set(filename, []);
 
+        // Prepare initial data dump for the worker
         const initialStoreValues = {};
         if (this.storeManager) {
             for (let k in this.storeManager.data) {
@@ -44,20 +53,38 @@ class WorkerManager extends EventEmitter {
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info'
             },
-            env: { ...process.env, NODE_PATH: path.resolve(this.storageDir, 'node_modules') }
+            env: { 
+                ...process.env, 
+                NODE_PATH: path.resolve(this.storageDir, 'node_modules') 
+            }
         });
 
         worker.on('message', async (msg) => {
-            if (msg.type === 'log') this.emit('log', `[${name}] ${msg.message}`, msg.level);
-            if (msg.type === 'call_service') await this.haConnector?.callService(msg.domain, msg.service, msg.data);
-            if (msg.type === 'update_state') await this.haConnector?.updateState(msg.entityId, msg.state, msg.attributes);
-            if (msg.type === 'subscribe') this.subscriptions.get(filename).push(msg.pattern);
-            if (msg.type === 'store_set') {
-                this.storeManager?.set(msg.key, msg.value, name);
+            // 1. Logging
+            if (msg.type === 'log') {
+                this.emit('log', `[${name}] ${msg.message}`, msg.level);
+            }
+            
+            // 2. Home Assistant Actions
+            if (msg.type === 'call_service' && this.haConnector) {
+                await this.haConnector.callService(msg.domain, msg.service, msg.data);
+            }
+            if (msg.type === 'update_state' && this.haConnector) {
+                await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+            }
+
+            // 3. Subscriptions (ha.on)
+            if (msg.type === 'subscribe') {
+                this.subscriptions.get(filename).push(msg.pattern);
+            }
+
+            // 4. Store Operations
+            if (msg.type === 'store_set' && this.storeManager) {
+                this.storeManager.set(msg.key, msg.value, name);
                 this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value });
             }
-            if (msg.type === 'store_delete') {
-                this.storeManager?.delete(msg.key);
+            if (msg.type === 'store_delete' && this.storeManager) {
+                this.storeManager.delete(msg.key);
                 this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined });
             }
         });
@@ -71,10 +98,13 @@ class WorkerManager extends EventEmitter {
             if (this.workers.get(filename) === worker) {
                 this.workers.delete(filename);
                 this.subscriptions.delete(filename);
+                
                 let reason = this.stopReasons.get(filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(filename)) ? 'error' : 'success';
+                
                 if (type === 'error') this.lastExitState.set(filename, 'error');
                 this.stopReasons.delete(filename);
+                
                 this.emit('script_exit', { filename, reason, type });
             }
         });
@@ -82,21 +112,36 @@ class WorkerManager extends EventEmitter {
         this.workers.set(filename, worker);
     }
 
+    /**
+     * Sends a message to all running workers.
+     */
     broadcastToWorkers(payload) {
-        for (const worker of this.workers.values()) worker.postMessage(payload);
+        for (const worker of this.workers.values()) {
+            worker.postMessage(payload);
+        }
     }
 
+    /**
+     * Routes state changes from HA to interested workers.
+     */
     dispatchStateChange(entityId, newState, oldState) {
         for (const [filename, patterns] of this.subscriptions) {
             const worker = this.workers.get(filename);
             if (!worker) continue;
-            if (patterns.some(p => this.matches(entityId, p))) {
+
+            const isMatched = patterns.some(p => this.matches(entityId, p));
+            if (isMatched) {
                 worker.postMessage({ type: 'ha_event', entity_id: entityId, state: newState, old_state: oldState });
             }
+            
+            // Always sync the local cache of every worker
             worker.postMessage({ type: 'state_update', entity_id: entityId, state: newState });
         }
     }
 
+    /**
+     * Helper for wildcard/regex/string matching.
+     */
     matches(entityId, pattern) {
         if (typeof pattern === 'string') {
             if (pattern === entityId) return true;
@@ -114,24 +159,22 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Stoppt ein Skript höflich (Graceful Shutdown)
+     * Stops a script gracefully.
      */
     stopScript(filename, reason = "by user") {
         const worker = this.workers.get(filename);
         if (worker) {
             this.stopReasons.set(filename, reason);
-            
-            // 1. Versuche höflichen Stop
+            // 1. Try graceful shutdown
             worker.postMessage({ type: 'stop_request' });
-
-            // 2. Sicherheits-Hammer nach 2 Sekunden
+            // 2. Force terminate after 2 seconds if still alive
             setTimeout(() => {
                 if (this.workers.get(filename) === worker) {
-                    console.log(`[Manager] Worker ${filename} did not stop gracefully. Terminating...`);
                     worker.terminate();
                 }
             }, 2000);
         }
     }
 }
+
 module.exports = new WorkerManager();
