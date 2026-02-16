@@ -1,6 +1,6 @@
-name: "JS-Automation"
-version: "1.0.2"
-slug: "js_automation"
+name: "JS Automations"
+version: "2.17.0"
+slug: "js_automations"
 description: "JavaScript Automations-Engine"
 arch:
   - aarch64

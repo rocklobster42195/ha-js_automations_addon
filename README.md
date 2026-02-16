@@ -1,213 +1,323 @@
+Here is a significantly expanded **README.md** for **JS Automations**. It is designed to be a complete manual for users, covering everything from basic logging to complex mass-actions and persistent data management.
+
+***
+
 # ⚡ JS Automations for Home Assistant
 
-**JS Automations** is a high-performance, isolated, and developer-friendly JavaScript execution engine for Home Assistant. It bridges the gap between simple YAML automations and complex AppDaemon python scripts, offering a full **Web IDE** experience with **Node.js**.
+**JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
-![Version](https://img.shields.io/badge/version-2.13.2-blue) ![Node](https://img.shields.io/badge/node-%3E%3D20-green) ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Add--on-blue)
+---
 
 ## 🚀 Key Features
 
-*   **🛡️ Isolated Worker Threads:** Every script runs in its own thread. A syntax error or infinite loop in one script **never** crashes your Home Assistant.
-*   **💻 Integrated Web IDE:** Built-in Monaco Editor (VS Code core) with dark mode, live logs, and **real-time IntelliSense** for your entities.
-*   **⚡ Synchronous State Cache:** Access all Home Assistant states instantly (`ha.states`) without `await` or API delays.
-*   **🧠 Global Store:** Share data between scripts and keep variables persistent across restarts (`ha.store`).
-*   **📦 Auto-NPM:** Just add `@npm package` to your header, and the system installs it automatically.
-*   **🎨 Smart UI:** Compact list view, live status icons, filtering, and metadata management (Area/Labels).
-*   **🔋 Batteries Included:** `axios` (HTTP), `node-cron` (Scheduling), and `sleep` are built-in globally.
+*   **🛡️ Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
+*   **📡 Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
+*   **⚡ Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
+*   **🧠 Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
+*   **📦 Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
+*   **🚥 Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
 
 ---
 
-## 🛠 Installation
+## 📝 The Metadata Header
 
-### As Home Assistant Add-on (Recommended)
-1.  Copy the `js-automation_addon` folder to your Home Assistant's `/addons/local/` directory (using Samba or SSH).
-2.  Go to **Settings > Add-ons > Add-on Store**.
-3.  Click the three dots (top right) -> **Check for updates**.
-4.  Install **JS Automations** from the "Local" section.
-5.  Start the Add-on and open the Web UI via the Sidebar.
-
-### Local Development
-1.  Clone this repository.
-2.  Run `npm install`.
-3.  Create a `.env` file: `HA_URL=http://YOUR_IP:8123` and `HA_TOKEN=YOUR_TOKEN`.
-4.  Run `npm run dev`.
-
----
-
-## 📚 Scripting API Reference
-
-The global `ha` object is available in every script. No imports needed.
-
-### 1. Triggers & Events (`ha.on`)
-Subscribe to state changes using specific IDs, Arrays, Wildcards, or Regex.
+Every script starts with a JSDoc-style header. This configures the engine's behavior.
 
 ```javascript
-// Single entity
-ha.on('light.kitchen', (e) => { ... });
-
-// Multiple entities
-ha.on(['light.kitchen', 'light.livingroom'], (e) => { ... });
-
-// Wildcards (ioBroker style)
-ha.on('binary_sensor.*_occupancy', (e) => { ... });
-
-// Regex (Advanced)
-ha.on(/^sensor\..*_battery$/, (e) => { ... });
+/**
+ * @name Battery Monitor
+ * @icon mdi:battery-alert
+ * @description Checks all battery levels daily
+ * @loglevel info
+ * @npm lodash
+ * @area Technical Room
+ * @label Maintenance
+ */
 ```
 
-### 2. State Access (`ha.states`)
-Access the current state of *any* entity synchronously. The cache is always up-to-date.
+---
+
+## 📚 API Documentation
+
+### 1. Logging & Debugging
+Control visibility via the `@loglevel` header (debug, info, warn, error).
 
 ```javascript
-// No await needed!
-if (ha.states['sun.sun'].state === 'above_horizon') {
-    ha.log("It's daytime!");
+ha.debug("Variable x is: " + x); // Only visible if @loglevel is debug
+ha.log("Automation started");    // Standard white log
+ha.warn("Battery is low!");      // Yellow log
+ha.error("API failed!");         // Red log (marks script as crashed)
+```
+
+### 2. Reactive Triggers (`ha.on`)
+React to changes in Home Assistant. **Using this keeps your script running.**
+
+```javascript
+// --- Single Entity ---
+ha.on('binary_sensor.front_door', (e) => {
+    ha.log(`Door is now ${e.state}`); // e.state is 'on' or 'off'
+});
+
+// --- Wildcards (Match multiple) ---
+ha.on('light.living_room_*', (e) => {
+    ha.log(`${e.attributes.friendly_name} changed to ${e.state}`);
+});
+
+// --- Regular Expressions (Advanced) ---
+ha.on(/^sensor\..*_humidity$/, (e) => {
+    ha.log(`${e.entity_id} reports ${e.state}% humidity`);
+});
+
+// --- Arrays ---
+ha.on(['input_boolean.test', 'switch.garden'], (e) => {
+    ha.log("One of the tracked entities changed");
+});
+```
+
+### 3. Reading States (`ha.states`)
+The cache is updated in real-time. No `await` required.
+
+```javascript
+const temp = ha.states['sensor.outdoor_temp'].state;
+const name = ha.states['sensor.outdoor_temp'].attributes.friendly_name;
+
+if (parseFloat(temp) > 25) {
+    ha.log(`It is hot in ${name}`);
 }
 ```
 
-### 3. Global Store (`ha.store`)
-Save data persistently. Values survive script restarts and Add-on reboots.
+### 4. Setting States & Creating Sensors (`ha.updateState`)
+Create virtual sensors or update existing ones directly in HA.
 
 ```javascript
-// Write
-ha.store.set('coffee_count', 42);
-
-// Read (Synchronous!)
-const count = ha.store.val.coffee_count;
-ha.log(`Coffees today: ${count}`);
+// This creates 'sensor.js_energy_total' if it doesn't exist
+ha.updateState('sensor.js_energy_total', 1250.5, {
+    unit_of_measurement: 'kWh',
+    friendly_name: 'Total Calculated Energy',
+    icon: 'mdi:transmission-tower'
+});
 ```
 
-### 4. Controlling Home Assistant
-Call services or create your own virtual sensors.
+### 5. Calling Services (`ha.callService`)
+Trigger any action in Home Assistant.
 
 ```javascript
-// Call Service
+// Turn on a light with attributes
 ha.callService('light', 'turn_on', {
     entity_id: 'light.kitchen',
-    brightness: 255
+    brightness: 150,
+    rgb_color: [255, 0, 0]
 });
 
-// Create/Update Virtual Entity (Sensor)
-ha.updateState('sensor.js_calculation', 123.45, {
-    unit_of_measurement: 'EUR',
-    friendly_name: 'Daily Cost'
+// Send a notification
+ha.callService('notify', 'mobile_app_phone', {
+    title: 'Security Alert',
+    message: 'Motion detected in the garage!'
 });
 ```
 
-### 5. Logging & Debugging
-Control console noise using Log-Levels.
+### 6. Entity Selectors (`ha.select`)
+Perform bulk actions on groups of entities.
 
 ```javascript
-ha.debug("Detailed variable dump..."); // Only visible if @loglevel is 'debug'
-ha.log("Standard info message");       // Standard
-ha.warn("Something looks odd");        // Yellow
-ha.error("Critical failure!");         // Red (and marks script as crashed)
+// Turn off all lights in a specific area
+ha.select('light.*')
+  .where(l => l.attributes.area === 'Living Room')
+  .turnOff();
+
+// Find all sensors with low battery
+const lowBatteries = ha.select('sensor.*_battery_level')
+  .where(s => parseFloat(s.state) < 10)
+  .toArray();
+
+ha.log(`Found ${lowBatteries.length} sensors with low battery.`);
+```
+
+### 7. Persistent Store (`ha.store`)
+Share data across scripts or reboots. Synchronous read/write.
+
+```javascript
+// Set a value
+ha.store.set('guest_mode', true);
+
+// Read a value (synchronous)
+if (ha.store.val.guest_mode === true) {
+    ha.log("Guest mode is active");
+}
+
+// Delete a value
+ha.store.delete('temp_variable');
 ```
 
 ---
 
-## 📝 Metadata Headers
+## 🔋 Global Built-ins
 
-Configure your script using JSDoc-style comments at the top of the file.
+No need to `require` these, they are always available.
 
+### `axios`
+Standard library for HTTP requests.
 ```javascript
-/**
- * @name Bitcoin Alarm           // Display name in UI
- * @icon mdi:currency-btc        // Icon in UI
- * @description Checks price...  // Tooltip description
- * @area Office                  // HA Area (Room)
- * @label Finance                // HA Label
- * @loglevel info                // debug | info | warn | error
- * @npm lodash, moment           // Auto-install NPM packages
- */
+async function checkWeather() {
+    const res = await axios.get('https://api.weather.com/v1/...');
+    ha.log("Temp: " + res.data.temp);
+}
+```
+
+### `schedule(cron, callback)`
+Time-based execution using CRON syntax. **Keeps script running.**
+```javascript
+// Every day at 07:30
+schedule('30 7 * * *', () => {
+    ha.log("Time to wake up!");
+});
+```
+
+### `sleep(ms)`
+Pause execution in async functions.
+```javascript
+async function sequence() {
+    ha.callService('light', 'turn_on', { entity_id: 'light.test' });
+    await sleep(2000); // wait 2 seconds
+    ha.callService('light', 'turn_off', { entity_id: 'light.test' });
+}
 ```
 
 ---
 
-## 💡 Code Examples
+## 💡 Complete Examples
 
-### Example 1: The "Cronjob"
-Runs every morning at 08:00. The worker stays alive automatically.
-
-```javascript
-/**
- * @name Morning Routine
- * @icon mdi:clock-outline
- */
-
-ha.log("Scheduler started.");
-
-schedule('0 8 * * *', () => {
-    ha.log("Good morning! Turning on coffee machine.");
-    ha.callService('switch', 'turn_on', { entity_id: 'switch.coffee_plug' });
-});
-```
-
-### Example 2: HTTP Request & Virtual Sensor
-Fetches data from an API and creates a sensor in HA. `axios` is built-in.
+### Smart Bathroom Fan
+Logic: Run fan if humidity is > 65% for 5 minutes, then stop.
 
 ```javascript
 /**
- * @name Crypto Tracker
- * @icon mdi:finance
+ * @name Bathroom Fan Logic
+ * @loglevel info
  */
 
-async function fetchPrice() {
-    try {
-        const res = await axios.get('https://api.coindesk.com/v1/bpi/currentprice.json');
-        const rate = res.data.bpi.USD.rate_float;
+let stopTimer = null;
+
+ha.on('sensor.bathroom_humidity', (e) => {
+    const hum = parseFloat(e.state);
+    
+    if (hum > 65) {
+        ha.log("Humidity high! Starting fan.");
+        ha.callService('switch', 'turn_on', { entity_id: 'switch.bathroom_fan' });
         
-        ha.updateState('sensor.btc_usd', rate, {
-            unit_of_measurement: 'USD',
-            friendly_name: 'Bitcoin Price'
+        // Cancel any pending stop timer
+        if (stopTimer) clearTimeout(stopTimer);
+    } 
+    else if (hum < 55) {
+        ha.log("Humidity normalized. Stopping fan in 5 minutes.");
+        if (stopTimer) clearTimeout(stopTimer);
+        
+        stopTimer = setTimeout(() => {
+            ha.callService('switch', 'turn_off', { entity_id: 'switch.bathroom_fan' });
+            ha.log("Fan stopped.");
+        }, 300000);
+    }
+});
+
+// Cleanup timer if script is updated/stopped
+ha.onStop(() => {
+    if (stopTimer) clearTimeout(stopTimer);
+});
+```
+
+### Trash Collection Monitor (`@npm` Example)
+This script uses the `node-ical` package to check an online calendar for upcoming trash collections and creates a sensor in Home Assistant.
+
+```javascript
+/**
+ * @name Trash Collection Calendar
+ * @icon mdi:trash-can
+ * @description Checks an iCal link for tomorrow's trash collection.
+ * @npm node-ical
+ * @loglevel info
+ */
+
+const ical = require('node-ical');
+const CALENDAR_URL = "https://your-calendar-link.ics";
+
+async function checkTrash() {
+    try {
+        const data = await ical.async.fromURL(CALENDAR_URL);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0,0,0,0);
+
+        let trashType = "None";
+        
+        for (let k in data) {
+            const event = data[k];
+            if (event.type === 'VEVENT') {
+                const eventDate = new Date(event.start);
+                eventDate.setHours(0,0,0,0);
+
+                if (eventDate.getTime() === tomorrow.getTime()) {
+                    trashType = event.summary;
+                    ha.log(`Collection tomorrow: ${trashType}`);
+                    break;
+                }
+            }
+        }
+
+        ha.updateState('sensor.js_trash_tomorrow', trashType, {
+            friendly_name: 'Trash Collection Tomorrow',
+            icon: 'mdi:delete-alert'
         });
-        ha.log(`Updated: $${rate}`);
+
     } catch (e) {
-        ha.error("API Error: " + e.message);
+        ha.error("Calendar check failed: " + e.message);
     }
 }
 
-fetchPrice();
-// Update every 10 minutes
-setInterval(fetchPrice, 600000); 
+// Check every day at 18:00 (6 PM)
+schedule('0 18 * * *', checkTrash);
+
+// Run once on startup
+checkTrash();
 ```
 
-### Example 3: Smart Light Sync (Reactive)
-Mirrors the state of one light to another.
+### Intelligence with `ha.select` (Battery Guardian)
+Instead of writing 50 separate automations, this script scans your entire home for low battery levels in a single sweep.
 
 ```javascript
 /**
- * @name Mirror Lights
- * @icon mdi:link-variant
+ * @name Battery Guardian
+ * @icon mdi:battery-alert
+ * @description Alerts if any battery level drops below 15%
  */
 
-const MASTER = 'light.living_room';
-const SLAVE = 'light.hallway_led';
-
-ha.on(MASTER, (e) => {
-    // Only react if state actually changed
-    if (e.state === e.old_state) return;
-
-    const action = e.state === 'on' ? 'turn_on' : 'turn_off';
+async function scanBatteries() {
+    ha.log("Starting battery scan...");
     
-    // Copy attributes like color
-    const data = { entity_id: SLAVE };
-    if (action === 'turn_on' && e.attributes.rgb_color) {
-        data.rgb_color = e.attributes.rgb_color;
+    // Select all sensors ending with '_battery'
+    const lowDevices = ha.select('sensor.*_battery')
+        .where(s => {
+            const val = parseFloat(s.state);
+            return val < 15 && s.state !== 'unavailable' && s.state !== 'unknown';
+        })
+        .toArray();
+
+    if (lowDevices.length > 0) {
+        const names = lowDevices.map(s => s.attributes.friendly_name || s.entity_id).join(', ');
+        ha.warn(`Low battery levels detected: ${names}`);
+        
+        // Send a persistent notification to the Home Assistant UI
+        ha.callService('notify', 'persistent_notification', {
+            title: 'Low Battery Alert',
+            message: `The following devices need new batteries: ${names}`
+        });
+    } else {
+        ha.log("All batteries are within the healthy range.");
     }
+}
 
-    ha.callService('light', action, data);
-});
+// Check every Sunday at 10:00 AM
+schedule('0 10 * * 0', scanBatteries);
+
+// Run once on startup
+scanBatteries();
 ```
-
----
-
-## 📂 Project Structure
-
-- **/core**: Backend logic (Worker management, HA connection, Store).
-- **/public**: Frontend (Monaco Editor, UI logic).
-- **/scripts**: Your user scripts (mapped to `/config/js-automation`).
-
----
-
-### License
-MIT

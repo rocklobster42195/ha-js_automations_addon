@@ -1,33 +1,42 @@
 # ⚙️ Technical Architecture: JS Automations
 
-## Architecture Overview
-The system follows a **Master-Worker** architecture designed for stability and Home Assistant Ingress compatibility.
+## Core Philosophy
+The system is designed to be **fault-tolerant** and **asynchronous-first**. It bridges the gap between the Home Assistant WebSocket/REST APIs and a local Node.js runtime.
 
-### 1. The Master Process (`server.js`)
-- **HTTP/WebSocket Server:** Serves the Dashboard and streams live logs via `Socket.io`.
-- **HA Bridge:** Maintains a single, high-speed native WebSocket connection to the Home Assistant API.
-- **State Orchestrator:** Manages the `StoreManager` (Global JSON Store) and `WorkerManager`.
-- **Ingress Proxy:** Handles dynamic path resolution to work behind Home Assistant's reverse proxy.
+## System Components
 
-### 2. The Worker Manager (`core/worker-manager.js`)
-- Orchestrates the lifecycle of Node.js `Worker Threads`.
-- **Subscription Engine:** Maintains a registry of which script listens to which HA entity. It uses a "Dispatch" pattern to only send relevant events to specific workers, minimizing CPU overhead.
-- **Crash Detection:** Monitors exit codes. Any non-zero exit (e.g. exit code 1) triggers an "Error" state in the UI.
+### 1. Master Process (`server.js`)
+The "Brain" of the system.
+- **HA Bridge:** Manages a single persistent WebSocket connection to Home Assistant.
+- **State Provider:** Maintains a master RAM cache of all HA entity states.
+- **Event Dispatcher:** Uses a subscription-map to route HA events only to the Worker Threads that actually need them.
+- **API Server:** Express.js based server handling the Dashboard UI and script management.
 
-### 3. The Worker Wrapper (`core/worker-wrapper.js`)
-- The entry point for every user script.
-- **Sandboxing:** Isolates user code from the main process.
-- **Smart Lifecycle:** Uses Node.js `ref()` and `unref()` logic. Scripts with active listeners (`ha.on`, `schedule`) stay alive; one-shot scripts exit automatically after execution to save RAM.
-- **Module Resolution:** Injects `/config/js-automation/node_modules` into the search path to support persistent NPM packages.
+### 2. Worker Manager (`core/worker-manager.js`)
+- **Orchestration:** Spawns and kills `Worker Threads`.
+- **Mirroring:** Communicates with `StoreManager` to keep global variables synced across all threads.
+- **Crash Detection:** Monitors exit codes (e.g., Code 1 for runtime errors) and updates the UI status to "error".
 
-## 📡 Data Flow: Real-time Updates
-1. **HA** sends a `state_changed` event via WebSocket.
-2. **HAConnector** updates the master state cache.
-3. **WorkerManager** evaluates active subscriptions (Regex/Wildcard).
-4. **Target Worker** receives a message and updates its local `ha.states` object before triggering the user's callback.
+### 3. Worker Wrapper (`core/worker-wrapper.js`)
+The "Sandbox" for user scripts.
+- **Path Injection:** Modifies `Module.globalPaths` and `NODE_PATH` to allow scripts to find NPM packages located in the persistent `/config/js-automation/.storage/node_modules` folder.
+- **Lifecycle Control:** Implements `ref()` and `unref()` logic. If a script has no active listeners (Cron or `ha.on`), the thread terminates itself automatically to save memory.
+- **Graceful Stop:** Listens for `stop_request` from master to execute `onStop` callbacks before exiting.
 
-## 📂 Internal File Roles
-- `parser.js`: Static analysis of script headers using Regex.
-- `ha-connection.js`: Raw WebSocket protocol implementation for maximum stability.
-- `state-manager.js`: Tracks which scripts should autostart on reboot.
-- `app.js`: Ingress-aware frontend logic; manages Monaco Editor initialization and library injection.
+### 4. Dependency Manager (`core/dependency-manager.js`)
+- **Sequential NPM:** Handles `npm install` and `npm uninstall` commands.
+- **Sanitized Pruning:** Scans all script headers to determine which packages are truly needed and removes orphans from the `.storage` directory.
+
+## 📡 Real-Time Synchronization
+1. **Master** receives a WebSocket message from HA.
+2. **Master** updates its internal `this.states` object.
+3. **Master** calls `workerManager.dispatchStateChange()`.
+4. **WorkerManager** sends a `state_update` message to **ALL** workers (to keep their synchronous `ha.states` cache up to date).
+5. **WorkerManager** sends a `ha_event` message **ONLY** to workers that have a matching subscription pattern (`ha.on`).
+
+## 📂 Data Storage (`/config/js-automation/`)
+- `.storage/`: Hidden directory containing system data.
+  - `state.json`: Registry of which scripts should autostart.
+  - `store.json`: Persistent global variables.
+  - `package.json`: NPM package manifest for user scripts.
+  - `node_modules/`: Installed third-party libraries.

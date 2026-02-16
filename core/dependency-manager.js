@@ -1,49 +1,83 @@
 /**
- * HA-JS-AUTOMATION: Dependency Manager (Add-on optimized)
+ * JS AUTOMATIONS - Dependency Manager (v1.8.1)
+ * Fix: Physical file check to bypass Node.js require cache
  */
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const ScriptParser = require('./parser');
 
 class DependencyManager {
-    constructor(scriptsDir) {
-        this.scriptsDir = scriptsDir; // Wir installieren JETZT hier!
+    constructor(scriptsDir, storageDir) {
+        this.scriptsDir = scriptsDir;
+        this.storageDir = storageDir;
+        this.packageJsonPath = path.join(this.storageDir, 'package.json');
+    }
+
+    ensurePackageJson() {
+        if (!fs.existsSync(this.packageJsonPath)) {
+            const minimalPkg = { name: "js-automations-runtime", version: "1.0.0", dependencies: {} };
+            fs.writeFileSync(this.packageJsonPath, JSON.stringify(minimalPkg, null, 2));
+        }
     }
 
     async install(packages) {
-        if (!packages || packages.length === 0) return;
+        const cleanPackages = (packages || []).map(p => p.trim()).filter(p => p.length > 0);
+        if (cleanPackages.length === 0) return;
 
-        const missing = packages.filter(pkg => !this.isInstalled(pkg));
-        if (missing.length === 0) return;
+        this.ensurePackageJson();
+        
+        // Prüfe physisch auf der Platte, ob das Paket fehlt
+        const missing = cleanPackages.filter(pkg => !this.isInstalled(pkg));
+        
+        if (missing.length === 0) {
+            // console.log("📦 All packages already present on disk.");
+            return;
+        }
 
-        console.log(`⬇️ Installing to ${this.scriptsDir}: ${missing.join(', ')}`);
-        
-        // WICHTIG: Wir führen npm install im /config/js-automation Ordner aus
-        const cmd = `npm install ${missing.join(' ')} --no-save --no-audit --loglevel=error`;
-        
-        return new Promise((resolve, reject) => {
-            exec(cmd, { cwd: this.scriptsDir }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`❌ NPM Error: ${stderr}`);
-                    reject(error);
-                } else {
-                    console.log(`✅ Packages ready in ${this.scriptsDir}`);
-                    resolve();
-                }
+        console.log(`⬇️ NPM Install: ${missing.join(', ')}`);
+        return this.runNpm(`install ${missing.join(' ')} --save`);
+    }
+
+    async prune() {
+        this.ensurePackageJson();
+        const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
+        const requiredSet = new Set();
+
+        files.forEach(file => {
+            const meta = ScriptParser.parse(path.join(this.scriptsDir, file));
+            meta.dependencies.forEach(dep => requiredSet.add(dep.split('@')[0]));
+        });
+
+        if (!fs.existsSync(this.packageJsonPath)) return;
+        const pkg = JSON.parse(fs.readFileSync(this.packageJsonPath, 'utf8'));
+        const installed = Object.keys(pkg.dependencies || {});
+        const toRemove = installed.filter(p => !requiredSet.has(p));
+
+        if (toRemove.length > 0) {
+            console.log(`🧹 NPM Prune: Removing ${toRemove.join(', ')}`);
+            await this.runNpm(`uninstall ${toRemove.join(' ')}`);
+        }
+    }
+
+    runNpm(command) {
+        return new Promise((resolve) => {
+            const cmd = `npm ${command} --prefix "${this.storageDir}" --no-audit --loglevel=error`;
+            exec(cmd, (error, stdout, stderr) => {
+                if (error) console.error(`❌ NPM Error: ${stderr}`);
+                resolve();
             });
         });
     }
 
+    /**
+     * Echter Dateisystem-Check statt require.resolve
+     */
     isInstalled(pkgName) {
         const cleanName = pkgName.split('@')[0];
-        try {
-            // Wir prüfen, ob das Paket im Scripts-Ordner existiert
-            require.resolve(cleanName, { paths: [this.scriptsDir] });
-            return true;
-        } catch (e) {
-            return false;
-        }
+        // Wir schauen direkt in den Ordner auf der Festplatte
+        const pkgFolder = path.join(this.storageDir, 'node_modules', cleanName);
+        return fs.existsSync(pkgFolder);
     }
 }
-
 module.exports = DependencyManager;

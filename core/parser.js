@@ -10,9 +10,10 @@ class ScriptParser {
             description: /@description\s+(.*)/,
             area: /@area\s+(.*)/,
             label: /@label\s+(.*)/,
-            loglevel: /@loglevel\s+(.*)/, // NEU
+            loglevel: /@loglevel\s+(.*)/,
             npm: /@npm\s+(.*)/
         };
+
         const metadata = {
             filename: path.basename(filePath),
             path: filePath,
@@ -21,18 +22,28 @@ class ScriptParser {
             description: '',
             area: '',
             label: '',
-            loglevel: 'info', // Standard
+            loglevel: 'info',
             dependencies: []
         };
+
         for (const [key, regex] of Object.entries(patterns)) {
             const match = content.match(regex);
             if (match && match[1]) {
-                if (key === 'npm') metadata.dependencies = match[1].split(',').map(d => d.trim());
-                else metadata[key] = match[1].trim();
+                const val = match[1].trim();
+                if (key === 'npm') {
+                    // Zerlegen, Trimmen und leere Fragmente filtern
+                    metadata.dependencies = val.split(',')
+                        .map(d => d.trim())
+                        .filter(d => d.length > 0);
+                } else {
+                    metadata[key] = val;
+                }
             }
         }
+
         if (!metadata.name) metadata.name = metadata.filename;
         return metadata;
     }
 }
+
 module.exports = ScriptParser;
