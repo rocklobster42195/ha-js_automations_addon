@@ -1,14 +1,60 @@
-# 🗺️ JS Automations Roadmap
+# 🗺️ JS Automations Roadmap - Version 2026
 
-## 🟦 Short Term (v2.17 - v2.20)
-- [ ] **Multi-Tab Editor:** Allow opening multiple scripts simultaneously with a tab bar.
-- [ ] **Shared State UI:** A dedicated dashboard tab to view and delete variables in `ha.store.val`.
-- [ ] **Template Gallery:** Choice of templates (Cron, Mirror, API-Fetch) when creating a new script.
+Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.17.x**) und die geplanten Meilensteine für die Zukunft.
 
-## 🟨 Mid Term (v2.20 - v3.0)
-- [ ] **Resource Monitoring:** Real-time display of CPU and RAM usage per script in the sidebar.
-- [ ] **MDI Search Fix:** Reliable, high-performance icon search within the Monaco Editor.
+---
 
-## 🟧 Long Term (v3.0+)
-- [ ] **Blockly Layer:** Drag-and-drop visual editor for non-coders that generates JS code.
-- [ ] **History & Diff:** View previous versions of a script and compare changes before saving.
+## ✅ Meilenstein 1: Das Fundament (Abgeschlossen)
+*   **Engine:** Node.js Backend mit isolierten Worker-Threads pro Skript.
+*   **HA-Bridge:** Native WebSocket-Verbindung (Zero-Config im Addon-Modus).
+*   **Synchroner Cache:** Blitzschneller Zugriff auf `ha.states` ohne `await`.
+*   **Synchroner Store:** Globaler, persistenter Speicher via `ha.store.val`.
+*   **NPM-Management:** Automatisches Installieren (`@npm`) und Aufräumen (`Prune`).
+*   **Lifecycle:** Automatisches Beenden von One-Shot-Skripten; Keep-alive für `ha.on` und `schedule`.
+*   **Log-Levels:** Filterung von Logs im Worker (`debug`, `info`, `warn`, `error`).
+
+---
+
+## ✅ Meilenstein 2: Das Cockpit (Abgeschlossen)
+*   **Listen-Layout:** Kompakte Sidebar-Liste statt platzraubender Kacheln.
+*   **Smart Grouping:** Gruppierung nach `@label` (Icons & Farben aus HA).
+*   **Flat Design:** Klares UI ohne Glow-Effekte für bessere Übersicht.
+*   **Erstellungs-Wizard:** Modal zum Anlegen neuer Skripte inkl. Metadaten-Abfrage.
+*   **Live-Logs:** Echtzeit-Streaming der Ausgaben ins Dashboard.
+
+---
+
+## 🏗️ Meilenstein 3: Die Workspace-Erfahrung (Nächste Schritte)
+*Ziel: Die tägliche Arbeit mit den Skripten so flüssig wie möglich machen.*
+
+*   **[ ] Persistenter Einklapp-Zustand:** Speichern der zu- oder aufgeklappten Labels im `localStorage`.
+*   **[ ] "Dirty-State" Schutz:** Visueller Indikator (Sternchen) bei ungespeicherten Änderungen und Warnung beim Schließen.
+*   **[ ] Multi-Tab Editing:** Gleichzeitiges Öffnen mehrerer Skripte (Vorsichtige Implementierung ohne Layout-Bruch).
+*   **[ ] Home-Dashboard:** Eine Startseite mit Code-Snippets, Schnellzugriff und Store-Übersicht.
+
+---
+
+## 🚀 Meilenstein 4: Power-User Features (Geplant)
+*Ziel: Die Skript-Engine noch mächtiger machen.*
+
+*   **[ ] TypeScript Support:** Optionale Nutzung von `.ts` Dateien mit automatischer Transpilierung im Hintergrund.
+*   **[ ] Blockly Integration:** Visueller Editor für einfache Logik-Bausteine (generiert JS-Code).
+*   **[ ] Language Badges:** Kleine Markierungen in der Liste (JS / TS / BLK).
+*   **[ ] Inter-Script Messaging:** Direkte Kommunikation zwischen Skripten über `ha.emit('event')`.
+*   **[ ] Globaler Ordner:** Ein Verzeichnis für geteilte Funktionen, die überall verfügbar sind.
+
+---
+
+## 🛡️ Meilenstein 5: HA-Integration & Wartung (Geplant)
+*Ziel: Nahtlose Verschmelzung mit Home Assistant.*
+
+*   **[ ] Mirror-Entitäten (Stabil):** Erstellen von HA-Entitäten zum Starten/Stoppen von Skripten (Technik muss noch stabilisiert werden).
+*   **[ ] Shared State UI:** Ein Tab im Home-Dashboard, um den Inhalt von `ha.store.val` zu sehen und zu verwalten.
+*   **[ ] Resource Monitor:** Anzeige von Speicherverbrauch und Laufzeit pro Skript.
+*   **[ ] Git-Sync:** Skripte direkt mit einem Repository synchronisieren.
+
+---
+
+## 🔧 Bekannte Herausforderungen
+*   **IntelliSense UI:** Das Monaco-Vorschlagsfenster leidet unter CSS-Konflikten innerhalb des Home Assistant Ingress-Iframes (Schwarz-auf-Schwarz Problem).
+*   **MDI Autocomplete:** Die schiere Menge an Icons (~7000) benötigt eine performante Lösung für die Suche im Editor.

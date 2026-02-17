@@ -85,8 +85,16 @@ input#search-input:focus { border-color: var(--accent) !important; }
     font-size: 0.7rem; font-weight: bold; text-transform: uppercase;
     border-bottom: 1px solid #1a1a1a; border-top: 1px solid var(--border);
     display: flex; justify-content: space-between; cursor: pointer;
+    cursor: pointer;
+    user-select: none; /* Verhindert Textmarkierung beim Doppelklick */
+    transition: background 0.2s, opacity 0.2s;
 }
 .section-header:hover { color: #fff; background: #161616; }
+
+.group-content {
+    /* Standardmäßig sichtbar, wird per JS gesteuert */
+    display: block; 
+}
 
 /* Die Zeile selbst */
 .script-row { 

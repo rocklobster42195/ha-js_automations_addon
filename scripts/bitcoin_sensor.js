@@ -3,7 +3,7 @@
  * @icon mdi:currency-btc
  * @description Holt den BTC Kurs und erstellt einen Sensor in HA.
  * @loglevel info
- * @area REG77
+ * @label Spielwiese
  */
 
 ha.log("Bitcoin-Sensor gestartet...");

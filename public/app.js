@@ -8,6 +8,7 @@ let editor = null, currentEditingFilename = '', socket = null, isMonacoReady = f
 let haData = { areas: [], labels: [] };
 let isDirty = false;
 let originalContent = '';
+let collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
 
 async function apiFetch(endpoint, options = {}) {
     const url = BASE_PATH + endpoint.replace(/^\//, '');
@@ -40,15 +41,21 @@ async function loadHAMetadata() {
     } catch (e) { console.warn("HA Metadata failed"); }
 }
 
-// --- RENDER LOGIC (COLORED HEADERS) ---
+/**
+ * UI RENDERING: Groups scripts by Label and remembers collapse state.
+ */
 function renderScripts(scripts, updateGlobal = true) {
     if (updateGlobal) allScripts = scripts;
     const list = document.getElementById('script-list');
     if (!list) return;
     list.innerHTML = '';
 
-    if (scripts.length === 0) { list.innerHTML = '<div style="text-align:center; padding:20px; color:#555">Keine Skripte.</div>'; return; }
+    if (scripts.length === 0) {
+        list.innerHTML = '<div style="text-align:center; padding:20px; color:#555">Keine Skripte gefunden.</div>';
+        return;
+    }
 
+    // 1. Gruppieren nach Label
     const groups = {};
     const NO_GROUP = '___none___';
 
@@ -58,74 +65,90 @@ function renderScripts(scripts, updateGlobal = true) {
         groups[groupKey].push(script);
     });
 
+    // 2. Gruppen sortieren (Alphabetisch, "Nicht zugeordnet" ganz unten)
     const sortedKeys = Object.keys(groups).sort((a, b) => {
         if (a === NO_GROUP) return 1;
         if (b === NO_GROUP) return -1;
         return a.localeCompare(b);
     });
 
+    // 3. Rendern der Sektionen
     sortedKeys.forEach(key => {
         const groupScripts = groups[key];
         const groupDiv = document.createElement('div');
         groupDiv.className = 'script-group';
         
-        // --- HEADER LOGIK ---
-        let headerName = key;
-        let iconClass = 'mdi-label-outline';
-        let iconStyle = ''; // Farbe nur für das Icon
+        // Einklapp-Zustand aus dem Gedächtnis (localStorage) prüfen
+        const isCollapsed = collapsedSections.includes(key);
 
-        if (key === NO_GROUP) {
-            headerName = 'Nicht zugeordnet';
-            iconClass = 'mdi-folder-open-outline';
-        } else {
+        // --- HEADER ERSTELLEN ---
+        let headerName = key === NO_GROUP ? 'Nicht zugeordnet' : key;
+        let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
+        let iconStyle = '';
+
+        if (key !== NO_GROUP) {
             const haLabel = haData.labels.find(l => l.name === key);
             if (haLabel) {
                 if (haLabel.icon) iconClass = haLabel.icon.replace(':', '-');
-                // HIER: Farbe nur für das Icon setzen
                 if (haLabel.color) iconStyle = `color: ${haLabel.color};`;
             }
         }
 
         const header = document.createElement('div');
         header.className = 'section-header';
-        
-        // Icon bekommt den Style, Text bleibt neutral
+        header.style.opacity = isCollapsed ? '0.5' : '1';
         header.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px;">
                 <i class="mdi ${iconClass}" style="font-size:1rem; ${iconStyle}"></i> 
                 <span>${headerName}</span>
             </div>
-            <span style="opacity:0.3; font-size:0.7em">${groupScripts.length}</span>`;
+            <i class="mdi mdi-chevron-${isCollapsed ? 'down' : 'up'}" style="font-size:0.8rem; opacity:0.5;"></i>`;
             
         groupDiv.appendChild(header);
 
-        // --- CONTENT CONTAINER (Wichtig fürs Einklappen) ---
+        // --- CONTAINER FÜR DIE ZEILEN ---
         const contentDiv = document.createElement('div');
         contentDiv.className = 'group-content';
+        contentDiv.style.display = isCollapsed ? 'none' : 'block';
 
-        // Event Listener zum Einklappen
+        // Event-Listener zum Einklappen & Speichern
         header.onclick = () => {
-            const isHidden = contentDiv.style.display === 'none';
-            contentDiv.style.display = isHidden ? 'block' : 'none';
-            header.style.opacity = isHidden ? '1' : '0.6'; // Visuelles Feedback (ausgegraut wenn zu)
+            const nowHidden = contentDiv.style.display !== 'none';
+            contentDiv.style.display = nowHidden ? 'none' : 'block';
+            
+            // Icon und Sichtbarkeit anpassen
+            const chevron = header.querySelector('.mdi-chevron-up, .mdi-chevron-down');
+            if (chevron) chevron.className = `mdi mdi-chevron-${nowHidden ? 'down' : 'up'}`;
+            header.style.opacity = nowHidden ? '0.5' : '1';
+
+            // Zustand im LocalStorage dauerhaft merken
+            if (nowHidden) {
+                if (!collapsedSections.includes(key)) collapsedSections.push(key);
+            } else {
+                collapsedSections = collapsedSections.filter(s => s !== key);
+            }
+            localStorage.setItem('js_collapsed_sections', JSON.stringify(collapsedSections));
         };
 
-        // Sortierung der Skripte
+        // Skripte innerhalb der Gruppe sortieren (Fehler > Running > Stopped)
         groupScripts.sort((a, b) => {
             const score = (s) => (s.status === 'error' ? 2 : (s.running ? 1 : 0));
-            if (score(a) !== score(b)) return score(b) - score(a);
+            const scoreDiff = score(b) - score(a);
+            if (scoreDiff !== 0) return scoreDiff;
             return a.name.localeCompare(b.name);
         });
 
-        // Zeilen rendern
+        // --- ZEILEN RENDERN ---
         groupScripts.forEach(s => {
             const row = document.createElement('div');
             row.className = 'script-row';
-            row.title = s.description || '';
+            row.title = s.description || `File: ${s.filename}`;
             row.onclick = () => openEditor(s.filename, s.description, s.icon);
+
             const icon = s.icon ? s.icon.split(':').pop() : 'script-text';
             let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
-            
+            const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
+
             row.innerHTML = `
                 <div class="script-meta">
                     <div class="script-icon"><i class="mdi mdi-${icon} ${statusClass}"></i></div>
@@ -135,13 +158,19 @@ function renderScripts(scripts, updateGlobal = true) {
                     </div>
                 </div>
                 <div class="row-actions">
-                    <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')"><i class="mdi ${s.running?'mdi-stop':'mdi-play'}"></i></button>
-                    <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" ${!s.running?'disabled':''}><i class="mdi mdi-restart"></i></button>
-                    <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')"><i class="mdi mdi-delete-outline"></i></button>
+                    <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="Start / Stop">
+                        <i class="mdi ${toggleIcon}"></i>
+                    </button>
+                    <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="Restart" ${!s.running?'disabled':''}>
+                        <i class="mdi mdi-restart"></i>
+                    </button>
+                    <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="Löschen">
+                        <i class="mdi mdi-delete-outline"></i>
+                    </button>
                 </div>`;
             contentDiv.appendChild(row);
         });
-        
+
         groupDiv.appendChild(contentDiv);
         list.appendChild(groupDiv);
     });

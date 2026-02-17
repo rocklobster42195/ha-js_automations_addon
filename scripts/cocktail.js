@@ -4,6 +4,7 @@
  * @description Holt Rezepte und berechnet goldene Stunde.
  * @loglevel info
  * @npm suncalc
+ * @label Spielwiese
  */
 
 // suncalc wird automatisch installiert
