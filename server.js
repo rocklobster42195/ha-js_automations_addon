@@ -29,7 +29,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { path: '/socket.io', cors: { origin: "*" } });
 
-const connector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, SCRIPTS_DIR);
+const connector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, STORAGE_DIR);
 const depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR); // Übergibt beide Pfade
 const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);

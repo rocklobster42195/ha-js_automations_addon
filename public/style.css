@@ -63,18 +63,40 @@ button:disabled { opacity: 0.1 !important; cursor: default !important; }
 
 /* --- SEARCH FIELD (Aggressive Dark Mode) --- */
 .search-box { padding: 10px 15px; border-bottom: 1px solid var(--border); }
+
+.search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 input[type="text"]#search-input { 
     width: 100% !important; 
     background-color: #000000 !important; 
     color: #ffffff !important; 
     border: 1px solid #333 !important; 
-    padding: 10px !important; 
+    padding: 10px 30px 10px 10px !important; /* Add padding to the right for the button */
     border-radius: 4px !important; 
     outline: none !important; 
     font-size: 0.9rem !important;
 }
 input#search-input::placeholder { color: #555; }
 input#search-input:focus { border-color: var(--accent) !important; }
+
+#clear-search-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #555 !important;
+    font-size: 1.1rem !important;
+    width: 28px;
+    height: 28px;
+}
+#clear-search-btn:hover {
+    color: #fff !important;
+    background: transparent !important;
+}
 
 /* --- SCRIPT LIST (Layout Fix) --- */
 .script-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
@@ -96,42 +118,61 @@ input#search-input:focus { border-color: var(--accent) !important; }
     display: block; 
 }
 
-/* Die Zeile selbst */
+/* Die Zeile selbst - NEUES LAYOUT */
 .script-row { 
-    padding: 10px 15px; 
+    padding: 8px 15px; /* Etwas weniger vertikales Padding */
     border-bottom: 1px solid #1a1a1a; 
     cursor: pointer; 
     display: flex; 
     align-items: center; 
-    justify-content: space-between; /* Drückt Text nach links, Buttons nach rechts */
+    gap: 15px;
     width: 100%;
 }
 .script-row:hover { background: #1c1c1c; }
 
-/* Linker Block: Icon + Text */
-.script-meta { 
-    display: flex; 
-    align-items: center; 
-    flex: 1; 
-    min-width: 0; /* WICHTIG für Textkürzung */
-    margin-right: 10px;
-}
-
+/* Linke Spalte: Icon */
 .script-icon { 
-    font-size: 22px; color: #444; 
-    min-width: 30px; text-align: center; margin-right: 12px; 
+    font-size: 24px;
+    color: #555;
+    min-width: 24px;
+    text-align: center;
 }
 .status-running { color: var(--accent) !important; }
 .status-error { color: var(--danger) !important; }
 
-.script-details { 
-    display: flex; 
-    flex-direction: column; 
+/* Rechte Spalte: Name, Dateiname, Actions */
+.script-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0; /* Wichtig für text-overflow */
+}
+
+.script-name { 
+    font-size: 0.95rem; 
+    font-weight: 500; 
+    color: #eee; 
     overflow: hidden; 
+    text-overflow: ellipsis; 
+    white-space: nowrap;
+    margin-bottom: 2px; /* Kleiner Abstand nach unten */
+}
+
+/* Untere Zeile der rechten Spalte */
+.script-lower-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.script-filename { 
+    font-size: 0.75rem; 
+    color: #555; 
+    font-family: monospace; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
     white-space: nowrap;
 }
-.script-name { font-size: 0.95rem; font-weight: 500; color: #eee; overflow: hidden; text-overflow: ellipsis; }
-.script-filename { font-size: 0.75rem; color: #555; font-family: monospace; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
 
 /* Rechter Block: Buttons */
 .row-actions { 
@@ -181,9 +222,30 @@ input#search-input:focus { border-color: var(--accent) !important; }
 /* LOGS */
 .log-section { flex: 1; display: flex; flex-direction: column; background: #000; overflow: hidden; }
 .log-header { 
-    padding: 8px 15px; background: #0a0a0a; border-bottom: 1px solid #111; 
-    display: flex; justify-content: space-between; align-items: center; 
-    font-size: 0.7rem; color: #444; font-weight: bold; text-transform: uppercase; 
+    padding: 8px 15px; 
+    background: #0a0a0a; 
+    border-bottom: 1px solid #111; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    font-size: 0.8rem; 
+    color: #666; 
+    font-weight: bold; 
+    text-transform: uppercase; 
+    letter-spacing: 0.5px;
+}
+.log-header button {
+    color: var(--text-dim) !important;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+}
+.log-header button:hover {
+    color: var(--text-main) !important;
+    background: #222 !important;
+}
+.log-header button i {
+    font-size: 1.4rem !important;
 }
 .console { flex: 1; padding: 12px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #999; line-height: 1.5; }
 

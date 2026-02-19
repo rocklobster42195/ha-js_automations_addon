@@ -4,7 +4,7 @@
  * @description Schaltet Licht bei Bewegung (wenn wach) und nach 2 Min Inaktivität aus.
  * @loglevel error
  * @area Schlafzimmer
- * @label Haustür REG77
+ * @label 
  */
 
 // Speicher für den Ausschalttimer

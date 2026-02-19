@@ -35,7 +35,15 @@ async function loadHAMetadata() {
     try {
         const res = await apiFetch('api/ha/metadata');
         if (res.ok) {
-            haData = await res.json();
+            const data = await res.json();
+            // TIMING FIX: If HA returns empty lists (during boot), retry in 3s
+            if (data.areas.length === 0 && data.labels.length === 0) {
+                console.log("⏳ HA Registry not ready. Retrying in 3s...");
+                setTimeout(loadHAMetadata, 3000);
+                return;
+            }
+            haData = data;
+            console.log("✅ HA Metadata loaded.");
             if (allScripts.length > 0) renderScripts(allScripts, false);
         }
     } catch (e) { console.warn("HA Metadata failed"); }
@@ -50,8 +58,12 @@ function renderScripts(scripts, updateGlobal = true) {
     if (!list) return;
     list.innerHTML = '';
 
+    const searchInput = document.getElementById('search-input');
+    const isSearchActive = searchInput && searchInput.value.length > 0;
+
     if (scripts.length === 0) {
-        list.innerHTML = '<div style="text-align:center; padding:20px; color:#555">Keine Skripte gefunden.</div>';
+        const message = isSearchActive ? 'Keine Skripte für die Suche gefunden.' : 'Keine Skripte gefunden.';
+        list.innerHTML = `<div style="text-align:center; padding:20px; color:#555">${message}</div>`;
         return;
     }
 
@@ -78,8 +90,8 @@ function renderScripts(scripts, updateGlobal = true) {
         const groupDiv = document.createElement('div');
         groupDiv.className = 'script-group';
         
-        // Einklapp-Zustand aus dem Gedächtnis (localStorage) prüfen
-        const isCollapsed = collapsedSections.includes(key);
+        // Einklapp-Zustand prüfen, bei Suche immer ausklappen
+        const isCollapsed = isSearchActive ? false : collapsedSections.includes(key);
 
         // --- HEADER ERSTELLEN ---
         let headerName = key === NO_GROUP ? 'Nicht zugeordnet' : key;
@@ -113,6 +125,9 @@ function renderScripts(scripts, updateGlobal = true) {
 
         // Event-Listener zum Einklappen & Speichern
         header.onclick = () => {
+            // Bei Suche ist das Einklappen deaktiviert
+            if (isSearchActive) return;
+
             const nowHidden = contentDiv.style.display !== 'none';
             contentDiv.style.display = nowHidden ? 'none' : 'block';
             
@@ -150,23 +165,25 @@ function renderScripts(scripts, updateGlobal = true) {
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
             row.innerHTML = `
-                <div class="script-meta">
-                    <div class="script-icon"><i class="mdi mdi-${icon} ${statusClass}"></i></div>
-                    <div class="script-details">
-                        <span class="script-name">${s.name}</span>
-                        <span class="script-filename">${s.filename}</span>
-                    </div>
+                <div class="script-icon">
+                    <i class="mdi mdi-${icon} ${statusClass}"></i>
                 </div>
-                <div class="row-actions">
-                    <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="Start / Stop">
-                        <i class="mdi ${toggleIcon}"></i>
-                    </button>
-                    <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="Restart" ${!s.running?'disabled':''}>
-                        <i class="mdi mdi-restart"></i>
-                    </button>
-                    <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="Löschen">
-                        <i class="mdi mdi-delete-outline"></i>
-                    </button>
+                <div class="script-info">
+                    <div class="script-name">${s.name}</div>
+                    <div class="script-lower-row">
+                        <span class="script-filename">${s.filename}</span>
+                        <div class="row-actions">
+                            <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="Start / Stop">
+                                <i class="mdi ${toggleIcon}"></i>
+                            </button>
+                            <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="Restart" ${!s.running?'disabled':''}>
+                                <i class="mdi mdi-restart"></i>
+                            </button>
+                            <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="Löschen">
+                                <i class="mdi mdi-delete-outline"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>`;
             contentDiv.appendChild(row);
         });
@@ -184,7 +201,6 @@ async function openEditor(filename, description, icon) {
     document.getElementById('editor-title').innerText = filename;
     updateIconPreview('editor-icon', icon);
     document.getElementById('editor-section').classList.remove('hidden');
-    document.getElementById('editor-section').style.display = 'flex';
     const res = await apiFetch(`api/scripts/${filename}/content`);
     const data = await res.json();
     originalContent = data.content;
@@ -199,11 +215,11 @@ function updateIconPreview(id, s) { const el=document.getElementById(id); if(el)
 function setDirty(d) { isDirty = d; document.querySelector('.btn-save').style.opacity = d ? '1' : '0.4'; document.getElementById('editor-title').innerText = currentEditingFilename + (d?' *':''); }
 
 async function saveCurrentScript() { if (!editor) return; await apiFetch(`api/scripts/${currentEditingFilename}/content`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ content: editor.getValue() }) }); originalContent = editor.getValue(); setDirty(false); await loadScripts(); }
-function closeEditor() { if(isDirty && !confirm("Discard?")) return; setDirty(false); document.getElementById('editor-section').style.display='none'; }
-window.closeModal = () => document.getElementById('new-script-modal').style.display='none';
+function closeEditor() { if(isDirty && !confirm("Discard?")) return; setDirty(false); document.getElementById('editor-section').classList.add('hidden'); }
+window.closeModal = () => document.getElementById('new-script-modal').classList.add('hidden');
 
 async function createNewScript() {
-    document.getElementById('new-script-modal').style.display = 'flex';
+    document.getElementById('new-script-modal').classList.remove('hidden');
     updateIconPreview('modal-icon-preview', 'mdi:script-text');
     try {
         const res = await apiFetch('api/ha/metadata');
@@ -222,6 +238,39 @@ async function submitNewScript() {
     const res = await apiFetch('api/scripts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(p) });
     if (res.ok) { const data = await res.json(); window.closeModal(); await loadScripts(); setTimeout(() => openEditor(data.filename, p.description, p.icon), 300); }
 }
+
+// --- SEARCH ---
+function filterScripts() {
+    const searchTerm = document.getElementById('search-input').value.toLowerCase();
+    const clearBtn = document.getElementById('clear-search-btn');
+
+    if (clearBtn) {
+        clearBtn.classList.toggle('hidden', searchTerm.length === 0);
+    }
+
+    if (!searchTerm) {
+        renderScripts(allScripts);
+        return;
+    }
+
+    const filtered = allScripts.filter(s => 
+        s.name.toLowerCase().includes(searchTerm) ||
+        s.filename.toLowerCase().includes(searchTerm) ||
+        (s.description && s.description.toLowerCase().includes(searchTerm))
+    );
+
+    renderScripts(filtered, false);
+}
+window.filterScripts = filterScripts;
+
+function clearSearch() {
+    const input = document.getElementById('search-input');
+    if (input) {
+        input.value = '';
+    }
+    filterScripts();
+}
+window.clearSearch = clearSearch;
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {

@@ -28,7 +28,10 @@
             </div>
 
             <div class="search-box">
-                <input type="text" id="search-input" placeholder="Suchen..." oninput="filterScripts()">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Suchen..." oninput="filterScripts()">
+                    <button id="clear-search-btn" class="hidden" onclick="clearSearch()"><i class="mdi mdi-close"></i></button>
+                </div>
             </div>
 
             <div id="script-list" class="script-list">
@@ -67,7 +70,7 @@
     </div>
 
     <!-- Modal for New Script -->
-    <div id="new-script-modal" class="modal-overlay hidden" style="display:none;">
+    <div id="new-script-modal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Neue Automation</h3>
 
