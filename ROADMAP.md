@@ -1,6 +1,6 @@
-# 🗺️ JS Automations Roadmap - Version 2026
+# 🗺️ JS Automations Roadmap
 
-Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.17.x**) und die geplanten Meilensteine mit Einschätzungen zu Komplexität und Aufwand.
+Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die geplanten Meilensteine mit Einschätzungen zu Komplexität und Aufwand.
 
 ---
 
@@ -20,12 +20,11 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.17.x**) und die 
 
 ---
 
-## 🏗️ Meilenstein 3: Die Workspace-Erfahrung (Nächste Schritte)
+## 🏗️ Meilenstein 3: Die Workspace-Erfahrung (Abgeschlossen)
 *Fokus: Produktivität beim Bearbeiten mehrerer Automations-Logiken.*
 
-| Feature | Komplexität | Aufwand | Beschreibung |
-| :--- | :---: | :---: | :--- |
-| **Multi-Tab Editing** | **5/10** | **M** | Monaco-Models für jede Datei im RAM halten; Wechsel ohne Statusverlust. |
+**Multi-Tab Editing:**  Monaco-Models für jede Datei im RAM halten; Wechsel ohne Statusverlust.
+**entities.d.ts Migration:** Pfad-Verschiebung der Typ-Datei in den `.storage` Ordner.
 
 ---
 
@@ -35,7 +34,6 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.17.x**) und die 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
 | **Language Badges** | **1/10** | **S** | Kleine Markierungen (JS / TS / BLK) in der Sidebar-Liste. |
-| **entities.d.ts Migration** | **2/10** | **S** | Pfad-Verschiebung der Typ-Datei in den `.storage` Ordner. |
 | **Globaler Ordner** | **4/10** | **M** | Automatisches Laden von Shared-Functions aus `/global` in jeden Worker. |
 | **TypeScript Support** | **8/10** | **L** | Integration von Transpilern (esbuild/sucrase) & Source-Maps für Debugging. |
 

@@ -1,5 +1,12 @@
 # ⚡ JS Automations for Home Assistant
 
+![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
+![Version](https://img.shields.io/badge/version-2.19.0-blue)
+
+<p align="center">
+  <img src="docs/images/ui.png" width="800" alt="Web UI des Add-ons">
+</p>
+
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
 ---
