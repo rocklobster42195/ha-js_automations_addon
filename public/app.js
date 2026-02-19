@@ -4,10 +4,10 @@
  */
 
 const BASE_PATH = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
-let editor = null, currentEditingFilename = '', socket = null, isMonacoReady = false, allScripts = [];
+let editor = null, socket = null, isMonacoReady = false, allScripts = [];
 let haData = { areas: [], labels: [] };
-let isDirty = false;
-let originalContent = '';
+let openTabs = [];
+let activeTabFilename = null;
 let collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
 
 async function apiFetch(endpoint, options = {}) {
@@ -47,6 +47,37 @@ async function loadHAMetadata() {
             if (allScripts.length > 0) renderScripts(allScripts, false);
         }
     } catch (e) { console.warn("HA Metadata failed"); }
+}
+
+function filterScripts() {
+    const searchInput = document.getElementById('search-input');
+    const clearBtn = document.getElementById('clear-search-btn');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    if (clearBtn) clearBtn.classList.toggle('hidden', searchTerm.length === 0);
+
+    if (searchTerm === '') {
+        renderScripts(allScripts, true); // Use complete list
+        return;
+    }
+
+    const filtered = allScripts.filter(s =>
+        s.name.toLowerCase().includes(searchTerm) ||
+        s.filename.toLowerCase().includes(searchTerm) ||
+        (s.description && s.description.toLowerCase().includes(searchTerm)) ||
+        (s.area && s.area.toLowerCase().includes(searchTerm)) ||
+        (s.label && s.label.toLowerCase().includes(searchTerm))
+    );
+
+    renderScripts(filtered, false);
+}
+
+function clearSearch() {
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.value = '';
+        filterScripts();
+    }
 }
 
 /**
@@ -158,7 +189,7 @@ function renderScripts(scripts, updateGlobal = true) {
             const row = document.createElement('div');
             row.className = 'script-row';
             row.title = s.description || `File: ${s.filename}`;
-            row.onclick = () => openEditor(s.filename, s.description, s.icon);
+            row.onclick = () => openOrSwitchToTab(s.filename, s.icon);
 
             const icon = s.icon ? s.icon.split(':').pop() : 'script-text';
             let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
@@ -193,29 +224,192 @@ function renderScripts(scripts, updateGlobal = true) {
     });
 }
 
-// --- EDITOR & ACTIONS ---
-async function openEditor(filename, description, icon) {
-    if (!isMonacoReady) { setTimeout(() => openEditor(filename, description, icon), 500); return; }
-    if (isDirty && currentEditingFilename !== filename) { if (!confirm("Discard changes?")) return; }
-    currentEditingFilename = filename; setDirty(false);
-    document.getElementById('editor-title').innerText = filename;
-    updateIconPreview('editor-icon', icon);
-    document.getElementById('editor-section').classList.remove('hidden');
-    const res = await apiFetch(`api/scripts/${filename}/content`);
-    const data = await res.json();
-    originalContent = data.content;
-    if (!editor) {
-        editor = monaco.editor.create(document.getElementById('monaco-container'), { value: data.content, language: 'javascript', theme: 'vs-dark', automaticLayout: true, fontSize: 13, minimap: { enabled: false }, suggest: { showWords: false } });
-        editor.onDidChangeModelContent(() => { isDirty = editor.getValue() !== originalContent; setDirty(isDirty); const m = editor.getValue().match(/@icon\s+mdi:(.*)/); if(m) updateIconPreview('editor-icon', 'mdi:'+m[1].trim()); });
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveCurrentScript);
-    } else editor.setValue(data.content);
+// --- EDITOR & TABS ---
+
+function renderTabs() {
+    const tabBar = document.getElementById('tab-bar');
+    if (!tabBar) return;
+    tabBar.innerHTML = '';
+
+    openTabs.forEach(tabData => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'tab';
+        tabEl.dataset.filename = tabData.filename;
+        if (tabData.filename === activeTabFilename) {
+            tabEl.classList.add('active');
+        }
+        if (tabData.isDirty) {
+            tabEl.classList.add('dirty');
+        }
+
+        tabEl.onclick = () => switchToTab(tabData.filename);
+        
+        const iconName = tabData.icon ? tabData.icon.split(':').pop() : 'script-text';
+
+        tabEl.innerHTML = `
+            <i class="tab-icon mdi mdi-${iconName}"></i>
+            <span class="tab-filename">${tabData.filename}</span>
+            <div class="tab-close-container">
+                <span class="tab-dirty-dot">●</span>
+                <button class="tab-close-btn" onclick="event.stopPropagation(); closeTab('${tabData.filename}');">
+                    <i class="mdi mdi-close"></i>
+                </button>
+            </div>
+        `;
+        tabBar.appendChild(tabEl);
+    });
 }
 
-function updateIconPreview(id, s) { const el=document.getElementById(id); if(el) el.className=`mdi mdi-${s?s.split(':').pop().trim():'script-text'}`; }
-function setDirty(d) { isDirty = d; document.querySelector('.btn-save').style.opacity = d ? '1' : '0.4'; document.getElementById('editor-title').innerText = currentEditingFilename + (d?' *':''); }
+async function openOrSwitchToTab(filename, icon) {
+    if (!isMonacoReady) { 
+        setTimeout(() => openOrSwitchToTab(filename, icon), 500); 
+        return; 
+    }
 
-async function saveCurrentScript() { if (!editor) return; await apiFetch(`api/scripts/${currentEditingFilename}/content`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ content: editor.getValue() }) }); originalContent = editor.getValue(); setDirty(false); await loadScripts(); }
-function closeEditor() { if(isDirty && !confirm("Discard?")) return; setDirty(false); document.getElementById('editor-section').classList.add('hidden'); }
+    document.getElementById('editor-section').classList.remove('hidden');
+
+    const existingTab = openTabs.find(t => t.filename === filename);
+    if (existingTab) {
+        switchToTab(filename);
+        return;
+    }
+
+    try {
+        const res = await apiFetch(`api/scripts/${filename}/content`);
+        const data = await res.json();
+        
+        const newTab = {
+            filename: filename,
+            icon: icon,
+            model: monaco.editor.createModel(data.content, 'javascript'),
+            isDirty: false,
+            originalContent: data.content,
+            viewState: null,
+        };
+
+        newTab.model.onDidChangeContent(() => {
+            const isNowDirty = newTab.model.getValue() !== newTab.originalContent;
+            if (newTab.isDirty !== isNowDirty) {
+                newTab.isDirty = isNowDirty;
+                setDirtyUI(newTab.filename, isNowDirty);
+            }
+        });
+
+        openTabs.push(newTab);
+        switchToTab(filename);
+    } catch(e) {
+        console.error(`Failed to open script ${filename}`, e);
+        document.getElementById('editor-section').classList.add('hidden');
+    }
+}
+
+function switchToTab(filename) {
+    if (!editor) return;
+
+    // Save view state of the outgoing tab
+    if (activeTabFilename) {
+        const oldTab = openTabs.find(t => t.filename === activeTabFilename);
+        if (oldTab) {
+            oldTab.viewState = editor.saveViewState();
+        }
+    }
+
+    activeTabFilename = filename;
+    const newTab = openTabs.find(t => t.filename === filename);
+    if (!newTab) return;
+
+    // Switch model and restore view state
+    editor.setModel(newTab.model);
+    if (newTab.viewState) {
+        editor.restoreViewState(newTab.viewState);
+    }
+    editor.focus();
+
+    renderTabs();
+    updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
+}
+
+function closeTab(filename) {
+    const tabToClose = openTabs.find(t => t.filename === filename);
+    if (!tabToClose) return;
+
+    if (tabToClose.isDirty && !confirm(`Änderungen an ${filename} verwerfen?`)) {
+        return;
+    }
+
+    // Find index and remove tab
+    const index = openTabs.findIndex(t => t.filename === filename);
+    openTabs.splice(index, 1);
+    
+    // Clean up the model
+    tabToClose.model.dispose();
+
+    if (openTabs.length === 0) {
+        // No tabs left, hide editor
+        document.getElementById('editor-section').classList.add('hidden');
+        activeTabFilename = null;
+        editor.setModel(null);
+    } else if (activeTabFilename === filename) {
+        // Closed the active tab, switch to a new one
+        const newIndex = Math.max(0, index - 1);
+        switchToTab(openTabs[newIndex].filename);
+    }
+
+    renderTabs();
+}
+
+function setDirtyUI(filename, isDirty) {
+    const tabData = openTabs.find(t => t.filename === filename);
+    if (tabData) tabData.isDirty = isDirty;
+    
+    const tabEl = document.querySelector(`.tab[data-filename="${filename}"]`);
+    if (tabEl) tabEl.classList.toggle('dirty', isDirty);
+
+    if (filename === activeTabFilename) {
+        updateToolbarUI(filename, tabData.icon, isDirty);
+    }
+}
+
+function updateToolbarUI(filename, icon, isDirty) {
+    document.getElementById('editor-title').innerText = filename + (isDirty ? ' *' : '');
+    const iconName = icon ? icon.split(':').pop().trim() : 'script-text';
+    document.getElementById('editor-icon').className = `mdi mdi-${iconName}`;
+    document.querySelector('.btn-save').style.opacity = isDirty ? '1' : '0.4';
+}
+
+async function saveActiveTab() {
+    if (!activeTabFilename) return;
+    const activeTab = openTabs.find(t => t.filename === activeTabFilename);
+    if (!activeTab || !activeTab.isDirty) return;
+
+    const content = activeTab.model.getValue();
+    await apiFetch(`api/scripts/${activeTabFilename}/content`, { 
+        method: 'POST', 
+        headers: {'Content-Type':'application/json'}, 
+        body: JSON.stringify({ content: content }) 
+    });
+    
+    activeTab.originalContent = content;
+    setDirtyUI(activeTabFilename, false);
+    await loadScripts(); // Refresh script list in case metadata changed
+}
+window.saveActiveTab = saveActiveTab;
+
+function closeAllTabs() { 
+    if (openTabs.some(t => t.isDirty) && !confirm("Alle ungespeicherten Änderungen verwerfen?")) {
+        return;
+    }
+    openTabs.forEach(t => t.model.dispose());
+    openTabs = [];
+    activeTabFilename = null;
+    editor.setModel(null);
+    document.getElementById('editor-section').classList.add('hidden');
+    renderTabs();
+}
+window.closeAllTabs = closeAllTabs;
+
+function updateIconPreview(id, s) { const el=document.getElementById(id); if(el) el.className=`mdi mdi-${s?s.split(':').pop().trim():'script-text'}`; }
+
 window.closeModal = () => document.getElementById('new-script-modal').classList.add('hidden');
 
 async function createNewScript() {
@@ -236,41 +430,13 @@ async function submitNewScript() {
     if (!n) return;
     const p = { name: n, icon: document.getElementById('new-script-icon').value, description: document.getElementById('new-script-desc').value, area: document.getElementById('new-script-area').value, label: document.getElementById('new-script-label').value, loglevel: document.getElementById('new-script-loglevel').value };
     const res = await apiFetch('api/scripts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(p) });
-    if (res.ok) { const data = await res.json(); window.closeModal(); await loadScripts(); setTimeout(() => openEditor(data.filename, p.description, p.icon), 300); }
-}
-
-// --- SEARCH ---
-function filterScripts() {
-    const searchTerm = document.getElementById('search-input').value.toLowerCase();
-    const clearBtn = document.getElementById('clear-search-btn');
-
-    if (clearBtn) {
-        clearBtn.classList.toggle('hidden', searchTerm.length === 0);
+    if (res.ok) { 
+        const data = await res.json(); 
+        window.closeModal(); 
+        await loadScripts(); 
+        setTimeout(() => openOrSwitchToTab(data.filename, p.icon), 100); 
     }
-
-    if (!searchTerm) {
-        renderScripts(allScripts);
-        return;
-    }
-
-    const filtered = allScripts.filter(s => 
-        s.name.toLowerCase().includes(searchTerm) ||
-        s.filename.toLowerCase().includes(searchTerm) ||
-        (s.description && s.description.toLowerCase().includes(searchTerm))
-    );
-
-    renderScripts(filtered, false);
 }
-window.filterScripts = filterScripts;
-
-function clearSearch() {
-    const input = document.getElementById('search-input');
-    if (input) {
-        input.value = '';
-    }
-    filterScripts();
-}
-window.clearSearch = clearSearch;
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -284,9 +450,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     socket.on('status_update', loadScripts);
+
     if (typeof require !== 'undefined') {
         require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-        require(['vs/editor/editor.main'], () => { configureMonaco(); loadScripts(); });
+        require(['vs/editor/editor.main'], () => {
+            // --- CREATE EDITOR INSTANCE ---
+            editor = monaco.editor.create(document.getElementById('monaco-container'), {
+                model: null, // No model initially, will be set when a tab is opened
+                language: 'javascript',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 13,
+                minimap: { enabled: false },
+                suggest: { showWords: false }
+            });
+
+            // Add Ctrl+S save command
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
+
+            // --- LOAD INITIAL DATA ---
+            configureMonaco();
+            loadScripts();
+        });
     }
     loadHAMetadata();
 });

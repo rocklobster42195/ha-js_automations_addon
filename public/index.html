@@ -41,6 +41,7 @@
 
         <main class="main-content">
             <div id="editor-section" class="hidden">
+                <div id="tab-bar"></div>
                 <div class="editor-toolbar">
                      <!-- NEUER WRAPPER FÜR LINKS -->
     <div class="editor-info">
@@ -50,8 +51,8 @@
 
     <!-- RECHTE SEITE (Buttons) -->
     <div class="toolbar-btns">
-        <button class="btn-save" onclick="saveCurrentScript()">SPEICHERN</button>
-        <button class="btn-close" onclick="closeEditor()"><i class="mdi mdi-close"></i></button>
+        <button class="btn-save" onclick="saveActiveTab()">SPEICHERN</button>
+        <button class="btn-close" onclick="closeAllTabs()"><i class="mdi mdi-close"></i></button>
     </div>
                 </div>
                 <div id="monaco-container"></div>

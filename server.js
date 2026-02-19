@@ -130,7 +130,21 @@ app.delete('/api/scripts/:filename', async (req, res) => {
 
 // Restliche API (Metadata, Content) bleibt identisch...
 app.get('/api/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
-app.get('/api/scripts/:filename/content', (req, res) => res.json({ content: fs.readFileSync(path.join(SCRIPTS_DIR, req.params.filename), 'utf8') }));
+app.get('/api/scripts/:filename/content', (req, res) => {
+    const filename = req.params.filename;
+    // entities.d.ts liegt im .storage Ordner
+    const fullPath = filename === 'entities.d.ts' 
+        ? path.join(STORAGE_DIR, filename) 
+        : path.join(SCRIPTS_DIR, filename);
+    
+    try {
+        const content = fs.readFileSync(fullPath, 'utf8');
+        res.json({ content });
+    } catch (e) {
+        console.error(`[API] File not found: ${fullPath}`);
+        res.status(404).json({error: "File not found"});
+    }
+});
 app.post('/api/scripts/:filename/content', async (req, res) => {
     const filename = req.params.filename;
     const fullPath = path.join(SCRIPTS_DIR, filename);
