@@ -43,17 +43,13 @@
             <div id="editor-section" class="hidden">
                 <div id="tab-bar"></div>
                 <div class="editor-toolbar">
-                     <!-- NEUER WRAPPER FÜR LINKS -->
-    <div class="editor-info">
-        <i id="editor-icon" class="mdi mdi-script-text"></i>
-        <span id="editor-title">datei.js</span>
-    </div>
-
-    <!-- RECHTE SEITE (Buttons) -->
-    <div class="toolbar-btns">
-        <button class="btn-save" onclick="saveActiveTab()">SPEICHERN</button>
-        <button class="btn-close" onclick="closeAllTabs()"><i class="mdi mdi-close"></i></button>
-    </div>
+                    <div class="toolbar-left">
+                        <button onclick="saveActiveTab()" title="Speichern"><i class="mdi mdi-content-save"></i></button>
+                        <button id="btn-word-wrap" onclick="toggleWordWrap()" title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap"></i></button>
+                    </div>
+                    <div class="toolbar-right">
+                        <button onclick="closeAllTabs()" title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
+                    </div>
                 </div>
                 <div id="monaco-container"></div>
             </div>

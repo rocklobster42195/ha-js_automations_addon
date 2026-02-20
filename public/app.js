@@ -371,9 +371,6 @@ function setDirtyUI(filename, isDirty) {
 }
 
 function updateToolbarUI(filename, icon, isDirty) {
-    document.getElementById('editor-title').innerText = filename + (isDirty ? ' *' : '');
-    const iconName = icon ? icon.split(':').pop().trim() : 'script-text';
-    document.getElementById('editor-icon').className = `mdi mdi-${iconName}`;
     document.querySelector('.btn-save').style.opacity = isDirty ? '1' : '0.4';
 }
 
@@ -465,6 +462,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 suggest: { showWords: false }
             });
 
+            // --- Restore Word Wrap Setting ---
+            const savedWordWrap = localStorage.getItem('js_editor_wordwrap') || 'off';
+            editor.updateOptions({ wordWrap: savedWordWrap });
+            const wrapButton = document.getElementById('btn-word-wrap');
+            if (wrapButton) {
+                wrapButton.style.color = (savedWordWrap === 'on') ? 'var(--accent)' : 'var(--text-sec)';
+            }
+
             // Add Ctrl+S save command
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
 
@@ -480,3 +485,22 @@ window.loadScripts = loadScripts;
 window.toggleScript = async (f) => { await apiFetch('api/scripts/control', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: f, action: 'toggle' })}); };
 window.restartScript = async (f) => { await apiFetch('api/scripts/control', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: f, action: 'restart' })}); };
 window.deleteScript = async (f) => { if(confirm(`Delete?`)) { await apiFetch(`api/scripts/${f}`, { method: 'DELETE' }); loadScripts(); } };
+
+function toggleWordWrap() {
+    if (!editor) return;
+
+    const currentOptions = editor.getOptions();
+    const currentWordWrap = currentOptions.get(monaco.editor.EditorOption.wordWrap);
+    
+    const newWordWrapValue = (currentWordWrap === 'off') ? 'on' : 'off';
+    editor.updateOptions({ wordWrap: newWordWrapValue });
+    localStorage.setItem('js_editor_wordwrap', newWordWrapValue);
+
+    // Visual feedback on the button
+    const wrapButton = document.getElementById('btn-word-wrap');
+    if (wrapButton) {
+        // Use accent color when active
+        wrapButton.style.color = (newWordWrapValue === 'on') ? 'var(--accent)' : 'var(--text-sec)';
+    }
+}
+window.toggleWordWrap = toggleWordWrap;
