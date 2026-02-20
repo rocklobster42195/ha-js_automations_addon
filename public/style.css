@@ -195,13 +195,19 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .main-content { flex: 1; display: flex; flex-direction: column; background: #000; height: 100%; min-width: 0; }
 
 /* EDITOR AREA */
-#editor-section { height: 65%; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
-#monaco-container { flex: 1; width: 100%; }
+#editor-section { 
+    height: 65%; /* Fallback, gets overwritten by JS */
+    display: flex; 
+    flex-direction: column; 
+    min-height: 90px; /* Tab-Bar (45px) + Toolbar (45px) */
+}
+#monaco-container { flex: 1; width: 100%; min-height: 0; }
 
 .editor-toolbar { 
     background: #111; height: 45px; padding: 0 10px; 
     display: flex; justify-content: space-between; align-items: center; 
     border-bottom: 1px solid var(--border); 
+    flex-shrink: 0;
 }
 
 .toolbar-left, .toolbar-right {
@@ -221,10 +227,27 @@ input#search-input:focus { border-color: var(--accent) !important; }
     background: #252525 !important;
 }
 
-
+/* RESIZER */
+#resizer {
+    flex-shrink: 0;
+    height: 4px;
+    border-top: 1px solid var(--border);
+    cursor: ns-resize;
+    transition: background-color 0.2s ease;
+}
+#resizer:hover, body.resizing #resizer {
+    background-color: var(--accent);
+}
 
 /* LOGS */
-.log-section { flex: 1; display: flex; flex-direction: column; background: #000; overflow: hidden; }
+.log-section { 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    background: #000; 
+    overflow: hidden; 
+    min-height: 45px; /* Log Header height */
+}
 .log-header { 
     padding: 8px 15px; 
     background: #0a0a0a; 
@@ -237,6 +260,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     font-weight: bold; 
     text-transform: uppercase; 
     letter-spacing: 0.5px;
+    flex-shrink: 0;
 }
 .log-header button {
     color: var(--text-dim) !important;
@@ -305,6 +329,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     background: var(--side);
     width: 100%;
     height: 45px;
+    flex-shrink: 0;
     overflow-x: auto;
     border-bottom: 1px solid var(--border);
     /* Hide scrollbar */

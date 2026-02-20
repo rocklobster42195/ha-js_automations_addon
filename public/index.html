@@ -44,8 +44,8 @@
                 <div id="tab-bar"></div>
                 <div class="editor-toolbar">
                     <div class="toolbar-left">
-                        <button onclick="saveActiveTab()" title="Speichern"><i class="mdi mdi-content-save"></i></button>
-                        <button id="btn-word-wrap" onclick="toggleWordWrap()" title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap"></i></button>
+                        <button class="btn-save" onclick="saveActiveTab()" title="Speichern"><i class="mdi mdi-content-save"></i></button>
+                        <button id="btn-word-wrap" onclick="toggleWordWrap()" title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                     </div>
                     <div class="toolbar-right">
                         <button onclick="closeAllTabs()" title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
@@ -53,6 +53,8 @@
                 </div>
                 <div id="monaco-container"></div>
             </div>
+
+            <div id="resizer"></div>
 
             <div class="log-section">
                 <div class="log-header">
