@@ -44,6 +44,48 @@ const stopCallbacks = [];
 let isListening = false;
 
 /**
+ * EntitySelector Class for bulk actions
+ */
+class EntitySelector {
+    constructor(entities, parentHa) {
+        this.list = entities; // Array of HA State objects
+        this.ha = parentHa;
+    }
+
+    /** Returns the number of entities in the current selection */
+    get count() { return this.list.length; }
+
+    /** Filters the current selection using a callback function */
+    where(callback) {
+        return new EntitySelector(this.list.filter(callback), this.ha);
+    }
+
+    /** Executes a function for each entity in the selection */
+    each(callback) {
+        this.list.forEach(callback);
+        return this;
+    }
+
+    /** Calls a service for all entities in the selection */
+    call(service, data = {}) {
+        this.list.forEach(entity => {
+            const domain = entity.entity_id.split('.')[0];
+            this.ha.callService(domain, service, { ...data, entity_id: entity.entity_id });
+        });
+        return this;
+    }
+
+    /** Shortcut to turn all selected entities ON */
+    turnOn(data = {}) { return this.call('turn_on', data); }
+
+    /** Shortcut to turn all selected entities OFF */
+    turnOff(data = {}) { return this.call('turn_off', data); }
+
+    /** Returns the raw array of state objects */
+    toArray() { return this.list; }
+}
+
+/**
  * Ensures the worker is listening for updates from the master.
  */
 function ensureMessageListener() {
@@ -97,6 +139,27 @@ const ha = {
     
     // Real-time Data
     states: states,
+
+    select: (pattern) => {
+        const allIds = Object.keys(states);
+        let matchedIds = [];
+
+        if (typeof pattern === 'string') {
+            if (pattern.includes('*')) {
+                const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+                matchedIds = allIds.filter(id => regex.test(id));
+            } else {
+                matchedIds = allIds.filter(id => id === pattern);
+            }
+        } else if (pattern instanceof RegExp) {
+            matchedIds = allIds.filter(id => pattern.test(id));
+        } else if (Array.isArray(pattern)) {
+            matchedIds = allIds.filter(id => pattern.includes(id));
+        }
+
+        const matchedStates = matchedIds.map(id => states[id]);
+        return new EntitySelector(matchedStates, ha);
+    },
     
     on: (pattern, callback) => {
         parentPort.ref(); // Keep alive
