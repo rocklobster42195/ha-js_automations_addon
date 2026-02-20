@@ -23,6 +23,27 @@
 
 ---
 
+## 🎮 Switches & Control
+
+For every script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
+
+*   **Entity ID:** `switch.js_automation_<script_name>`
+*   **State:** The switch is `on` when the script is running and `off` when it's stopped.
+*   **Control:** Toggling the switch in Home Assistant will start or stop the script. This is perfect for manually triggering automations or stopping long-running tasks.
+*   **Custom Icon:** The switch will automatically use the icon you define in the script's `@icon` metadata tag.
+
+```javascript
+/**
+ * @name My Awesome Script
+ * @icon mdi:robot-happy
+ */
+
+// This script will have a switch named "switch.js_automation_my_awesome_script"
+// with the "mdi:robot-happy" icon.
+```
+
+---
+
 ## 📝 The Metadata Header
 
 Every script starts with a JSDoc-style header. This configures the engine's behavior.
@@ -186,6 +207,13 @@ async function sequence() {
     ha.callService('light', 'turn_off', { entity_id: 'light.test' });
 }
 ```
+
+---
+## 🌍 Internationalization
+
+The user interface is available in both German and English.
+- **Automatic Detection:** The language is automatically chosen based on your browser's settings.
+- **Manual Override:** You can force a specific language for testing by adding the `?lng=` query parameter to the URL. For example, `?lng=en` will switch the UI to English.
 
 ---
 

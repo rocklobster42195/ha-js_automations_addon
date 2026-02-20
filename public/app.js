@@ -3,6 +3,41 @@
  * Feature: Colored Section Headers based on HA Labels
  */
 
+// --- I18N ---
+async function initI18next() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lng') || navigator.language.split('-')[0];
+
+    await i18next
+        .use(i18nextHttpBackend)
+        .init({
+            lng: lang,
+            fallbackLng: 'en',
+            debug: false,
+            ns: ['translation'],
+            defaultNS: 'translation',
+            backend: {
+                loadPath: 'locales/{{lng}}/translation.json'
+            }
+        });
+    updateUIWithTranslations();
+}
+
+function updateUIWithTranslations() {
+    document.title = i18next.t('app_title');
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (el.hasAttribute('data-i18n-placeholder')) {
+            el.placeholder = i18next.t(key);
+        } else if (el.hasAttribute('data-i18n-title')) {
+            el.title = i18next.t(key);
+        } else {
+            el.innerHTML = i18next.t(key);
+        }
+    });
+}
+// --- END I18N ---
+
 const BASE_PATH = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
 let editor = null, socket = null, isMonacoReady = false, allScripts = [];
 let haData = { areas: [], labels: [] };
@@ -93,7 +128,7 @@ function renderScripts(scripts, updateGlobal = true) {
     const isSearchActive = searchInput && searchInput.value.length > 0;
 
     if (scripts.length === 0) {
-        const message = isSearchActive ? 'Keine Skripte für die Suche gefunden.' : 'Keine Skripte gefunden.';
+        const message = isSearchActive ? i18next.t('no_scripts_found_search') : i18next.t('no_scripts_found');
         list.innerHTML = `<div style="text-align:center; padding:20px; color:#555">${message}</div>`;
         return;
     }
@@ -125,7 +160,7 @@ function renderScripts(scripts, updateGlobal = true) {
         const isCollapsed = isSearchActive ? false : collapsedSections.includes(key);
 
         // --- HEADER ERSTELLEN ---
-        let headerName = key === NO_GROUP ? 'Nicht zugeordnet' : key;
+        let headerName = key === NO_GROUP ? i18next.t('group_none') : key;
         let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
         let iconStyle = '';
 
@@ -204,13 +239,13 @@ function renderScripts(scripts, updateGlobal = true) {
                     <div class="script-lower-row">
                         <span class="script-filename">${s.filename}</span>
                         <div class="row-actions">
-                            <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="Start / Stop">
+                            <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}">
                                 <i class="mdi ${toggleIcon}"></i>
                             </button>
-                            <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="Restart" ${!s.running?'disabled':''}>
+                            <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="${i18next.t('script_action_restart_title')}" ${!s.running?'disabled':''}>
                                 <i class="mdi mdi-restart"></i>
                             </button>
-                            <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="Löschen">
+                            <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}">
                                 <i class="mdi mdi-delete-outline"></i>
                             </button>
                         </div>
@@ -333,7 +368,7 @@ function closeTab(filename) {
     const tabToClose = openTabs.find(t => t.filename === filename);
     if (!tabToClose) return;
 
-    if (tabToClose.isDirty && !confirm(`Änderungen an ${filename} verwerfen?`)) {
+    if (tabToClose.isDirty && !confirm(i18next.t('confirm_discard_changes', { filename }))) {
         return;
     }
 
@@ -393,7 +428,7 @@ async function saveActiveTab() {
 window.saveActiveTab = saveActiveTab;
 
 function closeAllTabs() { 
-    if (openTabs.some(t => t.isDirty) && !confirm("Alle ungespeicherten Änderungen verwerfen?")) {
+    if (openTabs.some(t => t.isDirty) && !confirm(i18next.t('confirm_discard_all_changes'))) {
         return;
     }
     openTabs.forEach(t => t.model.dispose());
@@ -416,8 +451,8 @@ async function createNewScript() {
         const res = await apiFetch('api/ha/metadata');
         if (res.ok) {
             const { areas, labels } = await res.json();
-            document.getElementById('new-script-area').innerHTML = '<option value="">Kein Bereich</option>' + areas.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-            document.getElementById('new-script-label').innerHTML = '<option value="">Kein Label</option>' + labels.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
+            document.getElementById('new-script-area').innerHTML = `<option value="">${i18next.t('area_none')}</option>` + areas.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+            document.getElementById('new-script-label').innerHTML = `<option value="">${i18next.t('label_none')}</option>` + labels.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
         }
     } catch (e) {}
 }
@@ -436,7 +471,9 @@ async function submitNewScript() {
 }
 
 // --- INIT ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initI18next();
+
     socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
     socket.on('log', d => {
         const out = document.getElementById('console-output'); if(out) {
@@ -488,7 +525,7 @@ async function loadScripts() { const res = await apiFetch('api/scripts'); if (re
 window.loadScripts = loadScripts;
 window.toggleScript = async (f) => { await apiFetch('api/scripts/control', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: f, action: 'toggle' })}); };
 window.restartScript = async (f) => { await apiFetch('api/scripts/control', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: f, action: 'restart' })}); };
-window.deleteScript = async (f) => { if(confirm(`Delete?`)) { await apiFetch(`api/scripts/${f}`, { method: 'DELETE' }); loadScripts(); } };
+window.deleteScript = async (f) => { if(confirm(i18next.t('confirm_delete_script', { filename: f }))) { await apiFetch(`api/scripts/${f}`, { method: 'DELETE' }); loadScripts(); } };
 
 function initResizer() {
     const resizer = document.getElementById('resizer');

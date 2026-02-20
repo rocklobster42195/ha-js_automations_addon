@@ -22,7 +22,7 @@ class HAConnector {
         this.ws = null;
         this.msgId = 1;
         this.isReady = false;
-        this.onEventCallback = null;
+        this.eventListeners = [];
         this.states = {}; 
     }
 
@@ -55,7 +55,7 @@ class HAConnector {
                 if (new_state) this.states[entity_id] = new_state;
                 else delete this.states[entity_id];
             }
-            if (this.onEventCallback) this.onEventCallback(msg.event);
+            this.eventListeners.forEach(cb => cb(msg.event));
         }
     }
 
@@ -77,8 +77,13 @@ class HAConnector {
     }
 
     send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data)); }
-    subscribeEvents() { this.send({ id: this.msgId++, type: 'subscribe_events', event_type: 'state_changed' }); }
-    onEvent(callback) { this.onEventCallback = callback; }
+    subscribeEvents() { this.send({ id: this.msgId++, type: 'subscribe_events' }); }
+    subscribeToEvents(callback) { this.eventListeners.push(callback); }
+
+    createEntity(domain, name, prefix, options) {
+        const entityId = `${domain}.${prefix}_${name}`;
+        this.updateState(entityId, 'off', options);
+    }
 
     async updateState(entityId, state, attributes = {}) {
         if (!this.token) return;

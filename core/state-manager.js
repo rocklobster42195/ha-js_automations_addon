@@ -12,6 +12,8 @@ class StateManager {
     constructor(rootDir) {
         this.stateFile = path.join(rootDir, 'state.json');
         this.state = { enabledScripts: [] };
+        this.liveStates = new Map();
+        this.entityScriptMap = new Map();
         this.load();
     }
 
@@ -34,6 +36,22 @@ class StateManager {
         } catch (e) {
             console.error("❌ Failed to save state.json:", e.message);
         }
+    }
+
+    set(entityId, state) {
+        this.liveStates.set(entityId, state);
+    }
+
+    get(entityId) {
+        return this.liveStates.get(entityId);
+    }
+
+    registerEntity(entityId, scriptName) {
+        this.entityScriptMap.set(entityId, scriptName);
+    }
+
+    getScriptNameForEntity(entityId) {
+        return this.entityScriptMap.get(entityId);
     }
 
     /** Mark a script as enabled */

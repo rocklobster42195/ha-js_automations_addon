@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="style.css">
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next-http-backend/2.5.0/i18nextHttpBackend.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 </head>
 
@@ -19,17 +21,17 @@
             <div class="sidebar-header">
                 <div class="brand">
                     <i class="mdi mdi-nodejs"></i>
-                    <span>JS AUTOMATIONS</span>
+                    <span data-i18n="header_title">JS AUTOMATIONS</span>
                 </div>
                 <div class="header-actions">
-                    <button onclick="createNewScript()" title="New Script"><i class="mdi mdi-plus"></i></button>
-                    <button onclick="loadScripts()" title="Refresh List"><i class="mdi mdi-refresh"></i></button>
+                    <button onclick="createNewScript()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
+                    <button onclick="loadScripts()" data-i18n="refresh_list_title" data-i18n-title title="Refresh List"><i class="mdi mdi-refresh"></i></button>
                 </div>
             </div>
 
             <div class="search-box">
                 <div class="search-container">
-                    <input type="text" id="search-input" placeholder="Suchen..." oninput="filterScripts()">
+                    <input type="text" id="search-input" data-i18n="search_placeholder" data-i18n-placeholder placeholder="Suchen..." oninput="filterScripts()">
                     <button id="clear-search-btn" class="hidden" onclick="clearSearch()"><i class="mdi mdi-close"></i></button>
                 </div>
             </div>
@@ -44,11 +46,11 @@
                 <div id="tab-bar"></div>
                 <div class="editor-toolbar">
                     <div class="toolbar-left">
-                        <button class="btn-save" onclick="saveActiveTab()" title="Speichern"><i class="mdi mdi-content-save"></i></button>
-                        <button id="btn-word-wrap" onclick="toggleWordWrap()" title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
+                        <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
+                        <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                     </div>
                     <div class="toolbar-right">
-                        <button onclick="closeAllTabs()" title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
+                        <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
                     </div>
                 </div>
                 <div id="monaco-container"></div>
@@ -58,8 +60,8 @@
 
             <div class="log-section">
                 <div class="log-header">
-                    <span>PROTOKOLL</span>
-                    <button onclick="document.getElementById('console-output').innerHTML=''" title="Clear Logs">
+                    <span data-i18n="log_header">PROTOKOLL</span>
+                    <button onclick="document.getElementById('console-output').innerHTML=''" data-i18n="clear_logs_title" data-i18n-title title="Clear Logs">
                         <i class="mdi mdi-delete-sweep"></i>
                     </button>
                 </div>
@@ -71,15 +73,15 @@
     <!-- Modal for New Script -->
     <div id="new-script-modal" class="modal-overlay hidden">
         <div class="modal">
-            <h3>Neue Automation</h3>
+            <h3 data-i18n="modal_new_automation_title">Neue Automation</h3>
 
             <div class="form-grid">
                 <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="new-script-name" placeholder="Name">
+                    <label data-i18n="form_name">Name</label>
+                    <input type="text" id="new-script-name" data-i18n="form_name" data-i18n-placeholder placeholder="Name">
                 </div>
                 <div class="form-group">
-    <label>Icon</label>
+    <label data-i18n="form_icon">Icon</label>
     <div class="icon-input-container">
         <!-- Live Vorschau Links -->
         <i id="modal-icon-preview" class="mdi mdi-script-text"></i>
@@ -119,35 +121,35 @@
     </datalist>
 </div>
                 <div class="form-group">
-                    <label>Bereich (Area)</label>
+                    <label data-i18n="form_area">Bereich (Area)</label>
                     <select id="new-script-area">
-                        <option value="">Kein Bereich</option>
+                        <option value="" data-i18n="area_none">Kein Bereich</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Label</label>
+                    <label data-i18n="form_label">Label</label>
                     <select id="new-script-label">
-                        <option value="">Kein Label</option>
+                        <option value="" data-i18n="label_none">Kein Label</option>
                     </select>
                 </div>
                 <div class="form-group">
-        <label>Log Level</label>
+        <label data-i18n="form_log_level">Log Level</label>
         <select id="new-script-loglevel">
-            <option value="debug">Debug (Alles)</option>
-            <option value="info" selected>Info (Standard)</option>
-            <option value="warn">Warnungen</option>
-            <option value="error">Nur Fehler</option>
+            <option value="debug" data-i18n="log_level_debug">Debug (Alles)</option>
+            <option value="info" selected data-i18n="log_level_info">Info (Standard)</option>
+            <option value="warn" data-i18n="log_level_warn">Warnungen</option>
+            <option value="error" data-i18n="log_level_error">Nur Fehler</option>
         </select>
     </div>
                 <div class="form-group full-width">
-                    <label>Beschreibung</label>
-                    <textarea id="new-script-desc" placeholder="Kurze Beschreibung..."></textarea>
+                    <label data-i18n="form_description">Beschreibung</label>
+                    <textarea id="new-script-desc" data-i18n="description_placeholder" data-i18n-placeholder placeholder="Kurze Beschreibung..."></textarea>
                 </div>
             </div>
 
             <div class="modal-btns">
-                <button class="btn-text" onclick="closeModal()">ABBRECHEN</button>
-                <button class="btn-primary" onclick="submitNewScript()">ERSTELLEN</button>
+                <button class="btn-text" onclick="closeModal()" data-i18n="button_cancel">ABBRECHEN</button>
+                <button class="btn-primary" onclick="submitNewScript()" data-i18n="button_create">ERSTELLEN</button>
             </div>
         </div>
     </div>

@@ -6,6 +6,7 @@ const { Worker } = require('worker_threads');
 const path = require('path');
 const EventEmitter = require('events');
 const fs = require('fs');
+const ScriptParser = require('./parser');
 
 class WorkerManager extends EventEmitter {
     constructor() {
@@ -17,25 +18,40 @@ class WorkerManager extends EventEmitter {
         this.storeManager = null;
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
+        this.scriptsDir = '';
     }
 
     setConnector(connector) { this.haConnector = connector; }
     setStore(store) { this.storeManager = store; }
     setStorageDir(dir) { this.storageDir = dir; }
+    setScriptsDir(dir) { this.scriptsDir = dir; }
+
+    getScripts() {
+        if (!this.scriptsDir) return [];
+        const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
+        return files.map(f => path.join(this.scriptsDir, f));
+    }
 
     /**
      * Starts a script in an isolated thread.
      */
-    startScript(scriptMeta) {
-        const { filename, name } = scriptMeta;
-        
-        // Restart if already running
-        if (this.workers.has(filename)) {
-            this.stopScript(filename, 'restarting');
+    startScript(filename) {
+        const fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
+        if (!fs.existsSync(fullPath)) {
+            this.emit('log', `[System] Script not found: ${filename}`, 'error');
+            return;
         }
 
-        this.lastExitState.delete(filename);
-        this.subscriptions.set(filename, []);
+        const scriptMeta = ScriptParser.parse(fullPath);
+        const { name } = scriptMeta;
+        
+        // Restart if already running
+        if (this.workers.has(scriptMeta.filename)) {
+            this.stopScript(scriptMeta.filename, 'restarting');
+        }
+
+        this.lastExitState.delete(scriptMeta.filename);
+        this.subscriptions.set(scriptMeta.filename, []);
 
         // Prepare initial data dump for the worker
         const initialStoreValues = {};
@@ -75,7 +91,7 @@ class WorkerManager extends EventEmitter {
 
             // 3. Subscriptions (ha.on)
             if (msg.type === 'subscribe') {
-                this.subscriptions.get(filename).push(msg.pattern);
+                this.subscriptions.get(scriptMeta.filename).push(msg.pattern);
             }
 
             // 4. Store Operations
@@ -91,25 +107,26 @@ class WorkerManager extends EventEmitter {
 
         worker.on('error', (err) => {
             this.emit('log', `[${name}] ❌ CRITICAL: ${err.message}`, 'error');
-            this.lastExitState.set(filename, 'error');
+            this.lastExitState.set(scriptMeta.filename, 'error');
         });
 
         worker.on('exit', (code) => {
-            if (this.workers.get(filename) === worker) {
-                this.workers.delete(filename);
-                this.subscriptions.delete(filename);
+            if (this.workers.get(scriptMeta.filename) === worker) {
+                this.workers.delete(scriptMeta.filename);
+                this.subscriptions.delete(scriptMeta.filename);
                 
-                let reason = this.stopReasons.get(filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
+                let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(filename)) ? 'error' : 'success';
                 
-                if (type === 'error') this.lastExitState.set(filename, 'error');
-                this.stopReasons.delete(filename);
+                if (type === 'error') this.lastExitState.set(scriptMeta.filename, 'error');
+                this.stopReasons.delete(scriptMeta.filename);
                 
-                this.emit('script_exit', { filename, reason, type });
+                this.emit('script_exit', { filename: scriptMeta.filename, reason, type });
             }
         });
 
-        this.workers.set(filename, worker);
+        this.workers.set(scriptMeta.filename, worker);
+        this.emit('script_start', { filename: scriptMeta.filename });
     }
 
     /**

@@ -15,6 +15,7 @@ const workerManager = require('./core/worker-manager');
 const DependencyManager = require('./core/dependency-manager');
 const StateManager = require('./core/state-manager');
 const StoreManager = require('./core/store-manager');
+const EntityManager = require('./core/entity-manager');
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const SCRIPTS_DIR = IS_ADDON ? '/config/js-automation' : path.join(__dirname, 'scripts');
@@ -35,6 +36,7 @@ const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/locales', express.static(path.join(__dirname, 'locales')));
 app.use(express.json());
 
 async function startSystem() {
@@ -44,9 +46,13 @@ async function startSystem() {
         workerManager.setConnector(connector);
         workerManager.setStore(storeManager);
         workerManager.setStorageDir(STORAGE_DIR); // Dem Manager den neuen Pfad sagen
+        workerManager.setScriptsDir(SCRIPTS_DIR);
+
+        const entityManager = new EntityManager(connector, workerManager, stateManager);
+        await entityManager.createSwitches();
 
         // State Verteilung
-        connector.onEvent(async (event) => {
+        connector.subscribeToEvents((event) => {
             if (event.event_type === 'state_changed') {
                 const { entity_id, new_state, old_state } = event.data;
                 workerManager.dispatchStateChange(entity_id, new_state, old_state);
@@ -54,10 +60,21 @@ async function startSystem() {
         });
 
         // Lifecycle Events
+        workerManager.on('script_start', ({ filename }) => {
+            const scriptName = path.basename(filename, '.js');
+            stateManager.set(`switch.js_automation_${scriptName}`, 'on');
+            connector.updateState(`switch.js_automation_${scriptName}`, 'on');
+            io.emit('status_update');
+        });
+
         workerManager.on('script_exit', (d) => {
             if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('by user')) {
                 stateManager.saveScriptStopped(d.filename);
             }
+            const scriptName = path.basename(d.filename, '.js');
+
+            stateManager.set(`switch.js_automation_${scriptName}`, 'off');
+            connector.updateState(`switch.js_automation_${scriptName}`, 'off');
             io.emit('log', { message: `[System] ${d.filename} ${d.reason}`, level: d.type });
             io.emit('status_update');
         });
@@ -71,7 +88,7 @@ async function startSystem() {
             if (fs.existsSync(fullPath)) {
                 const meta = ScriptParser.parse(fullPath);
                 if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-                workerManager.startScript(meta);
+                workerManager.startScript(file);
             }
         }
         
@@ -95,22 +112,17 @@ app.get('/api/scripts', (req, res) => {
 
 app.post('/api/scripts/control', async (req, res) => {
     const { filename, action } = req.body;
-    const fullPath = path.join(SCRIPTS_DIR, filename);
     if (action === 'toggle') {
         if (workerManager.workers.has(filename)) {
             workerManager.stopScript(filename, 'by user');
         } else {
-            const meta = ScriptParser.parse(fullPath);
-            if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-            workerManager.startScript(meta);
+            workerManager.startScript(filename);
             stateManager.saveScriptStarted(filename);
         }
     } else if (action === 'restart') {
         workerManager.stopScript(filename, 'restarting');
         setTimeout(async () => {
-            const meta = ScriptParser.parse(fullPath);
-            if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-            workerManager.startScript(meta);
+            workerManager.startScript(filename);
             io.emit('status_update');
         }, 500);
     }
@@ -152,9 +164,7 @@ app.post('/api/scripts/:filename/content', async (req, res) => {
     if (workerManager.workers.has(filename)) {
         workerManager.stopScript(filename, 'hot-reload');
         setTimeout(async () => {
-            const meta = ScriptParser.parse(fullPath);
-            if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
-            workerManager.startScript(meta);
+            workerManager.startScript(filename);
             io.emit('status_update');
         }, 500);
     } else {

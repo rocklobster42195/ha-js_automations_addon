@@ -20,11 +20,12 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 ---
 
-## 🏗️ Meilenstein 3: Die Workspace-Erfahrung (Abgeschlossen)
+## ✅ Meilenstein 3: Die Workspace-Erfahrung (Abgeschlossen)
 *Fokus: Produktivität beim Bearbeiten mehrerer Automations-Logiken.*
 
 **Multi-Tab Editing:**  Monaco-Models für jede Datei im RAM halten; Wechsel ohne Statusverlust.
 **entities.d.ts Migration:** Pfad-Verschiebung der Typ-Datei in den `.storage` Ordner.
+**Multilanguage (UI):** Dashboard auf Deutsch/Englisch (Fallback Englisch). 
 
 ---
 
@@ -44,7 +45,6 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Multilanguage (UI)** | **3/10** | **S** | Dashboard auf Deutsch/Englisch (Fallback Englisch). |
 | **Englische Kommentare** | **2/10** | **S** | Refactoring des Quellcodes für internationale Lesbarkeit. |
 | **Git-Sync (Addon)** | **3/10** | **S** | Deployment-Pipeline für das Addon nach GitHub (Repository-Struktur). |
 | **Resource Monitor** | **5/10** | **M** | Live CPU/RAM Anzeige pro Skript (via `pidusage`). |
