@@ -118,9 +118,8 @@ input#search-input:focus { border-color: var(--accent) !important; }
     display: block; 
 }
 
-/* Die Zeile selbst - NEUES LAYOUT */
 .script-row { 
-    padding: 8px 15px; /* Etwas weniger vertikales Padding */
+    padding: 8px 15px;
     border-bottom: 1px solid #1a1a1a; 
     cursor: pointer; 
     display: flex; 
@@ -180,7 +179,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     gap: 6px; 
     opacity: 0; 
     transition: opacity 0.2s; 
-    flex-shrink: 0; /* Verhindert das Schrumpfen/Umbruchen der Buttons */
+    flex-shrink: 0;
 }
 .script-row:hover .row-actions { opacity: 1; }
 

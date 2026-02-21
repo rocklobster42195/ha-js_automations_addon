@@ -15,3 +15,7 @@ homeassistant_api: true
 hassio_role: manager
 map:
   - config:rw
+options:
+  ui_language: "de"
+schema:
+  ui_language: list(de|en|es|ksh)

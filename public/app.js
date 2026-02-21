@@ -5,8 +5,23 @@
 
 // --- I18N ---
 async function initI18next() {
+    
     const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lng') || navigator.language.split('-')[0];
+    let lang = urlParams.get('lng');
+
+    // Wenn nicht per URL erzwungen, versuche Config vom Backend zu laden
+    if (!lang) {
+        try {
+            const res = await apiFetch('api/options');
+            if (res.ok) {
+                const opts = await res.json();
+                if (opts.ui_language) lang = opts.ui_language;
+            }
+        } catch (e) { console.debug("Could not load options", e); }
+    }
+
+    // Fallback: Browser-Sprache
+    if (!lang) lang = navigator.language.split('-')[0];
 
     await i18next
         .use(i18nextHttpBackend)
