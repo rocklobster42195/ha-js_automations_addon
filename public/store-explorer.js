@@ -34,7 +34,7 @@ async function loadStoreData() {
     const container = document.getElementById('store-table-body');
     if (!container) return;
 
-    container.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#666;">Loading data...</td></tr>';
+    container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Loading data...</td></tr>';
 
     try {
         // Wir nutzen die globale apiFetch aus app.js
@@ -43,11 +43,11 @@ async function loadStoreData() {
             storeCache = await res.json();
             renderStoreTable();
         } else {
-            container.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--danger);">Error loading data.</td></tr>';
+            container.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger);">Error loading data.</td></tr>';
         }
     } catch (e) {
         console.error(e);
-        container.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--danger);">${e.message}</td></tr>`;
+        container.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${e.message}</td></tr>`;
     }
 }
 
@@ -65,7 +65,7 @@ function renderStoreTable() {
     const keys = Object.keys(data).sort();
 
     if (keys.length === 0) {
-        container.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#666;">Store is empty.</td></tr>';
+        container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Store is empty.</td></tr>';
         return;
     }
 
@@ -97,6 +97,7 @@ function renderStoreTable() {
             <td class="store-val-cell">${valueHtml}</td>
             <td class="store-owner">${escapeHtml(meta.owner || 'System')}</td>
             <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString() : '-'}</td>
+            <td class="store-accessed">${meta.accessed ? new Date(meta.accessed).toLocaleString() : '-'}</td>
             <td class="store-actions">
                 <button onclick="editStoreItem('${key}')" title="Edit">
                     <i class="mdi mdi-pencil"></i>
@@ -110,7 +111,7 @@ function renderStoreTable() {
     });
 
     if (count === 0) {
-        container.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#666;">No results found.</td></tr>';
+        container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">No results found.</td></tr>';
     }
 }
 

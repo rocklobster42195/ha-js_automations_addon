@@ -38,6 +38,30 @@ const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
 const logManager = new LogManager(STORAGE_DIR);
 
+// OPTIONS LOADING
+let systemOptions = {};
+function loadSystemOptions() {
+    if (IS_ADDON && fs.existsSync('/data/options.json')) {
+        try {
+            systemOptions = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
+        } catch (e) { console.error("Failed to load options.json", e); }
+    } else if (fs.existsSync(path.join(__dirname, 'config.yaml'))) {
+        // Fallback for local dev: Parse config.yaml (simple regex)
+        try {
+            const yaml = fs.readFileSync(path.join(__dirname, 'config.yaml'), 'utf8');
+            const expertMatch = yaml.match(/expert_mode:\s*(true|false)/);
+            if (expertMatch) {
+                systemOptions.expert_mode = expertMatch[1] === 'true';
+            }
+            const langMatch = yaml.match(/ui_language:\s*["']?([a-z]{2})["']?/);
+            if (langMatch) {
+                systemOptions.ui_language = langMatch[1];
+            }
+        } catch (e) { console.error("Failed to parse config.yaml", e); }
+    }
+}
+loadSystemOptions();
+
 // NPM Logs an das Frontend weiterleiten
 depManager.on('log', ({ level, message }) => {
     const entry = logManager.add(level, 'System', message);
@@ -50,7 +74,11 @@ app.use(express.json());
 
 async function startSystem() {
     console.log(`🚀 Starting JS Automations Hub (v${packageJson.version})...`);
-    logManager.add('info', 'System', `Addon started (v${packageJson.version})...`);
+    let startMsg = `Addon started (v${packageJson.version})...`;
+    if (systemOptions.expert_mode) {
+        startMsg += " (Expert Mode)";
+    }
+    logManager.add('info', 'System', startMsg);
     try {
         await connector.connect();
         workerManager.setConnector(connector);
@@ -118,13 +146,7 @@ async function startSystem() {
 
 // API ENDPUNKTE
 app.get('/api/options', (req, res) => {
-    try {
-        if (IS_ADDON && fs.existsSync('/data/options.json')) {
-            res.json(JSON.parse(fs.readFileSync('/data/options.json', 'utf8')));
-        } else {
-            res.json({});
-        }
-    } catch (e) { res.json({}); }
+    res.json(systemOptions);
 });
 
 app.get('/api/scripts', (req, res) => {

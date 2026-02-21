@@ -1,7 +1,7 @@
 # ⚡ JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-2.26.0-blue)
+![Version](https://img.shields.io/badge/version-2.26.2-blue)
 
 <p align="center">
   <img src="docs/images/ui.png" width="800" alt="Web UI des Add-ons">
@@ -15,6 +15,7 @@
 *   **📡 Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **⚡ Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
 *   **🧠 Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
+*   **🔍 Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store`.
 *   **📦 Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
 *   **🚥 Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
 *   **🏷️ Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
@@ -65,6 +66,26 @@ All script outputs are captured by the central **Log Manager**.
 *   **Live Stream:** View logs in real-time in the dashboard IDE.
 *   **History:** Access past logs via the "Logs" tab in the UI.
 *   **Levels:** Filter by `info`, `warn`, `error`, or `debug` (configurable per script via `@loglevel`).
+
+---
+
+## 🔍 Store Explorer
+
+The **Store Explorer** provides a graphical user interface for the `ha.store`.
+*   **Visual Management:** View all global variables in a sortable table.
+*   **Live Updates:** See values, owners, and last update timestamps.
+*   **Edit & Delete:** Modify values directly or remove obsolete keys.
+*   **Search:** Filter keys and values to find specific data quickly.
+
+## 🧠 Expert Mode
+
+For advanced users, the **Expert Mode** unlocks additional system management features.
+
+*   **Activation:** Set `expert_mode: true` in the addon configuration or append `?expert=true` to the dashboard URL.
+*   **Features:**
+    *   **Store Explorer:** Access the global variable database via the header button.
+    *   **Clear Server Logs:** Button to permanently delete the entire server-side log history.
+    *   **Visual Indicator:** The brand icon turns dark green to indicate active expert mode.
 
 ---
 
