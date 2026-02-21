@@ -79,7 +79,16 @@
 
             <div class="log-section">
                 <div class="log-header">
-                    <span data-i18n="log_header">PROTOKOLL</span>
+                    <div style="display:flex; align-items:center; gap:20px;">
+                        <span data-i18n="log_header">PROTOKOLL</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span data-i18n="log_filter_label" style="font-size:0.8rem; opacity:0.7;">Filter:</span>
+                            <select id="logFilter" onchange="filterLogs()" style="background:#333; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 5px; font-size:0.8rem;">
+                                <option value="ALL" data-i18n="log_filter_all">Alle</option>
+                                <option value="System">System</option>
+                            </select>
+                        </div>
+                    </div>
                     <button onclick="document.getElementById('console-output').innerHTML=''" data-i18n="clear_logs_title" data-i18n-title title="Clear Logs">
                         <i class="mdi mdi-delete-sweep"></i>
                     </button>

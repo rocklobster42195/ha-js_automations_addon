@@ -862,6 +862,13 @@ async function clearLogs() {
     const container = document.getElementById('console-output');
     if (container) container.innerHTML = '';
     logEntries = [];
+
+    // Reset sources and filter dropdown
+    knownSources = new Set(['System']);
+    const select = document.getElementById('logFilter');
+    if (select) {
+        select.innerHTML = `<option value="ALL">${i18next.t('log_filter_all')}</option><option value="System">System</option>`;
+    }
 }
 window.clearLogs = clearLogs;
 
