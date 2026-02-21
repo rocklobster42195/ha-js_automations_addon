@@ -100,6 +100,16 @@ async function startSystem() {
 }
 
 // API ENDPUNKTE
+app.get('/api/options', (req, res) => {
+    try {
+        if (IS_ADDON && fs.existsSync('/data/options.json')) {
+            res.json(JSON.parse(fs.readFileSync('/data/options.json', 'utf8')));
+        } else {
+            res.json({});
+        }
+    } catch (e) { res.json({}); }
+});
+
 app.get('/api/scripts', (req, res) => {
     const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
     res.json(files.map(f => {
