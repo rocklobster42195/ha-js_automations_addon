@@ -26,6 +26,27 @@ const cron = require('node-cron');
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
+// 🛡️ GLOBALER CRASH HANDLER
+// Fängt Fehler ab, die das Skript sonst kommentarlos beenden würden.
+process.on('uncaughtException', (err) => {
+    if (parentPort) {
+        parentPort.postMessage({
+            type: 'log',
+            level: 'error',
+            source: 'System',
+            message: `🔥 CRASH: ${err.message}\n${err.stack}`
+        });
+    } else {
+        console.error("🔥 CRASH:", err);
+    }
+    // Kurze Pause, damit die Nachricht sicher über den Bus geht, dann beenden
+    setTimeout(() => process.exit(1), 100);
+});
+
+process.on('unhandledRejection', (reason) => {
+    if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
+});
+
 // --- 2. LOGGING LOGIC ---
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;

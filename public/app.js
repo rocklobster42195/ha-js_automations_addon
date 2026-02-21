@@ -162,7 +162,9 @@ function registerCompletionProviders() {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
             
             // Matches: ha.updateState(' or ha.on(' or ha.onStateChange(' or ha.states['
-            if (textUntilPosition.match(/ha\.(updateState|on|onStateChange)\(\s*['"]$/) || textUntilPosition.match(/ha\.states\[\s*['"]$/)) {
+            if (textUntilPosition.match(/ha\.(updateState|on|onStateChange)\(\s*['"]$/) || 
+                textUntilPosition.match(/ha\.states\[\s*['"]$/) ||
+                textUntilPosition.match(/ha\.on\(\s*\[[^\]]*['"]$/)) {
                 return {
                     suggestions: allEntities.map(e => ({
                         label: e,
