@@ -44,7 +44,7 @@ app.use(express.json());
 
 async function startSystem() {
     console.log(`🚀 Starting JS Automations Hub (v${packageJson.version})...`);
-    logManager.add('info', 'System', `Addon gestartet (v${packageJson.version})...`);
+    logManager.add('info', 'System', `Addon started (v${packageJson.version})...`);
     try {
         await connector.connect();
         workerManager.setConnector(connector);

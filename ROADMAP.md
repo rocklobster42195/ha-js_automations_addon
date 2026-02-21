@@ -34,9 +34,9 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Language Badges** | **1/10** | **S** | Kleine Markierungen (JS / TS / BLK) in der Sidebar-Liste. |
 | **Globaler Ordner** | **4/10** | **M** | Automatisches Laden von Shared-Functions aus `/global` in jeden Worker. |
 | **TypeScript Support** | **8/10** | **L** | Integration von Transpilern (esbuild/sucrase) & Source-Maps für Debugging. |
+| **Language Badges** | **1/10** | **S** | Kleine Markierungen (JS / TS / BLK) in der Sidebar-Liste. |
 
 ---
 
@@ -46,9 +46,7 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
 | **Englische Kommentare** | **2/10** | **S** | Refactoring des Quellcodes für internationale Lesbarkeit. |
-| **Git-Sync (Addon)** | **3/10** | **S** | Deployment-Pipeline für das Addon nach GitHub (Repository-Struktur). |
 | **Resource Monitor** | **5/10** | **M** | Live CPU/RAM Anzeige pro Skript (via `pidusage`). |
-| **Mirror-Entitäten** | **7/10** | **M** | Stabile HA-Switches für Skripte (Überarbeitung der WebSocket-Logic). |
 
 ---
 
@@ -57,9 +55,7 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Home-Dashboard** | **4/10** | **M** | Startseite mit Snippets, Quick-Actions und News. |
 | **Shared State UI** | **5/10** | **M** | Grafischer Explorer für den Inhalt von `ha.store.val`. |
-| **Git-Sync (Scripts)** | **6/10** | **M** | User-Skripte direkt aus dem Dashboard nach Git pushen/pullen. |
 | **Blockly Integration** | **9/10** | **XL** | Visueller Editor mit eigener Block-Library für Home Assistant Aktionen. |
 
 ---
@@ -67,10 +63,3 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 ## 🔧 Bekannte Herausforderungen
 
 *   **IntelliSense UI (Complexity 6):** Fix des Schwarz-auf-Schwarz Problems im Ingress-Iframe.
-*   **MDI Autocomplete (Complexity 7):** Performante Suche in ~7000 Icons mit visueller Vorschau im Editor (ähnlich VS Code Extension).
-
-***
-
-### 💡 Legende:
-*   **Komplexität:** Schwierigkeitsgrad der technischen Implementierung (1=trivial, 10=architektonisch schwierig).
-*   **Aufwand:** Zeitaufwand (S < 1 Tag, M < 3 Tage, L < 1 Woche, XL > 1 Woche).
