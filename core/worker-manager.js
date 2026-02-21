@@ -78,7 +78,7 @@ class WorkerManager extends EventEmitter {
         worker.on('message', async (msg) => {
             // 1. Logging
             if (msg.type === 'log') {
-                this.emit('log', `[${name}] ${msg.message}`, msg.level);
+                this.emit('log', { source: name, message: msg.message, level: msg.level });
             }
             
             // 2. Home Assistant Actions

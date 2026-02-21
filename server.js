@@ -16,6 +16,8 @@ const DependencyManager = require('./core/dependency-manager');
 const StateManager = require('./core/state-manager');
 const StoreManager = require('./core/store-manager');
 const EntityManager = require('./core/entity-manager');
+const LogManager = require('./core/log-manager');
+const packageJson = require('./package.json');
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const SCRIPTS_DIR = IS_ADDON ? '/config/js-automation' : path.join(__dirname, 'scripts');
@@ -34,13 +36,15 @@ const connector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, STOR
 const depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR); // Übergibt beide Pfade
 const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
+const logManager = new LogManager(STORAGE_DIR);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/locales', express.static(path.join(__dirname, 'locales')));
 app.use(express.json());
 
 async function startSystem() {
-    console.log(`🚀 Starting JS Automations Hub (v2.15)...`);
+    console.log(`🚀 Starting JS Automations Hub (v${packageJson.version})...`);
+    logManager.add('info', 'System', `Addon gestartet (v${packageJson.version})...`);
     try {
         await connector.connect();
         workerManager.setConnector(connector);
@@ -68,18 +72,25 @@ async function startSystem() {
         });
 
         workerManager.on('script_exit', (d) => {
-            if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('by user')) {
+            if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('stopped by user')) {
                 stateManager.saveScriptStopped(d.filename);
             }
             const scriptName = path.basename(d.filename, '.js');
 
             stateManager.set(`switch.js_automation_${scriptName}`, 'off');
             connector.updateState(`switch.js_automation_${scriptName}`, 'off');
-            io.emit('log', { message: `[System] ${d.filename} ${d.reason}`, level: d.type });
+            
+            // NEU: LogManager nutzen
+            const entry = logManager.add(d.type || 'info', 'System', `${d.filename} ${d.reason}`);
+            io.emit('log', entry);
             io.emit('status_update');
         });
 
-        workerManager.on('log', (msg) => io.emit('log', { message: msg }));
+        workerManager.on('log', (data) => {
+            // data = { source, message, level }
+            const entry = logManager.add(data.level || 'info', data.source, data.message);
+            io.emit('log', entry);
+        });
 
         // Autostart
         const enabled = stateManager.getEnabledScripts();
@@ -124,7 +135,7 @@ app.post('/api/scripts/control', async (req, res) => {
     const { filename, action } = req.body;
     if (action === 'toggle') {
         if (workerManager.workers.has(filename)) {
-            workerManager.stopScript(filename, 'by user');
+            workerManager.stopScript(filename, 'stopped by user');
         } else {
             workerManager.startScript(filename);
             stateManager.saveScriptStarted(filename);
@@ -189,6 +200,16 @@ app.post('/api/scripts', async (req, res) => {
     const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
     fs.writeFileSync(path.join(SCRIPTS_DIR, filename), `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n */\n\nha.log("Ready.");\n`, 'utf8');
     res.json({ filename });
+});
+
+// LOGS API
+app.get('/api/logs', (req, res) => {
+    res.json(logManager.getHistory());
+});
+
+app.delete('/api/logs', (req, res) => {
+    logManager.clear();
+    res.json({ ok: true });
 });
 
 startSystem();

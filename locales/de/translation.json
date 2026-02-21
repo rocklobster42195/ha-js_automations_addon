@@ -10,6 +10,8 @@
   "close_all_tabs_title": "Alle Tabs schließen",
   "log_header": "PROTOKOLL",
   "clear_logs_title": "Protokoll löschen",
+  "log_filter_label": "Filter:",
+  "log_filter_all": "Alle Quellen",
   "modal_new_automation_title": "Neue Automation",
   "script_name": "Name",
   "script_icon": "Icon",
