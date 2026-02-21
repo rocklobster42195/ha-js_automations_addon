@@ -47,6 +47,10 @@ class StoreManager {
         return null;
     }
 
+    getAll() {
+        return this.data;
+    }
+
     delete(key) {
         if (this.data[key]) {
             delete this.data[key];
@@ -54,6 +58,11 @@ class StoreManager {
             return true;
         }
         return false;
+    }
+
+    clear() {
+        this.data = {};
+        this.save();
     }
 
     /** Löscht alle Variablen, die von einem bestimmten Skript erstellt wurden */

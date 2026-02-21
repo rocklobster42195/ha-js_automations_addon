@@ -7,6 +7,7 @@
  * @label Spielwiese
  */
 
+
 // suncalc wird automatisch installiert
 const suncalc = require('suncalc');
 // axios nutzen wir global (schon im Add-on enthalten)

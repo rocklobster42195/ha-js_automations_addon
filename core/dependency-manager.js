@@ -5,10 +5,12 @@
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
 const ScriptParser = require('./parser');
 
-class DependencyManager {
+class DependencyManager extends EventEmitter {
     constructor(scriptsDir, storageDir) {
+        super();
         this.scriptsDir = scriptsDir;
         this.storageDir = storageDir;
         this.packageJsonPath = path.join(this.storageDir, 'package.json');
@@ -35,7 +37,7 @@ class DependencyManager {
             return;
         }
 
-        console.log(`⬇️ NPM Install: ${missing.join(', ')}`);
+        this.log(`⬇️ NPM Install: ${missing.join(', ')}`);
         return this.runNpm(`install ${missing.join(' ')} --save`);
     }
 
@@ -55,7 +57,7 @@ class DependencyManager {
         const toRemove = installed.filter(p => !requiredSet.has(p));
 
         if (toRemove.length > 0) {
-            console.log(`🧹 NPM Prune: Removing ${toRemove.join(', ')}`);
+            this.log(`🧹 NPM Prune: Removing ${toRemove.join(', ')}`);
             await this.runNpm(`uninstall ${toRemove.join(' ')}`);
         }
     }
@@ -64,10 +66,15 @@ class DependencyManager {
         return new Promise((resolve) => {
             const cmd = `npm ${command} --prefix "${this.storageDir}" --no-audit --loglevel=error`;
             exec(cmd, (error, stdout, stderr) => {
-                if (error) console.error(`❌ NPM Error: ${stderr}`);
+                if (error) this.log(`NPM Error: ${stderr}`, 'error');
                 resolve();
             });
         });
+    }
+
+    log(message, level = 'info') {
+        console.log(level === 'error' ? `❌ ${message}` : message);
+        this.emit('log', { level, message });
     }
 
     /**

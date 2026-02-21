@@ -1,5 +1,5 @@
 name: "JS Automations"
-version: "2.25.4"
+version: "2.26.0"
 slug: "js_automations"
 description: "JavaScript Automations-Engine"
 arch:
@@ -17,5 +17,7 @@ map:
   - config:rw
 options:
   ui_language: "de"
+  expert_mode: false
 schema:
   ui_language: list(de|en)
+  expert_mode: bool

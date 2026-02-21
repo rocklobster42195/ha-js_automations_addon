@@ -38,9 +38,12 @@ class ScriptParser {
                 // Wir testen gegen die gesäuberte Zeile
                 const match = cleanLine.match(regex);
                 if (match && match[1]) {
-                    const val = match[1].trim();
+                    let val = match[1].trim();
+                    // Remove trailing comment closer */
+                    val = val.replace(/\*\/$/, '').trim();
+
                     if (key === 'npm') {
-                        metadata.dependencies = val.split(',').map(d => d.trim()).filter(d => d.length > 0);
+                        metadata.dependencies = val.split(',').map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
                     } else {
                         metadata[key] = val;
                     }

@@ -38,6 +38,12 @@ const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
 const logManager = new LogManager(STORAGE_DIR);
 
+// NPM Logs an das Frontend weiterleiten
+depManager.on('log', ({ level, message }) => {
+    const entry = logManager.add(level, 'System', message);
+    io.emit('log', entry);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/locales', express.static(path.join(__dirname, 'locales')));
 app.use(express.json());
@@ -133,16 +139,28 @@ app.get('/api/scripts', (req, res) => {
 
 app.post('/api/scripts/control', async (req, res) => {
     const { filename, action } = req.body;
+    const fullPath = path.join(SCRIPTS_DIR, filename);
+
     if (action === 'toggle') {
         if (workerManager.workers.has(filename)) {
             workerManager.stopScript(filename, 'stopped by user');
         } else {
+            // Vor dem Starten Abhängigkeiten prüfen & installieren
+            if (fs.existsSync(fullPath)) {
+                const meta = ScriptParser.parse(fullPath);
+                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
+            }
             workerManager.startScript(filename);
             stateManager.saveScriptStarted(filename);
         }
     } else if (action === 'restart') {
         workerManager.stopScript(filename, 'restarting');
         setTimeout(async () => {
+            // Auch beim Restart prüfen
+            if (fs.existsSync(fullPath)) {
+                const meta = ScriptParser.parse(fullPath);
+                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
+            }
             workerManager.startScript(filename);
             io.emit('status_update');
         }, 500);
@@ -182,6 +200,11 @@ app.post('/api/scripts/:filename/content', async (req, res) => {
     const filename = req.params.filename;
     const fullPath = path.join(SCRIPTS_DIR, filename);
     fs.writeFileSync(fullPath, req.body.content, 'utf8');
+    
+    // Abhängigkeiten sofort nach dem Speichern installieren
+    const meta = ScriptParser.parse(fullPath);
+    if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
+
     if (workerManager.workers.has(filename)) {
         workerManager.stopScript(filename, 'hot-reload');
         setTimeout(async () => {
@@ -200,6 +223,27 @@ app.post('/api/scripts', async (req, res) => {
     const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
     fs.writeFileSync(path.join(SCRIPTS_DIR, filename), `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n */\n\nha.log("Ready.");\n`, 'utf8');
     res.json({ filename });
+});
+
+// STORE API
+app.get('/api/store', (req, res) => {
+    res.json(storeManager.getAll());
+});
+
+app.post('/api/store', (req, res) => {
+    const { key, value } = req.body;
+    storeManager.set(key, value, 'User-Edit');
+    res.json({ ok: true });
+});
+
+app.delete('/api/store', (req, res) => {
+    storeManager.clear();
+    res.json({ ok: true });
+});
+
+app.delete('/api/store/:key', (req, res) => {
+    storeManager.delete(req.params.key);
+    res.json({ ok: true });
 });
 
 // LOGS API

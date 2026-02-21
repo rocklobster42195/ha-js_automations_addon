@@ -8,17 +8,23 @@ async function initI18next() {
     
     const urlParams = new URLSearchParams(window.location.search);
     let lang = urlParams.get('lng');
+    let opts = {};
 
-    // Wenn nicht per URL erzwungen, versuche Config vom Backend zu laden
-    if (!lang) {
-        try {
-            const res = await apiFetch('api/options');
-            if (res.ok) {
-                const opts = await res.json();
-                if (opts.ui_language) lang = opts.ui_language;
-            }
-        } catch (e) { console.debug("Could not load options", e); }
+    // Config vom Backend laden (Sprache & Expertenmodus)
+    try {
+        const res = await apiFetch('api/options');
+        if (res.ok) {
+            opts = await res.json();
+        }
+    } catch (e) { console.debug("Could not load options", e); }
+
+    if (opts.expert_mode || urlParams.get('expert') === 'true') {
+        document.body.classList.add('expert-mode');
+        document.getElementById('btn-store-explorer')?.classList.remove('hidden');
+        document.getElementById('btn-clear-server-logs')?.classList.remove('hidden');
     }
+
+    if (!lang && opts.ui_language) lang = opts.ui_language;
 
     // Fallback: Browser-Sprache
     if (!lang) lang = navigator.language.split('-')[0];
@@ -58,7 +64,7 @@ let editor = null, socket = null, isMonacoReady = false, allScripts = [];
 let haData = { areas: [], labels: [], services: {} };
 let mdiIcons = [];
 let allEntities = [];
-let openTabs = [];
+var openTabs = [];
 let activeTabFilename = null;
 let collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
 
@@ -702,12 +708,10 @@ async function openOrSwitchToTab(filename, icon) {
 }
 
 function switchToTab(filename) {
-    if (!editor) return;
-
     // Save view state of the outgoing tab
-    if (activeTabFilename) {
+    if (activeTabFilename && editor) {
         const oldTab = openTabs.find(t => t.filename === activeTabFilename);
-        if (oldTab) {
+        if (oldTab && oldTab.type !== 'store') {
             oldTab.viewState = editor.saveViewState();
         }
     }
@@ -716,12 +720,26 @@ function switchToTab(filename) {
     const newTab = openTabs.find(t => t.filename === filename);
     if (!newTab) return;
 
-    // Switch model and restore view state
-    editor.setModel(newTab.model);
-    if (newTab.viewState) {
-        editor.restoreViewState(newTab.viewState);
+    // CHECK: Is this a Store Tab?
+    if (newTab.type === 'store') {
+        document.getElementById('editor-wrapper').classList.add('hidden');
+        document.getElementById('store-wrapper').classList.remove('hidden');
+        // Trigger load
+        if (typeof window.loadStoreData === 'function') window.loadStoreData();
+    } else {
+        // Normal Editor Tab
+        document.getElementById('store-wrapper').classList.add('hidden');
+        document.getElementById('editor-wrapper').classList.remove('hidden');
+        
+        // Switch model and restore view state
+        if (editor) {
+            editor.setModel(newTab.model);
+            if (newTab.viewState) {
+                editor.restoreViewState(newTab.viewState);
+            }
+            editor.focus();
+        }
     }
-    editor.focus();
 
     renderTabs();
     updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
@@ -740,7 +758,7 @@ function closeTab(filename) {
     openTabs.splice(index, 1);
     
     // Clean up the model
-    tabToClose.model.dispose();
+    if (tabToClose.model) tabToClose.model.dispose();
 
     if (openTabs.length === 0) {
         // No tabs left, hide editor
@@ -769,7 +787,14 @@ function setDirtyUI(filename, isDirty) {
 }
 
 function updateToolbarUI(filename, icon, isDirty) {
-    document.querySelector('.btn-save').style.opacity = isDirty ? '1' : '0.4';
+    const saveBtn = document.querySelector('.btn-save');
+    if (filename === 'System: Store') {
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.1';
+    } else {
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = isDirty ? '1' : '0.4';
+    }
 }
 
 async function saveActiveTab() {
@@ -794,7 +819,7 @@ function closeAllTabs() {
     if (openTabs.some(t => t.isDirty) && !confirm(i18next.t('confirm_discard_all_changes'))) {
         return;
     }
-    openTabs.forEach(t => t.model.dispose());
+    openTabs.forEach(t => { if(t.model) t.model.dispose(); });
     openTabs = [];
     activeTabFilename = null;
     editor.setModel(null);
@@ -1070,3 +1095,6 @@ function toggleWordWrap() {
 }
 window.toggleWordWrap = toggleWordWrap;
 window.insertCodeSnippet = insertCodeSnippet;
+window.apiFetch = apiFetch;
+window.renderTabs = renderTabs;
+window.switchToTab = switchToTab;

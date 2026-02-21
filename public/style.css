@@ -53,6 +53,7 @@ button:disabled { opacity: 0.1 !important; cursor: default !important; }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1rem; color: #fff !important; text-transform: uppercase; letter-spacing: 0.5px; }
 .brand i { color: var(--accent); font-size: 1.5rem; }
+body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
 
 .header-actions { display: flex; gap: 8px; }
 .header-actions button { 
@@ -437,3 +438,129 @@ input#search-input:focus { border-color: var(--accent) !important; }
     color: #fff !important;
     background: #333 !important;
 }
+
+/* --- STORE EXPLORER --- */
+#store-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.store-toolbar {
+    background: #111;
+    height: 45px;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* Buttons im Store-Header (wie header-actions) */
+.store-toolbar button {
+    color: var(--text-sec);
+    font-size: 1.3rem;
+    width: 32px;
+    height: 32px;
+}
+.store-toolbar button:hover {
+    color: #fff;
+    background: #252525 !important;
+}
+.store-toolbar h4 { margin: 0; font-weight: 500; color: #fff; margin-right: auto; }
+
+.store-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.store-search-input {
+    background: #222;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 5px 30px 5px 10px; /* Platz rechts für X Button */
+    border-radius: 4px;
+    font-size: 0.85rem;
+    width: 200px;
+    outline: none;
+}
+.store-search-input:focus { border-color: var(--accent); }
+
+#store-search-clear {
+    position: absolute;
+    right: 2px;
+    width: 24px;
+    height: 24px;
+    font-size: 1rem;
+    color: #888;
+}
+#store-search-clear:hover { color: #fff; background: transparent; }
+
+.store-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.store-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.store-table th {
+    background: #1a1a1a;
+    color: var(--text-sec);
+    text-align: left;
+    padding: 10px 15px;
+    font-weight: bold;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+}
+
+.store-table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #1a1a1a;
+    vertical-align: top;
+}
+
+/* Hover Effekt für Zeilen */
+.store-table tbody tr:hover {
+    background: #161616;
+}
+
+.store-key { font-family: monospace; color: var(--accent); font-weight: bold; width: 20%; }
+.store-val-cell { width: 40%; color: #ddd; }
+.store-owner { width: 15%; color: var(--text-dim); font-size: 0.85rem; }
+.store-updated { width: 15%; color: var(--text-dim); font-size: 0.85rem; }
+.store-actions { text-align: right; width: 10%; white-space: nowrap; }
+
+/* Buttons in der Tabelle */
+.store-actions button {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.store-actions button:hover { color: #fff; background: #333 !important; }
+
+.store-json {
+    margin: 0;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: #a5d6ff;
+    background: #111;
+    padding: 5px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+}
+.btn-danger:hover { color: var(--danger) !important; background: rgba(244, 67, 54, 0.1) !important; }

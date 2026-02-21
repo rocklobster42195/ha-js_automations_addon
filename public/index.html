@@ -24,6 +24,7 @@
                     <span data-i18n="header_title">JS AUTOMATIONS</span>
                 </div>
                 <div class="header-actions">
+                    <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
                     <button onclick="createNewScript()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
                     <button onclick="loadScripts()" data-i18n="refresh_list_title" data-i18n-title title="Refresh List"><i class="mdi mdi-refresh"></i></button>
                 </div>
@@ -44,35 +45,58 @@
         <main class="main-content">
             <div id="editor-section" class="hidden">
                 <div id="tab-bar"></div>
-                <div class="editor-toolbar">
-                    <div class="toolbar-left">
-                        <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
-                        <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
-                        <div class="toolbar-separator"></div>
-                        <!-- Snippet Buttons -->
-                        <button onclick="insertCodeSnippet('log')" data-i18n="snippet_log" data-i18n-title title="Log Output"><i class="mdi mdi-console"></i></button>
-                        <button onclick="insertCodeSnippet('service')" data-i18n="snippet_service" data-i18n-title title="Call Service"><i class="mdi mdi-flash"></i></button>
-                        <button onclick="insertCodeSnippet('listener')" data-i18n="snippet_listener" data-i18n-title title="Event Listener"><i class="mdi mdi-ear-hearing"></i></button>
-                        <button onclick="insertCodeSnippet('listener_array')" data-i18n="snippet_listener_array" data-i18n-title title="Event Listener (Array/Liste)"><i class="mdi mdi-playlist-plus"></i></button>
-                        <button onclick="insertCodeSnippet('on_stop')" data-i18n="snippet_on_stop" data-i18n-title title="On Script Stop (Cleanup)"><i class="mdi mdi-stop-circle-outline"></i></button>
-                        
-                        <div class="toolbar-separator"></div>
-                        
-                        <button onclick="insertCodeSnippet('state')" data-i18n="snippet_state" data-i18n-title title="Get State"><i class="mdi mdi-eye"></i></button>
-                        <button onclick="insertCodeSnippet('update_state')" data-i18n="snippet_update_state" data-i18n-title title="Update/Create State"><i class="mdi mdi-pencil"></i></button>
-                        <button onclick="insertCodeSnippet('select')" data-i18n="snippet_select" data-i18n-title title="Select Multiple (Bulk Action)"><i class="mdi mdi-checkbox-multiple-marked"></i></button>
-                        
-                        <div class="toolbar-separator"></div>
-                        
-                        <button onclick="insertCodeSnippet('store_set')" data-i18n="snippet_store_set" data-i18n-title title="Store: Wert speichern"><i class="mdi mdi-database-edit"></i></button>
-                        <button onclick="insertCodeSnippet('store_get')" data-i18n="snippet_store_get" data-i18n-title title="Store: Wert lesen"><i class="mdi mdi-database-search"></i></button>
-                        <button onclick="insertCodeSnippet('store_del')" data-i18n="snippet_store_del" data-i18n-title title="Store: Wert löschen"><i class="mdi mdi-database-remove"></i></button>
+                
+                <!-- EDITOR VIEW -->
+                <div id="editor-wrapper" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+                    <div class="editor-toolbar">
+                        <div class="toolbar-left">
+                            <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
+                            <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
+                            <div class="toolbar-separator"></div>
+                            <!-- Snippet Buttons -->
+                            <button onclick="insertCodeSnippet('log')" data-i18n="snippet_log" data-i18n-title title="Log Output"><i class="mdi mdi-console"></i></button>
+                            <button onclick="insertCodeSnippet('service')" data-i18n="snippet_service" data-i18n-title title="Call Service"><i class="mdi mdi-flash"></i></button>
+                            <button onclick="insertCodeSnippet('listener')" data-i18n="snippet_listener" data-i18n-title title="Event Listener"><i class="mdi mdi-ear-hearing"></i></button>
+                            <button onclick="insertCodeSnippet('listener_array')" data-i18n="snippet_listener_array" data-i18n-title title="Event Listener (Array/Liste)"><i class="mdi mdi-playlist-plus"></i></button>
+                            <button onclick="insertCodeSnippet('on_stop')" data-i18n="snippet_on_stop" data-i18n-title title="On Script Stop (Cleanup)"><i class="mdi mdi-stop-circle-outline"></i></button>
+                            
+                            <div class="toolbar-separator"></div>
+                            
+                            <button onclick="insertCodeSnippet('state')" data-i18n="snippet_state" data-i18n-title title="Get State"><i class="mdi mdi-eye"></i></button>
+                            <button onclick="insertCodeSnippet('update_state')" data-i18n="snippet_update_state" data-i18n-title title="Update/Create State"><i class="mdi mdi-pencil"></i></button>
+                            <button onclick="insertCodeSnippet('select')" data-i18n="snippet_select" data-i18n-title title="Select Multiple (Bulk Action)"><i class="mdi mdi-checkbox-multiple-marked"></i></button>
+                            
+                            <div class="toolbar-separator"></div>
+                            
+                            <button onclick="insertCodeSnippet('store_set')" data-i18n="snippet_store_set" data-i18n-title title="Store: Wert speichern"><i class="mdi mdi-database-edit"></i></button>
+                            <button onclick="insertCodeSnippet('store_get')" data-i18n="snippet_store_get" data-i18n-title title="Store: Wert lesen"><i class="mdi mdi-database-search"></i></button>
+                            <button onclick="insertCodeSnippet('store_del')" data-i18n="snippet_store_del" data-i18n-title title="Store: Wert löschen"><i class="mdi mdi-database-remove"></i></button>
+                        </div>
+                        <div class="toolbar-right">
+                            <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
+                        </div>
                     </div>
-                    <div class="toolbar-right">
-                        <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
+                    <div id="monaco-container"></div>
+                </div>
+
+                <!-- STORE VIEW -->
+                <div id="store-wrapper" class="hidden">
+                    <div class="store-toolbar">
+                        <h4>Global Store (ha.store)</h4>
+                        <div class="store-search-box">
+                            <input type="text" id="store-search" class="store-search-input" placeholder="Filter..." oninput="renderStoreTable()">
+                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()"><i class="mdi mdi-close"></i></button>
+                        </div>
+                        <button onclick="clearStore()" title="Clear All (Delete everything)" style="color:var(--danger)"><i class="mdi mdi-delete-alert"></i></button>
+                        <button onclick="loadStoreData()" title="Refresh"><i class="mdi mdi-refresh"></i></button>
+                    </div>
+                    <div class="store-content">
+                        <table class="store-table">
+                            <thead><tr><th>Key</th><th>Value</th><th>Owner</th><th>Updated</th><th></th></tr></thead>
+                            <tbody id="store-table-body"></tbody>
+                        </table>
                     </div>
                 </div>
-                <div id="monaco-container"></div>
             </div>
 
             <div id="resizer"></div>
@@ -93,7 +117,7 @@
                         <button onclick="clearLogView()" data-i18n="log_clear_view_title" data-i18n-title title="Clear View">
                             <i class="mdi mdi-trash-can-outline"></i>
                         </button>
-                        <button onclick="clearServerLogs()" data-i18n="log_clear_server_title" data-i18n-title title="Delete Server Logs">
+                        <button id="btn-clear-server-logs" class="hidden" onclick="clearServerLogs()" data-i18n="log_clear_server_title" data-i18n-title title="Delete Server Logs">
                             <i class="mdi mdi-delete-forever"></i>
                         </button>
                     </div>
@@ -189,6 +213,7 @@
 
 
     <script src="app.js"></script>
+    <script src="store-explorer.js"></script>
 </body>
 
 </html>
