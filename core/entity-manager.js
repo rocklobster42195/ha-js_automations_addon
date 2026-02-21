@@ -1,6 +1,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const ScriptParser = require('./parser');
 
 class EntityManager {
 
@@ -17,24 +18,18 @@ class EntityManager {
 
     async createSwitches() {
         const scripts = await this.workerManager.getScripts();
-        for (const script of scripts) {
-            const scriptName = path.basename(script, '.js');
-            const entityId = `switch.js_automation_${scriptName}`;
-            const icon = await this.getIconFromScript(script);
+        for (const scriptPath of scripts) {
+            const meta = ScriptParser.parse(scriptPath);
+            const scriptName = path.basename(scriptPath, '.js');
+            const entityId = `switch.js_automations_${scriptName}`;
 
-            this.haConnection.createEntity('switch', scriptName, 'js_automation', {
-                name: scriptName,
-                icon: icon || 'mdi:script-text-outline',
+            this.haConnection.createEntity('switch', scriptName, 'js_automations', {
+                friendly_name: meta.name,
+                icon: meta.icon,
             });
-            this.stateManager.registerEntity(entityId, script);
+            this.stateManager.registerEntity(entityId, scriptPath);
             this.stateManager.set(entityId, 'off');
         }
-    }
-
-    async getIconFromScript(scriptPath) {
-        const content = await fs.promises.readFile(scriptPath, 'utf8');
-        const match = content.match(/\/\/\s*icon:\s*(mdi:[a-z0-9-]+)/);
-        return match ? match[1] : null;
     }
 
     handleEvent(event) {
