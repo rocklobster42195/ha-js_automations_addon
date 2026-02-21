@@ -36,5 +36,16 @@
   "script_action_delete_title": "Fott domet",
   "confirm_discard_changes": "Willste {{filename}} wirklich verjesse?",
   "confirm_discard_all_changes": "Alles verjesse wat nit jeschpeichert is?",
-  "confirm_delete_script": "Soll dat Skript '{{filename}}' wirklich fott?"
+  "confirm_delete_script": "Soll dat Skript '{{filename}}' wirklich fott?",
+  "snippet_log": "Log Usjab",
+  "snippet_service": "Service oprofe",
+  "snippet_listener": "Event Listener",
+  "snippet_listener_array": "Event Listener (Liss)",
+  "snippet_on_stop": "Beim Stoppe (Opräume)",
+  "snippet_state": "Status lese",
+  "snippet_update_state": "Status schrieve",
+  "snippet_select": "Miehwahl (Bulk)",
+  "snippet_store_set": "Store: Wert speichere",
+  "snippet_store_get": "Store: Wert lese",
+  "snippet_store_del": "Store: Wert fott schmieße"
 }

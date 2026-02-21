@@ -55,7 +55,9 @@ function updateUIWithTranslations() {
 
 const BASE_PATH = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
 let editor = null, socket = null, isMonacoReady = false, allScripts = [];
-let haData = { areas: [], labels: [] };
+let haData = { areas: [], labels: [], services: {} };
+let mdiIcons = [];
+let allEntities = [];
 let openTabs = [];
 let activeTabFilename = null;
 let collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
@@ -66,18 +68,323 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 // --- MONACO CONFIG ---
+function registerCompletionProviders() {
+    // MDI Icons Provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ['"', "'", ':', ' '],
+        provideCompletionItems: function(model, position) {
+            const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+            if (textUntilPosition.match(/(@icon\s+|icon["']?\s*[:=]\s*["'])(mdi:)?$/) || textUntilPosition.endsWith('mdi:')) {
+                const icons = mdiIcons.length > 0 ? mdiIcons : ['account', 'home', 'lightbulb', 'switch', 'bell', 'check', 'alert', 'calendar', 'clock', 'weather-sunny', 'water', 'thermometer', 'battery', 'wifi'];
+                return {
+                    suggestions: icons.map(i => ({
+                        label: `mdi:${i}`,
+                        kind: monaco.languages.CompletionItemKind.Value,
+                        insertText: textUntilPosition.endsWith('mdi:') ? i : `mdi:${i}`,
+                        documentation: {
+                            value: `!Preview \n\n **mdi:${i}**`,
+                            isTrusted: true
+                        }
+                    }))
+                };
+            }
+            return { suggestions: [] };
+        }
+    });
+
+    // HA Services Provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ["'", '"'],
+        provideCompletionItems: function(model, position) {
+            const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+            // Match: ha.callService(' or ha.callService('dom - erlaubt Text nach dem Quote
+            if (textUntilPosition.match(/ha\.callService\(\s*['"](?:[^'"]*)$/)) {
+                // Dynamische Domains oder Fallback
+                const domains = (haData.services && Object.keys(haData.services).length > 0) 
+                    ? Object.keys(haData.services).sort() 
+                    : ['light', 'switch', 'notify', 'media_player', 'climate', 'automation', 'script', 'scene', 'tts'];
+                return { suggestions: domains.map(d => ({ label: d, kind: monaco.languages.CompletionItemKind.Module, insertText: d })) };
+            }
+            // Regex Fix: Capture Domain (zwischen den Quotes)
+            // Erlaubt nun auch Text nach dem Anführungszeichen (für Filterung während des Tippens)
+            // Vereinfacht: Ignoriert Backreference für mehr Robustheit (z.B. bei gemischten Quotes während des Tippens)
+            const serviceMatch = textUntilPosition.match(/ha\.callService\(\s*['"]([^'"]+)['"]\s*,\s*['"](?:[^'"]*)$/);
+            if (serviceMatch) {
+                const domain = serviceMatch[1]; // Domain ist jetzt in Gruppe 1
+                let services = [];
+                let serviceData = {};
+
+                if (haData.services && haData.services[domain]) {
+                    services = Object.keys(haData.services[domain]).sort();
+                    serviceData = haData.services[domain];
+                } else {
+                    // Fallback
+                    services = ['turn_on', 'turn_off', 'toggle', 'reload'];
+                    if (domain === 'media_player') services = ['play_media', 'media_pause', 'media_play', 'volume_set'];
+                }
+
+                // Check text AFTER cursor to prevent duplication
+                // If we are in a snippet or existing code like: 'service', { ... }
+                const textAfter = model.getValueInRange({
+                    startLineNumber: position.lineNumber, 
+                    startColumn: position.column, 
+                    endLineNumber: position.lineNumber, 
+                    endColumn: model.getLineMaxColumn(position.lineNumber)
+                });
+                const hasArgs = textAfter.match(/^\s*['"]\s*,/);
+
+                return { 
+                    suggestions: services.map(s => {
+                        // SNIPPET LOGIC: Automatisch Schema einfügen
+                        // Aus "turn_on" wird "turn_on', { entity_id: '${1}' }"
+                        // ABER: Nur wenn noch keine Argumente folgen!
+                        const item = { 
+                            label: s, 
+                            kind: monaco.languages.CompletionItemKind.Function, 
+                            insertText: hasArgs ? s : `${s}', { entity_id: '\${1}' }`,
+                            insertTextRules: hasArgs ? monaco.languages.CompletionItemInsertTextRule.None : monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        };
+                        if (serviceData[s] && serviceData[s].description) {
+                            item.documentation = { value: serviceData[s].description, isTrusted: true };
+                        }
+                        return item;
+                    }) 
+                };
+            }
+            return { suggestions: [] };
+        }
+    });
+
+    // HA Entities Provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ["'", '"'],
+        provideCompletionItems: function(model, position) {
+            const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+            
+            // Matches: ha.updateState(' or ha.on(' or ha.onStateChange(' or ha.states['
+            if (textUntilPosition.match(/ha\.(updateState|on|onStateChange)\(\s*['"]$/) || textUntilPosition.match(/ha\.states\[\s*['"]$/)) {
+                return {
+                    suggestions: allEntities.map(e => ({
+                        label: e,
+                        kind: monaco.languages.CompletionItemKind.Constant,
+                        insertText: e,
+                        detail: 'Entity'
+                    }))
+                };
+            }
+
+            // Context-aware trigger (entity_id:)
+            if (textUntilPosition.match(/entity_id["']?\s*:\s*['"]$/)) {
+                let domainFilter = null;
+                
+                // Look back for ha.callService domain (max 50 lines)
+                const startLine = Math.max(1, position.lineNumber - 50);
+                const range = {startLineNumber: startLine, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column};
+                const textContext = model.getValueInRange(range);
+                
+                // Find all callService calls
+                const matches = [...textContext.matchAll(/ha\.callService\s*\(\s*['"]([^'"]+)['"]/g)];
+                if (matches.length > 0) {
+                    const lastMatch = matches[matches.length - 1];
+                    // Check if we are still inside the parentheses of this call
+                    const textAfterMatch = textContext.substring(lastMatch.index);
+                    let openParens = 0;
+                    for (const char of textAfterMatch) {
+                        if (char === '(') openParens++;
+                        if (char === ')') openParens--;
+                    }
+                    if (openParens > 0) {
+                        domainFilter = lastMatch[1];
+                    }
+                }
+
+                let entities = allEntities;
+                if (domainFilter && domainFilter !== 'homeassistant') {
+                    const filtered = allEntities.filter(e => e.startsWith(domainFilter + '.'));
+                    // Only apply filter if we have results (fallback to all if 0 found)
+                    if (filtered.length > 0) entities = filtered;
+                }
+
+                return {
+                    suggestions: entities.map(e => ({
+                        label: e,
+                        kind: monaco.languages.CompletionItemKind.Constant,
+                        insertText: e,
+                        detail: 'Entity'
+                    }))
+                };
+            }
+
+            return { suggestions: [] };
+        }
+    });
+
+    // HA Device Class Provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ["'", '"'],
+        provideCompletionItems: function(model, position) {
+            const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+            
+            if (textUntilPosition.match(/device_class["']?\s*:\s*['"]$/)) {
+                const classes = ['aqi', 'battery', 'carbon_dioxide', 'carbon_monoxide', 'current', 'date', 'distance', 'duration', 'energy', 'frequency', 'gas', 'humidity', 'illuminance', 'monetary', 'motion', 'nitrogen_dioxide', 'occupancy', 'opening', 'ozone', 'pm1', 'pm10', 'pm25', 'power', 'power_factor', 'pressure', 'signal_strength', 'smoke', 'speed', 'temperature', 'timestamp', 'voltage', 'volume', 'water', 'weight', 'wind_speed'];
+                return {
+                    suggestions: classes.map(c => ({
+                        label: c,
+                        kind: monaco.languages.CompletionItemKind.EnumMember,
+                        insertText: c
+                    }))
+                };
+            }
+            return { suggestions: [] };
+        }
+    });
+}
+
 async function configureMonaco() {
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, checkJs: true, allowJs: true });
     try {
         const res = await apiFetch('api/scripts/entities.d.ts/content');
         const data = await res.json();
         if (data.content) {
+            // Extract entities for IntelliSense
+            const matches = data.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g);
+            if (matches) {
+                allEntities = matches.map(m => m.replace(/"/g, '')).sort();
+                console.log(`✅ Loaded ${allEntities.length} Entities.`);
+            }
             const entities = data.content.replace(/export /g, '').replace(/type EntityID =\s+\|/g, 'type EntityID = ');
-            const lib = `${entities}\ninterface HA { log(m:any):void; error(m:any):void; callService(d:string,s:string,data?:any):void; onStateChange(id:EntityID,cb:any):void; updateState(id:string,s:any,a?:any):void; store:any; on(p:any,cb:any):void; onStop(cb:any):void; select(p:any):any; }\ndeclare var ha: HA; declare var axios: any; declare function schedule(c:string,cb:any):void; declare function sleep(ms:number):Promise<void>;`;
+            const lib = `
+${entities}
+
+interface HAAttributes {
+    /** (Optional) Name displayed in the UI */
+    friendly_name?: string;
+    /** (Optional) Unit of measurement (e.g. '°C', '€') */
+    unit_of_measurement?: string;
+    /** (Optional) Icon (e.g. 'mdi:home') */
+    icon?: string;
+    /** (Optional) Device class (e.g. 'temperature', 'motion') */
+    device_class?: string;
+    /** (Optional) State class for statistics */
+    state_class?: 'measurement' | 'total' | 'total_increasing';
+    /** (Optional) URL to an image */
+    entity_picture?: string;
+    /** (Optional) Custom attribute */
+    last_updated_by?: string;
+    [key: string]: any;
+}
+
+/** Home Assistant JavaScript Automation API */
+interface HA {
+    /** Log a message to the console (Info level). */
+    log(message: any): void;
+    /** Log an error message. */
+    error(message: any): void;
+    /** Call a Home Assistant service. */
+    callService(domain: string, service: string, data?: Record<string, any>): void;
+    /** Update or create a state in Home Assistant. */
+    updateState(entityId: EntityID, state: any, attributes?: HAAttributes): void;
+    /** Local storage for the script. */
+    store: { val: Record<string, any>; set(key: string, value: any): void; get(key: string): any; delete(key: string): void; };
+    /** Access to all current states in Home Assistant. */
+    states: Record<EntityID, { state: string; attributes: any; }>;
+    /** Subscribe to events. Supports wildcards (e.g. 'switch.*'). */
+    on(pattern: EntityID | string | string[], callback: (event: any) => void): void;
+    /** Cleanup function when script stops. */
+    onStop(callback: () => void): void;
+    /** Select multiple entities. */
+    select(pattern: string): { count: number; each(callback: (entity: any) => void): void; map<T>(callback: (entity: any) => T): T[]; };
+}
+declare var ha: HA;
+declare var axios: any;
+declare function schedule(cron: string, callback: () => void): void;
+declare function sleep(ms: number): Promise<void>;
+`;
             monaco.languages.typescript.javascriptDefaults.addExtraLib(lib, 'file:///ha-api.d.ts');
         }
     } catch (e) {}
+    registerCompletionProviders();
     isMonacoReady = true;
+}
+
+function updateIconDecorations(model) {
+    if (typeof monaco === 'undefined' || !model) return;
+
+    const text = model.getValue();
+    // Findet "mdi:icon-name" in Anführungszeichen oder nach @icon
+    const regex = /(?:@icon\s+|["'])(mdi:([a-z0-9-]+))/g;
+    const decorations = [];
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+        const iconName = match[2]; // z.B. "home"
+        
+        // Position berechnen (Start des "mdi:..." Strings)
+        const matchIndex = match.index + match[0].indexOf(match[1]);
+        const startPos = model.getPositionAt(matchIndex);
+        
+        decorations.push({
+            range: new monaco.Range(startPos.lineNumber, startPos.column, startPos.lineNumber, startPos.column),
+            options: {
+                // Nutzt die MDI-Klasse direkt für das Rendering
+                beforeContentClassName: `mdi mdi-${iconName} icon-preview-inline`,
+                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+            }
+        });
+    }
+    // Alte Decorations löschen und neue setzen (speichern in model._iconDecos)
+    model._iconDecos = model.deltaDecorations(model._iconDecos || [], decorations);
+}
+
+/**
+ * Fügt Code-Snippets an der Cursor-Position ein.
+ * Nutzt Monaco's SnippetController für Tabstops (${1}).
+ */
+function insertCodeSnippet(type) {
+    if (!editor) return;
+    const contribution = editor.getContribution('snippetController2');
+    
+    let template = '';
+    switch (type) {
+        case 'log':
+            template = 'ha.log("${1:Message}");';
+            break;
+        case 'service':
+            template = "ha.callService('${1:domain}', '${2:service}', { entity_id: '${3}' });";
+            break;
+        case 'listener':
+            template = "ha.on('${1:entity_id}', (e) => {\n\t${2:// code}\n});";
+            break;
+        case 'listener_array':
+            template = "ha.on(['${1:entity_1}', '${2:entity_2}'], (e) => {\n\t${3:// code}\n});";
+            break;
+        case 'state':
+            template = "ha.states['${1:entity_id}']";
+            break;
+        case 'update_state':
+            template = "ha.updateState('${1:sensor.my_sensor}', '${2:state_value}', {\n\tfriendly_name: '${3:Name}',\n\tunit_of_measurement: '${4:EUR}',\n\ticon: '${5:mdi:robot}',\n\tdevice_class: '${6:monetary}',\n\tentity_picture: '${7:https://...}',\n\tlast_updated_by: '${8:JS-Automation}'\n});";
+            break;
+        case 'select':
+            template = "ha.select('${1:light.*}').turnOff();";
+            break;
+        case 'on_stop':
+            template = "ha.onStop(() => {\n\t${1:// cleanup code}\n});";
+            break;
+        case 'store_set':
+            template = "ha.store.set('${1:key}', ${2:value});";
+            break;
+        case 'store_get':
+            template = "const ${1:val} = ha.store.get('${2:key}');";
+            break;
+        case 'store_del':
+            template = "ha.store.delete('${1:key}');";
+            break;
+    }
+    
+    if (template) {
+        editor.focus();
+        contribution.insert(template);
+    }
 }
 
 // --- DATA LOADING ---
@@ -92,11 +399,48 @@ async function loadHAMetadata() {
                 setTimeout(loadHAMetadata, 3000);
                 return;
             }
-            haData = data;
+            haData.areas = data.areas || [];
+            haData.labels = data.labels || [];
             console.log("✅ HA Metadata loaded.");
             if (allScripts.length > 0) renderScripts(allScripts, false);
         }
     } catch (e) { console.warn("HA Metadata failed"); }
+}
+
+async function loadHAServices() {
+    try {
+        const res = await apiFetch('api/ha/services');
+        if (res.ok) {
+            haData.services = await res.json();
+            console.log(`✅ Loaded Services for ${Object.keys(haData.services).length} Domains.`);
+        }
+    } catch (e) { console.warn("HA Services load failed", e); }
+}
+
+async function loadMDIIcons() {
+    try {
+        // Sucht den Link zur CSS-Datei im DOM
+        const link = document.querySelector('link[href*="materialdesignicons.min.css"]');
+        if (!link) return;
+
+        const res = await fetch(link.href);
+        if (res.ok) {
+            const css = await res.text();
+            // Extrahiert alle Klassennamen wie .mdi-account::before
+            const regex = /\.mdi-([a-z0-9-]+)::before/g;
+            let match;
+            const iconSet = new Set();
+            while ((match = regex.exec(css)) !== null) {
+                iconSet.add(match[1]);
+            }
+            mdiIcons = Array.from(iconSet).sort();
+            console.log(`✅ Loaded ${mdiIcons.length} MDI Icons.`);
+            
+            // Datalist im Modal befüllen
+            const dl = document.getElementById('mdi-suggestions');
+            if (dl) dl.innerHTML = mdiIcons.map(i => `<option value="mdi:${i}">`).join('');
+        }
+    } catch (e) { console.warn("MDI Load failed", e); }
 }
 
 function filterScripts() {
@@ -343,9 +687,11 @@ async function openOrSwitchToTab(filename, icon) {
                 newTab.isDirty = isNowDirty;
                 setDirtyUI(newTab.filename, isNowDirty);
             }
+            updateIconDecorations(newTab.model);
         });
 
         openTabs.push(newTab);
+        updateIconDecorations(newTab.model);
         switchToTab(filename);
     } catch(e) {
         console.error(`Failed to open script ${filename}`, e);
@@ -630,6 +976,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     loadHAMetadata();
+    loadMDIIcons();
+    loadHAServices();
     initLogs();
 });
 async function loadScripts() { const res = await apiFetch('api/scripts'); if (res.ok) renderScripts(await res.json()); }
@@ -706,3 +1054,4 @@ function toggleWordWrap() {
     }
 }
 window.toggleWordWrap = toggleWordWrap;
+window.insertCodeSnippet = insertCodeSnippet;

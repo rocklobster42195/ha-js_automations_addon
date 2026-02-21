@@ -36,5 +36,16 @@
   "script_action_delete_title": "Delete",
   "confirm_discard_changes": "Discard changes to {{filename}}?",
   "confirm_discard_all_changes": "Discard all unsaved changes?",
-  "confirm_delete_script": "Delete script '{{filename}}'?"
+  "confirm_delete_script": "Delete script '{{filename}}'?",
+  "snippet_log": "Log Output",
+  "snippet_service": "Call Service",
+  "snippet_listener": "Event Listener",
+  "snippet_listener_array": "Event Listener (List)",
+  "snippet_on_stop": "On Script Stop (Cleanup)",
+  "snippet_state": "Get State",
+  "snippet_update_state": "Update/Create State",
+  "snippet_select": "Select Multiple (Bulk)",
+  "snippet_store_set": "Store: Set Value",
+  "snippet_store_get": "Store: Get Value",
+  "snippet_store_del": "Store: Delete Value"
 }

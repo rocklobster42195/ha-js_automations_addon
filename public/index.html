@@ -48,6 +48,25 @@
                     <div class="toolbar-left">
                         <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
                         <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
+                        <div class="toolbar-separator"></div>
+                        <!-- Snippet Buttons -->
+                        <button onclick="insertCodeSnippet('log')" data-i18n="snippet_log" data-i18n-title title="Log Output"><i class="mdi mdi-console"></i></button>
+                        <button onclick="insertCodeSnippet('service')" data-i18n="snippet_service" data-i18n-title title="Call Service"><i class="mdi mdi-flash"></i></button>
+                        <button onclick="insertCodeSnippet('listener')" data-i18n="snippet_listener" data-i18n-title title="Event Listener"><i class="mdi mdi-ear-hearing"></i></button>
+                        <button onclick="insertCodeSnippet('listener_array')" data-i18n="snippet_listener_array" data-i18n-title title="Event Listener (Array/Liste)"><i class="mdi mdi-playlist-plus"></i></button>
+                        <button onclick="insertCodeSnippet('on_stop')" data-i18n="snippet_on_stop" data-i18n-title title="On Script Stop (Cleanup)"><i class="mdi mdi-stop-circle-outline"></i></button>
+                        
+                        <div class="toolbar-separator"></div>
+                        
+                        <button onclick="insertCodeSnippet('state')" data-i18n="snippet_state" data-i18n-title title="Get State"><i class="mdi mdi-eye"></i></button>
+                        <button onclick="insertCodeSnippet('update_state')" data-i18n="snippet_update_state" data-i18n-title title="Update/Create State"><i class="mdi mdi-pencil"></i></button>
+                        <button onclick="insertCodeSnippet('select')" data-i18n="snippet_select" data-i18n-title title="Select Multiple (Bulk Action)"><i class="mdi mdi-checkbox-multiple-marked"></i></button>
+                        
+                        <div class="toolbar-separator"></div>
+                        
+                        <button onclick="insertCodeSnippet('store_set')" data-i18n="snippet_store_set" data-i18n-title title="Store: Wert speichern"><i class="mdi mdi-database-edit"></i></button>
+                        <button onclick="insertCodeSnippet('store_get')" data-i18n="snippet_store_get" data-i18n-title title="Store: Wert lesen"><i class="mdi mdi-database-search"></i></button>
+                        <button onclick="insertCodeSnippet('store_del')" data-i18n="snippet_store_del" data-i18n-title title="Store: Wert löschen"><i class="mdi mdi-database-remove"></i></button>
                     </div>
                     <div class="toolbar-right">
                         <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
@@ -61,16 +80,9 @@
             <div class="log-section">
                 <div class="log-header">
                     <span data-i18n="log_header">PROTOKOLL</span>
-                    <div class="log-controls" style="display: flex; align-items: center; gap: 10px;">
-                        <label for="logFilter" style="font-size: 0.8em;" data-i18n="log_filter_label">Filter:</label>
-                        <select id="logFilter" onchange="filterLogs()" style="padding: 2px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
-                            <option value="ALL" data-i18n="log_filter_all">Alle Quellen</option>
-                            <option value="System">System</option>
-                        </select>
-                        <button onclick="clearLogs()" data-i18n="clear_logs_title" data-i18n-title title="Clear Logs">
-                            <i class="mdi mdi-delete-sweep"></i>
-                        </button>
-                    </div>
+                    <button onclick="document.getElementById('console-output').innerHTML=''" data-i18n="clear_logs_title" data-i18n-title title="Clear Logs">
+                        <i class="mdi mdi-delete-sweep"></i>
+                    </button>
                 </div>
                 <div id="console-output" class="console"></div>
             </div>

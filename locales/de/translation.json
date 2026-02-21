@@ -36,5 +36,16 @@
   "script_action_delete_title": "Löschen",
   "confirm_discard_changes": "Änderungen an {{filename}} verwerfen?",
   "confirm_discard_all_changes": "Alle ungespeicherten Änderungen verwerfen?",
-  "confirm_delete_script": "Skript '{{filename}}' löschen?"
+  "confirm_delete_script": "Skript '{{filename}}' löschen?",
+  "snippet_log": "Log Ausgabe",
+  "snippet_service": "Service aufrufen",
+  "snippet_listener": "Event Listener",
+  "snippet_listener_array": "Event Listener (Liste)",
+  "snippet_on_stop": "Beim Stoppen (Cleanup)",
+  "snippet_state": "Status lesen",
+  "snippet_update_state": "Status schreiben/erstellen",
+  "snippet_select": "Mehrfachauswahl (Bulk)",
+  "snippet_store_set": "Store: Wert speichern",
+  "snippet_store_get": "Store: Wert lesen",
+  "snippet_store_del": "Store: Wert löschen"
 }

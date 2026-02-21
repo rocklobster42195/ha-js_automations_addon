@@ -226,6 +226,13 @@ input#search-input:focus { border-color: var(--accent) !important; }
     background: #252525 !important;
 }
 
+.toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 8px;
+}
+
 /* RESIZER */
 #resizer {
     flex-shrink: 0;
@@ -414,6 +421,16 @@ input#search-input:focus { border-color: var(--accent) !important; }
 /* Hide close button on dirty tab if not hovered */
 .tab.dirty:not(:hover) .tab-close-btn {
     display: none;
+}
+
+/* --- INLINE ICON PREVIEW (Monaco) --- */
+.icon-preview-inline {
+    display: inline-block;
+    margin-right: 5px;
+    color: #999 !important;
+    font-size: 1.1em;
+    vertical-align: middle;
+    opacity: 0.8;
 }
 
 .tab-close-btn:hover {

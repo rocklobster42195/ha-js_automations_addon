@@ -9,8 +9,6 @@
 
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
----
-
 ## 🚀 Key Features
 
 *   **🛡️ Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
@@ -59,6 +57,14 @@ Every script starts with a JSDoc-style header. This configures the engine's beha
  * @label Maintenance
  */
 ```
+---
+
+### Log Manager
+
+All script outputs are captured by the central **Log Manager**.
+*   **Live Stream:** View logs in real-time in the dashboard IDE.
+*   **History:** Access past logs via the "Logs" tab in the UI.
+*   **Levels:** Filter by `info`, `warn`, `error`, or `debug` (configurable per script via `@loglevel`).
 
 ---
 

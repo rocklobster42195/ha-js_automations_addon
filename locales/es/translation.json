@@ -36,5 +36,16 @@
   "script_action_delete_title": "Eliminar",
   "confirm_discard_changes": "¿Descartar cambios en {{filename}}?",
   "confirm_discard_all_changes": "¿Descartar todos los cambios no guardados?",
-  "confirm_delete_script": "¿Eliminar script '{{filename}}'?"
+  "confirm_delete_script": "¿Eliminar script '{{filename}}'?",
+  "snippet_log": "Salida de registro",
+  "snippet_service": "Llamar servicio",
+  "snippet_listener": "Escucha de eventos",
+  "snippet_listener_array": "Escucha de eventos (Lista)",
+  "snippet_on_stop": "Al detener script (Limpieza)",
+  "snippet_state": "Obtener estado",
+  "snippet_update_state": "Actualizar/Crear estado",
+  "snippet_select": "Selección múltiple (Lote)",
+  "snippet_store_set": "Almacén: Guardar valor",
+  "snippet_store_get": "Almacén: Leer valor",
+  "snippet_store_del": "Almacén: Borrar valor"
 }

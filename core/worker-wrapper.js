@@ -180,6 +180,7 @@ const ha = {
             storeValues[key] = value;
             parentPort.postMessage({ type: 'store_set', key, value });
         },
+        get: (key) => storeValues[key],
         delete: (key) => {
             delete storeValues[key];
             parentPort.postMessage({ type: 'store_delete', key });
