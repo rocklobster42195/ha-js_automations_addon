@@ -857,10 +857,16 @@ async function initLogs() {
     } catch (e) { console.error("Log load failed", e); }
 }
 
-async function clearLogs() {
-    await apiFetch('api/logs', { method: 'DELETE' });
+function clearLogView() {
     const container = document.getElementById('console-output');
     if (container) container.innerHTML = '';
+}
+window.clearLogView = clearLogView;
+
+async function clearServerLogs() {
+    if (!confirm(i18next.t('confirm_clear_logs', { defaultValue: 'Do you really want to delete the entire server log?' }))) return;
+    await apiFetch('api/logs', { method: 'DELETE' });
+    clearLogView();
     logEntries = [];
 
     // Reset sources and filter dropdown
@@ -870,7 +876,7 @@ async function clearLogs() {
         select.innerHTML = `<option value="ALL">${i18next.t('log_filter_all')}</option><option value="System">System</option>`;
     }
 }
-window.clearLogs = clearLogs;
+window.clearServerLogs = clearServerLogs;
 
 function appendLog(entry, autoScroll = true) {
     if (typeof entry === 'string') {

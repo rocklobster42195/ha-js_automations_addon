@@ -80,18 +80,23 @@
             <div class="log-section">
                 <div class="log-header">
                     <div style="display:flex; align-items:center; gap:20px;">
-                        <span data-i18n="log_header">PROTOKOLL</span>
+                        <span data-i18n="log_header">LOGS</span>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <span data-i18n="log_filter_label" style="font-size:0.8rem; opacity:0.7;">Filter:</span>
                             <select id="logFilter" onchange="filterLogs()" style="background:#333; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 5px; font-size:0.8rem;">
-                                <option value="ALL" data-i18n="log_filter_all">Alle</option>
+                                <option value="ALL" data-i18n="log_filter_all">All</option>
                                 <option value="System">System</option>
                             </select>
                         </div>
                     </div>
-                    <button onclick="document.getElementById('console-output').innerHTML=''" data-i18n="clear_logs_title" data-i18n-title title="Clear Logs">
-                        <i class="mdi mdi-delete-sweep"></i>
-                    </button>
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="clearLogView()" data-i18n="log_clear_view_title" data-i18n-title title="Clear View">
+                            <i class="mdi mdi-trash-can-outline"></i>
+                        </button>
+                        <button onclick="clearServerLogs()" data-i18n="log_clear_server_title" data-i18n-title title="Delete Server Logs">
+                            <i class="mdi mdi-delete-forever"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="console-output" class="console"></div>
             </div>
