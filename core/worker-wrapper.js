@@ -128,6 +128,9 @@ function ensureMessageListener() {
 
         // Handle ha.on() triggers
         if (msg.type === 'ha_event') {
+            // FIX: Update cache immediately so ha.states is current in the callback
+            if (msg.state) states[msg.entity_id] = msg.state;
+
             subscriptionCallbacks.forEach(sub => sub.callback({
                 entity_id: msg.entity_id,
                 state: msg.state.state,
