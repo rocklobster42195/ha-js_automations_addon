@@ -2,9 +2,10 @@
  * @name Cocktail & Sonne
  * @icon mdi:glass-cocktail
  * @description Holt Rezepte und berechnet goldene Stunde.
+ * @area 
+ * @label 
  * @loglevel info
- * @npm suncalc
- * @label Spielwiese
+ * @npm suncalc, dewpoint
  */
 
 

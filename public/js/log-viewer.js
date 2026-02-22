@@ -79,6 +79,7 @@ function appendLog(entry, autoScroll = true) {
     else if (entry.level === 'warn') color = '#ffb86c'; 
     else if (entry.level === 'debug') color = '#6272a4'; 
     else if (source === 'System') color = '#8be9fd'; 
+    else if (source === 'NPM') color = '#ff79c6';
 
     const timeStr = entry.ts ? new Date(entry.ts).toLocaleTimeString() : new Date().toLocaleTimeString();
     

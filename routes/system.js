@@ -16,10 +16,10 @@ module.exports = (connector, logManager, getSystemOptions) => {
 
         https.get(url, (resp) => {
             if (resp.statusCode === 200) res.json({ ok: true });
-            else if (resp.statusCode === 404) res.json({ ok: false });
-            else res.json({ ok: false, error: `Status ${resp.statusCode}` });
+            else if (resp.statusCode === 404) res.json({ ok: false, error: 'Package not found' });
+            else res.json({ ok: false, error: `NPM Registry Status ${resp.statusCode}` });
         }).on("error", (err) => {
-            res.json({ ok: false, error: err.message });
+            res.json({ ok: false, error: `Network Error: ${err.message}` });
         });
     });
 

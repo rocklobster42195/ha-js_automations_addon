@@ -24,7 +24,10 @@ class DependencyManager extends EventEmitter {
     }
 
     async install(packages) {
-        const cleanPackages = (packages || []).map(p => p.trim()).filter(p => p.length > 0);
+        const cleanPackages = (packages || [])
+            .join(',') // Array zu String, um gemischte Formate abzufangen
+            .split(/[\s,]+/) // Split by comma OR space
+            .map(p => p.trim()).filter(p => p.length > 0);
         if (cleanPackages.length === 0) return;
 
         this.ensurePackageJson();
@@ -48,7 +51,18 @@ class DependencyManager extends EventEmitter {
 
         files.forEach(file => {
             const meta = ScriptParser.parse(path.join(this.scriptsDir, file));
-            meta.dependencies.forEach(dep => requiredSet.add(dep.split('@')[0]));
+            meta.dependencies.forEach(dep => {
+                dep.split(/[\s,]+/).forEach(d => {
+                    let name = d.trim();
+                    if (name.startsWith('@')) {
+                        const atIndex = name.indexOf('@', 1);
+                        if (atIndex > 0) name = name.substring(0, atIndex);
+                    } else {
+                        name = name.split('@')[0];
+                    }
+                    requiredSet.add(name);
+                });
+            });
         });
 
         if (!fs.existsSync(this.packageJsonPath)) return;
@@ -81,10 +95,18 @@ class DependencyManager extends EventEmitter {
      * Echter Dateisystem-Check statt require.resolve
      */
     isInstalled(pkgName) {
-        const cleanName = pkgName.split('@')[0];
+        let cleanName = pkgName;
+        // Fix für Scoped Packages (@scope/pkg) und Versionen
+        if (cleanName.startsWith('@')) {
+             const atIndex = cleanName.indexOf('@', 1);
+             if (atIndex > 0) cleanName = cleanName.substring(0, atIndex);
+        } else {
+            cleanName = cleanName.split('@')[0];
+        }
         // Wir schauen direkt in den Ordner auf der Festplatte
         const pkgFolder = path.join(this.storageDir, 'node_modules', cleanName);
-        return fs.existsSync(pkgFolder);
+        const exists = fs.existsSync(pkgFolder);
+        return exists;
     }
 }
 module.exports = DependencyManager;

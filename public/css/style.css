@@ -350,7 +350,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     border: 1px solid transparent;
 }
 .npm-tag.valid { border-color: var(--success); color: var(--success); background: rgba(76, 175, 80, 0.1); }
-.npm-tag.invalid { border-color: var(--danger); color: var(--danger); background: rgba(244, 67, 54, 0.1); }
+.npm-tag.invalid { border-color: var(--danger); color: var(--danger); background: rgba(244, 67, 54, 0.1); cursor: help; }
 .npm-tag.loading { color: #aaa; border-color: #555; border-style: dashed; }
 
 .npm-tag-close { cursor: pointer; opacity: 0.7; font-size: 1rem; line-height: 1; }

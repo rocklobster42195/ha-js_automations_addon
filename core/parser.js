@@ -43,7 +43,9 @@ class ScriptParser {
                     val = val.replace(/\*\/$/, '').trim();
 
                     if (key === 'npm') {
-                        metadata.dependencies = val.split(',').map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
+                        // Split by comma OR whitespace to handle "pkg1 pkg2" and "pkg1, pkg2"
+                        const deps = val.split(/[\s,]+/).map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
+                        metadata.dependencies.push(...deps);
                     } else {
                         metadata[key] = val;
                     }

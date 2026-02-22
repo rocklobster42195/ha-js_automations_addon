@@ -420,6 +420,10 @@ function renderNpmTags() {
     npmPackages.forEach((pkg, index) => {
         const tag = document.createElement('div');
         tag.className = `npm-tag ${pkg.status}`;
+
+        // Tooltip für Feedback (z.B. "Package not found" oder "Network Error")
+        if (pkg.error) tag.title = pkg.error;
+        else if (pkg.status === 'valid') tag.title = 'Package available';
         
         let icon = '';
         if (pkg.status === 'loading') icon = '<i class="mdi mdi-loading mdi-spin"></i>';
@@ -439,9 +443,15 @@ async function validateNpmPackage(pkg) {
     if (lastAt > 0) cleanName = cleanName.substring(0, lastAt);
 
     // URL Encode für Slashes in Scoped Packages (@scope%2Fpkg)
-    const res = await apiFetch(`api/npm/check/${encodeURIComponent(cleanName)}`);
-    const data = await res.json().catch(() => ({ ok: false }));
-    pkg.status = data.ok ? 'valid' : 'invalid';
+    try {
+        const res = await apiFetch(`api/npm/check/${encodeURIComponent(cleanName)}`);
+        const data = await res.json();
+        pkg.status = data.ok ? 'valid' : 'invalid';
+        pkg.error = data.ok ? null : (data.error || 'Unknown error');
+    } catch (e) {
+        pkg.status = 'invalid';
+        pkg.error = 'Backend connection failed';
+    }
     renderNpmTags();
 }
 
