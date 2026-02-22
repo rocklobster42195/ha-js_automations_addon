@@ -319,6 +319,54 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .icon-input-container input { border: none !important; background: transparent !important; padding: 10px 5px !important; width: 100% !important; }
 #modal-icon-preview { font-size: 1.4rem; color: var(--accent); margin-right: 5px; }
 
+/* --- NPM TAGS INPUT --- */
+.npm-tags-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    background: var(--input-bg);
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 5px;
+    min-height: 42px;
+    cursor: text;
+}
+.npm-tags-input:focus-within { border-color: var(--accent); }
+
+#npm-tags-container {
+    display: contents;
+}
+
+.npm-tag {
+    background: #333;
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 6px 2px 8px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid transparent;
+}
+.npm-tag.valid { border-color: var(--success); color: var(--success); background: rgba(76, 175, 80, 0.1); }
+.npm-tag.invalid { border-color: var(--danger); color: var(--danger); background: rgba(244, 67, 54, 0.1); }
+.npm-tag.loading { color: #aaa; border-color: #555; border-style: dashed; }
+
+.npm-tag-close { cursor: pointer; opacity: 0.7; font-size: 1rem; line-height: 1; }
+.npm-tag-close:hover { opacity: 1; color: #fff; }
+
+.npm-tags-input input {
+    border: none !important;
+    background: transparent !important;
+    outline: none !important;
+    flex: 1;
+    min-width: 80px;
+    color: #fff;
+    padding: 5px !important;
+    margin: 0 !important;
+}
+
 .modal-btns { 
     display: flex; 
     align-items: center; 

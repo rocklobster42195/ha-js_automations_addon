@@ -2,8 +2,9 @@
  * @name Battery Guardian
  * @icon mdi:battery-alert
  * @description Alerts if any battery level drops below 15%
- * @loglevel debug
+ * @area Badezimmer
  * @label Alarme
+ * @loglevel debug
  */
 
 async function scanBatteries() {

@@ -54,6 +54,9 @@
                             <button id="btn-script-restart" onclick="restartActiveScript()" data-i18n="script_action_restart_title" data-i18n-title title="Neustart"><i class="mdi mdi-restart"></i></button>
                             <div class="toolbar-separator"></div>
                             <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
+                            <button id="btn-script-edit" onclick="editActiveScript()" title="Edit Metadata"><i class="mdi mdi-pencil"></i></button>
+                            <button id="btn-script-duplicate" onclick="duplicateActiveScript()" data-i18n="script_action_duplicate_title" data-i18n-title title="Duplizieren"><i class="mdi mdi-content-duplicate"></i></button>
+                            <button id="btn-script-delete" onclick="deleteActiveScript()" data-i18n="script_action_delete_title" data-i18n-title title="Löschen"><i class="mdi mdi-delete-outline"></i></button>
                             <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                             <div class="toolbar-separator"></div>
                             <!-- Snippet Buttons -->
@@ -181,6 +184,13 @@
                 <div class="form-group full-width">
                     <label data-i18n="script_description">Beschreibung</label>
                     <textarea id="new-script-desc" data-i18n="description_placeholder" data-i18n-placeholder placeholder="Kurze Beschreibung..."></textarea>
+                </div>
+                <div class="form-group full-width">
+                    <label data-i18n="npm_packages">NPM Packages</label>
+                    <div class="npm-tags-input" onclick="document.getElementById('npm-input').focus()">
+                        <div id="npm-tags-container"></div>
+                        <input type="text" id="npm-input" class="npm-input-field" data-i18n="npm_packages_placeholder" data-i18n-placeholder placeholder="Add package..." onkeydown="handleNpmInput(event)">
+                    </div>
                 </div>
             </div>
 

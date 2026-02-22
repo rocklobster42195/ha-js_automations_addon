@@ -191,12 +191,18 @@ function updateToolbarUI(filename, icon, isDirty) {
     const saveBtn = document.querySelector('.btn-save');
     const toggleBtn = document.getElementById('btn-script-toggle');
     const restartBtn = document.getElementById('btn-script-restart');
+    const editBtn = document.getElementById('btn-script-edit');
+    const dupBtn = document.getElementById('btn-script-duplicate');
+    const deleteBtn = document.getElementById('btn-script-delete');
 
     if (filename === 'System: Store') {
         saveBtn.disabled = true;
         saveBtn.style.opacity = '0.1';
         if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.style.opacity = '0.1'; }
         if (restartBtn) { restartBtn.disabled = true; restartBtn.style.opacity = '0.1'; }
+        if (editBtn) { editBtn.disabled = true; editBtn.style.opacity = '0.1'; }
+        if (dupBtn) { dupBtn.disabled = true; dupBtn.style.opacity = '0.1'; }
+        if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.style.opacity = '0.1'; }
     } else {
         saveBtn.disabled = false;
         saveBtn.style.opacity = isDirty ? '1' : '0.4';
@@ -221,6 +227,19 @@ function updateToolbarUI(filename, icon, isDirty) {
             restartBtn.disabled = !(script && script.running);
             restartBtn.style.opacity = (script && script.running) ? '1' : '0.4';
         }
+
+        if (editBtn) {
+            editBtn.disabled = false;
+            editBtn.style.opacity = '1';
+        }
+        if (dupBtn) {
+            dupBtn.disabled = false;
+            dupBtn.style.opacity = '1';
+        }
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.style.opacity = '1';
+        }
     }
 }
 
@@ -230,6 +249,18 @@ async function toggleActiveScript() {
 
 async function restartActiveScript() {
     if (activeTabFilename && activeTabFilename !== 'System: Store') await window.restartScript(activeTabFilename);
+}
+
+async function editActiveScript() {
+    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.editScript(activeTabFilename);
+}
+
+async function duplicateActiveScript() {
+    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.duplicateScript(activeTabFilename);
+}
+
+async function deleteActiveScript() {
+    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.deleteScript(activeTabFilename);
 }
 
 async function saveActiveTab() {
@@ -270,3 +301,6 @@ window.saveActiveTab = saveActiveTab;
 window.closeAllTabs = closeAllTabs;
 window.toggleActiveScript = toggleActiveScript;
 window.restartActiveScript = restartActiveScript;
+window.editActiveScript = editActiveScript;
+window.deleteActiveScript = deleteActiveScript;
+window.duplicateActiveScript = duplicateActiveScript;

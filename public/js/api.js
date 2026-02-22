@@ -12,15 +12,15 @@ async function apiFetch(endpoint, options = {}) {
     return fetch(url, options);
 }
 
-async function loadHAMetadata() {
+async function loadHAMetadata(retryCount = 0) {
     try {
         const res = await apiFetch('api/ha/metadata');
         if (res.ok) {
             const data = await res.json();
             // TIMING FIX: If HA returns empty lists (during boot), retry in 3s
             if (data.areas.length === 0 && data.labels.length === 0) {
-                console.log("⏳ HA Registry not ready. Retrying in 3s...");
-                setTimeout(loadHAMetadata, 3000);
+                console.log(`⏳ HA Registry not ready (Attempt ${retryCount + 1}). Retrying in 3s...`);
+                setTimeout(() => loadHAMetadata(retryCount + 1), 3000);
                 return;
             }
             haData.areas = data.areas || [];
@@ -30,8 +30,16 @@ async function loadHAMetadata() {
             if (typeof allScripts !== 'undefined' && allScripts.length > 0 && typeof renderScripts === 'function') {
                 renderScripts(allScripts, false);
             }
+        } else {
+            throw new Error(`Status ${res.status}`);
         }
-    } catch (e) { console.warn("HA Metadata failed"); }
+    } catch (e) { 
+        console.warn("HA Metadata failed", e);
+        if (retryCount < 20) { // Retry for ~1 minute
+            console.log(`⏳ Metadata load failed. Retrying in 3s... (${retryCount + 1}/20)`);
+            setTimeout(() => loadHAMetadata(retryCount + 1), 3000);
+        }
+    }
 }
 
 async function loadHAServices() {
