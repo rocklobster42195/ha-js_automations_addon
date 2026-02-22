@@ -7,7 +7,7 @@
     <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
@@ -50,6 +50,9 @@
                 <div id="editor-wrapper" style="display:flex; flex-direction:column; flex:1; min-height:0;">
                     <div class="editor-toolbar">
                         <div class="toolbar-left">
+                            <button id="btn-script-toggle" onclick="toggleActiveScript()" data-i18n="script_action_toggle_title" data-i18n-title title="Start / Stop"><i class="mdi mdi-play"></i></button>
+                            <button id="btn-script-restart" onclick="restartActiveScript()" data-i18n="script_action_restart_title" data-i18n-title title="Neustart"><i class="mdi mdi-restart"></i></button>
+                            <div class="toolbar-separator"></div>
                             <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
                             <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                             <div class="toolbar-separator"></div>
@@ -135,7 +138,7 @@
             <div class="form-grid">
                 <div class="form-group">
                     <label data-i18n="script_name">Name</label>
-                    <input type="text" id="new-script-name" data-i18n="script_name" data-i18n-placeholder placeholder="Name">
+                    <input type="text" id="new-script-name" data-i18n="script_name" data-i18n-placeholder placeholder="Name" oninput="checkScriptName()" autocomplete="off">
                 </div>
                 <div class="form-group">
     <label data-i18n="script_icon">Icon</label>
@@ -146,35 +149,12 @@
         <!-- Input mit Datalist verknüpft -->
         <input type="text" id="new-script-icon" value="mdi:script-text" 
                list="mdi-suggestions" 
-               oninput="updateModalIconPreview()" 
+               oninput="updateIconPreview('modal-icon-preview', this.value)" 
                placeholder="mdi:...">
     </div>
     
     <!-- "IntelliSense" Light: Die häufigsten Icons -->
     <datalist id="mdi-suggestions">
-        <option value="mdi:script-text">
-        <option value="mdi:home-automation">
-        <option value="mdi:lightbulb">
-        <option value="mdi:power-plug">
-        <option value="mdi:thermometer">
-        <option value="mdi:weather-sunny">
-        <option value="mdi:motion-sensor">
-        <option value="mdi:battery">
-        <option value="mdi:wifi">
-        <option value="mdi:network">
-        <option value="mdi:server">
-        <option value="mdi:robot">
-        <option value="mdi:clock-outline">
-        <option value="mdi:alert-circle">
-        <option value="mdi:check-circle">
-        <option value="mdi:play">
-        <option value="mdi:stop">
-        <option value="mdi:restart">
-        <option value="mdi:blinds">
-        <option value="mdi:fan">
-        <option value="mdi:lock">
-        <option value="mdi:door">
-        <option value="mdi:garage">
     </datalist>
 </div>
                 <div class="form-group">
@@ -205,15 +185,40 @@
             </div>
 
             <div class="modal-btns">
+                <!-- Error Message (Left side of footer) -->
+                <div id="modal-error-msg" class="modal-error"></div>
                 <button class="btn-text" onclick="closeModal()" data-i18n="button_cancel">ABBRECHEN</button>
                 <button class="btn-primary" onclick="submitNewScript()" data-i18n="button_create">ERSTELLEN</button>
             </div>
         </div>
     </div>
 
+    <!-- Modal for Entity Picker -->
+    <div id="entity-picker-modal" class="modal-overlay hidden">
+        <div class="modal" style="height: 80vh; display: flex; flex-direction: column;">
+            <h3 data-i18n="modal_insert_entity_title">Entity einfügen</h3>
+            <div class="search-box" style="border:none; padding: 0 0 10px 0;">
+                <div class="search-container">
+                    <input type="text" id="entity-search-input" data-i18n="entity_search_placeholder" data-i18n-placeholder placeholder="Entity suchen..." oninput="filterEntityPicker()" autocomplete="off">
+                </div>
+            </div>
+            <div id="entity-list" class="entity-list"></div>
+            <div class="modal-btns">
+                <button class="btn-text" onclick="closeEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
+            </div>
+        </div>
+    </div>
 
-    <script src="app.js"></script>
-    <script src="store-explorer.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/editor-config.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/tab-manager.js"></script>
+    <script src="js/script-list.js"></script>
+    <script src="js/log-viewer.js"></script>
+    <script src="js/layout.js"></script>
+    <script src="js/socket-client.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/store-explorer.js"></script>
 </body>
 
 </html>
