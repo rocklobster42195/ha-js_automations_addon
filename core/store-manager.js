@@ -27,10 +27,11 @@ class StoreManager {
         fs.writeFileSync(this.storeFile, JSON.stringify(this.data, null, 2));
     }
 
-    set(key, value, scriptName) {
+    set(key, value, scriptName, isSecret = false) {
         this.data[key] = {
             value: value,
             owner: scriptName,
+            isSecret: isSecret === true,
             updated: new Date().toISOString(),
             accessed: new Date().toISOString()
         };

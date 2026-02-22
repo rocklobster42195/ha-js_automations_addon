@@ -634,6 +634,12 @@ input#search-input:focus { border-color: var(--accent) !important; }
 
 .store-key { font-family: monospace; color: var(--accent); font-weight: bold; width: 20%; }
 .store-val-cell { color: #ddd; } /* Nimmt den restlichen Platz ein */
+.store-value-masked {
+    font-family: monospace;
+    color: #888;
+    letter-spacing: 2px;
+    font-size: 1.1em;
+}
 .store-owner { width: 120px; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .store-updated { width: 150px; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; text-align: right; }
 .store-accessed { width: 150px; color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; text-align: right; }

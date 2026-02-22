@@ -25,6 +25,8 @@ function openStoreTab() {
             model: null    // Kein Monaco Model
         });
     }
+    
+    injectStoreComponents(); // Sicherstellen, dass Modal und Button da sind
     if (window.renderTabs) window.renderTabs();
     if (window.switchToTab) window.switchToTab(STORE_TAB_ID);
 }
@@ -74,26 +76,35 @@ function renderStoreTable() {
         const item = data[key];
         // Fallback, falls Datenstruktur mal abweicht (z.B. Legacy)
         const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
-        const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: 'System', updated: null };
+        const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: 'System', updated: null, isSecret: false };
         
         const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
 
         // Filterung
-        if (filter && !key.toLowerCase().includes(filter) && !valStr.toLowerCase().includes(filter)) {
+        // Bei Secrets suchen wir NICHT im Value, um Sicherheit zu wahren (oder optional doch, aber hier strikt)
+        const searchInVal = meta.isSecret ? '' : valStr.toLowerCase();
+        if (filter && !key.toLowerCase().includes(filter) && !searchInVal.includes(filter)) {
             return;
         }
         count++;
 
         const row = document.createElement('tr');
         
-        // Value-Darstellung: Wenn Objekt, dann als Code-Block, sonst Text
-        let valueHtml = `<div class="store-value">${escapeHtml(valStr)}</div>`;
-        if (typeof val === 'object') {
+        // Value-Darstellung
+        let valueHtml = '';
+        let iconHtml = '';
+
+        if (meta.isSecret) {
+            valueHtml = `<div class="store-value-masked">••••••••</div>`;
+            iconHtml = `<i class="mdi mdi-lock" style="color:#ffb86c; margin-right:5px;" title="Secret"></i>`;
+        } else if (typeof val === 'object') {
             valueHtml = `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
+        } else {
+            valueHtml = `<div class="store-value">${escapeHtml(valStr)}</div>`;
         }
 
         row.innerHTML = `
-            <td class="store-key">${escapeHtml(key)}</td>
+            <td class="store-key">${iconHtml}${escapeHtml(key)}</td>
             <td class="store-val-cell">${valueHtml}</td>
             <td class="store-owner">${escapeHtml(meta.owner || 'System')}</td>
             <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString() : '-'}</td>
@@ -116,31 +127,109 @@ function renderStoreTable() {
 }
 
 async function editStoreItem(key) {
-    // Aktuellen Wert holen (wir "schummeln" und holen ihn aus dem DOM oder laden neu, 
-    // aber sauberer ist ein API Call oder wir speichern die Daten global in store-explorer.js)
-    // Für V1: Wir nehmen an, der User weiß, was er tut oder wir laden kurz neu.
+    const item = storeCache[key];
+    if (!item) return;
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const isSecret = item.isSecret || false;
     
-    // Besser: Wir fragen den User nach dem NEUEN Wert.
-    // Um den alten Wert anzuzeigen, müssten wir `data` global vorhalten.
-    // Workaround: Leerer Prompt oder wir laden den Wert einzeln (nicht implementiert).
-    // Wir machen es einfach:
-    
-    const input = prompt(`New value for "${key}" (JSON allowed):`);
-    if (input === null) return; // Abbrechen
+    // Value für Editor vorbereiten (JSON Stringify wenn Objekt)
+    let valStr = val;
+    if (typeof val === 'object') valStr = JSON.stringify(val, null, 2);
 
-    let value = input;
+    openStoreModal(key, valStr, isSecret);
+}
+
+function openStoreModal(key = null, value = '', isSecret = false) {
+    const modal = document.getElementById('store-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('store-modal-title');
+    const keyInput = document.getElementById('store-key-input');
+    const valInput = document.getElementById('store-value-input');
+    const secretCheck = document.getElementById('store-secret-check');
+    const toggleIcon = document.getElementById('store-value-toggle');
+
+    // Reset UI
+    modal.classList.remove('hidden');
+    valInput.type = isSecret ? 'password' : 'text';
+    toggleIcon.className = isSecret ? 'mdi mdi-eye' : 'mdi mdi-eye-off';
+    
+    if (key) {
+        // Edit Mode
+        titleEl.textContent = 'Edit Variable';
+        keyInput.value = key;
+        keyInput.disabled = true; // Key cannot be changed (it's the ID)
+    } else {
+        // Create Mode
+        titleEl.textContent = 'New Variable';
+        keyInput.value = '';
+        keyInput.disabled = false;
+    }
+
+    valInput.value = value;
+    secretCheck.checked = isSecret;
+}
+
+function closeStoreModal() {
+    document.getElementById('store-modal').classList.add('hidden');
+}
+
+function toggleStoreValueVisibility() {
+    const input = document.getElementById('store-value-input');
+    const icon = document.getElementById('store-value-toggle');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'mdi mdi-eye-off';
+    } else {
+        input.type = 'password';
+        icon.className = 'mdi mdi-eye';
+    }
+}
+
+function toggleStoreSecretState() {
+    const isSecret = document.getElementById('store-secret-check').checked;
+    const input = document.getElementById('store-value-input');
+    const icon = document.getElementById('store-value-toggle');
+    
+    // Wenn Secret aktiviert wird, Input auf Password setzen
+    if (isSecret) {
+        input.type = 'password';
+        icon.className = 'mdi mdi-eye';
+    } else {
+        input.type = 'text';
+        icon.className = 'mdi mdi-eye-off';
+    }
+}
+
+async function saveStoreItemFromModal() {
+    const key = document.getElementById('store-key-input').value.trim();
+    let valStr = document.getElementById('store-value-input').value;
+    const isSecret = document.getElementById('store-secret-check').checked;
+
+    if (!key) {
+        alert("Key is required");
+        return;
+    }
+
+    // Versuchen, JSON zu parsen, wenn es kein Secret ist oder wenn es wie JSON aussieht
+    // Bei Secrets speichern wir Strings oft als Strings, aber JSON ist auch erlaubt.
+    let value = valStr;
     try {
-        value = JSON.parse(input);
+        // Nur parsen wenn es wie JSON aussieht ({...} oder [...])
+        if (valStr.trim().startsWith('{') || valStr.trim().startsWith('[')) {
+            value = JSON.parse(valStr);
+        }
     } catch (e) {
-        // Wenn kein gültiges JSON, bleibt es ein String
+        // Ignore, keep as string
     }
 
     try {
         await apiFetch('api/store', { 
             method: 'POST', 
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ key, value })
+            body: JSON.stringify({ key, value, isSecret })
         });
+        closeStoreModal();
         loadStoreData();
     } catch (e) { alert("Error saving: " + e.message); }
 }
@@ -175,6 +264,57 @@ function clearStoreSearch() {
     }
 }
 
+// --- INJECTION HELPERS ---
+function injectStoreComponents() {
+    // 1. Inject Modal if missing
+    if (!document.getElementById('store-modal')) {
+        const modalHtml = `
+        <div id="store-modal" class="modal-overlay hidden">
+            <div class="modal">
+                <h3 id="store-modal-title">Store Item</h3>
+                <div class="form-group">
+                    <label>Key (ID)</label>
+                    <input type="text" id="store-key-input" placeholder="e.g. my_api_key">
+                </div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Value</label>
+                    <div class="icon-input-container">
+                        <input type="text" id="store-value-input" placeholder="Value">
+                        <i id="store-value-toggle" class="mdi mdi-eye-off" style="cursor:pointer; opacity:0.7;" onclick="toggleStoreValueVisibility()"></i>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:15px; flex-direction:row; align-items:center; gap:10px;">
+                    <input type="checkbox" id="store-secret-check" style="width:auto !important;" onchange="toggleStoreSecretState()">
+                    <label for="store-secret-check" style="margin:0; cursor:pointer; font-size:0.9rem; color:#ddd; text-transform:none;">Is Secret (Masked in UI)</label>
+                </div>
+                <div class="modal-btns">
+                    <button class="btn-primary" onclick="saveStoreItemFromModal()">SAVE</button>
+                    <button class="btn-text" onclick="closeStoreModal()">CANCEL</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    // 2. Inject Add Button to Toolbar if missing
+    const toolbar = document.querySelector('.store-toolbar');
+    if (toolbar && !document.getElementById('btn-store-add')) {
+        // Button vor dem Suchfeld einfügen oder am Anfang der Actions
+        const searchBox = toolbar.querySelector('.store-search-box');
+        const btn = document.createElement('button');
+        btn.id = 'btn-store-add';
+        btn.title = 'Add Variable';
+        btn.innerHTML = '<i class="mdi mdi-plus"></i>';
+        btn.onclick = () => openStoreModal();
+        
+        if (searchBox) {
+            toolbar.insertBefore(btn, searchBox);
+        } else {
+            toolbar.appendChild(btn);
+        }
+    }
+}
+
 // Hilfsfunktion für HTML Escaping
 function escapeHtml(text) {
     if (!text) return '';
@@ -189,3 +329,8 @@ window.editStoreItem = editStoreItem;
 window.clearStore = clearStore;
 window.renderStoreTable = renderStoreTable;
 window.clearStoreSearch = clearStoreSearch;
+window.openStoreModal = openStoreModal;
+window.closeStoreModal = closeStoreModal;
+window.saveStoreItemFromModal = saveStoreItemFromModal;
+window.toggleStoreValueVisibility = toggleStoreValueVisibility;
+window.toggleStoreSecretState = toggleStoreSecretState;

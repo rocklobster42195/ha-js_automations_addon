@@ -200,9 +200,9 @@ const ha = {
     // Persistent Store
     store: {
         val: storeValues,
-        set: (key, value) => {
+        set: (key, value, isSecret = false) => {
             storeValues[key] = value;
-            parentPort.postMessage({ type: 'store_set', key, value });
+            parentPort.postMessage({ type: 'store_set', key, value, isSecret });
         },
         get: (key) => storeValues[key],
         delete: (key) => {

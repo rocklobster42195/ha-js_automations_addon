@@ -96,7 +96,7 @@ class WorkerManager extends EventEmitter {
 
             // 4. Store Operations
             if (msg.type === 'store_set' && this.storeManager) {
-                this.storeManager.set(msg.key, msg.value, name);
+                this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
                 this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value });
             }
             if (msg.type === 'store_delete' && this.storeManager) {
