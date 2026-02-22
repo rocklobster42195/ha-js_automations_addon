@@ -151,6 +151,12 @@ const systemRouter = require('./routes/system')(connector, logManager, () => sys
 
 app.use('/api/scripts', scriptsRouter);
 app.use('/api/store', storeRouter);
+
+// Status-Route für Version
+app.get('/api/status', (req, res) => {
+    res.json({ version: packageJson.version });
+});
+
 app.use('/api', systemRouter);
 
 startSystem();

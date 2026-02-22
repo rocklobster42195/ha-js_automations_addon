@@ -47,15 +47,27 @@ button:disabled { opacity: 0.1 !important; cursor: default !important; }
 }
 
 .sidebar-header { 
-    padding: 20px 15px; border-bottom: 1px solid var(--border); 
-    display: flex; justify-content: space-between; align-items: center; 
+    padding: 10px 15px; border-bottom: 1px solid var(--border); 
+    display: flex; flex-direction: column; gap: 5px;
 }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1rem; color: #fff !important; text-transform: uppercase; letter-spacing: 0.5px; }
 .brand i { color: var(--accent); font-size: 1.5rem; }
 body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
 
-.header-actions { display: flex; gap: 2px; }
+.version-tag {
+    font-family: monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    background: #222;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.version-tag:empty { display: none; }
+
+.header-actions { display: flex; gap: 2px; width: 100%; }
 .header-actions button { 
     color: var(--text-sec) !important; font-size: 1.3rem !important; 
     width: 32px; height: 32px; 

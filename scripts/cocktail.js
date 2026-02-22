@@ -5,7 +5,7 @@
  * @area 
  * @label 
  * @loglevel info
- * @npm suncalc, dewpoint
+ * @npm suncalc
  */
 
 

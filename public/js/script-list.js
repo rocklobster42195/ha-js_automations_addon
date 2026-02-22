@@ -567,3 +567,17 @@ window.handleNpmInput = handleNpmInput;
 window.removeNpmTag = removeNpmTag;
 window.editScript = editScript;
 window.duplicateScript = duplicateScript;
+
+// --- VERSION LOADER ---
+async function loadVersion() {
+    const el = document.getElementById('app-version');
+    if (!el) return;
+    try {
+        const res = await apiFetch('api/status');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.version) el.textContent = `v${data.version}`;
+        }
+    } catch (e) { console.debug("Version check failed", e); }
+}
+loadVersion();
