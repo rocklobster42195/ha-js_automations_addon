@@ -102,8 +102,8 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
         
         let header = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n`;
-        if (npmModules && Array.isArray(npmModules)) {
-            npmModules.forEach(pkg => header += ` * @npm ${pkg}\n`);
+        if (npmModules && Array.isArray(npmModules) && npmModules.length > 0) {
+            header += ` * @npm ${npmModules.join(', ')}\n`;
         }
         header += ` */\n\n`;
         
@@ -124,8 +124,8 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         let content = fs.readFileSync(fullPath, 'utf8');
 
         let newHeader = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n`;
-        if (npmModules && Array.isArray(npmModules)) {
-            npmModules.forEach(pkg => newHeader += ` * @npm ${pkg}\n`);
+        if (npmModules && Array.isArray(npmModules) && npmModules.length > 0) {
+            newHeader += ` * @npm ${npmModules.join(', ')}\n`;
         }
         newHeader += ` */`;
 

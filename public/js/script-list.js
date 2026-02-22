@@ -456,6 +456,13 @@ async function submitNewScript() {
         icon = 'mdi:script-text';
     }
 
+    // FIX: Falls noch Text im NPM-Input steht (nicht mit Enter bestätigt), jetzt hinzufügen
+    const npmInput = document.getElementById('npm-input');
+    if (npmInput && npmInput.value.trim()) {
+        addNpmTag(npmInput.value.trim());
+        npmInput.value = '';
+    }
+
     // NPM Pakete sammeln (nur Namen)
     // Warnung bei ungültigen Paketen? Optional. Wir speichern sie trotzdem.
     const desc = document.getElementById('new-script-desc').value;
