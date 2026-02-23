@@ -2,7 +2,7 @@
  * JS AUTOMATIONS - Dependency Manager (v1.8.1)
  * Fix: Physical file check to bypass Node.js require cache
  */
-const { exec } = require('child_process');
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
@@ -23,28 +23,31 @@ class DependencyManager extends EventEmitter {
         }
     }
 
-    async install(packages) {
+    async install(packages, autoPrune = true, verbose = true) {
         const cleanPackages = (packages || [])
             .join(',') // Array zu String, um gemischte Formate abzufangen
             .split(/[\s,]+/) // Split by comma OR space
             .map(p => p.trim()).filter(p => p.length > 0);
-        if (cleanPackages.length === 0) return;
 
         this.ensurePackageJson();
         
         // Prüfe physisch auf der Platte, ob das Paket fehlt
         const missing = cleanPackages.filter(pkg => !this.isInstalled(pkg));
+        const existing = [...new Set(cleanPackages.filter(pkg => this.isInstalled(pkg)))];
         
-        if (missing.length === 0) {
-            // console.log("📦 All packages already present on disk.");
-            return;
+        if (missing.length > 0) {
+            this.log(`⬇️ NPM Install: ${missing.join(', ')}`);
+            await this.runNpm(`install ${missing.join(' ')} --save`);
         }
 
-        this.log(`⬇️ NPM Install: ${missing.join(', ')}`);
-        return this.runNpm(`install ${missing.join(' ')} --save`);
+        if (existing.length > 0 && verbose) {
+            this.log(`📦 Using existing packages: ${existing.join(', ')}`);
+        }
+
+        if (autoPrune) await this.prune(cleanPackages);
     }
 
-    async prune() {
+    async prune(currentScriptDeps = []) {
         this.ensurePackageJson();
         const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
         const requiredSet = new Set();
@@ -53,14 +56,7 @@ class DependencyManager extends EventEmitter {
             const meta = ScriptParser.parse(path.join(this.scriptsDir, file));
             meta.dependencies.forEach(dep => {
                 dep.split(/[\s,]+/).forEach(d => {
-                    let name = d.trim();
-                    if (name.startsWith('@')) {
-                        const atIndex = name.indexOf('@', 1);
-                        if (atIndex > 0) name = name.substring(0, atIndex);
-                    } else {
-                        name = name.split('@')[0];
-                    }
-                    requiredSet.add(name);
+                    requiredSet.add(this.getPackageName(d));
                 });
             });
         });
@@ -70,8 +66,17 @@ class DependencyManager extends EventEmitter {
         const installed = Object.keys(pkg.dependencies || {});
         const toRemove = installed.filter(p => !requiredSet.has(p));
 
+        // Info-Log für Pakete, die im aktuellen Skript nicht (mehr) drin sind, 
+        // aber wegen anderen Skripten behalten werden.
+        const currentSet = new Set(currentScriptDeps.map(d => this.getPackageName(d)));
+        const kept = installed.filter(p => !currentSet.has(p) && requiredSet.has(p));
+        
+        if (kept.length > 0) {
+            this.log(`ℹ️ Shared packages retained: ${kept.join(', ')}`);
+        }
+
         if (toRemove.length > 0) {
-            this.log(`🧹 NPM Prune: Removing ${toRemove.join(', ')}`);
+            this.log(`🗑️ NPM Uninstall: Removing unused packages: ${toRemove.join(', ')}`);
             await this.runNpm(`uninstall ${toRemove.join(' ')}`);
         }
     }
@@ -79,10 +84,16 @@ class DependencyManager extends EventEmitter {
     runNpm(command) {
         return new Promise((resolve) => {
             const cmd = `npm ${command} --prefix "${this.storageDir}" --no-audit --loglevel=error`;
-            exec(cmd, (error, stdout, stderr) => {
-                if (error) this.log(`NPM Error: ${stderr}`, 'error');
-                resolve();
-            });
+            try {
+                // Use execSync to ensure installation completes before the script is restarted (Hot-Reload)
+                execSync(cmd, { stdio: 'pipe' });
+                const isUninstall = command.startsWith('uninstall');
+                this.log(isUninstall ? "✅ NPM Uninstall finished." : "✅ NPM Install finished.");
+            } catch (error) {
+                const stderr = error.stderr ? error.stderr.toString() : error.message;
+                this.log(`NPM Error: ${stderr}`, 'error');
+            }
+            resolve();
         });
     }
 
@@ -95,18 +106,22 @@ class DependencyManager extends EventEmitter {
      * Echter Dateisystem-Check statt require.resolve
      */
     isInstalled(pkgName) {
-        let cleanName = pkgName;
-        // Fix für Scoped Packages (@scope/pkg) und Versionen
-        if (cleanName.startsWith('@')) {
-             const atIndex = cleanName.indexOf('@', 1);
-             if (atIndex > 0) cleanName = cleanName.substring(0, atIndex);
-        } else {
-            cleanName = cleanName.split('@')[0];
-        }
+        const cleanName = this.getPackageName(pkgName);
         // Wir schauen direkt in den Ordner auf der Festplatte
         const pkgFolder = path.join(this.storageDir, 'node_modules', cleanName);
         const exists = fs.existsSync(pkgFolder);
         return exists;
+    }
+
+    getPackageName(raw) {
+        let name = raw.trim();
+        if (name.startsWith('@')) {
+            const atIndex = name.indexOf('@', 1);
+            if (atIndex > 0) name = name.substring(0, atIndex);
+        } else {
+            name = name.split('@')[0];
+        }
+        return name;
     }
 }
 module.exports = DependencyManager;

@@ -16,6 +16,7 @@
     --danger: #f44336;
     --modal-bg: #1c1c1c;
     --input-bg: #222;
+    color-scheme: dark;
 }
 
 /* --- GLOBAL RESET --- */
@@ -85,7 +86,7 @@ body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
 
 input[type="text"]#search-input { 
     width: 100% !important; 
-    background-color: #000000 !important; 
+    background-color: #222 !important; 
     color: #ffffff !important; 
     border: 1px solid #333 !important; 
     padding: 10px 30px 10px 10px !important; /* Add padding to the right for the button */
@@ -93,7 +94,7 @@ input[type="text"]#search-input {
     outline: none !important; 
     font-size: 0.9rem !important;
 }
-input#search-input::placeholder { color: #555; }
+input#search-input::placeholder { color: #aaa; }
 input#search-input:focus { border-color: var(--accent) !important; }
 
 #clear-search-btn {
@@ -101,7 +102,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     right: 5px;
     top: 50%;
     transform: translateY(-50%);
-    color: #555 !important;
+    color: #aaa !important;
     font-size: 1.1rem !important;
     width: 28px;
     height: 28px;
@@ -294,6 +295,22 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .log-header button i {
     font-size: 1.4rem !important;
 }
+
+/* Log Filter / Protocol Filter */
+.log-header select, .log-header input {
+    background-color: #222 !important;
+    border: 1px solid #333 !important;
+    color: #aaa !important;
+    border-radius: 4px;
+    outline: none;
+    padding: 2px 5px;
+}
+
+.log-header select option {
+    background: #222;
+    color: #aaa;
+}
+
 .console { flex: 1; padding: 12px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #999; line-height: 1.5; }
 
 /* --- MODAL (Grid Layout) --- */

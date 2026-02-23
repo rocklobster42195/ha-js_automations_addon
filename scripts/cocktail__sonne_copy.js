@@ -1,13 +1,12 @@
 /**
- * @name Cocktail & Sonne
+ * @name Cocktail & Sonne (Copy)
  * @icon mdi:glass-cocktail
  * @description Holt Rezepte und berechnet goldene Stunde.
  * @area 
  * @label 
  * @loglevel info
- * @npm suncalc
+ * @npm suncalc, iban
  */
-
 
 // suncalc wird automatisch installiert
 const suncalc = require('suncalc');

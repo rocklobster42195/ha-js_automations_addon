@@ -17,7 +17,5 @@ map:
   - config:rw
 options:
   ui_language: "de"
-  expert_mode: false
 schema:
   ui_language: list(de|en)
-  expert_mode: bool

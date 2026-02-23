@@ -6,13 +6,13 @@ class ScriptParser {
         const content = fs.readFileSync(filePath, 'utf8');
         
         const patterns = {
-            name: /@name\s+(.*)/,
-            icon: /@icon\s+(.*)/,
-            description: /@description\s+(.*)/,
-            area: /@area\s+(.*)/,
-            label: /@label\s+(.*)/,
-            loglevel: /@loglevel\s+(.*)/,
-            npm: /@npm\s+(.*)/
+            name: /^@name\s+(.*)/,
+            icon: /^@icon\s+(.*)/,
+            description: /^@description\s+(.*)/,
+            area: /^@area\s+(.*)/,
+            label: /^@label\s+(.*)/,
+            loglevel: /^@loglevel\s+(.*)/,
+            npm: /^@npm[:]?\s+(.*)/
         };
 
         const metadata = {

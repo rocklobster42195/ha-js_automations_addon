@@ -2,6 +2,14 @@
  * JS AUTOMATIONS - Main Server (v1.9.0)
  * Storage Migration & NPM Prune
  */
+// DEV SETUP CHECK
+if (!process.env.SUPERVISOR_TOKEN && !require('fs').existsSync(require('path').join(__dirname, '.env'))) {
+    try {
+        // Starte den Wizard synchron in einem Kindprozess, damit wir warten können
+        require('child_process').execSync(`"${process.execPath}" "${require('path').join(__dirname, 'core', 'dev-setup.js')}"`, { stdio: 'inherit' });
+    } catch (e) { process.exit(1); }
+}
+
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
@@ -39,28 +47,28 @@ const storeManager = new StoreManager(STORAGE_DIR);
 const logManager = new LogManager(STORAGE_DIR);
 
 // OPTIONS LOADING
-let systemOptions = {};
-function loadSystemOptions() {
-    if (IS_ADDON && fs.existsSync('/data/options.json')) {
-        try {
-            systemOptions = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
-        } catch (e) { console.error("Failed to load options.json", e); }
-    } else if (fs.existsSync(path.join(__dirname, 'config.yaml'))) {
-        // Fallback for local dev: Parse config.yaml (simple regex)
-        try {
-            const yaml = fs.readFileSync(path.join(__dirname, 'config.yaml'), 'utf8');
-            const expertMatch = yaml.match(/expert_mode:\s*(true|false)/);
-            if (expertMatch) {
-                systemOptions.expert_mode = expertMatch[1] === 'true';
-            }
-            const langMatch = yaml.match(/ui_language:\s*["']?([a-z]{2})["']?/);
-            if (langMatch) {
-                systemOptions.ui_language = langMatch[1];
-            }
-        } catch (e) { console.error("Failed to parse config.yaml", e); }
-    }
-}
-loadSystemOptions();
+let systemOptions = { expert_mode: true };
+// function loadSystemOptions() {
+//     if (IS_ADDON && fs.existsSync('/data/options.json')) {
+//         try {
+//             systemOptions = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
+//         } catch (e) { console.error("Failed to load options.json", e); }
+//     } else if (fs.existsSync(path.join(__dirname, 'config.yaml'))) {
+//         // Fallback for local dev: Parse config.yaml (simple regex)
+//         try {
+//             const yaml = fs.readFileSync(path.join(__dirname, 'config.yaml'), 'utf8');
+//             const expertMatch = yaml.match(/expert_mode:\s*(true|false)/);
+//             if (expertMatch) {
+//                 systemOptions.expert_mode = expertMatch[1] === 'true';
+//             }
+//             const langMatch = yaml.match(/ui_language:\s*["']?([a-z]{2})["']?/);
+//             if (langMatch) {
+//                 systemOptions.ui_language = langMatch[1];
+//             }
+//         } catch (e) { console.error("Failed to parse config.yaml", e); }
+//     }
+// }
+// loadSystemOptions();
 
 // NPM Logs an das Frontend weiterleiten
 depManager.on('log', ({ level, message }) => {
@@ -132,7 +140,7 @@ async function startSystem() {
             const fullPath = path.join(SCRIPTS_DIR, file);
             if (fs.existsSync(fullPath)) {
                 const meta = ScriptParser.parse(fullPath);
-                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
+                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies, false, false);
                 workerManager.startScript(file);
             }
         }
