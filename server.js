@@ -140,7 +140,7 @@ async function startSystem() {
             const fullPath = path.join(SCRIPTS_DIR, file);
             if (fs.existsSync(fullPath)) {
                 const meta = ScriptParser.parse(fullPath);
-                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies, false, false);
+                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies, false);
                 workerManager.startScript(file);
             }
         }

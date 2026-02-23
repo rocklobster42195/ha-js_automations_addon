@@ -23,7 +23,7 @@ class DependencyManager extends EventEmitter {
         }
     }
 
-    async install(packages, autoPrune = true, verbose = true) {
+    async install(packages, autoPrune = true) {
         const cleanPackages = (packages || [])
             .join(',') // Array zu String, um gemischte Formate abzufangen
             .split(/[\s,]+/) // Split by comma OR space
@@ -33,15 +33,10 @@ class DependencyManager extends EventEmitter {
         
         // Prüfe physisch auf der Platte, ob das Paket fehlt
         const missing = cleanPackages.filter(pkg => !this.isInstalled(pkg));
-        const existing = [...new Set(cleanPackages.filter(pkg => this.isInstalled(pkg)))];
         
         if (missing.length > 0) {
             this.log(`⬇️ NPM Install: ${missing.join(', ')}`);
             await this.runNpm(`install ${missing.join(' ')} --save`);
-        }
-
-        if (existing.length > 0 && verbose) {
-            this.log(`📦 Using existing packages: ${existing.join(', ')}`);
         }
 
         if (autoPrune) await this.prune(cleanPackages);

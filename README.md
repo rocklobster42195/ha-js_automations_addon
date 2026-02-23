@@ -1,7 +1,7 @@
 # ⚡ JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-2.29.0-blue)
+![Version](https://img.shields.io/badge/version-2.29.1-blue)
 
 <p align="center">
   <img src="docs/images/ui.png" width="800" alt="Web UI des Add-ons">
@@ -15,17 +15,34 @@
 *   **📡 Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **⚡ Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
 *   **🧠 Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
-*   **🔍 Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store`.
+*   **🔍 Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
 *   **📦 Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
 *   **🚥 Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
 *   **🏷️ Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
 
 ---
 
+## 🚀 Local Development Setup
+
+1.  **Clone the repository** and navigate into the directory.
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+3.  **Start the server:**
+    ```bash
+    npm run dev
+    ```
+4.  **Follow the setup wizard:** On the first run, a wizard will automatically start in your terminal. It will ask for your Home Assistant URL and a Long-Lived Access Token.
+5.  **Done!** The wizard creates a `.env` file for you, and the server will start. The UI is available at `http://localhost:PORT`.
+
+---
+
 ## 🎮 Switches & Control
 
-For every script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
+> **⚠️ Note:** This feature is under active development. The goal is to allow scripts to be exposed as a `switch` or `button` via a header tag. The current implementation creates a switch for every script, which may not be ideal for all use cases.
 
+For every script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
 *   **Entity ID:** `switch.js_automation_<script_name>`
 *   **State:** The switch is `on` when the script is running and `off` when it's stopped.
 *   **Control:** Toggling the switch in Home Assistant will start or stop the script. This is perfect for manually triggering automations or stopping long-running tasks.
@@ -76,6 +93,7 @@ The **Store Explorer** provides a graphical user interface for the `ha.store`.
 *   **Live Updates:** See values, owners, and last update timestamps.
 *   **Edit & Delete:** Modify values directly or remove obsolete keys.
 *   **Search:** Filter keys and values to find specific data quickly.
+*   **🔐 Secrets Management:** Mark variables as "Secret" to mask their values in the UI (e.g., `••••••••`). This is perfect for storing API keys, tokens, or passwords that your scripts need but shouldn't be visible on screen.
 
 ## 🧠 Expert Mode
 
