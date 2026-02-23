@@ -13,14 +13,14 @@
 
 ## Key Features
 
-*   ** Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
-*   ** Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
-*   ** Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
-*   ** Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
-*   ** Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
-*   ** Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
-*   ** Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
-*   ** Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
+*   **Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
+*   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
+*   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
+*   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
+*   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
+*   **Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
+*   **Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
+*   **Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
 
 ---
 
