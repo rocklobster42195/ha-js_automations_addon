@@ -46,3 +46,9 @@ The dashboard uses **i18next** for translations.
 *   **Detection:** Automatic browser language detection with fallback to English. Can be forced via `?lng=xx`.
 *   **Structure:** JSON files located in `/locales/{lang}/translation.json`.
 *   **Extensibility:** Be sure to add your new language in config.yaml
+
+### 8. Resource Usage & Optimization (Known Limitations)
+
+Since every script runs in its own isolated **Worker Thread**, the system prioritizes stability over memory efficiency.
+*   **RAM Overhead:** Each thread spawns a separate V8 instance, consuming ~20-30 MB of base RAM. With many active scripts, this adds up.
+*   **State Duplication:** The `ha.states` object is replicated in every thread. For large HA installations (thousands of entities), this increases memory pressure.

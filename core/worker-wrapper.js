@@ -19,10 +19,6 @@ if (workerData.storageDir) {
     }
 }
 
-// Load built-in libraries
-const axios = require('axios');
-const cron = require('node-cron');
-
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
@@ -214,11 +210,24 @@ const ha = {
 
 // Injection
 global.ha = ha;
-global.axios = axios;
+
+// Lazy Load Axios
+Object.defineProperty(global, 'axios', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+        // Cache the module on the global object after first load
+        const lib = require('axios');
+        Object.defineProperty(global, 'axios', { value: lib });
+        return lib;
+    }
+});
+
 global.schedule = (exp, cb) => {
     parentPort.ref(); // Keep alive for cron
     ensureMessageListener();
-    return cron.schedule(exp, cb);
+    // Lazy Load Cron only when used
+    return require('node-cron').schedule(exp, cb);
 };
 global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
