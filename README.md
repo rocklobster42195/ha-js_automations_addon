@@ -9,20 +9,22 @@
 
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
-## 🚀 Key Features
+> 📘 **Deep Dive:** Interested in the internal architecture? Check out the [Technical Documentation](TECH-README.md).
 
-*   **🛡️ Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
-*   **📡 Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
-*   **⚡ Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
-*   **🧠 Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
-*   **🔍 Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
-*   **📦 Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
-*   **🚥 Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
-*   **🏷️ Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
+## Key Features
+
+*   ** Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
+*   ** Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
+*   ** Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
+*   ** Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
+*   ** Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
+*   ** Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
+*   ** Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
+*   ** Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
 
 ---
 
-## 🚀 Local Development Setup
+## Local Development Setup
 
 1.  **Clone the repository** and navigate into the directory.
 2.  **Install dependencies:**
@@ -38,9 +40,9 @@
 
 ---
 
-## 🎮 Switches & Control
+## Switches & Control
 
-> **⚠️ Note:** This feature is under active development. The goal is to allow scripts to be exposed as a `switch` or `button` via a header tag. The current implementation creates a switch for every script, which may not be ideal for all use cases.
+> **Note:** This feature is under active development. The goal is to allow scripts to be exposed as a `switch` or `button` via a header tag. The current implementation creates a switch for every script, which may not be ideal for all use cases.
 
 For every script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
 *   **Entity ID:** `switch.js_automation_<script_name>`
@@ -60,7 +62,7 @@ For every script you create, the addon automatically generates a matching `switc
 
 ---
 
-## 📝 The Metadata Header
+## The Metadata Header
 
 Every script starts with a JSDoc-style header. This configures the engine's behavior.
 
@@ -86,28 +88,25 @@ All script outputs are captured by the central **Log Manager**.
 
 ---
 
-## 🔍 Store Explorer
+## Store Explorer
 
 The **Store Explorer** provides a graphical user interface for the `ha.store`.
 *   **Visual Management:** View all global variables in a sortable table.
 *   **Live Updates:** See values, owners, and last update timestamps.
 *   **Edit & Delete:** Modify values directly or remove obsolete keys.
 *   **Search:** Filter keys and values to find specific data quickly.
-*   **🔐 Secrets Management:** Mark variables as "Secret" to mask their values in the UI (e.g., `••••••••`). This is perfect for storing API keys, tokens, or passwords that your scripts need but shouldn't be visible on screen.
+*   **Secrets Management:** Mark variables as "Secret" to mask their values in the UI (e.g., `••••••••`). This is perfect for storing API keys, tokens, or passwords that your scripts need but shouldn't be visible on screen.
 
-## 🧠 Expert Mode
+## Expert Mode
 
-For advanced users, the **Expert Mode** unlocks additional system management features.
+> **Note:** Currently, Expert Mode is **permanently enabled** for all users. It might become a configurable option in a future release.
 
-*   **Activation:** Set `expert_mode: true` in the addon configuration or append `?expert=true` to the dashboard URL.
-*   **Features:**
-    *   **Store Explorer:** Access the global variable database via the header button.
-    *   **Clear Server Logs:** Button to permanently delete the entire server-side log history.
-    *   **Visual Indicator:** The brand icon turns dark green to indicate active expert mode.
+*   **Store Explorer:** Access the global variable database via the header button.
+*   **Clear Server Logs:** Button to permanently delete the entire server-side log history.
 
 ---
 
-## 📚 API Documentation
+## API Documentation
 
 ### 1. Logging & Debugging
 Control visibility via the `@loglevel` header (debug, info, warn, error).
@@ -221,7 +220,7 @@ ha.store.delete('temp_variable');
 
 ---
 
-## 🔋 Global Built-ins
+## Global Built-ins
 
 No need to `require` these, they are always available.
 
@@ -254,7 +253,7 @@ async function sequence() {
 ```
 
 ---
-## 🌍 Internationalization
+## Internationalization
 
 The user interface is available in both German and English.
 - **Automatic Detection:** The language is automatically chosen based on your browser's settings.
@@ -262,7 +261,7 @@ The user interface is available in both German and English.
 
 ---
 
-## 💡 Complete Examples
+## Complete Examples
 
 ### Smart Bathroom Fan
 Logic: Run fan if humidity is > 65% for 5 minutes, then stop.
