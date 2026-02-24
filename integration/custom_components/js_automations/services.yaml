@@ -1,0 +1,40 @@
+create_entity:
+  name: Create or Update Entity
+  description: Creates a persistent entity in the Entity Registry and sets its state.
+  fields:
+    entity_id:
+      name: Entity ID
+      description: The entity ID (e.g., sensor.my_custom_sensor).
+      required: true
+      selector:
+        text:
+    unique_id:
+      name: Unique ID
+      description: A unique identifier for the registry. Must be unique per domain.
+      required: true
+      selector:
+        text:
+    state:
+      name: State
+      description: The state of the entity.
+      required: false
+      selector:
+        text:
+    attributes:
+      name: Attributes
+      description: Dictionary of attributes.
+      required: false
+      selector:
+        object:
+    name:
+      name: Friendly Name
+      description: The friendly name of the entity.
+      required: false
+      selector:
+        text:
+    icon:
+      name: Icon
+      description: The icon (e.g., mdi:flash).
+      required: false
+      selector:
+        icon:

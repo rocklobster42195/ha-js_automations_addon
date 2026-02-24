@@ -1,6 +1,6 @@
 # 🔌 Konzept: Native Integration & Hybrid Architecture (Meilenstein 7)
 
-## 1. Das Problem: "Ephemeral Entities"
+## 1. Das Problem: "Flüchtige Entitäten"
 Aktuell erzeugt das Add-on Entitäten über die Home Assistant HTTP API (`POST /api/states/...`).
 *   **Nachteil 1:** Diese Entitäten sind "flüchtig". Nach einem HA-Neustart sind sie weg, bis das Skript sie neu setzt.
 *   **Nachteil 2:** Sie haben keine `unique_id` und keinen Eintrag in der **Entity Registry**.
@@ -19,9 +19,36 @@ Wir wandeln das Projekt in ein **Hybrid Add-on** um. Das bedeutet, das Add-on br
     *   Prüft beim Start, ob die Integration in `/config/custom_components/js_automations` existiert und aktuell ist.
 
 2.  **Python Integration (Der "Body"):**
+(Erste Version angelegt, aber noch nicht getestet. Muss zurzeit noch per Hand Installiert werden. Sollte über das Addon on passieren)
     *   Eine schlanke `custom_component`, die in Home Assistant Core läuft.
     *   Stellt Services bereit, um Entitäten zu registrieren und zu aktualisieren.
     *   Verwaltet die Einträge in der **Entity Registry** (Persistenz, Unique IDs).
+
+### Kommunikationsfluss (Die "Bridge")
+Die Custom Component ersetzt **nicht** die WebSocket-API, sondern erweitert sie.
+
+1.  **Lesen (Input):** Node.js nutzt weiterhin den nativen WebSocket (`subscribe_events`), um Zustände von HA zu empfangen. Das ist performant und etabliert.
+2.  **Schreiben (Output):**
+    *   *Bisher:* HTTP POST auf `/api/states/...` (Flüchtig).
+    *   *Neu:* WebSocket Service Call auf `js_automations.create_entity` (Persistent).
+
+Die "Bridge" dient also rein der **Verwaltung von Entitäten**, nicht dem Datentransport für das Lesen von Sensoren.
+
+### Local Development Strategie
+Da ein lokales Node.js Skript (auf dem PC des Entwicklers) keine Dateien in den `/config` Ordner des HA-Servers kopieren kann:
+*   **Add-on Betrieb:** Der Installer läuft automatisch (kopiert Dateien von `/app` nach `/config`).
+*   **Local Dev:** Der Entwickler muss die Integration **einmalig manuell** auf seinem Test-HA installieren (z.B. Ordner kopieren).
+*   **Laufzeit:** Da `ha.create` technisch nur einen Service-Call über den WebSocket sendet, funktioniert der Code identisch – egal ob das Skript im Add-on oder lokal auf dem PC läuft.
+
+### Scope & Abgrenzung (Was die Integration NICHT tut)
+Um die Wartbarkeit zu sichern, verfolgen wir den Ansatz der **"Slim Bridge"**. Die Logik bleibt zu 100% in Node.js.
+
+*   **Keine Logik in Python:** Die Integration führt keine Automatisierungen aus. Sie ist nur ein "dummer" Empfänger für Befehle aus Node.js.
+*   **Kein Ersatz für API:** Sensordaten lesen wir weiterhin direkt über den WebSocket Stream in Node.js, nicht über Python-Umwege.
+
+**Zukunftsmusik (Out of Scope für M7):**
+*   *Services mit Argumenten:* `js_automations.run(script="x", args={...})` (Geplant für später).
+*   *Device Registry:* Gruppierung von Entitäten zu Geräten (Geplant für später).
 
 ---
 
@@ -53,7 +80,7 @@ Sie definiert eine virtuelle Plattform (ähnlich wie MQTT, aber über Service-Ca
     *   `update_entity(unique_id, state, attributes)`: Setzt den Status.
     *   `remove_entity(unique_id)`: Löscht die Entität.
 
-### B. Die Node.js Erweiterung (`ha.register`)
+### B. Die Node.js Erweiterung (`ha.create`)
 Wir erweitern die API für Skripte, um die neuen Fähigkeiten zu nutzen.
 
 ```javascript
@@ -61,7 +88,7 @@ Wir erweitern die API für Skripte, um die neuen Fähigkeiten zu nutzen.
 ha.updateState('sensor.mein_wert', 123);
 
 // Neu (Persistent):
-ha.register('sensor.mein_wert', {
+ha.create('sensor.mein_wert', {
     name: 'Mein Wichtiger Sensor',
     type: 'sensor', // oder binary_sensor, switch, number...
     icon: 'mdi:flash',
@@ -69,7 +96,8 @@ ha.register('sensor.mein_wert', {
     persistent: true // Flag für Backend
 });
 
-ha.updateState('sensor.mein_wert', 456);
+// Aktualisierung erfolgt weiterhin über updateState oder automatisch durch die Integration
+ha.updateState('sensor.mein_wert', 456); 
 ```
 
 ### C. Fallback-Strategie
