@@ -61,6 +61,17 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 ---
 
+## 🔌 Meilenstein 7: Native Integration (Geplant)
+*Fokus: Zero-Config Experience und volle Home Assistant Kompatibilität.*
+
+| Feature | Komplexität | Aufwand | Beschreibung |
+| :--- | :---: | :---: | :--- |
+| **Hybrid Architecture** | **7/10** | **L** | Add-on liefert `custom_component` mit und installiert sie bei Bedarf. |
+| **Native Entities** | **6/10** | **M** | `ha.register()` nutzt interne HA-API statt HTTP. Echte Registry-Einträge. |
+| **Installer Wizard** | **4/10** | **S** | UI-Flow zum Kopieren der Integration nach `/config`. |
+
+---
+
 ## ✨ Nice to have
 *Fokus: Komfort-Features und alternative Programmiermethoden.*
 

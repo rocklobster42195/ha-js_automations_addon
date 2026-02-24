@@ -29,7 +29,7 @@ const LogManager = require('./core/log-manager');
 const packageJson = require('./package.json');
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
-const SCRIPTS_DIR = IS_ADDON ? '/config/js-automation' : path.join(__dirname, 'scripts');
+const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, 'scripts');
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage'); // NEU: Versteckter System-Ordner
 const PORT = process.env.PORT || 3000;
 
