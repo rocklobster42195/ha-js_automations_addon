@@ -50,6 +50,17 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 ---
 
+## 📦 Meilenstein 6: Script Management 2.0 (Geplant)
+*Fokus: Flexiblerer Umgang mit Dateien, Import/Export und Usability.*
+
+| Feature | Komplexität | Aufwand | Beschreibung |
+| :--- | :---: | :---: | :--- |
+| **Unified Creation Wizard** | **5/10** | **M** | Modal mit Tabs: *Neu* (Templates), *Upload* (Drag & Drop) und *Gist-Import*. Auto-Check auf Duplikate. |
+| **Editor Toolbar 2.0** | **3/10** | **S** | Download-Button für aktives Skript. |
+| **Advanced File Ops** | **6/10** | **M** | Umbenennen von Skripten (Rename & Restart) und "Backup All" (ZIP-Download aller Skripte). |
+
+---
+
 ## ✨ Nice to have
 *Fokus: Komfort-Features und alternative Programmiermethoden.*
 

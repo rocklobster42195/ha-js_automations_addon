@@ -75,7 +75,7 @@ body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
     border-top: 1px solid var(--border);
     font-family: monospace;
     font-size: 0.85rem;
-    color: var(--text-dim);
+    color: #999;
     display: none;
     justify-content: space-between;
     align-items: center;

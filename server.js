@@ -150,6 +150,23 @@ async function startSystem() {
         depManager.prune();
 
         server.listen(PORT, '0.0.0.0', () => console.log(`🌍 Dashboard on port ${PORT}`));
+
+        // Auto-Reconnection Loop
+        let isReconnecting = false;
+        setInterval(async () => {
+            if (!connector.isReady && !isReconnecting) {
+                isReconnecting = true;
+                console.log("⚠️ HA Connection lost. Attempting to reconnect...");
+                try {
+                    await connector.connect();
+                    console.log("✅ HA Reconnected!");
+                } catch (e) {
+                    console.error("❌ Reconnection failed:", e.message);
+                } finally {
+                    isReconnecting = false;
+                }
+            }
+        }, 5000);
     } catch (err) { console.error(err); }
 }
 

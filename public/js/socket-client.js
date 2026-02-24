@@ -11,10 +11,40 @@ function initSocket() {
     // BASE_PATH is global from api.js
     socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
     
+    socket.on('connect', () => {
+        const hb = document.getElementById('heartbeat-icon');
+        if (hb) {
+            hb.parentElement.title = 'Connected';
+            hb.style.color = '#999';
+            hb.style.opacity = '1';
+            hb.style.transform = '';
+        }
+    });
+
+    socket.on('disconnect', () => {
+        const hb = document.getElementById('heartbeat-icon');
+        if (hb) {
+            hb.parentElement.title = 'Disconnected';
+            hb.style.color = 'var(--danger)';
+            hb.style.opacity = '1';
+            hb.style.transform = '';
+        }
+    });
+
     socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
     socket.on('status_update', () => { if(typeof loadScripts === 'function') loadScripts(); });
     
     socket.on('system_stats', (data) => {
+        const hb = document.getElementById('heartbeat-icon');
+        if (hb) {
+            // Falls Verbindung wieder da ist (Daten kommen), aber Icon noch rot war: Reset
+            if (hb.style.color === 'var(--danger)') {
+                hb.parentElement.title = 'Connected';
+                hb.style.color = '#999';
+                hb.style.opacity = '1';
+            }
+        }
+
         const cpuEl = document.getElementById('stat-cpu');
         const ramEl = document.getElementById('stat-ram');
         if (cpuEl) {

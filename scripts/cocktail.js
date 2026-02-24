@@ -5,13 +5,13 @@
  * @area 
  * @label 
  * @loglevel info
- * @npm suncalc,iban
+ * @npm suncalc
  */
 
 
 // suncalc wird automatisch installiert
 const suncalc = require('suncalc');
-const iban=require('iban');
+
 // axios nutzen wir global (schon im Add-on enthalten)
 
 ha.log("🍹 Kombi-Skript gestartet...");

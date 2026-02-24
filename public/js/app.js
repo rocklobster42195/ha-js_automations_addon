@@ -95,6 +95,9 @@ function injectSidebarFooter() {
     const footer = document.createElement('div');
     footer.className = 'sidebar-footer';
     footer.innerHTML = `
+        <div class="stat-item" title="Backend Heartbeat">
+            <i id="heartbeat-icon" class="mdi mdi-heart-pulse" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
+        </div>
         <div class="stat-item" title="CPU Usage">
             <i class="mdi mdi-chip"></i> <span id="stat-cpu" style="min-width:28px; text-align:right;">0%</span>
             <canvas id="cpu-sparkline" width="24" height="20" style="margin-left:4px; opacity:0.8;"></canvas>
