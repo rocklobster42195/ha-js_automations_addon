@@ -46,7 +46,7 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
 | **Englische Kommentare** | **2/10** | **S** | Refactoring des Quellcodes für internationale Lesbarkeit. |
-| **Resource Monitor** | **5/10** | **M** | Live CPU/RAM Anzeige pro Skript (via `pidusage`). |
+| **Resource Monitor** | **5/10** | **M** | Live RAM Anzeige pro Skript (via Worker-Polling). **(Frontend Ready)** |
 
 ---
 

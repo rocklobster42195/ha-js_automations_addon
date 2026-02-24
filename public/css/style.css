@@ -68,6 +68,25 @@ body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
 }
 .version-tag:empty { display: none; }
 
+/* --- SIDEBAR FOOTER (Expert Mode) --- */
+.sidebar-footer {
+    padding: 4px 10px;
+    background: #0e0e0e;
+    border-top: 1px solid var(--border);
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: 30px;
+}
+body.expert-mode .sidebar-footer { display: flex; }
+
+.stat-item { display: flex; align-items: center; gap: 6px; cursor: help; }
+.stat-item i { font-size: 0.85rem; }
+
 .header-actions { display: flex; gap: 2px; width: 100%; }
 .header-actions button { 
     color: var(--text-sec) !important; font-size: 1.3rem !important; 

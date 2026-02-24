@@ -95,8 +95,14 @@ function renderStoreTable() {
         let iconHtml = '';
 
         if (meta.isSecret) {
-            valueHtml = `<div class="store-value-masked">••••••••</div>`;
-            iconHtml = `<i class="mdi mdi-lock" style="color:#ffb86c; margin-right:5px;" title="Secret"></i>`;
+            const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            valueHtml = `
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <span id="secret-val-${count}" class="store-value-masked">••••••••</span>
+                    <button class="btn-row" onclick="toggleSecretDisplay('${safeKey}', 'secret-val-${count}', this)" title="Show/Hide">
+                        <i class="mdi mdi-eye"></i>
+                    </button>
+                </div>`;
         } else if (typeof val === 'object') {
             valueHtml = `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
         } else {
@@ -264,6 +270,34 @@ function clearStoreSearch() {
     }
 }
 
+function toggleSecretDisplay(key, spanId, btn) {
+    const span = document.getElementById(spanId);
+    const icon = btn.querySelector('i');
+    const item = storeCache[key];
+    
+    if (!span || !item) return;
+    
+    const isHidden = icon.classList.contains('mdi-eye');
+    
+    if (isHidden) {
+        const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+        let valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+        
+        if (typeof val === 'object') {
+            span.innerHTML = `<pre class="store-json" style="margin:0;">${escapeHtml(valStr)}</pre>`;
+            span.className = ''; 
+        } else {
+            span.textContent = valStr;
+            span.className = 'store-value';
+        }
+        icon.className = 'mdi mdi-eye-off';
+    } else {
+        span.textContent = '••••••••';
+        span.className = 'store-value-masked';
+        icon.className = 'mdi mdi-eye';
+    }
+}
+
 // --- INJECTION HELPERS ---
 function injectStoreComponents() {
     // 1. Inject Modal if missing
@@ -334,3 +368,4 @@ window.closeStoreModal = closeStoreModal;
 window.saveStoreItemFromModal = saveStoreItemFromModal;
 window.toggleStoreValueVisibility = toggleStoreValueVisibility;
 window.toggleStoreSecretState = toggleStoreSecretState;
+window.toggleSecretDisplay = toggleSecretDisplay;

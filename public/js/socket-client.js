@@ -4,6 +4,8 @@
  */
 
 var socket = null;
+var cpuHistory = new Array(10).fill(0);
+var ramHistory = new Array(10).fill(0);
 
 function initSocket() {
     // BASE_PATH is global from api.js
@@ -11,6 +13,57 @@ function initSocket() {
     
     socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
     socket.on('status_update', () => { if(typeof loadScripts === 'function') loadScripts(); });
+    
+    socket.on('system_stats', (data) => {
+        const cpuEl = document.getElementById('stat-cpu');
+        const ramEl = document.getElementById('stat-ram');
+        if (cpuEl) {
+            cpuEl.textContent = `${data.cpu}%`;
+            if (data.cpu >= 90) cpuEl.style.color = '#ff5555';      // Red
+            else if (data.cpu >= 70) cpuEl.style.color = '#ffb86c'; // Orange
+            else if (data.cpu >= 50) cpuEl.style.color = '#f1fa8c'; // Yellow
+            else cpuEl.style.color = '';                            // Default
+            
+            drawSparkline('cpu-sparkline', cpuHistory, data.cpu, (v) => v >= 90 ? '#ff5555' : (v >= 70 ? '#ffb86c' : (v >= 50 ? '#f1fa8c' : '#666666')), 100);
+        }
+        
+        if (ramEl) {
+            const sysUsed = data.ram_used > 1024 ? (data.ram_used / 1024).toFixed(1) + ' GB' : data.ram_used + ' MB';
+            
+            // Platz sparen: Nur Node-RAM anzeigen
+            ramEl.textContent = `${data.app_ram} MB`;
+            
+            // Tooltip erweitert um System-Werte (da hier Platz ist)
+            ramEl.parentElement.title = `Node Heap: ${data.app_heap} MB (Scripts)\nNode RSS: ${data.app_ram} MB (Total)\nSystem: ${sysUsed}`;
+            
+            // RAM Sparkline (Fixe Skala: 512MB = 100%. Ermöglicht bessere visuelle Einschätzung.)
+            drawSparkline('ram-sparkline', ramHistory, data.app_ram, (v) => v >= 1024 ? '#ff5555' : (v >= 512 ? '#ffb86c' : (v >= 256 ? '#f1fa8c' : '#666666')), 512);
+        }
+
+        if (data.script_stats && typeof updateScriptStats === 'function') {
+            updateScriptStats(data.script_stats);
+        }
+    });
+}
+
+function drawSparkline(id, history, val, colorFn, maxVal) {
+    history.push(val);
+    if (history.length > 10) history.shift();
+    
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    ctx.clearRect(0, 0, w, h);
+    
+    const barW = (w / history.length) - 1;
+    history.forEach((v, i) => {
+        ctx.fillStyle = colorFn(v);
+        const barH = Math.max(2, (v / maxVal) * h); // Mindestens 2px hoch
+        ctx.fillRect(i * (barW + 1), h - barH, barW, barH);
+    });
 }
 
 window.initSocket = initSocket;

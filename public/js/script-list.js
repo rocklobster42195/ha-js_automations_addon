@@ -163,7 +163,9 @@ function renderScripts(scripts, updateGlobal = true) {
         groupScripts.forEach(s => {
             const row = document.createElement('div');
             row.className = 'script-row';
-            row.title = s.description || `File: ${s.filename}`;
+            
+            row.title = buildScriptTooltip(s);
+            
             row.onclick = () => openOrSwitchToTab(s.filename, s.icon);
 
             let icon = s.icon ? s.icon.split(':').pop() : 'script-text';
@@ -200,6 +202,47 @@ function renderScripts(scripts, updateGlobal = true) {
         groupDiv.appendChild(contentDiv);
         list.appendChild(groupDiv);
     });
+}
+
+function buildScriptTooltip(s) {
+    if (!document.body.classList.contains('expert-mode')) {
+        return s.description || `File: ${s.filename}`;
+    }
+
+    const lines = [`File: ${s.filename}`];
+    lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
+    
+    if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
+    if (s.last_started) lines.push(`Started: ${new Date(s.last_started).toLocaleString()}`);
+    
+    if (s.description) lines.push(`\n${s.description}`);
+    return lines.join('\n');
+}
+
+function updateScriptStats(statsMap) {
+    if (!allScripts) return;
+    let changed = false;
+    
+    // Daten im lokalen Array aktualisieren
+    for (const [filename, data] of Object.entries(statsMap)) {
+        const script = allScripts.find(s => s.filename === filename);
+        if (script) {
+            script.ram_usage = data.ram_usage;
+            changed = true;
+        }
+    }
+    
+    // Nur DOM-Attribute aktualisieren (kein Re-Render)
+    if (changed && document.body.classList.contains('expert-mode')) {
+        const rows = document.querySelectorAll('.script-row');
+        rows.forEach(row => {
+            const nameEl = row.querySelector('.script-filename');
+            if (nameEl) {
+                const s = allScripts.find(script => script.filename === nameEl.textContent);
+                if (s) row.title = buildScriptTooltip(s);
+            }
+        });
+    }
 }
 
 function updateIconPreview(id, s) { 
@@ -567,6 +610,7 @@ window.handleNpmInput = handleNpmInput;
 window.removeNpmTag = removeNpmTag;
 window.editScript = editScript;
 window.duplicateScript = duplicateScript;
+window.updateScriptStats = updateScriptStats;
 
 // --- VERSION LOADER ---
 async function loadVersion() {

@@ -142,6 +142,16 @@ function ensureMessageListener() {
             }
             process.exit(0);
         }
+
+        // Handle stats request
+        if (msg.type === 'get_stats') {
+            const mem = process.memoryUsage();
+            parentPort.postMessage({
+                type: 'stats',
+                heapUsed: mem.heapUsed,
+                rss: mem.rss
+            });
+        }
     });
 }
 

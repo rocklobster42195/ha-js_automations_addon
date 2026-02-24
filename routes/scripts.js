@@ -13,6 +13,14 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             const m = ScriptParser.parse(path.join(SCRIPTS_DIR, f));
             m.status = workerManager.workers.has(f) ? 'running' : (workerManager.lastExitState.get(f) === 'error' ? 'error' : 'stopped');
             m.running = m.status === 'running';
+            
+            // RAM-Statistiken hinzufügen, falls Skript läuft
+            if (m.running && typeof workerManager.getScriptStats === 'function') {
+                const stats = workerManager.getScriptStats(f);
+                if (stats) m.ram_usage = stats.ram_usage;
+                if (workerManager.startTimes.has(f)) m.last_started = workerManager.startTimes.get(f);
+            }
+            
             return m;
         }));
     });

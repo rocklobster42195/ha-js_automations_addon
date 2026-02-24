@@ -14,11 +14,16 @@ class WorkerManager extends EventEmitter {
         this.workers = new Map();
         this.stopReasons = new Map();
         this.lastExitState = new Map();
+        this.stats = new Map();
+        this.startTimes = new Map();
         this.haConnector = null;
         this.storeManager = null;
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
+
+        // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
+        setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
     }
 
     setConnector(connector) { this.haConnector = connector; }
@@ -30,6 +35,10 @@ class WorkerManager extends EventEmitter {
         if (!this.scriptsDir) return [];
         const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
         return files.map(f => path.join(this.scriptsDir, f));
+    }
+
+    getScriptStats(filename) {
+        return this.stats.get(filename);
     }
 
     /**
@@ -103,6 +112,14 @@ class WorkerManager extends EventEmitter {
                 this.storeManager.delete(msg.key);
                 this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined });
             }
+
+            // 5. Stats Response
+            if (msg.type === 'stats') {
+                this.stats.set(scriptMeta.filename, {
+                    ram_usage: Math.round(msg.heapUsed / 1024 / 1024 * 100) / 100, // MB
+                    rss: Math.round(msg.rss / 1024 / 1024 * 100) / 100
+                });
+            }
         });
 
         worker.on('error', (err) => {
@@ -114,6 +131,8 @@ class WorkerManager extends EventEmitter {
             if (this.workers.get(scriptMeta.filename) === worker) {
                 this.workers.delete(scriptMeta.filename);
                 this.subscriptions.delete(scriptMeta.filename);
+                this.stats.delete(scriptMeta.filename);
+                this.startTimes.delete(scriptMeta.filename);
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(filename)) ? 'error' : 'success';
@@ -126,7 +145,13 @@ class WorkerManager extends EventEmitter {
         });
 
         this.workers.set(scriptMeta.filename, worker);
+        this.startTimes.set(scriptMeta.filename, Date.now());
         this.emit('script_start', { filename: scriptMeta.filename });
+
+        // RAM-Messung beschleunigen: Nach 1s direkt anfragen (statt auf 5s Interval warten)
+        setTimeout(() => {
+            if (this.workers.has(scriptMeta.filename)) worker.postMessage({ type: 'get_stats' });
+        }, 1000);
     }
 
     /**
@@ -182,6 +207,8 @@ class WorkerManager extends EventEmitter {
         const worker = this.workers.get(filename);
         if (worker) {
             this.stopReasons.set(filename, reason);
+            this.stats.delete(filename);
+            this.startTimes.delete(filename);
             // 1. Try graceful shutdown
             worker.postMessage({ type: 'stop_request' });
             // 2. Force terminate after 2 seconds if still alive

@@ -16,6 +16,7 @@ const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const HAConnector = require('./core/ha-connection');
 const ScriptParser = require('./core/parser');
@@ -166,5 +167,40 @@ app.get('/api/status', (req, res) => {
 });
 
 app.use('/api', systemRouter);
+
+// --- SYSTEM STATS (CPU/RAM) ---
+function getCpuTick() {
+    const cpus = os.cpus();
+    let user = 0, nice = 0, sys = 0, idle = 0, irq = 0;
+    for (const cpu of cpus) {
+        user += cpu.times.user;
+        nice += cpu.times.nice;
+        sys += cpu.times.sys;
+        idle += cpu.times.idle;
+        irq += cpu.times.irq;
+    }
+    return { idle, total: user + nice + sys + idle + irq };
+}
+
+let startTick = getCpuTick();
+
+setInterval(() => {
+    const endTick = getCpuTick();
+    const idleDiff = endTick.idle - startTick.idle;
+    const totalDiff = endTick.total - startTick.total;
+    const cpuPercent = totalDiff > 0 ? 100 - Math.floor(100 * idleDiff / totalDiff) : 0;
+    startTick = endTick;
+
+    const totalMem = Math.round(os.totalmem() / 1024 / 1024);
+    const freeMem = Math.round(os.freemem() / 1024 / 1024);
+    const appMem = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const appHeap = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    
+    // Skript-Stats mitsenden (Map zu Objekt konvertieren)
+    const scriptStats = {};
+    workerManager.stats.forEach((v, k) => scriptStats[k] = v);
+
+    io.emit('system_stats', { cpu: cpuPercent, ram_used: totalMem - freeMem, ram_total: totalMem, app_ram: appMem, app_heap: appHeap, script_stats: scriptStats });
+}, 2000);
 
 startSystem();

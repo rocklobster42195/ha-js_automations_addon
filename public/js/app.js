@@ -84,4 +84,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadMDIIcons();
     loadHAServices();
     initLogs();
+    
+    injectSidebarFooter();
 });
+
+function injectSidebarFooter() {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    
+    const footer = document.createElement('div');
+    footer.className = 'sidebar-footer';
+    footer.innerHTML = `
+        <div class="stat-item" title="CPU Usage">
+            <i class="mdi mdi-chip"></i> <span id="stat-cpu" style="min-width:28px; text-align:right;">0%</span>
+            <canvas id="cpu-sparkline" width="24" height="20" style="margin-left:4px; opacity:0.8;"></canvas>
+        </div>
+        <div class="stat-item" title="RAM Usage">
+            <i class="mdi mdi-memory"></i> <span id="stat-ram">0 / 0 MB</span>
+            <canvas id="ram-sparkline" width="24" height="20" style="margin-left:4px; opacity:0.8;"></canvas>
+        </div>
+    `;
+    sidebar.appendChild(footer);
+}
