@@ -11,24 +11,37 @@ function initSocket() {
     // BASE_PATH is global from api.js
     socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
     
-    socket.on('connect', () => {
+    // Helper: UI Update für Herz & Overlay zentral steuern
+    const updateConnectionUI = (isConnected) => {
         const hb = document.getElementById('heartbeat-icon');
+        const overlay = document.getElementById('connection-lost-overlay');
+        
+        // 1. Heartbeat Icon
         if (hb) {
-            hb.parentElement.title = 'Connected';
-            hb.style.color = '#999';
+            hb.parentElement.title = isConnected ? 'Connected' : 'Disconnected';
+            hb.style.color = isConnected ? '#999' : 'var(--danger)';
             hb.style.opacity = '1';
-            hb.style.transform = '';
+            if (isConnected) hb.style.transform = '';
         }
+
+        // 2. Overlay
+        if (overlay) {
+            if (isConnected) {
+                overlay.classList.add('hidden');
+                document.body.classList.remove('offline-mode');
+            } else {
+                overlay.classList.remove('hidden');
+                document.body.classList.add('offline-mode');
+            }
+        }
+    };
+
+    socket.on('connect', () => {
+        updateConnectionUI(true);
     });
 
     socket.on('disconnect', () => {
-        const hb = document.getElementById('heartbeat-icon');
-        if (hb) {
-            hb.parentElement.title = 'Disconnected';
-            hb.style.color = 'var(--danger)';
-            hb.style.opacity = '1';
-            hb.style.transform = '';
-        }
+        updateConnectionUI(false);
     });
 
     socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
@@ -39,9 +52,7 @@ function initSocket() {
         if (hb) {
             // Falls Verbindung wieder da ist (Daten kommen), aber Icon noch rot war: Reset
             if (hb.style.color === 'var(--danger)') {
-                hb.parentElement.title = 'Connected';
-                hb.style.color = '#999';
-                hb.style.opacity = '1';
+                updateConnectionUI(true);
             }
         }
 
@@ -74,6 +85,19 @@ function initSocket() {
             updateScriptStats(data.script_stats);
         }
     });
+
+    // Mobile Wake-Up Handler
+    // Prüft beim Aufwecken des Handys sofort den Status
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('📱 App active: Checking connection...');
+            if (!socket.connected) {
+                console.log('🔌 Socket disconnected. Forcing reconnect...');
+                updateConnectionUI(false);
+                socket.connect();
+            }
+        }
+    });
 }
 
 function drawSparkline(id, history, val, colorFn, maxVal) {
@@ -95,5 +119,10 @@ function drawSparkline(id, history, val, colorFn, maxVal) {
         ctx.fillRect(i * (barW + 1), h - barH, barW, barH);
     });
 }
+
+// Global helper for the overlay button
+window.manualReload = function() {
+    window.location.reload();
+};
 
 window.initSocket = initSocket;

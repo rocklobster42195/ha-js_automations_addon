@@ -705,3 +705,33 @@ input#search-input:focus { border-color: var(--accent) !important; }
     white-space: pre-wrap;
 }
 .btn-danger:hover { color: var(--danger) !important; background: rgba(244, 67, 54, 0.1) !important; }
+
+/* --- CONNECTION OVERLAY --- */
+#connection-lost-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    backdrop-filter: blur(4px);
+}
+.reconnect-spinner {
+    border: 4px solid rgba(255,255,255,0.1);
+    border-left-color: var(--accent); /* Use existing theme variable */
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Greys out the UI when offline */
+.offline-mode .sidebar, .offline-mode .main-content {
+    filter: grayscale(100%);
+    pointer-events: none;
+}

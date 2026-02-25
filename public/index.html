@@ -237,6 +237,16 @@
         </div>
     </div>
 
+    <!-- Connection Lost Overlay -->
+    <div id="connection-lost-overlay" class="hidden">
+        <div class="reconnect-spinner"></div>
+        <h2 style="margin-bottom: 10px;">Verbindung unterbrochen</h2>
+        <p style="color: #aaa; margin-bottom: 20px;">Versuche Wiederherstellung...</p>
+        <button class="btn-primary" onclick="manualReload()">
+            <i class="mdi mdi-reload"></i> Jetzt neu laden
+        </button>
+    </div>
+
     <script src="js/api.js"></script>
     <script src="js/editor-config.js"></script>
     <script src="js/i18n.js"></script>

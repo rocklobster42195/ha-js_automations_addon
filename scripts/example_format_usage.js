@@ -18,7 +18,7 @@ ha.log(`Dauer (${seconds}s): ${durationStr}`);
 
 // 2. Lux Wert interpretieren
 const currentLux = 45;
-const darkness = luxToDarkness(currentLux;)
+const darkness = luxToDarkness(currentLux);
 ha.log(`Helligkeit (${currentLux} lux): ${darkness}`); 
 
 // 3. Runden

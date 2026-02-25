@@ -72,6 +72,18 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 ---
 
+## ⚙️ Meilenstein 8: System Settings & Personalization (Geplant)
+*Fokus: Zentrale Konfiguration und Anpassbarkeit der Benutzeroberfläche.*
+
+| Feature | Komplexität | Aufwand | Beschreibung |
+| :--- | :---: | :---: | :--- |
+| **Settings Tab** | **4/10** | **M** | Zentraler Tab mit Split-View (Kategorien/Optionen) für alle Einstellungen. |
+| **Status Bar Config** | **5/10** | **M** | 3 Slots im Footer frei belegbar (CPU, RAM oder Custom Entity). |
+| **Expert Mode** | **2/10** | **S** | Umschalter zum Ausblenden technischer Details/Buttons in der UI. |
+| **Danger Zone** | **3/10** | **S** | Node.js RAM-Limit erhöhen und Log-Level global setzen. |
+
+---
+
 ## ✨ Nice to have
 *Fokus: Komfort-Features und alternative Programmiermethoden.*
 
