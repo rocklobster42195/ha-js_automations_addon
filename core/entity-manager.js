@@ -19,6 +19,9 @@ class EntityManager {
     async createSwitches() {
         const scripts = await this.workerManager.getScripts();
         for (const scriptPath of scripts) {
+            // Skip libraries (they are passive and live in /libraries subfolder)
+            if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
+
             const meta = ScriptParser.parse(scriptPath);
             const scriptName = path.basename(scriptPath, '.js');
             const entityId = `switch.js_automations_${scriptName}`;

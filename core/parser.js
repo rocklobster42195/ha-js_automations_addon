@@ -12,7 +12,8 @@ class ScriptParser {
             area: /^@area\s+(.*)/,
             label: /^@label\s+(.*)/,
             loglevel: /^@loglevel\s+(.*)/,
-            npm: /^@npm[:]?\s+(.*)/
+            npm: /^@npm[:]?\s+(.*)/,
+            include: /^@include\s+(.*)/
         };
 
         const metadata = {
@@ -24,7 +25,8 @@ class ScriptParser {
             area: '',
             label: '',
             loglevel: 'info',
-            dependencies: []
+            dependencies: [],
+            includes: []
         };
 
         // Zeilenweise parsen ist sicherer gegen Sternchen (*)
@@ -46,6 +48,10 @@ class ScriptParser {
                         // Split by comma OR whitespace to handle "pkg1 pkg2" and "pkg1, pkg2"
                         const deps = val.split(/[\s,]+/).map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
                         metadata.dependencies.push(...deps);
+                    } else if (key === 'include') {
+                        // Handle includes similar to npm
+                        const incs = val.split(/[\s,]+/).map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
+                        metadata.includes.push(...incs);
                     } else {
                         metadata[key] = val;
                     }

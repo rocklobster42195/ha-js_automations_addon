@@ -31,11 +31,13 @@ const packageJson = require('./package.json');
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, 'scripts');
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage'); // NEU: Versteckter System-Ordner
+const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries'); // NEU: Libraries Ordner
 const PORT = process.env.PORT || 3000;
 
 // Ordnerstrukturen sicherstellen
 if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
 if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
+if (!fs.existsSync(LIBRARIES_DIR)) fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
 
 const app = express();
 const server = http.createServer(app);
@@ -171,7 +173,7 @@ async function startSystem() {
 }
 
 // --- ROUTERS ---
-const scriptsRouter = require('./routes/scripts')(workerManager, depManager, stateManager, io, SCRIPTS_DIR, STORAGE_DIR);
+const scriptsRouter = require('./routes/scripts')(workerManager, depManager, stateManager, io, SCRIPTS_DIR, STORAGE_DIR, LIBRARIES_DIR);
 const storeRouter = require('./routes/store')(storeManager);
 const systemRouter = require('./routes/system')(connector, logManager, () => systemOptions);
 

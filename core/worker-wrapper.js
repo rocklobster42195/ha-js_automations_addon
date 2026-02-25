@@ -4,6 +4,8 @@
  */
 const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
+const fs = require('fs');
+const vm = require('vm');
 const Module = require('module');
 
 // --- 1. MODULE PATH INJECTION ---
@@ -241,8 +243,53 @@ global.schedule = (exp, cb) => {
 };
 global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-// --- 5. EXECUTION ---
+// --- 5. LIBRARY INJECTION ---
+function loadLibraries() {
+    const scriptPath = workerData.path;
+    try {
+        // 1. Skript-Inhalt lesen, um Header zu parsen
+        const content = fs.readFileSync(scriptPath, 'utf8');
+        
+        // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
+        // Matches: @include lib1.js, lib2.js
+        const includeMatches = content.matchAll(/@include\s+(.+)/g);
+        const librariesToLoad = new Set();
+
+        for (const match of includeMatches) {
+            match[1].split(',').forEach(lib => {
+                const cleanName = lib.trim();
+                if (cleanName) librariesToLoad.add(cleanName);
+            });
+        }
+
+        // 3. Libraries laden und ausführen
+        if (librariesToLoad.size > 0) {
+            // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
+            const libDir = path.join(path.dirname(scriptPath), 'libraries');
+            
+            librariesToLoad.forEach(libName => {
+                // .js Endung sicherstellen
+                if (!libName.endsWith('.js')) libName += '.js';
+                
+                const libPath = path.join(libDir, libName);
+                
+                if (fs.existsSync(libPath)) {
+                    const libCode = fs.readFileSync(libPath, 'utf8');
+                    // Führt den Code im globalen Kontext dieses Workers aus
+                    vm.runInThisContext(libCode, { filename: libPath });
+                } else {
+                    ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
+                }
+            });
+        }
+    } catch (e) {
+        ha.error(`Library Injection Error: ${e.message}`);
+    }
+}
+
+// --- 6. EXECUTION ---
 try {
+    loadLibraries(); // Zuerst Libraries laden
     const scriptPath = require.resolve(workerData.path);
     delete require.cache[scriptPath]; // Avoid stale code
     require(scriptPath);

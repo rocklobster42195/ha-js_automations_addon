@@ -140,11 +140,18 @@
 
             <div class="form-grid">
                 <div class="form-group">
-                    <label data-i18n="script_name">Name</label>
+                    <label data-i18n="script_type">Script Type</label>
+                    <select id="new-script-type" onchange="handleTypeChange()">
+                        <option value="automation" data-i18n="type_automation">Automation</option>
+                        <option value="library" data-i18n="type_library">Global Library</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><span data-i18n="script_name">Name</span> <span class="field-hint">(@name)</span></label>
                     <input type="text" id="new-script-name" data-i18n="script_name" data-i18n-placeholder placeholder="Name" oninput="checkScriptName()" autocomplete="off">
                 </div>
                 <div class="form-group">
-    <label data-i18n="script_icon">Icon</label>
+    <label><span data-i18n="script_icon">Icon</span> <span class="field-hint">(@icon)</span></label>
     <div class="icon-input-container">
         <!-- Live Vorschau Links -->
         <i id="modal-icon-preview" class="mdi mdi-script-text"></i>
@@ -161,19 +168,19 @@
     </datalist>
 </div>
                 <div class="form-group">
-                    <label data-i18n="script_area">Bereich (Area)</label>
+                    <label><span data-i18n="script_area">Bereich</span> <span class="field-hint">(@area)</span></label>
                     <select id="new-script-area">
                         <option value="" data-i18n="area_none">Kein Bereich</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label data-i18n="script_label">Label</label>
+                    <label><span data-i18n="script_label">Label</span> <span class="field-hint">(@label)</span></label>
                     <select id="new-script-label">
                         <option value="" data-i18n="label_none">Kein Label</option>
                     </select>
                 </div>
                 <div class="form-group">
-        <label data-i18n="script_log_level">Log Level</label>
+        <label><span data-i18n="script_log_level">Log Level</span> <span class="field-hint">(@loglevel)</span></label>
         <select id="new-script-loglevel">
             <option value="debug" data-i18n="log_level_debug">Debug (Alles)</option>
             <option value="info" selected data-i18n="log_level_info">Info (Standard)</option>
@@ -182,11 +189,22 @@
         </select>
     </div>
                 <div class="form-group full-width">
-                    <label data-i18n="script_description">Beschreibung</label>
+                    <label><span data-i18n="script_description">Beschreibung</span> <span class="field-hint">(@description)</span></label>
                     <textarea id="new-script-desc" data-i18n="description_placeholder" data-i18n-placeholder placeholder="Kurze Beschreibung..."></textarea>
                 </div>
                 <div class="form-group full-width">
-                    <label data-i18n="npm_packages">NPM Packages</label>
+                    <label><span data-i18n="global_libraries">Global Libraries</span> <span class="field-hint">(@include)</span></label>
+                    <div class="npm-tags-input" onclick="document.getElementById('lib-input').focus()">
+                        <div id="lib-tags-container" style="display: contents;"></div>
+                        <input type="text" id="lib-input" class="npm-input-field" data-i18n="add_library_placeholder" data-i18n-placeholder placeholder="Add library..." list="lib-suggestions" onkeydown="handleLibInput(event)">
+                    </div>
+                    <!-- Autocomplete für vorhandene Libraries -->
+                    <datalist id="lib-suggestions">
+                        <!-- Wird per JS gefüllt -->
+                    </datalist>
+                </div>
+                <div class="form-group full-width">
+                    <label><span data-i18n="npm_packages">NPM Packages</span> <span class="field-hint">(@npm)</span></label>
                     <div class="npm-tags-input" onclick="document.getElementById('npm-input').focus()">
                         <div id="npm-tags-container"></div>
                         <input type="text" id="npm-input" class="npm-input-field" data-i18n="npm_packages_placeholder" data-i18n-placeholder placeholder="Add package..." onkeydown="handleNpmInput(event)">

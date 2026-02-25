@@ -5,6 +5,7 @@
 
 var isMonacoReady = false;
 var allEntities = [];
+window._libDisposables = []; // Speicher für Monaco Lib-Referenzen
 
 // --- MONACO CONFIG ---
 function registerCompletionProviders() {
@@ -195,6 +196,9 @@ async function configureMonaco() {
             monaco.languages.typescript.javascriptDefaults.addExtraLib(lib, 'file:///ha-api.d.ts');
         }
     } catch (e) {}
+    
+    await loadLibraryDefinitions(); // NEU: Globale Libraries laden
+
     registerCompletionProviders();
     isMonacoReady = true;
 }
@@ -308,6 +312,40 @@ function insertEntityToEditor(text) {
     editor.executeEdits("insert-entity", [op]);
 }
 
+async function loadLibraryDefinitions() {
+    if (typeof monaco === 'undefined') return;
+    try {
+        const res = await apiFetch('api/scripts');
+        if (!res.ok) return;
+        const scripts = await res.json();
+        
+        // Filter: Nur Libraries
+        const libs = scripts.filter(s => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\')));
+
+        // Alte Definitionen aufräumen
+        if (window._libDisposables) {
+            window._libDisposables.forEach(d => d.dispose());
+        }
+        window._libDisposables = [];
+
+        for (const lib of libs) {
+            try {
+                const cRes = await apiFetch(`api/scripts/${lib.filename}/content`);
+                if (cRes.ok) {
+                    const data = await cRes.json();
+                    // Als virtuelle Datei hinzufügen. Monaco parst dann JSDoc & Signaturen.
+                    const disposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+                        data.content, 
+                        `file:///libraries/${lib.filename}`
+                    );
+                    window._libDisposables.push(disposable);
+                }
+            } catch (e) { }
+        }
+        if (libs.length > 0) console.log(`📚 IntelliSense: ${libs.length} Libraries loaded.`);
+    } catch (e) { console.warn("IntelliSense Load Error", e); }
+}
+
 // Make globally available
 window.registerCompletionProviders = registerCompletionProviders;
 window.configureMonaco = configureMonaco;
@@ -317,3 +355,4 @@ window.toggleWordWrap = toggleWordWrap;
 window.openEntityPicker = openEntityPicker;
 window.closeEntityPicker = closeEntityPicker;
 window.filterEntityPicker = filterEntityPicker;
+window.loadLibraryDefinitions = loadLibraryDefinitions;

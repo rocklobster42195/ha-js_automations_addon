@@ -136,15 +136,15 @@ input#search-input:focus { border-color: var(--accent) !important; }
 
 /* Sektions-Header */
 .section-header {
-    padding: 8px 15px; background: #111; color: var(--text-dim);
+    padding: 8px 15px; background: #1a1a1a; color: #999;
     font-size: 0.7rem; font-weight: bold; text-transform: uppercase;
-    border-bottom: 1px solid #1a1a1a; border-top: 1px solid var(--border);
+    border-bottom: 1px solid #222; border-top: 1px solid var(--border);
     display: flex; justify-content: space-between; cursor: pointer;
     cursor: pointer;
     user-select: none; /* Verhindert Textmarkierung beim Doppelklick */
     transition: background 0.2s, opacity 0.2s;
 }
-.section-header:hover { color: #fff; background: #161616; }
+.section-header:hover { color: #fff; background: #252525; }
 
 .group-content {
     /* Standardmäßig sichtbar, wird per JS gesteuert */
@@ -213,6 +213,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     opacity: 0; 
     transition: opacity 0.2s; 
     flex-shrink: 0;
+    align-items: center;
 }
 .script-row:hover .row-actions { opacity: 1; }
 

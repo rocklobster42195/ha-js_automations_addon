@@ -61,5 +61,15 @@
   "modal_insert_entity_title": "Insert Entity",
   "modal_edit_script_title": "Edit Script",
   "modal_duplicate_script_title": "Duplicate Script",
-  "entity_search_placeholder": "Search entity..."
+  "entity_search_placeholder": "Search entity...",
+  "group_global_libraries": "Global Libraries",
+  "status_passive_library": "Passive Library",
+  "library_cannot_start": "Libraries cannot be started directly",
+  "library_mode_banner": "<strong>LIBRARY MODE</strong> &mdash; This script is passive. Use <code>@include {{filename}}</code> in automations.",
+  "script_type": "Script Type",
+  "type_automation": "Automation",
+  "type_library": "Global Library",
+  "global_libraries": "Global Libraries",
+  "add_library_placeholder": "Add library...",
+  "warn_library_in_use": "Warning: The library '{{filename}}' is used by {{count}} script(s): {{scripts}}.\nDo you really want to delete it?"
 }

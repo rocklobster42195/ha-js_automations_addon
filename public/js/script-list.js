@@ -6,6 +6,7 @@
 var allScripts = [];
 var collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
 var npmPackages = []; // Temporärer Speicher für das Modal
+var includedLibraries = []; // Temporärer Speicher für Includes
 var editingScriptFilename = null; // Wenn gesetzt, sind wir im Edit-Modus
 var duplicatedScriptContent = null; // Speicher für Code beim Duplizieren
 
@@ -82,15 +83,21 @@ function renderScripts(scripts, updateGlobal = true) {
     // 1. Gruppieren nach Label
     const groups = {};
     const NO_GROUP = '___none___';
+    const LIB_GROUP = '___libraries___';
 
     scripts.forEach(script => {
-        const groupKey = (script.label && script.label.trim() !== '') ? script.label : NO_GROUP;
+        // Check if it is a library (based on path)
+        const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
+        
+        const groupKey = isLib ? LIB_GROUP : ((script.label && script.label.trim() !== '') ? script.label : NO_GROUP);
         if (!groups[groupKey]) groups[groupKey] = [];
         groups[groupKey].push(script);
     });
 
     // 2. Gruppen sortieren (Alphabetisch, "Nicht zugeordnet" ganz unten)
     const sortedKeys = Object.keys(groups).sort((a, b) => {
+        if (a === LIB_GROUP) return 1; // Libraries immer ganz unten
+        if (b === LIB_GROUP) return -1;
         if (a === NO_GROUP) return 1;
         if (b === NO_GROUP) return -1;
         return a.localeCompare(b);
@@ -109,6 +116,11 @@ function renderScripts(scripts, updateGlobal = true) {
         let headerName = key === NO_GROUP ? i18next.t('group_none') : key;
         let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
         let iconStyle = '';
+
+        if (key === LIB_GROUP) {
+            headerName = i18next.t('group_global_libraries');
+            iconClass = "mdi-bookshelf";
+        }
 
         if (key !== NO_GROUP && typeof haData !== 'undefined') {
             const haLabel = haData.labels.find(l => l.name === key);
@@ -175,6 +187,16 @@ function renderScripts(scripts, updateGlobal = true) {
             let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
+            // Libraries sind passiv -> Keine Controls
+            const isLib = key === LIB_GROUP;
+            const controlsHtml = isLib ? 
+                `<span style="font-size:0.75rem; color:#666; font-style:italic; margin-right:10px;">${i18next.t('status_passive_library')}</span>
+                 <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>` 
+                : 
+                `<button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}"><i class="mdi ${toggleIcon}"></i></button>
+                 <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="${i18next.t('script_action_restart_title')}" ${!s.running ? 'disabled' : ''}><i class="mdi mdi-restart"></i></button>
+                 <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>`;
+
             row.innerHTML = `
                 <div class="script-icon">
                     <i class="mdi mdi-${icon} ${statusClass}"></i>
@@ -184,15 +206,7 @@ function renderScripts(scripts, updateGlobal = true) {
                     <div class="script-lower-row">
                         <span class="script-filename">${s.filename}</span>
                         <div class="row-actions">
-                            <button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}">
-                                <i class="mdi ${toggleIcon}"></i>
-                            </button>
-                            <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="${i18next.t('script_action_restart_title')}" ${!s.running ? 'disabled' : ''}>
-                                <i class="mdi mdi-restart"></i>
-                            </button>
-                            <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}">
-                                <i class="mdi mdi-delete-outline"></i>
-                            </button>
+                            ${controlsHtml}
                         </div>
                     </div>
                 </div>`;
@@ -201,6 +215,23 @@ function renderScripts(scripts, updateGlobal = true) {
 
         groupDiv.appendChild(contentDiv);
         list.appendChild(groupDiv);
+    });
+
+    // Datalist für Libraries füllen (für Autocomplete im Modal)
+    updateLibrarySuggestions(editingScriptFilename);
+}
+
+function updateLibrarySuggestions(excludeFilename) {
+    const datalist = document.getElementById('lib-suggestions');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    
+    const libs = allScripts.filter(s => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\')));
+    libs.forEach(lib => {
+        if (excludeFilename && lib.filename === excludeFilename) return;
+        const opt = document.createElement('option');
+        opt.value = lib.filename;
+        datalist.appendChild(opt);
     });
 }
 
@@ -303,6 +334,7 @@ async function createNewScript() {
     
     // Reset Formular
     document.getElementById('new-script-name').value = '';
+    document.getElementById('new-script-type').value = 'automation';
     document.getElementById('new-script-desc').value = '';
     document.getElementById('new-script-icon').value = 'mdi:script-text';
     document.getElementById('new-script-area').value = '';
@@ -317,6 +349,13 @@ async function createNewScript() {
     npmPackages = [];
     renderNpmTags();
     document.getElementById('npm-input').value = '';
+
+    // Reset Lib Input
+    includedLibraries = [];
+    renderLibTags();
+    document.getElementById('lib-input').value = '';
+
+    updateLibrarySuggestions(null);
 
     checkScriptName();
 
@@ -355,6 +394,10 @@ async function editScript(filename) {
 
     // Fill Form
     document.getElementById('new-script-name').value = script.name || '';
+    // Determine Type based on path
+    const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
+    document.getElementById('new-script-type').value = isLib ? 'library' : 'automation';
+    
     document.getElementById('new-script-desc').value = script.description || '';
     document.getElementById('new-script-icon').value = script.icon || 'mdi:script-text';
     document.getElementById('new-script-area').value = script.area || '';
@@ -367,6 +410,13 @@ async function editScript(filename) {
     npmPackages = [];
     if (script.dependencies) script.dependencies.forEach(d => addNpmTag(d));
     renderNpmTags();
+
+    // Fill Includes
+    includedLibraries = [];
+    if (script.includes) script.includes.forEach(i => addLibTag(i));
+    renderLibTags();
+
+    updateLibrarySuggestions(filename);
 }
 
 async function duplicateScript(filename) {
@@ -405,6 +455,7 @@ async function duplicateScript(filename) {
 
     // Fill Form
     document.getElementById('new-script-name').value = `${script.name} (Copy)`;
+    document.getElementById('new-script-type').value = 'automation'; // Duplikat ist standardmäßig Automation
     document.getElementById('new-script-desc').value = script.description || '';
     document.getElementById('new-script-icon').value = script.icon || 'mdi:script-text';
     document.getElementById('new-script-area').value = script.area || '';
@@ -418,7 +469,26 @@ async function duplicateScript(filename) {
     if (script.dependencies) script.dependencies.forEach(d => addNpmTag(d));
     renderNpmTags();
 
+    // Fill Includes
+    includedLibraries = [];
+    if (script.includes) script.includes.forEach(i => addLibTag(i));
+    renderLibTags();
+
+    updateLibrarySuggestions(null);
+
     checkScriptName(); // Namen validieren
+}
+
+function handleTypeChange() {
+    const type = document.getElementById('new-script-type').value;
+    const iconInput = document.getElementById('new-script-icon');
+    
+    if (type === 'library') {
+        iconInput.value = 'mdi:book-open-variant';
+    } else {
+        iconInput.value = 'mdi:script-text';
+    }
+    updateIconPreview('modal-icon-preview', iconInput.value);
 }
 
 // --- NPM CHIP LOGIC ---
@@ -498,6 +568,55 @@ async function validateNpmPackage(pkg) {
     renderNpmTags();
 }
 
+// --- LIBRARY CHIP LOGIC ---
+function handleLibInput(e) {
+    const input = e.target;
+    const val = input.value.trim();
+    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+        e.preventDefault();
+        if (val) {
+            addLibTag(val);
+            input.value = '';
+        }
+    } else if (e.key === 'Backspace' && val === '' && includedLibraries.length > 0) {
+        removeLibTag(includedLibraries.length - 1);
+    }
+}
+
+function addLibTag(libName) {
+    if (includedLibraries.includes(libName)) return;
+    includedLibraries.push(libName);
+    renderLibTags();
+}
+
+function removeLibTag(index) {
+    includedLibraries.splice(index, 1);
+    renderLibTags();
+}
+
+function renderLibTags() {
+    const container = document.getElementById('lib-tags-container');
+    if (!container) return;
+    container.innerHTML = '';
+    includedLibraries.forEach((lib, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'npm-tag valid'; // Libraries sind blau (via CSS .valid oder eigene Klasse)
+        // tag.style.backgroundColor = '#2196F3'; // Entfernt: Beißt sich mit grüner Schrift
+
+        let iconName = 'book-open-variant';
+        const script = allScripts.find(s => s.filename === lib);
+        if (script && script.icon && script.icon !== 'mdi:script-text') {
+            const customIcon = script.icon.split(':').pop();
+            if (typeof mdiIcons === 'undefined' || mdiIcons.length === 0 || mdiIcons.includes(customIcon)) {
+                iconName = customIcon;
+            }
+        }
+
+        tag.innerHTML = `<i class="mdi mdi-${iconName}"></i> ${lib} <span class="npm-tag-close" onclick="removeLibTag(${index})">&times;</span>`;
+        container.appendChild(tag);
+    });
+}
+
 async function submitNewScript() {
     const n = document.getElementById('new-script-name').value.trim();
     const errEl = document.getElementById('modal-error-msg');
@@ -516,15 +635,24 @@ async function submitNewScript() {
         npmInput.value = '';
     }
 
+    // FIX: Falls noch Text im Lib-Input steht
+    const libInput = document.getElementById('lib-input');
+    if (libInput && libInput.value.trim()) {
+        addLibTag(libInput.value.trim());
+        libInput.value = '';
+    }
+
     // NPM Pakete sammeln (nur Namen)
     // Warnung bei ungültigen Paketen? Optional. Wir speichern sie trotzdem.
     const desc = document.getElementById('new-script-desc').value;
     
     const p = { 
         name: n, 
+        type: document.getElementById('new-script-type').value, // 'automation' or 'library'
         icon: icon, 
         description: desc, 
         npmModules: npmPackages.map(p => p.name), // NEU: Liste der Pakete
+        includes: includedLibraries, // NEU: Liste der Includes
         area: document.getElementById('new-script-area').value, 
         label: document.getElementById('new-script-label').value, 
         loglevel: document.getElementById('new-script-loglevel').value,
@@ -548,6 +676,23 @@ async function submitNewScript() {
         const data = await res.json();
         closeModal();
         await loadScripts();
+
+        // NEU: IntelliSense aktualisieren (falls Library erstellt/bearbeitet wurde)
+        if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
+
+        // Handle Rename: Update Tab & Active State if filename changed
+        if (editingScriptFilename && data.filename && editingScriptFilename !== data.filename) {
+            if (typeof openTabs !== 'undefined') {
+                const tab = openTabs.find(t => t.filename === editingScriptFilename);
+                if (tab) tab.filename = data.filename;
+            }
+            if (typeof activeTabFilename !== 'undefined' && activeTabFilename === editingScriptFilename) {
+                activeTabFilename = data.filename;
+            }
+            if (typeof renderTabs === 'function') renderTabs();
+            editingScriptFilename = data.filename;
+        }
+
         const targetFilename = editingScriptFilename || data.filename;
 
         // Refresh Editor Content if tab is open
@@ -581,16 +726,36 @@ async function submitNewScript() {
 async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }
 async function restartScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'restart' }) }); }
 async function deleteScript(f) {
-    if (confirm(i18next.t('confirm_delete_script', { filename: f }))) {
-        await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });
-        // openTabs is global from tab-manager.js
-        if (typeof openTabs !== 'undefined') {
-            const t = openTabs.find(t => t.filename === f);
-            if (t) t.isDirty = false;
-            closeTab(f);
-        }
-        loadScripts();
+    // Check dependencies (Libraries)
+    const dependents = allScripts.filter(s => {
+        if (!s.includes || !Array.isArray(s.includes)) return false;
+        // Check exact match or without .js extension (users might write @include lib or @include lib.js)
+        return s.includes.some(inc => inc === f || inc === f.replace(/\.js$/, ''));
+    });
+
+    if (dependents.length > 0) {
+        const depNames = dependents.map(s => s.name).join(', ');
+        const msg = i18next.t('warn_library_in_use', { 
+            filename: f, 
+            count: dependents.length, 
+            scripts: depNames
+        });
+        if (!confirm(msg)) return;
+    } else {
+        if (!confirm(i18next.t('confirm_delete_script', { filename: f }))) return;
     }
+
+    await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });
+    // openTabs is global from tab-manager.js
+    if (typeof openTabs !== 'undefined') {
+        const t = openTabs.find(t => t.filename === f);
+        if (t) t.isDirty = false;
+        closeTab(f);
+    }
+    loadScripts();
+    
+    // NEU: IntelliSense aktualisieren (falls Library gelöscht wurde)
+    if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
 }
 
 // Make globally available
@@ -608,6 +773,9 @@ window.restartScript = restartScript;
 window.deleteScript = deleteScript;
 window.handleNpmInput = handleNpmInput;
 window.removeNpmTag = removeNpmTag;
+window.handleTypeChange = handleTypeChange;
+window.handleLibInput = handleLibInput;
+window.removeLibTag = removeLibTag;
 window.editScript = editScript;
 window.duplicateScript = duplicateScript;
 window.updateScriptStats = updateScriptStats;

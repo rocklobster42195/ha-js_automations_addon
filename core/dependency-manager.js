@@ -44,11 +44,29 @@ class DependencyManager extends EventEmitter {
 
     async prune(currentScriptDeps = []) {
         this.ensurePackageJson();
-        const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
+        
+        // Collect all scripts (Automations + Libraries)
+        const allFiles = [];
+        
+        // 1. Automations
+        if (fs.existsSync(this.scriptsDir)) {
+            fs.readdirSync(this.scriptsDir)
+                .filter(f => f.endsWith('.js'))
+                .forEach(f => allFiles.push(path.join(this.scriptsDir, f)));
+        }
+        
+        // 2. Libraries
+        const libDir = path.join(this.scriptsDir, 'libraries');
+        if (fs.existsSync(libDir)) {
+            fs.readdirSync(libDir)
+                .filter(f => f.endsWith('.js'))
+                .forEach(f => allFiles.push(path.join(libDir, f)));
+        }
+
         const requiredSet = new Set();
 
-        files.forEach(file => {
-            const meta = ScriptParser.parse(path.join(this.scriptsDir, file));
+        allFiles.forEach(filePath => {
+            const meta = ScriptParser.parse(filePath);
             meta.dependencies.forEach(dep => {
                 dep.split(/[\s,]+/).forEach(d => {
                     requiredSet.add(this.getPackageName(d));
@@ -59,6 +77,14 @@ class DependencyManager extends EventEmitter {
         if (!fs.existsSync(this.packageJsonPath)) return;
         const pkg = JSON.parse(fs.readFileSync(this.packageJsonPath, 'utf8'));
         const installed = Object.keys(pkg.dependencies || {});
+
+        // 0. Install missing packages (Self-Healing for Libraries)
+        const missing = Array.from(requiredSet).filter(p => !this.isInstalled(p));
+        if (missing.length > 0) {
+            this.log(`⬇️ NPM Auto-Install (Dependencies): ${missing.join(', ')}`);
+            await this.runNpm(`install ${missing.join(' ')} --save`);
+        }
+
         const toRemove = installed.filter(p => !requiredSet.has(p));
 
         // Info-Log für Pakete, die im aktuellen Skript nicht (mehr) drin sind, 

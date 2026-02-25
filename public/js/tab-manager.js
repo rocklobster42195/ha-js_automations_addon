@@ -148,6 +148,7 @@ function switchToTab(filename) {
 
     renderTabs();
     updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
+    updateEditorMode(newTab.filename);
 }
 
 function closeTab(filename) {
@@ -209,23 +210,39 @@ function updateToolbarUI(filename, icon, isDirty) {
 
         // Script Status prüfen (allScripts ist global aus script-list.js)
         const script = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
+        const isLib = script && script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
         
         if (toggleBtn) {
-            toggleBtn.disabled = false;
-            toggleBtn.style.opacity = '1';
-            const i = toggleBtn.querySelector('i');
-            if (script && script.running) {
-                i.className = 'mdi mdi-stop';
-                i.style.color = 'var(--accent)';
-            } else {
+            if (isLib) {
+                toggleBtn.disabled = true;
+                toggleBtn.style.opacity = '0.3';
+                toggleBtn.title = i18next.t('library_cannot_start');
+                const i = toggleBtn.querySelector('i');
                 i.className = 'mdi mdi-play';
                 i.style.color = '';
+            } else {
+                toggleBtn.disabled = false;
+                toggleBtn.style.opacity = '1';
+                toggleBtn.title = i18next.t('script_action_toggle_title');
+                const i = toggleBtn.querySelector('i');
+                if (script && script.running) {
+                    i.className = 'mdi mdi-stop';
+                    i.style.color = 'var(--accent)';
+                } else {
+                    i.className = 'mdi mdi-play';
+                    i.style.color = '';
+                }
             }
         }
 
         if (restartBtn) {
-            restartBtn.disabled = !(script && script.running);
-            restartBtn.style.opacity = (script && script.running) ? '1' : '0.4';
+            if (isLib) {
+                restartBtn.disabled = true;
+                restartBtn.style.opacity = '0.3';
+            } else {
+                restartBtn.disabled = !(script && script.running);
+                restartBtn.style.opacity = (script && script.running) ? '1' : '0.4';
+            }
         }
 
         if (editBtn) {
@@ -240,6 +257,31 @@ function updateToolbarUI(filename, icon, isDirty) {
             deleteBtn.disabled = false;
             deleteBtn.style.opacity = '1';
         }
+    }
+}
+
+function updateEditorMode(filename) {
+    const script = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
+    const isLib = script && script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
+    
+    const container = document.getElementById('editor-wrapper');
+    if (!container) return;
+
+    // Remove existing banner if any
+    const existingBanner = document.getElementById('lib-mode-banner');
+    if (existingBanner) existingBanner.remove();
+
+    if (isLib) {
+        const banner = document.createElement('div');
+        banner.id = 'lib-mode-banner';
+        banner.style.background = '#1e2a36'; // Dark Blue/Grey to match theme
+        banner.style.color = '#64b5f6'; // Light Blue Text
+        banner.style.padding = '4px 10px';
+        banner.style.fontSize = '0.8rem';
+        banner.style.borderBottom = '1px solid #0d47a1';
+        banner.innerHTML = '<i class="mdi mdi-bookshelf" style="margin-right:6px;"></i> ' + i18next.t('library_mode_banner', { filename });
+        
+        container.insertBefore(banner, container.firstChild);
     }
 }
 

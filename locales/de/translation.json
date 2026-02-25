@@ -18,7 +18,7 @@
   "modal_new_automation_title": "Neue Automation",
   "script_name": "Name",
   "script_icon": "Icon",
-  "script_area": "Bereich (Area)",
+  "script_area": "Bereich",
   "script_label": "Label",
   "script_log_level": "Log Level",
   "script_description": "Beschreibung",
@@ -61,5 +61,15 @@
   "modal_insert_entity_title": "Entity einfügen",
   "modal_edit_script_title": "Skript bearbeiten",
   "modal_duplicate_script_title": "Skript duplizieren",
-  "entity_search_placeholder": "Entity suchen..."
+  "entity_search_placeholder": "Entity suchen...",
+  "group_global_libraries": "Globale Bibliotheken",
+  "status_passive_library": "Passive Bibliothek",
+  "library_cannot_start": "Bibliotheken können nicht direkt gestartet werden",
+  "library_mode_banner": "<strong>BIBLIOTHEKS-MODUS</strong> &mdash; Dieses Skript ist passiv. Nutze <code>@include {{filename}}</code> in Automationen.",
+  "script_type": "Skript Typ",
+  "type_automation": "Automation",
+  "type_library": "Globale Bibliothek",
+  "global_libraries": "Globale Bibliotheken",
+  "add_library_placeholder": "Bibliothek hinzufügen...",
+  "warn_library_in_use": "Warnung: Die Bibliothek '{{filename}}' wird von {{count}} Skript(en) verwendet: {{scripts}}.\nMöchtest du sie wirklich löschen?"
 }

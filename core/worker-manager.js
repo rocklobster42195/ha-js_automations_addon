@@ -33,8 +33,19 @@ class WorkerManager extends EventEmitter {
 
     getScripts() {
         if (!this.scriptsDir) return [];
+        const results = [];
+        
+        // 1. Automations (Root)
         const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
-        return files.map(f => path.join(this.scriptsDir, f));
+        results.push(...files.map(f => path.join(this.scriptsDir, f)));
+
+        // 2. Libraries (Subfolder)
+        const libDir = path.join(this.scriptsDir, 'libraries');
+        if (fs.existsSync(libDir)) {
+            const libs = fs.readdirSync(libDir).filter(f => f.endsWith('.js'));
+            results.push(...libs.map(f => path.join(libDir, f)));
+        }
+        return results;
     }
 
     getScriptStats(filename) {

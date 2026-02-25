@@ -18,6 +18,7 @@
 *   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
 *   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
+*   **Global Libraries:** Create reusable code modules and include them in any script using the `@include` tag.
 *   **Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
 *   **Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
 *   **Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
@@ -44,7 +45,7 @@
 
 > **Note:** This feature is under active development. The goal is to allow scripts to be exposed as a `switch` or `button` via a header tag. The current implementation creates a switch for every script, which may not be ideal for all use cases.
 
-For every script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
+For every automation script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
 *   **Entity ID:** `switch.js_automation_<script_name>`
 *   **State:** The switch is `on` when the script is running and `off` when it's stopped.
 *   **Control:** Toggling the switch in Home Assistant will start or stop the script. This is perfect for manually triggering automations or stopping long-running tasks.
@@ -73,6 +74,7 @@ Every script starts with a JSDoc-style header. This configures the engine's beha
  * @description Checks all battery levels daily
  * @loglevel info
  * @npm lodash
+ * @include telegram_helper.js
  * @area Technical Room
  * @label Maintenance
  */
@@ -103,6 +105,34 @@ The **Store Explorer** provides a graphical user interface for the `ha.store`.
 
 *   **Store Explorer:** Access the global variable database via the header button.
 *   **Clear Server Logs:** Button to permanently delete the entire server-side log history.
+
+---
+
+## Global Libraries
+
+Stop copying and pasting code! With Global Libraries, you can write functions once and use them everywhere.
+
+### 1. Creating a Library
+When creating a new script, select **Global Library** as the type.
+*   Libraries are saved in a dedicated `libraries/` subfolder.
+*   They are **passive**: They do not have a Start/Stop button and do not run on their own.
+*   They can define their own `@npm` dependencies.
+
+### 2. Using a Library
+To use a library in your automation, simply add the `@include` tag to your header:
+
+```javascript
+/**
+ * @name Living Room Lights
+ * @include utils.js, lighting_scenes.js
+ */
+
+// Now you can use functions defined in utils.js
+const isDark = utils.isDarkOutside();
+```
+
+### 3. IntelliSense
+The integrated editor is smart enough to read your libraries. When you type a function name from an included library, you will get **autocomplete** and parameter hints, just like with built-in functions.
 
 ---
 
