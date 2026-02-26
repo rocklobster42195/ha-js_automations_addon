@@ -60,3 +60,19 @@ Der bestehende `+` Button in der Sidebar öffnet ein erweitertes Modal, das die 
 *   Umbau des `createNewScript` Modals auf Tab-Navigation.
 *   Implementierung von `FileReader` API für Uploads.
 *   Implementierung von `fetch` für Gist-Importe.
+
+### Backend
+*   Neue Route `POST /api/scripts/upload` (benötigt `multer` Middleware).
+*   Neue Route `POST /api/scripts/import` (für Gist/URL Import).
+*   Erweiterung `POST /api/scripts` (Support für Templates).
+
+---
+
+## 5. Implementierungs-Status
+
+| Feature | Status | Anmerkungen |
+| :--- | :---: | :--- |
+| **Unified Creation Wizard** | ✅ **Fertig** | Frontend & Backend implementiert. |
+| **Editor Toolbar 2.0 (Download)** | ✅ **Fertig** | Backend-Route und Frontend-Button implementiert. |
+| **Backup All (ZIP Export)** | ⚪️ **Geplant** | |
+| **Umbenennen (Renaming)** | ✅ **Fertig** | Bereits implementiert. |

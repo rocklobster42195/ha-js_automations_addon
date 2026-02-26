@@ -14,6 +14,7 @@
 ## Key Features
 
 *   **Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
+*   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
 *   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
@@ -38,6 +39,15 @@
     ```
 4.  **Follow the setup wizard:** On the first run, a wizard will automatically start in your terminal. It will ask for your Home Assistant URL and a Long-Lived Access Token.
 5.  **Done!** The wizard creates a `.env` file for you, and the server will start. The UI is available at `http://localhost:PORT`.
+
+---
+
+## Unified Creation Wizard
+
+The **+** button opens the new creation wizard, offering three ways to add scripts:
+1.  **New:** Start from scratch or select a template (e.g., Interval, State Trigger).
+2.  **Upload:** Drag & drop `.js` files directly into the editor.
+3.  **Import:** Paste a raw URL (GitHub/Gist) to fetch code from the web.
 
 ---
 

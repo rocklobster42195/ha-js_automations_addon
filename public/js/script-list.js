@@ -699,6 +699,8 @@ async function submitNewScript() {
         if (typeof openTabs !== 'undefined') {
             const tab = openTabs.find(t => t.filename === targetFilename);
             if (tab) {
+                tab.icon = p.icon; // Icon sofort aktualisieren
+
                 const cRes = await apiFetch(`api/scripts/${targetFilename}/content`);
                 if (cRes.ok) {
                     const cData = await cRes.json();
@@ -707,7 +709,6 @@ async function submitNewScript() {
                         tab.originalContent = cData.content;
                         tab.isDirty = false;
                     }
-                    tab.icon = p.icon;
                 }
             }
         }

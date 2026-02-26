@@ -44,18 +44,19 @@ function renderTabs() {
 
         tabEl.onclick = () => switchToTab(tabData.filename);
         
-        let iconName = tabData.icon ? tabData.icon.split(':').pop() : 'script-text';
+        // Live-Daten aus allScripts holen (falls vorhanden), sonst Fallback auf Tab-Daten
+        const scriptFromList = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === tabData.filename) : null;
+        const effectiveIcon = scriptFromList ? scriptFromList.icon : tabData.icon;
+
+        let iconName = effectiveIcon ? effectiveIcon.split(':').pop() : 'script-text';
         if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(iconName)) {
             iconName = 'script-text';
         }
 
         let statusClass = '';
-        if (typeof allScripts !== 'undefined') {
-            const s = allScripts.find(s => s.filename === tabData.filename);
-            if (s) {
-                if (s.running) statusClass = 'status-running';
-                else if (s.status === 'error') statusClass = 'status-error';
-            }
+        if (scriptFromList) {
+            if (scriptFromList.running) statusClass = 'status-running';
+            else if (scriptFromList.status === 'error') statusClass = 'status-error';
         }
 
         tabEl.innerHTML = `
@@ -305,6 +306,18 @@ async function deleteActiveScript() {
     if (activeTabFilename && activeTabFilename !== 'System: Store') await window.deleteScript(activeTabFilename);
 }
 
+async function downloadActiveScript() {
+    if (!activeTabFilename || activeTabFilename === 'System: Store') return;
+
+    // Create a temporary link to trigger the download
+    const link = document.createElement('a');
+    link.href = (typeof BASE_PATH !== 'undefined' ? BASE_PATH : '/') + `api/scripts/${activeTabFilename}/download`;
+    link.setAttribute('download', activeTabFilename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
 async function saveActiveTab() {
     if (!activeTabFilename) return;
     const activeTab = openTabs.find(t => t.filename === activeTabFilename);
@@ -346,3 +359,4 @@ window.restartActiveScript = restartActiveScript;
 window.editActiveScript = editActiveScript;
 window.deleteActiveScript = deleteActiveScript;
 window.duplicateActiveScript = duplicateActiveScript;
+window.downloadActiveScript = downloadActiveScript;

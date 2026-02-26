@@ -33,7 +33,10 @@ Thumbs.db
 # Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
-# scripts/*.js
+scripts/*.js
 
 # ...aber behalte vielleicht ein Beispiel:
 # !scripts/example.js
+
+
+AI_RULES.md

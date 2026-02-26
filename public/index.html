@@ -25,7 +25,7 @@
                     <span id="app-version" class="version-tag"></span>
                 </div>
                 <div class="header-actions">
-                    <button onclick="createNewScript()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
+                    <button onclick="openCreationWizard()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
                     <button onclick="loadScripts()" data-i18n="refresh_list_title" data-i18n-title title="Refresh List"><i class="mdi mdi-refresh"></i></button>
                     <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
                 </div>
@@ -56,6 +56,7 @@
                             <div class="toolbar-separator"></div>
                             <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
                             <button id="btn-script-edit" onclick="editActiveScript()" title="Edit Metadata"><i class="mdi mdi-pencil"></i></button>
+                            <button id="btn-script-download" onclick="downloadActiveScript()" data-i18n="download_script_title" data-i18n-title title="Download Script"><i class="mdi mdi-download"></i></button>
                             <button id="btn-script-duplicate" onclick="duplicateActiveScript()" data-i18n="script_action_duplicate_title" data-i18n-title title="Duplizieren"><i class="mdi mdi-content-duplicate"></i></button>
                             <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                             <div class="toolbar-separator"></div>
@@ -133,94 +134,6 @@
         </main>
     </div>
 
-    <!-- Modal for New Script -->
-    <div id="new-script-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h3 data-i18n="modal_new_automation_title">Neue Automation</h3>
-
-            <div class="form-grid">
-                <div class="form-group">
-                    <label data-i18n="script_type">Script Type</label>
-                    <select id="new-script-type" onchange="handleTypeChange()">
-                        <option value="automation" data-i18n="type_automation">Automation</option>
-                        <option value="library" data-i18n="type_library">Global Library</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label><span data-i18n="script_name">Name</span> <span class="field-hint">(@name)</span></label>
-                    <input type="text" id="new-script-name" data-i18n="script_name" data-i18n-placeholder placeholder="Name" oninput="checkScriptName()" autocomplete="off">
-                </div>
-                <div class="form-group">
-    <label><span data-i18n="script_icon">Icon</span> <span class="field-hint">(@icon)</span></label>
-    <div class="icon-input-container">
-        <!-- Live Vorschau Links -->
-        <i id="modal-icon-preview" class="mdi mdi-script-text"></i>
-        
-        <!-- Input mit Datalist verknüpft -->
-        <input type="text" id="new-script-icon" value="mdi:script-text" 
-               list="mdi-suggestions" 
-               oninput="updateIconPreview('modal-icon-preview', this.value)" 
-               placeholder="mdi:...">
-    </div>
-    
-    <!-- "IntelliSense" Light: Die häufigsten Icons -->
-    <datalist id="mdi-suggestions">
-    </datalist>
-</div>
-                <div class="form-group">
-                    <label><span data-i18n="script_area">Bereich</span> <span class="field-hint">(@area)</span></label>
-                    <select id="new-script-area">
-                        <option value="" data-i18n="area_none">Kein Bereich</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label><span data-i18n="script_label">Label</span> <span class="field-hint">(@label)</span></label>
-                    <select id="new-script-label">
-                        <option value="" data-i18n="label_none">Kein Label</option>
-                    </select>
-                </div>
-                <div class="form-group">
-        <label><span data-i18n="script_log_level">Log Level</span> <span class="field-hint">(@loglevel)</span></label>
-        <select id="new-script-loglevel">
-            <option value="debug" data-i18n="log_level_debug">Debug (Alles)</option>
-            <option value="info" selected data-i18n="log_level_info">Info (Standard)</option>
-            <option value="warn" data-i18n="log_level_warn">Warnungen</option>
-            <option value="error" data-i18n="log_level_error">Nur Fehler</option>
-        </select>
-    </div>
-                <div class="form-group full-width">
-                    <label><span data-i18n="script_description">Beschreibung</span> <span class="field-hint">(@description)</span></label>
-                    <textarea id="new-script-desc" data-i18n="description_placeholder" data-i18n-placeholder placeholder="Kurze Beschreibung..."></textarea>
-                </div>
-                <div class="form-group full-width">
-                    <label><span data-i18n="global_libraries">Global Libraries</span> <span class="field-hint">(@include)</span></label>
-                    <div class="npm-tags-input" onclick="document.getElementById('lib-input').focus()">
-                        <div id="lib-tags-container" style="display: contents;"></div>
-                        <input type="text" id="lib-input" class="npm-input-field" data-i18n="add_library_placeholder" data-i18n-placeholder placeholder="Add library..." list="lib-suggestions" onkeydown="handleLibInput(event)">
-                    </div>
-                    <!-- Autocomplete für vorhandene Libraries -->
-                    <datalist id="lib-suggestions">
-                        <!-- Wird per JS gefüllt -->
-                    </datalist>
-                </div>
-                <div class="form-group full-width">
-                    <label><span data-i18n="npm_packages">NPM Packages</span> <span class="field-hint">(@npm)</span></label>
-                    <div class="npm-tags-input" onclick="document.getElementById('npm-input').focus()">
-                        <div id="npm-tags-container"></div>
-                        <input type="text" id="npm-input" class="npm-input-field" data-i18n="npm_packages_placeholder" data-i18n-placeholder placeholder="Add package..." onkeydown="handleNpmInput(event)">
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal-btns">
-                <!-- Error Message (Left side of footer) -->
-                <div id="modal-error-msg" class="modal-error"></div>
-                <button class="btn-text" onclick="closeModal()" data-i18n="button_cancel">ABBRECHEN</button>
-                <button class="btn-primary" onclick="submitNewScript()" data-i18n="button_create">ERSTELLEN</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Modal for Entity Picker -->
     <div id="entity-picker-modal" class="modal-overlay hidden">
         <div class="modal" style="height: 80vh; display: flex; flex-direction: column;">
@@ -257,6 +170,7 @@
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
     <script src="js/store-explorer.js"></script>
+    <script src="js/creation-wizard.js"></script>
 </body>
 
 </html>

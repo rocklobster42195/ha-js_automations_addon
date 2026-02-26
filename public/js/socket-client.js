@@ -6,6 +6,7 @@
 var socket = null;
 var cpuHistory = new Array(10).fill(0);
 var ramHistory = new Array(10).fill(0);
+var overlayTimeout = null;
 
 function initSocket() {
     // BASE_PATH is global from api.js
@@ -27,11 +28,20 @@ function initSocket() {
         // 2. Overlay
         if (overlay) {
             if (isConnected) {
+                if (overlayTimeout) {
+                    clearTimeout(overlayTimeout);
+                    overlayTimeout = null;
+                }
                 overlay.classList.add('hidden');
                 document.body.classList.remove('offline-mode');
             } else {
-                overlay.classList.remove('hidden');
-                document.body.classList.add('offline-mode');
+                if (!overlayTimeout && overlay.classList.contains('hidden')) {
+                    overlayTimeout = setTimeout(() => {
+                        overlay.classList.remove('hidden');
+                        document.body.classList.add('offline-mode');
+                        overlayTimeout = null;
+                    }, 2000);
+                }
             }
         }
     };
