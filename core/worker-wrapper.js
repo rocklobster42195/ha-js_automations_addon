@@ -45,6 +45,12 @@ process.on('unhandledRejection', (reason) => {
     if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
 });
 
+// 🛡️ GLOBALER SIGNAL HANDLER
+// Fängt SIGTERM (Stop-Signal) ab und beendet mit Code 0 statt 143.
+process.on('SIGTERM', () => {
+    process.exit(0);
+});
+
 // --- 2. LOGGING LOGIC ---
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;

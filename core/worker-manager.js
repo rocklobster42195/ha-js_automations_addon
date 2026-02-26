@@ -146,7 +146,7 @@ class WorkerManager extends EventEmitter {
                 this.startTimes.delete(scriptMeta.filename);
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
-                const type = (code !== 0 && !this.stopReasons.has(filename)) ? 'error' : 'success';
+                const type = (code !== 0 && !this.stopReasons.has(scriptMeta.filename)) ? 'error' : 'success';
                 
                 if (type === 'error') this.lastExitState.set(scriptMeta.filename, 'error');
                 this.stopReasons.delete(scriptMeta.filename);
