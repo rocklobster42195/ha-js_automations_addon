@@ -39,4 +39,5 @@ scripts/*.js
 # !scripts/example.js
 
 
-AI_RULES.md
+#AI_RULES.md
+package-lock.json

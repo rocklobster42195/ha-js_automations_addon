@@ -5,10 +5,6 @@
 
 var allScripts = [];
 var collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
-var npmPackages = []; // Temporärer Speicher für das Modal
-var includedLibraries = []; // Temporärer Speicher für Includes
-var editingScriptFilename = null; // Wenn gesetzt, sind wir im Edit-Modus
-var duplicatedScriptContent = null; // Speicher für Code beim Duplizieren
 
 async function loadScripts() {
     // Refresh Metadata (Labels, Areas) in background
@@ -216,23 +212,6 @@ function renderScripts(scripts, updateGlobal = true) {
         groupDiv.appendChild(contentDiv);
         list.appendChild(groupDiv);
     });
-
-    // Datalist für Libraries füllen (für Autocomplete im Modal)
-    updateLibrarySuggestions(editingScriptFilename);
-}
-
-function updateLibrarySuggestions(excludeFilename) {
-    const datalist = document.getElementById('lib-suggestions');
-    if (!datalist) return;
-    datalist.innerHTML = '';
-    
-    const libs = allScripts.filter(s => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\')));
-    libs.forEach(lib => {
-        if (excludeFilename && lib.filename === excludeFilename) return;
-        const opt = document.createElement('option');
-        opt.value = lib.filename;
-        datalist.appendChild(opt);
-    });
 }
 
 function buildScriptTooltip(s) {
@@ -287,441 +266,37 @@ function updateIconPreview(id, s) {
     el.className = `mdi mdi-${icon}`; 
 }
 
-function closeModal() { document.getElementById('new-script-modal').classList.add('hidden'); }
-
-function checkScriptName() {
-    const nameInput = document.getElementById('new-script-name');
-    const errEl = document.getElementById('modal-error-msg');
-    const createBtn = document.querySelector('#new-script-modal .btn-primary');
-
-    const name = nameInput.value.trim();
-
-    // Im Edit-Modus prüfen wir den Dateinamen nicht (da wir ihn eh nicht ändern)
-    if (editingScriptFilename) return;
-
-    // Button deaktivieren, wenn leer
-    if (!name) {
-        if (errEl) { errEl.textContent = ''; }
-        if (createBtn) createBtn.disabled = true;
-        return;
-    }
-
-    // Simulation der Backend-Dateinamen-Generierung (Slugify)
-    // Muss exakt mit server.js übereinstimmen: Nur a-z, 0-9 und _ (keine Bindestriche!)
-    const slug = name.toLowerCase()
-        .replace(/\s+/g, '_')
-        .replace(/[^a-z0-9_]/g, '');
-
-    const filename = slug + '.js';
-
-    // Prüfen ob Dateiname existiert
-    const exists = allScripts.some(s => s.filename === filename);
-
-    if (exists) {
-        const msg = i18next.t('error_file_exists', { filename, defaultValue: `File '${filename}' already exists.` });
-        if (errEl) { errEl.textContent = msg; }
-        if (createBtn) createBtn.disabled = true;
-    } else {
-        if (errEl) { errEl.textContent = ''; }
-        if (createBtn) createBtn.disabled = false;
-    }
-}
-
 async function createNewScript() {
-    document.getElementById('new-script-modal').classList.remove('hidden');
-    editingScriptFilename = null;
-    duplicatedScriptContent = null;
-    
-    // Reset Formular
-    document.getElementById('new-script-name').value = '';
-    document.getElementById('new-script-type').value = 'automation';
-    document.getElementById('new-script-desc').value = '';
-    document.getElementById('new-script-icon').value = 'mdi:script-text';
-    document.getElementById('new-script-area').value = '';
-    document.getElementById('new-script-label').value = '';
-    document.getElementById('new-script-loglevel').value = 'info';
-    
-    // UI Reset
-    document.querySelector('#new-script-modal h3').textContent = i18next.t('modal_new_automation_title');
-    document.querySelector('#new-script-modal .btn-primary').textContent = i18next.t('button_create');
-
-    // Reset NPM Input
-    npmPackages = [];
-    renderNpmTags();
-    document.getElementById('npm-input').value = '';
-
-    // Reset Lib Input
-    includedLibraries = [];
-    renderLibTags();
-    document.getElementById('lib-input').value = '';
-
-    updateLibrarySuggestions(null);
-
-    checkScriptName();
-
-    updateIconPreview('modal-icon-preview', 'mdi:script-text');
-    try {
-        const res = await apiFetch('api/ha/metadata');
-        if (res.ok) {
-            const { areas, labels } = await res.json();
-            document.getElementById('new-script-area').innerHTML = `<option value="">${i18next.t('area_none')}</option>` + areas.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-            document.getElementById('new-script-label').innerHTML = `<option value="">${i18next.t('label_none')}</option>` + labels.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
-        }
-    } catch (e) { }
+    // Redirect to Wizard
+    if (window.openCreationWizard) window.openCreationWizard('create');
 }
 
 async function editScript(filename) {
     const script = allScripts.find(s => s.filename === filename);
     if (!script) return;
-
-    editingScriptFilename = filename;
-    document.getElementById('new-script-modal').classList.remove('hidden');
-
-    // UI Update
-    document.querySelector('#new-script-modal h3').textContent = i18next.t('modal_edit_script_title');
-    document.querySelector('#new-script-modal .btn-primary').textContent = i18next.t('save_title');
-    document.querySelector('#new-script-modal .btn-primary').disabled = false;
-
-    // Load Metadata (Areas/Labels) first
-    try {
-        const res = await apiFetch('api/ha/metadata');
-        if (res.ok) {
-            const { areas, labels } = await res.json();
-            document.getElementById('new-script-area').innerHTML = `<option value="">${i18next.t('area_none')}</option>` + areas.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-            document.getElementById('new-script-label').innerHTML = `<option value="">${i18next.t('label_none')}</option>` + labels.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
-        }
-    } catch (e) { }
-
-    // Fill Form
-    document.getElementById('new-script-name').value = script.name || '';
-    // Determine Type based on path
-    const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
-    document.getElementById('new-script-type').value = isLib ? 'library' : 'automation';
     
-    document.getElementById('new-script-desc').value = script.description || '';
-    document.getElementById('new-script-icon').value = script.icon || 'mdi:script-text';
-    document.getElementById('new-script-area').value = script.area || '';
-    document.getElementById('new-script-label').value = script.label || '';
-    document.getElementById('new-script-loglevel').value = script.loglevel || 'info';
-
-    updateIconPreview('modal-icon-preview', script.icon);
-
-    // Fill NPM
-    npmPackages = [];
-    if (script.dependencies) script.dependencies.forEach(d => addNpmTag(d));
-    renderNpmTags();
-
-    // Fill Includes
-    includedLibraries = [];
-    if (script.includes) script.includes.forEach(i => addLibTag(i));
-    renderLibTags();
-
-    updateLibrarySuggestions(filename);
+    if (window.openCreationWizard) window.openCreationWizard('edit', script);
 }
 
 async function duplicateScript(filename) {
     const script = allScripts.find(s => s.filename === filename);
     if (!script) return;
 
+    let code = '';
     // Content laden
     try {
         const res = await apiFetch(`api/scripts/${filename}/content`);
         if (res.ok) {
             const data = await res.json();
             // Header entfernen (alles bis zum ersten */)
-            duplicatedScriptContent = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
+            code = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
         }
     } catch (e) {
         console.error("Failed to fetch script content for duplication", e);
         return;
     }
 
-    editingScriptFilename = null; // Wir erstellen ein neues Skript
-    document.getElementById('new-script-modal').classList.remove('hidden');
-
-    // UI Update
-    document.querySelector('#new-script-modal h3').textContent = i18next.t('modal_duplicate_script_title', { defaultValue: 'Duplicate Script' });
-    document.querySelector('#new-script-modal .btn-primary').textContent = i18next.t('button_duplicate', { defaultValue: 'DUPLICATE' });
-    
-    // Load Metadata
-    try {
-        const res = await apiFetch('api/ha/metadata');
-        if (res.ok) {
-            const { areas, labels } = await res.json();
-            document.getElementById('new-script-area').innerHTML = `<option value="">${i18next.t('area_none')}</option>` + areas.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-            document.getElementById('new-script-label').innerHTML = `<option value="">${i18next.t('label_none')}</option>` + labels.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
-        }
-    } catch (e) { }
-
-    // Fill Form
-    document.getElementById('new-script-name').value = `${script.name} (Copy)`;
-    document.getElementById('new-script-type').value = 'automation'; // Duplikat ist standardmäßig Automation
-    document.getElementById('new-script-desc').value = script.description || '';
-    document.getElementById('new-script-icon').value = script.icon || 'mdi:script-text';
-    document.getElementById('new-script-area').value = script.area || '';
-    document.getElementById('new-script-label').value = script.label || '';
-    document.getElementById('new-script-loglevel').value = script.loglevel || 'info';
-
-    updateIconPreview('modal-icon-preview', script.icon);
-
-    // Fill NPM
-    npmPackages = [];
-    if (script.dependencies) script.dependencies.forEach(d => addNpmTag(d));
-    renderNpmTags();
-
-    // Fill Includes
-    includedLibraries = [];
-    if (script.includes) script.includes.forEach(i => addLibTag(i));
-    renderLibTags();
-
-    updateLibrarySuggestions(null);
-
-    checkScriptName(); // Namen validieren
-}
-
-function handleTypeChange() {
-    const type = document.getElementById('new-script-type').value;
-    const iconInput = document.getElementById('new-script-icon');
-    
-    if (type === 'library') {
-        iconInput.value = 'mdi:book-open-variant';
-    } else {
-        iconInput.value = 'mdi:script-text';
-    }
-    updateIconPreview('modal-icon-preview', iconInput.value);
-}
-
-// --- NPM CHIP LOGIC ---
-function handleNpmInput(e) {
-    const input = e.target;
-    const val = input.value.trim();
-
-    // Enter (13), Komma (188) oder Space -> Tag erstellen
-    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
-        e.preventDefault();
-        if (val) {
-            addNpmTag(val);
-            input.value = '';
-        }
-    }
-    // Backspace -> Letzten Tag löschen, wenn Input leer
-    else if (e.key === 'Backspace' && val === '' && npmPackages.length > 0) {
-        removeNpmTag(npmPackages.length - 1);
-    }
-}
-
-function addNpmTag(pkgName) {
-    // Duplikate vermeiden
-    if (npmPackages.some(p => p.name === pkgName)) return;
-
-    const pkg = { name: pkgName, status: 'loading' };
-    npmPackages.push(pkg);
-    renderNpmTags();
-    validateNpmPackage(pkg);
-}
-
-function removeNpmTag(index) {
-    npmPackages.splice(index, 1);
-    renderNpmTags();
-}
-
-function renderNpmTags() {
-    const container = document.getElementById('npm-tags-container');
-    if (!container) return;
-    container.innerHTML = '';
-
-    npmPackages.forEach((pkg, index) => {
-        const tag = document.createElement('div');
-        tag.className = `npm-tag ${pkg.status}`;
-
-        // Tooltip für Feedback (z.B. "Package not found" oder "Network Error")
-        if (pkg.error) tag.title = pkg.error;
-        else if (pkg.status === 'valid') tag.title = 'Package available';
-        
-        let icon = '';
-        if (pkg.status === 'loading') icon = '<i class="mdi mdi-loading mdi-spin"></i>';
-        else if (pkg.status === 'valid') icon = '<i class="mdi mdi-check"></i>';
-        else if (pkg.status === 'invalid') icon = '<i class="mdi mdi-alert-circle-outline"></i>';
-
-        tag.innerHTML = `${icon} ${pkg.name} <span class="npm-tag-close" onclick="removeNpmTag(${index})">&times;</span>`;
-        container.appendChild(tag);
-    });
-}
-
-async function validateNpmPackage(pkg) {
-    // Version abschneiden für Check (z.B. axios@1.0.0 -> axios)
-    // Fix für Scoped Packages (@scope/pkg) und Versionen
-    let cleanName = pkg.name;
-    const lastAt = cleanName.lastIndexOf('@');
-    if (lastAt > 0) cleanName = cleanName.substring(0, lastAt);
-
-    // URL Encode für Slashes in Scoped Packages (@scope%2Fpkg)
-    try {
-        const res = await apiFetch(`api/npm/check/${encodeURIComponent(cleanName)}`);
-        const data = await res.json();
-        pkg.status = data.ok ? 'valid' : 'invalid';
-        pkg.error = data.ok ? null : (data.error || 'Unknown error');
-    } catch (e) {
-        pkg.status = 'invalid';
-        pkg.error = 'Backend connection failed';
-    }
-    renderNpmTags();
-}
-
-// --- LIBRARY CHIP LOGIC ---
-function handleLibInput(e) {
-    const input = e.target;
-    const val = input.value.trim();
-    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
-        e.preventDefault();
-        if (val) {
-            addLibTag(val);
-            input.value = '';
-        }
-    } else if (e.key === 'Backspace' && val === '' && includedLibraries.length > 0) {
-        removeLibTag(includedLibraries.length - 1);
-    }
-}
-
-function addLibTag(libName) {
-    if (includedLibraries.includes(libName)) return;
-    includedLibraries.push(libName);
-    renderLibTags();
-}
-
-function removeLibTag(index) {
-    includedLibraries.splice(index, 1);
-    renderLibTags();
-}
-
-function renderLibTags() {
-    const container = document.getElementById('lib-tags-container');
-    if (!container) return;
-    container.innerHTML = '';
-    includedLibraries.forEach((lib, index) => {
-        const tag = document.createElement('div');
-        tag.className = 'npm-tag valid'; // Libraries sind blau (via CSS .valid oder eigene Klasse)
-        // tag.style.backgroundColor = '#2196F3'; // Entfernt: Beißt sich mit grüner Schrift
-
-        let iconName = 'book-open-variant';
-        const script = allScripts.find(s => s.filename === lib);
-        if (script && script.icon && script.icon !== 'mdi:script-text') {
-            const customIcon = script.icon.split(':').pop();
-            if (typeof mdiIcons === 'undefined' || mdiIcons.length === 0 || mdiIcons.includes(customIcon)) {
-                iconName = customIcon;
-            }
-        }
-
-        tag.innerHTML = `<i class="mdi mdi-${iconName}"></i> ${lib} <span class="npm-tag-close" onclick="removeLibTag(${index})">&times;</span>`;
-        container.appendChild(tag);
-    });
-}
-
-async function submitNewScript() {
-    const n = document.getElementById('new-script-name').value.trim();
-    const errEl = document.getElementById('modal-error-msg');
-    if (!n) return;
-    
-    let icon = document.getElementById('new-script-icon').value;
-    const iconName = icon ? icon.split(':').pop().trim() : '';
-    if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(iconName)) {
-        icon = 'mdi:script-text';
-    }
-
-    // FIX: Falls noch Text im NPM-Input steht (nicht mit Enter bestätigt), jetzt hinzufügen
-    const npmInput = document.getElementById('npm-input');
-    if (npmInput && npmInput.value.trim()) {
-        addNpmTag(npmInput.value.trim());
-        npmInput.value = '';
-    }
-
-    // FIX: Falls noch Text im Lib-Input steht
-    const libInput = document.getElementById('lib-input');
-    if (libInput && libInput.value.trim()) {
-        addLibTag(libInput.value.trim());
-        libInput.value = '';
-    }
-
-    // NPM Pakete sammeln (nur Namen)
-    // Warnung bei ungültigen Paketen? Optional. Wir speichern sie trotzdem.
-    const desc = document.getElementById('new-script-desc').value;
-    
-    const p = { 
-        name: n, 
-        type: document.getElementById('new-script-type').value, // 'automation' or 'library'
-        icon: icon, 
-        description: desc, 
-        npmModules: npmPackages.map(p => p.name), // NEU: Liste der Pakete
-        includes: includedLibraries, // NEU: Liste der Includes
-        area: document.getElementById('new-script-area').value, 
-        label: document.getElementById('new-script-label').value, 
-        loglevel: document.getElementById('new-script-loglevel').value,
-        code: duplicatedScriptContent // Code übergeben (falls vorhanden)
-    };
-
-    let res;
-    if (editingScriptFilename) {
-        // UPDATE MODE
-        res = await apiFetch(`api/scripts/${editingScriptFilename}/metadata`, { 
-            method: 'PUT', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify(p) 
-        });
-    } else {
-        // CREATE MODE
-        res = await apiFetch('api/scripts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(p) });
-    }
-
-    if (res.ok) {
-        const data = await res.json();
-        closeModal();
-        await loadScripts();
-
-        // NEU: IntelliSense aktualisieren (falls Library erstellt/bearbeitet wurde)
-        if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
-
-        // Handle Rename: Update Tab & Active State if filename changed
-        if (editingScriptFilename && data.filename && editingScriptFilename !== data.filename) {
-            if (typeof openTabs !== 'undefined') {
-                const tab = openTabs.find(t => t.filename === editingScriptFilename);
-                if (tab) tab.filename = data.filename;
-            }
-            if (typeof activeTabFilename !== 'undefined' && activeTabFilename === editingScriptFilename) {
-                activeTabFilename = data.filename;
-            }
-            if (typeof renderTabs === 'function') renderTabs();
-            editingScriptFilename = data.filename;
-        }
-
-        const targetFilename = editingScriptFilename || data.filename;
-
-        // Refresh Editor Content if tab is open
-        if (typeof openTabs !== 'undefined') {
-            const tab = openTabs.find(t => t.filename === targetFilename);
-            if (tab) {
-                tab.icon = p.icon; // Icon sofort aktualisieren
-
-                const cRes = await apiFetch(`api/scripts/${targetFilename}/content`);
-                if (cRes.ok) {
-                    const cData = await cRes.json();
-                    if (tab.model) {
-                        tab.model.setValue(cData.content);
-                        tab.originalContent = cData.content;
-                        tab.isDirty = false;
-                    }
-                }
-            }
-        }
-
-        setTimeout(() => openOrSwitchToTab(targetFilename, p.icon), 100);
-        duplicatedScriptContent = null; // Reset
-    } else {
-        const err = await res.json().catch(() => ({}));
-        const msg = i18next.t('error_create_failed', { defaultValue: 'Creation failed' }) + ": " + (err.message || res.statusText);
-        if (errEl) { 
-            errEl.textContent = msg; 
-        }
-    }
+    if (window.openCreationWizard) window.openCreationWizard('duplicate', { ...script, code });
 }
 
 async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }
@@ -763,20 +338,12 @@ async function deleteScript(f) {
 window.loadScripts = loadScripts;
 window.filterScripts = filterScripts;
 window.clearSearch = clearSearch;
-window.checkScriptName = checkScriptName;
 window.renderScripts = renderScripts;
 window.updateIconPreview = updateIconPreview;
-window.closeModal = closeModal;
 window.createNewScript = createNewScript;
-window.submitNewScript = submitNewScript;
 window.toggleScript = toggleScript;
 window.restartScript = restartScript;
 window.deleteScript = deleteScript;
-window.handleNpmInput = handleNpmInput;
-window.removeNpmTag = removeNpmTag;
-window.handleTypeChange = handleTypeChange;
-window.handleLibInput = handleLibInput;
-window.removeLibTag = removeLibTag;
 window.editScript = editScript;
 window.duplicateScript = duplicateScript;
 window.updateScriptStats = updateScriptStats;

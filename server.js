@@ -92,13 +92,21 @@ async function startSystem() {
     logManager.add('info', 'System', startMsg);
     try {
         await connector.connect();
+        
+        // Integration Check (Ping)
+        const hasIntegration = await connector.checkIntegrationAvailable();
+        const intMsg = hasIntegration 
+            ? "✅ Native Integration (js_automations) detected." 
+            : "⚠️ Native Integration not found. Using Legacy Mode (HTTP).";
+        io.emit('log', logManager.add(hasIntegration ? 'info' : 'warn', 'System', intMsg));
+
         workerManager.setConnector(connector);
         workerManager.setStore(storeManager);
         workerManager.setStorageDir(STORAGE_DIR); // Dem Manager den neuen Pfad sagen
         workerManager.setScriptsDir(SCRIPTS_DIR);
 
         const entityManager = new EntityManager(connector, workerManager, stateManager);
-        await entityManager.createSwitches();
+        await entityManager.createExposedEntities(hasIntegration);
 
         // State Verteilung
         connector.subscribeToEvents((event) => {
@@ -109,21 +117,51 @@ async function startSystem() {
         });
 
         // Lifecycle Events
-        workerManager.on('script_start', ({ filename }) => {
+        workerManager.on('script_start', ({ filename, meta }) => {
+            // Nur Switches bekommen Status-Updates (Buttons sind stateless)
+            if (!meta || meta.expose !== 'switch') return;
+
             const scriptName = path.basename(filename, '.js');
-            stateManager.set(`switch.js_automation_${scriptName}`, 'on');
-            connector.updateState(`switch.js_automation_${scriptName}`, 'on');
+            // FIX: Ensure entityId and unique_id are lowercase to match creation
+            const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
+            const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
+            stateManager.set(entityId, 'on');
+            
+            if (hasIntegration) {
+                // Native Update via Service
+                const payload = { unique_id: uniqueId, domain: 'switch', state: 'on' };
+                logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
+                connector.callService('js_automations', 'update_entity', payload);
+            } else {
+                // Legacy Update
+                connector.updateState(entityId, 'on');
+            }
             io.emit('status_update');
         });
 
         workerManager.on('script_exit', (d) => {
+            // Nur Switches bekommen Status-Updates
+            if (!d.meta || d.meta.expose !== 'switch') return;
+
             if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('stopped by user')) {
                 stateManager.saveScriptStopped(d.filename);
             }
             const scriptName = path.basename(d.filename, '.js');
 
-            stateManager.set(`switch.js_automation_${scriptName}`, 'off');
-            connector.updateState(`switch.js_automation_${scriptName}`, 'off');
+            // FIX: Ensure entityId and unique_id are lowercase to match creation
+            const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
+            const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
+            stateManager.set(entityId, 'off');
+            
+            if (hasIntegration) {
+                // Native Update via Service
+                const payload = { unique_id: uniqueId, domain: 'switch', state: 'off' };
+                logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
+                connector.callService('js_automations', 'update_entity', payload);
+            } else {
+                // Legacy Update
+                connector.updateState(entityId, 'off');
+            }
             
             // NEU: LogManager nutzen
             const entry = logManager.add(d.type || 'info', 'System', `${d.filename} ${d.reason}`);

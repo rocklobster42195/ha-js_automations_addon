@@ -5,9 +5,12 @@
         "title": "Install JS Automations Bridge",
         "description": "Do you want to enable the bridge for native entities?"
       }
-    },
-    "abort": {
-      "single_instance_allowed": "The integration is already installed."
     }
+  },
+  "create_entry": {
+    "default": "The JS Automations Bridge has been successfully installed. You can now start creating automations in JavaScript."
+  },
+  "abort": {
+    "single_instance_allowed": "The integration is already installed."
   }
 }

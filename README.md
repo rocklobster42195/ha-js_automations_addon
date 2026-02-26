@@ -17,6 +17,8 @@
 *   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
 *   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
+*   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
+*   **Script Control:** Expose any script as a `switch` or `button` entity via the `@expose` tag for easy dashboard integration.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
 *   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
 *   **Global Libraries:** Create reusable code modules and include them in any script using the `@include` tag.
@@ -51,23 +53,33 @@ The **+** button opens the new creation wizard, offering three ways to add scrip
 
 ---
 
-## Switches & Control
+## Native Entities & The Bridge
 
-> **Note:** This feature is under active development. The goal is to allow scripts to be exposed as a `switch` or `button` via a header tag. The current implementation creates a switch for every script, which may not be ideal for all use cases.
+JS Automations features a unique **Hybrid Architecture**. It includes a lightweight custom component that acts as a bridge between the Node.js engine and Home Assistant Core.
 
-For every automation script you create, the addon automatically generates a matching `switch` entity in Home Assistant. This allows you to monitor and control your scripts directly from your dashboard.
-*   **Entity ID:** `switch.js_automation_<script_name>`
-*   **State:** The switch is `on` when the script is running and `off` when it's stopped.
-*   **Control:** Toggling the switch in Home Assistant will start or stop the script. This is perfect for manually triggering automations or stopping long-running tasks.
-*   **Custom Icon:** The switch will automatically use the icon you define in the script's `@icon` metadata tag.
+Unlike other add-ons that rely on MQTT or ephemeral HTTP states, this bridge allows JS Automations to register **true native entities** in the Home Assistant Registry.
+*   **Persistent:** Entities survive Home Assistant reboots.
+*   **Editable:** You can change the icon, name, and area directly in the Home Assistant Device settings.
+*   **Zero Config:** No MQTT broker or complex configuration required.
+
+---
+
+## Script Control (@expose)
+
+You can expose any script as a native Home Assistant entity by setting the `@expose` tag (or using the creation wizard).
+
+*   **Switch:** (`@expose switch`) Creates a toggle. `On` means the script is running, `Off` means it's stopped. Perfect for long-running loops or services.
+*   **Button:** (`@expose button`) Creates a stateless button. Pressing it starts (or restarts) the script. Ideal for one-off actions.
+*   **Entity ID:** `switch.js_automations_<script_name>` or `button.js_automations_<script_name>`
 
 ```javascript
 /**
  * @name My Awesome Script
+ * @expose switch
  * @icon mdi:robot-happy
  */
 
-// This script will have a switch named "switch.js_automation_my_awesome_script"
+// This script will have a switch named "switch.js_automations_my_awesome_script"
 // with the "mdi:robot-happy" icon.
 ```
 

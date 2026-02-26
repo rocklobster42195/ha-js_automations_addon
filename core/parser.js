@@ -3,18 +3,12 @@ const path = require('path');
 
 class ScriptParser {
     static parse(filePath) {
-        const content = fs.readFileSync(filePath, 'utf8');
-        
-        const patterns = {
-            name: /^@name\s+(.*)/,
-            icon: /^@icon\s+(.*)/,
-            description: /^@description\s+(.*)/,
-            area: /^@area\s+(.*)/,
-            label: /^@label\s+(.*)/,
-            loglevel: /^@loglevel\s+(.*)/,
-            npm: /^@npm[:]?\s+(.*)/,
-            include: /^@include\s+(.*)/
-        };
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+            // Standard BOM Entfernung
+            content = content.replace(/^\uFEFF/, '');
+        } catch (e) { return {}; }
 
         const metadata = {
             filename: path.basename(filePath),
@@ -26,41 +20,96 @@ class ScriptParser {
             label: '',
             loglevel: 'info',
             dependencies: [],
-            includes: []
+            includes: [],
+            expose: null
         };
 
-        // Zeilenweise parsen ist sicherer gegen Sternchen (*)
-        const lines = content.split('\n');
+        // Wir suchen einfach den ersten JSDoc Block am Anfang der Datei
+        const jsDocMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
         
-        lines.forEach(line => {
-            // Entferne Kommentazeichen und Leerzeichen am Anfang
-            const cleanLine = line.replace(/^\s*\/?\*+\s?/, '').trim();
-            
-            for (const [key, regex] of Object.entries(patterns)) {
-                // Wir testen gegen die gesäuberte Zeile
-                const match = cleanLine.match(regex);
-                if (match && match[1]) {
-                    let val = match[1].trim();
-                    // Remove trailing comment closer */
-                    val = val.replace(/\*\/$/, '').trim();
-
-                    if (key === 'npm') {
-                        // Split by comma OR whitespace to handle "pkg1 pkg2" and "pkg1, pkg2"
-                        const deps = val.split(/[\s,]+/).map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
-                        metadata.dependencies.push(...deps);
-                    } else if (key === 'include') {
-                        // Handle includes similar to npm
-                        const incs = val.split(/[\s,]+/).map(d => d.trim().replace(/['"()]/g, '')).filter(d => d.length > 0);
-                        metadata.includes.push(...incs);
-                    } else {
-                        metadata[key] = val;
-                    }
+        if (jsDocMatch) {
+            // Block gefunden -> Parsen
+            const lines = jsDocMatch[1].split('\n');
+            lines.forEach(line => {
+                const match = line.match(/@(\w+)(?:\s+(.*))?/);
+                if (match) {
+                    this._applyMeta(metadata, match[1], match[2]);
                 }
+            });
+        } else {
+            // Fallback: Alte // @tags Zeilenweise suchen (nur lesen, nicht schreiben)
+            const lines = content.split('\n');
+            for (const line of lines) {
+                const match = line.match(/^\s*\/\/\s*@(\w+)(?:\s+(.*))?/);
+                if (match) this._applyMeta(metadata, match[1], match[2]);
+                else if (line.trim() && !line.startsWith('//')) break; // Stop bei Code
             }
-        });
+        }
 
         if (!metadata.name) metadata.name = metadata.filename;
         return metadata;
+    }
+
+    static _applyMeta(metadata, key, val) {
+        val = val ? val.trim() : '';
+        if (key === 'npm' || key === 'include') {
+            const list = val.split(/[\s,]+/).map(s => s.trim().replace(/['"()]/g, '')).filter(s => s);
+            if (key === 'npm') metadata.dependencies.push(...list);
+            else metadata.includes.push(...list);
+        } else if (key === 'expose') {
+            metadata.expose = val || 'switch';
+        } else if (metadata.hasOwnProperty(key)) {
+            metadata[key] = val;
+        }
+    }
+
+    static updateMetadata(filePath, meta) {
+        if (!fs.existsSync(filePath)) {
+            return;
+        }
+
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch (e) {
+            return;
+        }
+        content = content.replace(/^\uFEFF/, ''); // BOM weg
+
+        // 1. Alten Header entfernen
+        // Wir entfernen zuerst den JSDoc Block...
+        content = content.replace(/^\s*\/\*\*[\s\S]*?\*\/\s*/, '');
+        // ...und dann alle alten "// @tag" Blöcke am Anfang der Datei.
+        content = content.replace(/^(\s*\/\/\s*@.*\r?\n)+/, '');
+
+        // Neuen Header generieren
+        const lines = ['/**'];
+        if (meta.name) lines.push(` * @name ${meta.name}`);
+        if (meta.icon) lines.push(` * @icon ${meta.icon}`);
+        if (meta.description) lines.push(` * @description ${meta.description}`);
+        if (meta.area) lines.push(` * @area ${meta.area}`);
+        if (meta.label) lines.push(` * @label ${meta.label}`);
+        if (meta.loglevel && meta.loglevel !== 'info') lines.push(` * @loglevel ${meta.loglevel}`);
+        if (meta.expose) {
+            const val = meta.expose === 'button' ? 'button' : 'switch';
+            lines.push(` * @expose ${val}`);
+        }
+        
+        const deps = meta.npmModules || meta.dependencies;
+        if (deps && deps.length > 0) lines.push(` * @npm ${deps.join(', ')}`);
+        
+        const incs = meta.includes;
+        if (incs && incs.length > 0) lines.push(` * @include ${incs.join(', ')}`);
+
+        lines.push(' */');
+        
+        // 3. Schreiben
+        const newContent = lines.join('\n') + '\n' + content.trimStart();
+        try {
+            fs.writeFileSync(filePath, newContent, 'utf8');
+        } catch (e) {
+            console.error(`[Parser] Could not write to file "${filePath}".`, e);
+        }
     }
 }
 module.exports = ScriptParser;

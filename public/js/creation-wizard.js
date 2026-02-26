@@ -20,6 +20,9 @@ const SCRIPT_TEMPLATES = {
 };
 
 let currentWizardTab = 'new';
+let wizardMode = 'create'; // 'create', 'edit', 'duplicate'
+let wizardOriginalFilename = null; // Für Edit-Mode
+let wizardDuplicateCode = null; // Für Duplicate-Mode
 let wizardNpmModules = [];
 let wizardIncludes = [];
 
@@ -67,13 +70,15 @@ function injectCreationWizard() {
                 
                 <div class="wizard-grid">
                     <div class="form-group">
-                        <label data-i18n="script_type">Typ</label>
+                        <label><span data-i18n="script_type">Typ</span> <i class="mdi mdi-information-outline" style="font-size:0.9em; opacity:0.7;" data-i18n-title="wizard_type_tooltip" title="Info"></i></label>
                         <select id="wizard-type" onchange="handleWizardTypeChange()">
-                            <option value="automation" data-i18n="wizard_option_automation">Automation (Startet automatisch)</option>
+                            <option value="switch" data-i18n="wizard_option_switch">Schalter (Dauerläufer)</option>
+                            <option value="button" data-i18n="wizard_option_button">Button (Aktion)</option>
+                            <option value="hidden" data-i18n="wizard_option_hidden">Hintergrund (Unsichtbar)</option>
                             <option value="library" data-i18n="wizard_option_library">Library (Wird von anderen importiert)</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="wizard-group-template">
                         <label><span data-i18n="wizard_label_template">Template</span></label>
                         <select id="wizard-template">
                             ${Object.keys(SCRIPT_TEMPLATES).map(k => `<option value="${k}">${i18next.t(SCRIPT_TEMPLATES[k].labelKey)}</option>`).join('')}
@@ -210,12 +215,17 @@ function injectCreationWizard() {
     });
 }
 
-async function openCreationWizard() {
+async function openCreationWizard(mode = 'create', data = null) {
     injectCreationWizard();
     // The modal is now in the DOM, translate its contents
     if (window.updateUIWithTranslations) window.updateUIWithTranslations();
 
-    document.getElementById('creation-wizard-modal').classList.remove('hidden');
+    const modal = document.getElementById('creation-wizard-modal');
+    modal.classList.remove('hidden');
+    
+    wizardMode = mode;
+    wizardOriginalFilename = null;
+    wizardDuplicateCode = null;
     
     // Reset fields
     document.getElementById('wizard-name').value = '';
@@ -237,8 +247,58 @@ async function openCreationWizard() {
     renderWizardTags('npm');
     renderWizardTags('includes');
 
-    // Switch Tab triggers validation (must happen after reset)
-    switchWizardTab('new');
+    // UI Anpassungen je nach Mode
+    const tabs = document.querySelector('.wizard-tabs');
+    const templateGroup = document.getElementById('wizard-group-template');
+    const title = modal.querySelector('h3');
+    const btn = document.getElementById('btn-wizard-action');
+
+    if (mode === 'create') {
+        tabs.style.display = 'flex';
+        if (templateGroup) templateGroup.style.display = 'block';
+        title.textContent = i18next.t('new_script_title');
+        btn.textContent = i18next.t('button_create');
+        switchWizardTab('new');
+    } else {
+        // Edit oder Duplicate
+        tabs.style.display = 'none'; // Keine Tabs (Upload/Import macht hier keinen Sinn)
+        if (templateGroup) templateGroup.style.display = 'none'; // Template Auswahl verstecken
+        switchWizardTab('new'); // Erzwinge den Formular-Tab
+
+        if (mode === 'edit') {
+            title.textContent = i18next.t('modal_edit_script_title');
+            btn.textContent = i18next.t('save_title');
+            wizardOriginalFilename = data.filename;
+        } else {
+            title.textContent = i18next.t('modal_duplicate_script_title');
+            btn.textContent = i18next.t('button_duplicate');
+            wizardDuplicateCode = data.code;
+        }
+
+        // Felder befüllen
+        document.getElementById('wizard-name').value = mode === 'duplicate' ? (data.name + ' (Copy)') : data.name;
+        
+        // Typ Mapping für Edit Mode
+        let typeVal = 'hidden';
+        if (data.path && data.path.includes('libraries')) typeVal = 'library';
+        else if (data.expose === 'switch') typeVal = 'switch';
+        else if (data.expose === 'button') typeVal = 'button';
+        document.getElementById('wizard-type').value = typeVal;
+
+        document.getElementById('wizard-icon').value = data.icon || '';
+        updateWizardIconPreview(data.icon);
+        document.getElementById('wizard-area').value = data.area || '';
+        document.getElementById('wizard-label').value = data.label || '';
+        document.getElementById('wizard-loglevel').value = data.loglevel || 'info';
+        document.getElementById('wizard-description').value = data.description || '';
+
+        if (data.dependencies) data.dependencies.forEach(d => addWizardNpmTag(d));
+        if (data.includes) data.includes.forEach(i => { if (!wizardIncludes.includes(i)) wizardIncludes.push(i); });
+        renderWizardTags('includes');
+    }
+
+    // Validation triggern (nach dem Befüllen)
+    checkWizardScriptName();
 
     // Populate Datalists (Area/Label)
     try {
@@ -432,7 +492,7 @@ function handleWizardTypeChange() {
     if (type === 'library') {
         iconInput.value = 'mdi:book-open-variant';
     } else {
-        if (iconInput.value === 'mdi:book-open-variant') {
+        if (iconInput.value === 'mdi:book-open-variant' || !iconInput.value) {
             iconInput.value = 'mdi:script-text';
         }
     }
@@ -452,6 +512,14 @@ function checkWizardScriptName() {
     }
     const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     const filename = slug + '.js';
+
+    // Im Edit-Modus ist der eigene Dateiname erlaubt (keine Änderung)
+    if (wizardMode === 'edit' && filename === wizardOriginalFilename) {
+        if (errEl) errEl.textContent = '';
+        if (createBtn) createBtn.disabled = false;
+        return;
+    }
+
     const exists = typeof allScripts !== 'undefined' && allScripts.some(s => s.filename === filename);
     if (errEl) errEl.textContent = exists ? i18next.t('error_file_exists', { filename }) : '';
     if (createBtn) createBtn.disabled = exists;
@@ -486,13 +554,21 @@ async function executeWizardAction() {
     try {
         if (currentWizardTab === 'new') {
             const name = document.getElementById('wizard-name').value.trim();
-            const type = document.getElementById('wizard-type').value;
+            const wizardType = document.getElementById('wizard-type').value;
             const icon = document.getElementById('wizard-icon').value.trim();
             const templateKey = document.getElementById('wizard-template').value;
             const area = document.getElementById('wizard-area').value.trim();
             const label = document.getElementById('wizard-label').value.trim();
             const loglevel = document.getElementById('wizard-loglevel').value;
             const description = document.getElementById('wizard-description').value.trim();
+
+            // Mapping Wizard Type -> Backend Fields
+            let type = 'automation';
+            let expose = null;
+            if (wizardType === 'switch') { expose = 'switch'; }
+            else if (wizardType === 'button') { expose = 'button'; }
+            else if (wizardType === 'library') { type = 'library'; }
+            // hidden: type=automation, expose=null
 
             const npmInput = document.getElementById('wizard-npm-input');
             if (npmInput && npmInput.value.trim()) {
@@ -507,12 +583,56 @@ async function executeWizardAction() {
             }
 
             if (!name) throw new Error(i18next.t('error_wizard_name_required'));
-            const code = SCRIPT_TEMPLATES[templateKey] ? SCRIPT_TEMPLATES[templateKey].code : '';
             
-            const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, type, icon, code, area, label, loglevel, description, npmModules: wizardNpmModules.map(p => p.name), includes: wizardIncludes }) });
-            if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Creation failed'); }
-            const data = await res.json();
-            newFilename = data.filename;
+            // Payload bauen
+            const payload = { name, type, expose, icon, area, label, loglevel, description, npmModules: wizardNpmModules.map(p => p.name), includes: wizardIncludes };
+
+            if (wizardMode === 'edit') {
+                // UPDATE
+                const res = await apiFetch(`api/scripts/${wizardOriginalFilename}/metadata`, { 
+                    method: 'PUT', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
+                if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Update failed'); }
+                const data = await res.json();
+                newFilename = data.filename;
+
+                // Handle Rename Side-Effects (Tabs aktualisieren)
+                if (wizardOriginalFilename && newFilename && wizardOriginalFilename !== newFilename) {
+                    if (typeof openTabs !== 'undefined') {
+                        const tab = openTabs.find(t => t.filename === wizardOriginalFilename);
+                        if (tab) tab.filename = newFilename;
+                    }
+                    if (typeof activeTabFilename !== 'undefined' && activeTabFilename === wizardOriginalFilename) {
+                        activeTabFilename = newFilename;
+                    }
+                    if (typeof renderTabs === 'function') renderTabs();
+                }
+
+                // FIX: Editor-Inhalt aktualisieren, damit der neue Header sichtbar wird
+                if (typeof openTabs !== 'undefined') {
+                    const tab = openTabs.find(t => t.filename === newFilename);
+                    if (tab && tab.model) {
+                        // Cache-Busting: Zeitstempel anhängen, damit Browser nicht cached
+                        const cRes = await apiFetch(`api/scripts/${newFilename}/content?_t=${Date.now()}`);
+                        if (cRes.ok) {
+                            const cData = await cRes.json();
+                            tab.model.setValue(cData.content);
+                            tab.originalContent = cData.content;
+                            tab.isDirty = false;
+                        }
+                    }
+                }
+            } else {
+                // CREATE or DUPLICATE
+                payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES[templateKey] ? SCRIPT_TEMPLATES[templateKey].code : '');
+                
+                const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Creation failed'); }
+                const data = await res.json();
+                newFilename = data.filename;
+            }
         } else if (currentWizardTab === 'upload') {
             const fileInput = document.getElementById('wizard-file-input');
             const type = document.getElementById('wizard-upload-type').value;
@@ -545,6 +665,19 @@ async function executeWizardAction() {
             const icon = newScript ? newScript.icon : 'mdi:script-text';
             if (window.openOrSwitchToTab) {
                 window.openOrSwitchToTab(newFilename, icon);
+                
+                // Wenn wir im Edit-Modus waren, aktualisieren wir auch das Icon im Tab sofort
+                if (wizardMode === 'edit') {
+                    const tab = openTabs.find(t => t.filename === newFilename);
+                    if (tab) {
+                        tab.icon = icon;
+                        if (typeof renderTabs === 'function') renderTabs();
+                        // Toolbar aktualisieren falls aktiv
+                        if (typeof activeTabFilename !== 'undefined' && activeTabFilename === newFilename && typeof updateToolbarUI === 'function') {
+                            updateToolbarUI(newFilename, icon, tab.isDirty);
+                        }
+                    }
+                }
             } else {
                 window.openTab(newFilename);
             }

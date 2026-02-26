@@ -119,6 +119,29 @@ class HAConnector {
     }
 
     /**
+     * Prüft, ob die Integration (Custom Component) geladen ist.
+     * Sendet 'get_services' und sucht nach 'js_automations'.
+     */
+    async checkIntegrationAvailable() {
+        if (!this.isReady) return false;
+        const id = this.msgId++;
+        this.send({ id, type: 'get_services' });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                const msg = JSON.parse(data);
+                if (msg.id === id) {
+                    this.ws.removeListener('message', handler);
+                    const services = msg.result || {};
+                    resolve('js_automations' in services);
+                }
+            };
+            this.ws.on('message', handler);
+            // Timeout zur Sicherheit
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve(false); }, 2000);
+        });
+    }
+
+    /**
      * Generates IntelliSense file in .storage directory
      */
     generateTypeDefinitions(states) {

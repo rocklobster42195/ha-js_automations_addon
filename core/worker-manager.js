@@ -21,6 +21,7 @@ class WorkerManager extends EventEmitter {
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
+        this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> uniqueId
 
         // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -105,8 +106,64 @@ class WorkerManager extends EventEmitter {
             if (msg.type === 'call_service' && this.haConnector) {
                 await this.haConnector.callService(msg.domain, msg.service, msg.data);
             }
+
             if (msg.type === 'update_state' && this.haConnector) {
-                await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                // Hybrid-Logik: Wenn nativ bekannt, nutze Service, sonst Legacy HTTP
+                if (this.nativeEntities.has(msg.entityId)) {
+                    const uniqueId = this.nativeEntities.get(msg.entityId);
+                    const [domain] = msg.entityId.split('.');
+                    try {
+                        await this.haConnector.callService('js_automations', 'update_entity', {
+                            unique_id: uniqueId,
+                            domain: domain,
+                            state: msg.state,
+                            attributes: msg.attributes
+                        });
+                    } catch (e) {
+                        // Fallback bei Fehler (z.B. Integration entladen)
+                        this.emit('log', { source: 'System', message: `Native Update failed for ${msg.entityId}, falling back to legacy.`, level: 'warn' });
+                        this.nativeEntities.delete(msg.entityId);
+                        await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                    }
+                } else {
+                    await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                }
+            }
+            
+            // 2b. Native Entity Creation (Integration)
+            if (msg.type === 'create_entity' && this.haConnector) {
+                const { entityId, config } = msg;
+
+                this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
+
+                const payload = {
+                    entity_id: entityId,
+                    unique_id: config.unique_id || entityId,
+                    name: config.name || entityId,
+                    icon: config.icon,
+                    attributes: config.attributes || {}
+                };
+                
+                // FIX: state direkt an create_entity übergeben (Schema erwartet 'state')
+                if (config.initial_state !== undefined) {
+                    payload.state = config.initial_state;
+                }
+                
+                // Map common attributes to payload.attributes
+                // Map common attributes to the top-level payload for the integration
+                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture'].forEach(key => {
+                    if (config[key]) payload[key] = config[key];
+                });
+
+                try {
+                    // Wir senden den Befehl und warten nicht auf eine Antwort, aber fangen Fehler ab.
+                    await this.haConnector.callService('js_automations', 'create_entity', payload);
+                    this.nativeEntities.set(entityId, payload.unique_id);
+                    this.emit('log', { source: 'System', message: `Successfully sent registration for ${entityId}`, level: 'debug' });
+                } catch (e) {
+                    // Dieser Fehler wird geworfen, wenn die Integration nicht da ist oder der Payload falsch ist.
+                    this.emit('log', { source: 'System', message: `Failed to create native entity ${entityId}: ${e.message}`, level: 'error' });
+                }
             }
 
             // 3. Subscriptions (ha.on)
@@ -151,13 +208,13 @@ class WorkerManager extends EventEmitter {
                 if (type === 'error') this.lastExitState.set(scriptMeta.filename, 'error');
                 this.stopReasons.delete(scriptMeta.filename);
                 
-                this.emit('script_exit', { filename: scriptMeta.filename, reason, type });
+                this.emit('script_exit', { filename: scriptMeta.filename, reason, type, meta: scriptMeta });
             }
         });
 
         this.workers.set(scriptMeta.filename, worker);
         this.startTimes.set(scriptMeta.filename, Date.now());
-        this.emit('script_start', { filename: scriptMeta.filename });
+        this.emit('script_start', { filename: scriptMeta.filename, meta: scriptMeta });
 
         // RAM-Messung beschleunigen: Nach 1s direkt anfragen (statt auf 5s Interval warten)
         setTimeout(() => {

@@ -215,22 +215,17 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
     // POST Create
     router.post('/', async (req, res) => {
-        const { name, type, icon, description, area, label, loglevel, npmModules, includes, code } = req.body;
+        const { name, type, code } = req.body;
         const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
         const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
+        const fullPath = path.join(targetDir, filename);
         
-        let header = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n`;
-        if (npmModules && Array.isArray(npmModules) && npmModules.length > 0) {
-            header += ` * @npm ${npmModules.join(', ')}\n`;
-        }
-        if (includes && Array.isArray(includes) && includes.length > 0) {
-            header += ` * @include ${includes.join(', ')}\n`;
-        }
-        header += ` */\n\n`;
+        // 1. Create file with initial code
+        fs.writeFileSync(fullPath, code || 'ha.log("Ready.");\n', 'utf8');
         
-        const content = header + (code || 'ha.log("Ready.");\n');
-        
-        fs.writeFileSync(path.join(targetDir, filename), content, 'utf8');
+        // 2. Use the central parser to write the metadata header
+        ScriptParser.updateMetadata(fullPath, req.body);
+
         res.json({ filename });
     });
 
@@ -265,26 +260,8 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             fullPath = newFullPath; // Update path for subsequent write
         }
 
-        let content = fs.readFileSync(fullPath, 'utf8');
-
-        let newHeader = `/**\n * @name ${name}\n * @icon ${icon || 'mdi:script-text'}\n * @description ${description || ''}\n * @area ${area || ''}\n * @label ${label || ''}\n * @loglevel ${loglevel || 'info'}\n`;
-        if (npmModules && Array.isArray(npmModules) && npmModules.length > 0) {
-            newHeader += ` * @npm ${npmModules.join(', ')}\n`;
-        }
-        if (includes && Array.isArray(includes) && includes.length > 0) {
-            newHeader += ` * @include ${includes.join(', ')}\n`;
-        }
-        newHeader += ` */`;
-
-        // Replace existing header (matches /** ... */ at start of file)
-        const headerRegex = /^\/\*\*[\s\S]*?\*\//;
-        if (headerRegex.test(content)) {
-            content = content.replace(headerRegex, newHeader);
-        } else {
-            content = newHeader + '\n\n' + content;
-        }
-
-        fs.writeFileSync(fullPath, content, 'utf8');
+        // Use Parser to update metadata (handles @expose and formatting centrally)
+        ScriptParser.updateMetadata(fullPath, req.body);
         
         // 5. REFACTORING: Update consumers
         let updatedConsumers = 0;

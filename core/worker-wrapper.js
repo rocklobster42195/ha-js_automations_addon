@@ -175,6 +175,16 @@ const ha = {
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
     
+    /**
+     * Erstellt eine native Home Assistant Entität (via Integration).
+     * @param {string} entityId - Die gewünschte Entity ID (z.B. 'sensor.mein_wert')
+     * @param {object} config - Konfiguration (name, icon, type, unit_of_measurement, etc.)
+     */
+    create: (entityId, config = {}) => {
+        // Wir senden den Intent an den Hauptprozess, der entscheidet (Integration vs. Legacy)
+        parentPort.postMessage({ type: 'create_entity', entityId, config });
+    },
+    
     // Real-time Data
     states: states,
 
