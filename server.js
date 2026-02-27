@@ -121,6 +121,9 @@ async function startSystem() {
             // Nur Switches bekommen Status-Updates (Buttons sind stateless)
             if (!meta || meta.expose !== 'switch') return;
 
+            // FIX: Save state for autostart
+            stateManager.saveScriptStarted(filename);
+
             const scriptName = path.basename(filename, '.js');
             // FIX: Ensure entityId and unique_id are lowercase to match creation
             const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
@@ -129,7 +132,7 @@ async function startSystem() {
             
             if (hasIntegration) {
                 // Native Update via Service
-                const payload = { unique_id: uniqueId, domain: 'switch', state: 'on' };
+                const payload = { unique_id: uniqueId, state: 'on' };
                 logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
                 connector.callService('js_automations', 'update_entity', payload);
             } else {
@@ -141,30 +144,30 @@ async function startSystem() {
 
         workerManager.on('script_exit', (d) => {
             // Nur Switches bekommen Status-Updates
-            if (!d.meta || d.meta.expose !== 'switch') return;
+            if (d.meta && d.meta.expose === 'switch') {
+                if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('stopped by user')) {
+                    stateManager.saveScriptStopped(d.filename);
+                }
+                const scriptName = path.basename(d.filename, '.js');
 
-            if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('stopped by user')) {
-                stateManager.saveScriptStopped(d.filename);
-            }
-            const scriptName = path.basename(d.filename, '.js');
-
-            // FIX: Ensure entityId and unique_id are lowercase to match creation
-            const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
-            const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
-            stateManager.set(entityId, 'off');
-            
-            if (hasIntegration) {
-                // Native Update via Service
-                const payload = { unique_id: uniqueId, domain: 'switch', state: 'off' };
-                logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
-                connector.callService('js_automations', 'update_entity', payload);
-            } else {
-                // Legacy Update
-                connector.updateState(entityId, 'off');
+                // FIX: Ensure entityId and unique_id are lowercase to match creation
+                const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
+                const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
+                stateManager.set(entityId, 'off');
+                
+                if (hasIntegration) {
+                    // Native Update via Service
+                    const payload = { unique_id: uniqueId, state: 'off' };
+                    logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
+                    connector.callService('js_automations', 'update_entity', payload);
+                } else {
+                    // Legacy Update
+                    connector.updateState(entityId, 'off');
+                }
             }
             
-            // NEU: LogManager nutzen
-            const entry = logManager.add(d.type || 'info', 'System', `${d.filename} ${d.reason}`);
+            // NEU: LogManager nutzen & UI Update für ALLE Skripte
+            const entry = logManager.add(d.type || 'info', 'System', `${path.basename(d.filename)} ${d.reason}`);
             io.emit('log', entry);
             io.emit('status_update');
         });
@@ -189,7 +192,7 @@ async function startSystem() {
         // Initialer Prune beim Start (optional)
         depManager.prune();
 
-        server.listen(PORT, '0.0.0.0', () => console.log(`🌍 Dashboard on port ${PORT}`));
+        server.listen(PORT, '0.0.0.0', () => console.log(`🌍 Dashboard on http://localhost:${PORT}`));
 
         // Auto-Reconnection Loop
         let isReconnecting = false;
@@ -221,6 +224,16 @@ app.use('/api/store', storeRouter);
 // Status-Route für Version
 app.get('/api/status', (req, res) => {
     res.json({ version: packageJson.version });
+});
+
+// FIX: Add missing route for services (IntelliSense)
+app.get('/api/ha/services', async (req, res) => {
+    try {
+        const services = await connector.getServices();
+        res.json(services);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.use('/api', systemRouter);

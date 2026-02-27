@@ -14,6 +14,7 @@ class EntityManager {
         this.workerManager = workerManager;
         this.stateManager = stateManager;
         this.haConnection.subscribeToEvents(this.handleEvent.bind(this));
+        this.startWatcher();
     }
 
     async createExposedEntities(hasIntegration = false) {
@@ -40,6 +41,14 @@ class EntityManager {
                     unique_id: uniqueId,
                     name: meta.name,
                     icon: meta.icon,
+                    area_id: meta.area || undefined,
+                    labels: meta.label ? [meta.label] : [],
+                    device_info: {
+                        identifiers: [`js_automations_script_${scriptName}`],
+                        name: meta.name || scriptName,
+                        manufacturer: "JS Automations",
+                        model: "Script",
+                    },
                     attributes: {
                         source: 'JS Automations Addon',
                         script: scriptName
@@ -71,6 +80,67 @@ class EntityManager {
         }
     }
 
+    startWatcher() {
+        if (!this.workerManager.scriptsDir) return;
+        
+        // Simple debounce map to avoid double events on save
+        const debounceTimers = new Map();
+
+        try {
+            fs.watch(this.workerManager.scriptsDir, (eventType, filename) => {
+                if (filename && filename.endsWith('.js')) {
+                    if (debounceTimers.has(filename)) clearTimeout(debounceTimers.get(filename));
+                    
+                    debounceTimers.set(filename, setTimeout(() => {
+                        this.processSingleScript(path.join(this.workerManager.scriptsDir, filename));
+                    }, 500));
+                }
+            });
+        } catch (e) {
+            console.error("[EntityManager] Failed to watch scripts directory:", e);
+        }
+    }
+
+    async processSingleScript(scriptPath) {
+        if (!fs.existsSync(scriptPath)) return;
+        
+        try {
+            const meta = ScriptParser.parse(scriptPath);
+            if (!meta.expose) return;
+
+            const hasIntegration = await this.haConnection.checkIntegrationAvailable();
+            const scriptName = path.basename(scriptPath, '.js');
+            const domain = meta.expose === 'button' ? 'button' : 'switch';
+            const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
+
+            if (hasIntegration) {
+                const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
+                const payload = {
+                    entity_id: entityId,
+                    unique_id: uniqueId,
+                    name: meta.name,
+                    icon: meta.icon,
+                    area_id: meta.area || undefined,
+                    labels: meta.label ? [meta.label] : [],
+                    device_info: {
+                        identifiers: [`js_automations_script_${scriptName}`],
+                        name: meta.name || scriptName,
+                        manufacturer: "JS Automations",
+                        model: "Script",
+                    },
+                    attributes: { source: 'JS Automations Addon', script: scriptName }
+                };
+                // Note: We do NOT send 'state' here to avoid resetting a running switch to 'off' on save.
+                
+                await this.haConnection.callService('js_automations', 'create_entity', payload);
+            }
+            
+            this.stateManager.registerEntity(entityId, scriptPath);
+        } catch (e) {
+            console.error(`[EntityManager] Error processing ${scriptPath}:`, e);
+        }
+    }
+
     handleEvent(event) {
         if (event.event_type !== 'call_service') {
             return;
@@ -93,7 +163,6 @@ class EntityManager {
             
             if (scriptPath) {
                 const scriptName = path.basename(scriptPath);
-                console.log(`[EntityManager] Action for script ${scriptName}: ${service}`);
                 
                 if (service === 'turn_on') {
                     this.workerManager.startScript(scriptName);

@@ -88,7 +88,7 @@ Wir erweitern die API für Skripte, um die neuen Fähigkeiten zu nutzen.
 ha.updateState('sensor.mein_wert', 123);
 
 // Neu (Persistent):
-ha.create('sensor.mein_wert', {
+ha.register('sensor.mein_wert', {
     name: 'Mein Wichtiger Sensor',
     type: 'sensor', // oder binary_sensor, switch, number...
     icon: 'mdi:flash',

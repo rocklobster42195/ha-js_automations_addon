@@ -8,7 +8,6 @@ class JSAutomationsConfigFlow(config_entries.ConfigFlow, domain="js_automations"
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
-        # Prevent double installation
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 

@@ -115,7 +115,6 @@ class WorkerManager extends EventEmitter {
                     try {
                         await this.haConnector.callService('js_automations', 'update_entity', {
                             unique_id: uniqueId,
-                            domain: domain,
                             state: msg.state,
                             attributes: msg.attributes
                         });
@@ -151,9 +150,21 @@ class WorkerManager extends EventEmitter {
                 
                 // Map common attributes to payload.attributes
                 // Map common attributes to the top-level payload for the integration
-                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture'].forEach(key => {
+                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'area_id', 'labels', 'device_info'].forEach(key => {
                     if (config[key]) payload[key] = config[key];
                 });
+
+                // AUTO-INJECT DEVICE INFO if missing
+                // Damit landen Sensoren automatisch im Gerät des Skripts
+                if (!payload.device_info) {
+                    const scriptName = path.basename(scriptMeta.filename, '.js');
+                    payload.device_info = {
+                        identifiers: [`js_automations_script_${scriptName}`],
+                        name: scriptMeta.name || scriptName,
+                        manufacturer: "JS Automations",
+                        model: "Script",
+                    };
+                }
 
                 try {
                     // Wir senden den Befehl und warten nicht auf eine Antwort, aber fangen Fehler ab.

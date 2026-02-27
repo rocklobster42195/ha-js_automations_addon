@@ -1,11 +1,11 @@
 {
   "domain": "js_automations",
   "name": "JS Automations Bridge",
-  "version": "0.1.0",
-  "documentation": "https://github.com/davelop/ha-js-automations",
-  "dependencies": [],
-  "codeowners": [],
-  "requirements": [],
+  "config_flow": true,
+  "documentation": "https://github.com/boris-k/ha-js_automations_addon",
   "iot_class": "local_push",
-  "config_flow": true
+  "issue_tracker": "https://github.com/boris-k/ha-js_automations_addon/issues",
+  "version": "1.0.0",
+  "codeowners": ["@boris-k"],
+  "requirements": []
 }

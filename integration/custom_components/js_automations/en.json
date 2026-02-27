@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JS Automations Bridge",
+        "description": "This integration acts as a bridge for the JS Automations Add-on. There is no configuration needed. Click Submit to install."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of the JS Automations Bridge is allowed."
+    }
+  }
+}

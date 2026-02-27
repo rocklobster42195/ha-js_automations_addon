@@ -113,17 +113,35 @@ class HAConnector {
         });
     }
 
-    async callService(domain, service, data) {
-        if (!this.isReady) return;
-        this.send({ id: this.msgId++, type: 'call_service', domain, service, service_data: data });
+    callService(domain, service, data) {
+        if (!this.isReady) return Promise.reject(new Error("WebSocket not connected"));
+        const id = this.msgId++;
+        this.send({ id, type: 'call_service', domain, service, service_data: data });
+        
+        return new Promise((resolve, reject) => {
+            const handler = (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    if (msg.id === id) {
+                        this.ws.removeListener('message', handler);
+                        if (msg.success) resolve(msg.result);
+                        else reject(new Error(msg.error ? msg.error.message : "Unknown Service Error"));
+                    }
+                } catch (e) { /* ignore parse errors */ }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => {
+                this.ws.removeListener('message', handler);
+                reject(new Error("Service Call Timeout"));
+            }, 5000);
+        });
     }
 
     /**
-     * Prüft, ob die Integration (Custom Component) geladen ist.
-     * Sendet 'get_services' und sucht nach 'js_automations'.
+     * Ruft alle verfügbaren Services von Home Assistant ab.
      */
-    async checkIntegrationAvailable() {
-        if (!this.isReady) return false;
+    async getServices() {
+        if (!this.isReady) return {};
         const id = this.msgId++;
         this.send({ id, type: 'get_services' });
         return new Promise((resolve) => {
@@ -131,14 +149,21 @@ class HAConnector {
                 const msg = JSON.parse(data);
                 if (msg.id === id) {
                     this.ws.removeListener('message', handler);
-                    const services = msg.result || {};
-                    resolve('js_automations' in services);
+                    resolve(msg.result || {});
                 }
             };
             this.ws.on('message', handler);
-            // Timeout zur Sicherheit
-            setTimeout(() => { this.ws.removeListener('message', handler); resolve(false); }, 2000);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve({}); }, 5000);
         });
+    }
+
+    /**
+     * Prüft, ob die Integration (Custom Component) geladen ist.
+     * Sendet 'get_services' und sucht nach 'js_automations'.
+     */
+    async checkIntegrationAvailable() {
+        const services = await this.getServices();
+        return 'js_automations' in services;
     }
 
     /**

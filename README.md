@@ -211,12 +211,18 @@ if (parseFloat(temp) > 25) {
 Create virtual sensors or update existing ones directly in HA.
 
 ```javascript
-// This creates 'sensor.js_energy_total' if it doesn't exist
-ha.updateState('sensor.js_energy_total', 1250.5, {
+// Register the entity once (Persistent)
+ha.register('sensor.js_energy_total', {
+    name: 'Total Calculated Energy',
+    icon: 'mdi:transmission-tower',
     unit_of_measurement: 'kWh',
-    friendly_name: 'Total Calculated Energy',
-    icon: 'mdi:transmission-tower'
+        area_id: 'kitchen',           // Optional: Assign to an Area
+        labels: ['energy', 'solar'],  // Optional: Add Labels
+        initial_state: 1250.5         // Optional: Set initial value
 });
+
+// Update the value later (e.g. in a loop)
+ha.updateState('sensor.js_energy_total', 1251.0);
 ```
 
 ### 5. Calling Services (`ha.callService`)
@@ -368,6 +374,12 @@ This script uses the `node-ical` package to check an online calendar for upcomin
 const ical = require('node-ical');
 const CALENDAR_URL = "https://your-calendar-link.ics";
 
+// Register the sensor once
+ha.register('sensor.js_trash_tomorrow', {
+    name: 'Trash Collection Tomorrow',
+    icon: 'mdi:delete-alert'
+});
+
 async function checkTrash() {
     try {
         const data = await ical.async.fromURL(CALENDAR_URL);
@@ -391,10 +403,7 @@ async function checkTrash() {
             }
         }
 
-        ha.updateState('sensor.js_trash_tomorrow', trashType, {
-            friendly_name: 'Trash Collection Tomorrow',
-            icon: 'mdi:delete-alert'
-        });
+        ha.updateState('sensor.js_trash_tomorrow', trashType);
 
     } catch (e) {
         ha.error("Calendar check failed: " + e.message);

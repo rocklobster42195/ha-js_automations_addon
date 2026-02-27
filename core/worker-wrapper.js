@@ -176,11 +176,12 @@ const ha = {
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
     
     /**
-     * Erstellt eine native Home Assistant Entität (via Integration).
+     * Registriert eine native Home Assistant Entität (via Integration).
+     * Erstellt sie neu oder aktualisiert die Konfiguration, falls vorhanden.
      * @param {string} entityId - Die gewünschte Entity ID (z.B. 'sensor.mein_wert')
      * @param {object} config - Konfiguration (name, icon, type, unit_of_measurement, etc.)
      */
-    create: (entityId, config = {}) => {
+    register: (entityId, config = {}) => {
         // Wir senden den Intent an den Hauptprozess, der entscheidet (Integration vs. Legacy)
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },
@@ -239,17 +240,24 @@ const ha = {
 // Injection
 global.ha = ha;
 
-// Lazy Load Axios
-Object.defineProperty(global, 'axios', {
-    configurable: true,
-    enumerable: true,
-    get: () => {
-        // Cache the module on the global object after first load
-        const lib = require('axios');
-        Object.defineProperty(global, 'axios', { value: lib });
-        return lib;
-    }
-});
+// Setup Axios Global & Defaults
+try {
+    const axios = require('axios');
+    const http = require('http');
+    const https = require('https');
+    
+    // Disable Keep-Alive to allow process to exit automatically
+    axios.defaults.httpAgent = new http.Agent({ keepAlive: false });
+    axios.defaults.httpsAgent = new https.Agent({ keepAlive: false });
+    
+    // Force Connection close header
+    if (!axios.defaults.headers.common) axios.defaults.headers.common = {};
+    axios.defaults.headers.common['Connection'] = 'close';
+
+    global.axios = axios;
+} catch (e) {
+    // Fallback if axios is not found
+}
 
 global.schedule = (exp, cb) => {
     parentPort.ref(); // Keep alive for cron
