@@ -52,12 +52,16 @@ class EntityManager {
             // Nur wenn @expose gesetzt ist, erstellen wir eine Entität
             if (!meta.expose) continue;
 
-            const domain = meta.expose === 'button' ? 'button' : 'switch';
-            const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
-            const entityIcon = domain === 'button' ? 'mdi:play' : meta.icon;
-            
             // Check current state (for reconnects/restarts)
             const isRunning = this.workerManager.workers.has(scriptPath);
+
+            const domain = meta.expose === 'button' ? 'button' : 'switch';
+            const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
+            
+            let entityIcon = meta.icon;
+            if (domain === 'button') entityIcon = 'mdi:play';
+            else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
+
             const initialState = (domain === 'switch' && isRunning) ? 'on' : 'off';
 
             if (hasIntegration) {
@@ -102,7 +106,6 @@ class EntityManager {
                 // Switch braucht einen initialen State
                 if (domain === 'switch') {
                     payload.state = initialState;
-                    if (isRunning) payload.icon = 'mdi:play';
                 }
 
                 await this.haConnection.callService('js_automations', 'create_entity', {
@@ -120,7 +123,7 @@ class EntityManager {
                     
                     // Bei Legacy müssen wir den State separat setzen, falls er 'on' sein soll
                     if (initialState === 'on') {
-                        this.haConnection.updateState(entityId, 'on', { icon: 'mdi:play' });
+                        this.haConnection.updateState(entityId, 'on', { icon: 'mdi:stop' });
                     }
                 }
             }
@@ -213,6 +216,7 @@ class EntityManager {
             // if (!meta.expose) return;
 
             const hasIntegration = await this.haConnection.checkIntegrationAvailable();
+            const isRunning = this.workerManager.workers.has(scriptPath);
             
             // Metadaten für Lookup laden
             const { areas, labels } = await this.haConnection.getHAMetadata();
@@ -224,7 +228,10 @@ class EntityManager {
                 const shouldExist = meta.expose === domain;
                 const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
                 const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
-                const entityIcon = domain === 'button' ? 'mdi:play' : meta.icon;
+                
+                let entityIcon = meta.icon;
+                if (domain === 'button') entityIcon = 'mdi:play';
+                else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
 
                 if (shouldExist) {
                     // --- CREATE / UPDATE ---

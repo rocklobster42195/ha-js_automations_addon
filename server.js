@@ -134,12 +134,12 @@ async function startSystem() {
             
             if (hasIntegration) {
                 // Native Update via Service
-                const payload = { unique_id: uniqueId, state: 'on' };
+                const payload = { unique_id: uniqueId, state: 'on', icon: 'mdi:stop' };
                 logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
                 connector.callService('js_automations', 'update_entity', payload);
             } else {
                 // Legacy Update
-                connector.updateState(entityId, 'on');
+                connector.updateState(entityId, 'on', { icon: 'mdi:stop' });
             }
             io.emit('status_update');
         });
@@ -165,12 +165,12 @@ async function startSystem() {
                 
                 if (hasIntegration) {
                     // Native Update via Service
-                    const payload = { unique_id: uniqueId, state: 'off' };
+                    const payload = { unique_id: uniqueId, state: 'off', icon: 'mdi:play' };
                     logManager.add('debug', 'System', `Updating system switch state: ${JSON.stringify(payload)}`);
                     connector.callService('js_automations', 'update_entity', payload);
                 } else {
                     // Legacy Update
-                    connector.updateState(entityId, 'off');
+                    connector.updateState(entityId, 'off', { icon: 'mdi:play' });
                 }
             }
             

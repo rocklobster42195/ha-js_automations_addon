@@ -39,9 +39,7 @@ Thumbs.db
 scripts/*.js
 
 # ...aber behalte vielleicht ein Beispiel:
-!scripts/gemini_demo.js
+!scripts/gemini_weather_demo.js
 !scripts/cleanup_tool.js
 
-
 AI_RULES.md
-package-lock.json

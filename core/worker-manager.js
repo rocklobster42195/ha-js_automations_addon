@@ -148,17 +148,21 @@ class WorkerManager extends EventEmitter {
             if (msg.type === 'update_state' && this.haConnector) {
                 // Hybrid-Logik: Wenn nativ bekannt, nutze Service, sonst Legacy HTTP
                 if (this.nativeEntities.has(msg.entityId)) {
-                    const uniqueId = this.nativeEntities.get(msg.entityId);
+                    const entityPayload = this.nativeEntities.get(msg.entityId);
                     const [domain] = msg.entityId.split('.');
                     try {
                         await this.haConnector.callService('js_automations', 'update_entity', {
-                            unique_id: uniqueId,
+                            unique_id: entityPayload.unique_id,
                             state: msg.state,
                             attributes: msg.attributes
                         });
                     } catch (e) {
                         // Fallback bei Fehler (z.B. Integration entladen)
-                        this.emit('log', { source: 'System', message: `Native Update failed for ${msg.entityId}, falling back to legacy.`, level: 'warn' });
+                        let errorMsg = `Native Update failed for ${msg.entityId}: ${e.message}`;
+                        if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
+                            errorMsg += " -> Check if 'js_automations' integration is installed.";
+                        }
+                        this.emit('log', { source: 'System', message: errorMsg + " Falling back to legacy.", level: 'warn' });
                         // Wir löschen es hier nicht sofort, damit ein Republish noch möglich ist, falls es nur ein temporärer Fehler war
                         await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                     }
@@ -255,7 +259,11 @@ class WorkerManager extends EventEmitter {
                     this.emit('log', { source: 'System', message: `Successfully sent registration for ${entityId}`, level: 'debug' });
                 } catch (e) {
                     // Dieser Fehler wird geworfen, wenn die Integration nicht da ist oder der Payload falsch ist.
-                    this.emit('log', { source: 'System', message: `Failed to create native entity ${entityId}: ${e.message}`, level: 'error' });
+                    let errorMsg = `Failed to create native entity ${entityId}: ${e.message}`;
+                    if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
+                        errorMsg += " -> Check if 'js_automations' integration is installed and HA is restarted.";
+                    }
+                    this.emit('log', { source: 'System', message: errorMsg, level: 'error' });
                 }
             }
 
