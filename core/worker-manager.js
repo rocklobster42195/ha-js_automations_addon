@@ -266,12 +266,20 @@ class WorkerManager extends EventEmitter {
 
             // 4. Store Operations
             if (msg.type === 'store_set' && this.storeManager) {
-                this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
-                this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value });
+                // DEDUPLICATION: Nur senden, wenn sich der Wert wirklich geändert hat
+                const currentEntry = this.storeManager.data[msg.key];
+                const currentValue = currentEntry ? currentEntry.value : undefined;
+
+                if (currentValue !== msg.value) {
+                    this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
+                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value }, worker);
+                }
             }
             if (msg.type === 'store_delete' && this.storeManager) {
-                this.storeManager.delete(msg.key);
-                this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined });
+                if (this.storeManager.data[msg.key] !== undefined) {
+                    this.storeManager.delete(msg.key);
+                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined }, worker);
+                }
             }
 
             // 5. Stats Response
@@ -318,8 +326,9 @@ class WorkerManager extends EventEmitter {
     /**
      * Sends a message to all running workers.
      */
-    broadcastToWorkers(payload) {
+    broadcastToWorkers(payload, exceptWorker = null) {
         for (const worker of this.workers.values()) {
+            if (worker === exceptWorker) continue;
             worker.postMessage(payload);
         }
     }

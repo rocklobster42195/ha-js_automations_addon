@@ -64,6 +64,7 @@ const sendLog = (level, msg) => {
 // --- 3. CACHE & SYNC ---
 const states = workerData.initialStates || {};
 const storeValues = workerData.initialStore || {};
+const storeListeners = {};
 const subscriptionCallbacks = [];
 const stopCallbacks = [];
 let isListening = false;
@@ -158,8 +159,15 @@ function ensureMessageListener() {
 
         // Real-time global store sync
         if (msg.type === 'store_update') {
+            const oldValue = storeValues[msg.key];
             if (msg.value === undefined) delete storeValues[msg.key];
             else storeValues[msg.key] = msg.value;
+
+            if (storeListeners[msg.key]) {
+                storeListeners[msg.key].forEach(cb => {
+                    try { cb(msg.value, oldValue); } catch (e) { console.error(`Store Listener Error (${msg.key}):`, e); }
+                });
+            }
         }
 
         // Handle ha.on() triggers
@@ -365,6 +373,13 @@ const ha = {
         delete: (key) => {
             delete storeValues[key];
             parentPort.postMessage({ type: 'store_delete', key });
+        },
+        on: (key, cb) => {
+            if (typeof cb !== 'function') return;
+            if (!storeListeners[key]) storeListeners[key] = [];
+            storeListeners[key].push(cb);
+            parentPort.ref(); // Keep process alive
+            ensureMessageListener();
         }
     }
 };

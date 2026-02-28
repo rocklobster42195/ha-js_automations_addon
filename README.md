@@ -312,6 +312,11 @@ if (ha.store.val.guest_mode === true) {
     ha.log("Guest mode is active");
 }
 
+// React to changes (Cross-Script Communication)
+ha.store.on('guest_mode', (newValue, oldValue) => {
+    ha.log(`Guest mode changed from ${oldValue} to ${newValue}`);
+});
+
 // Delete a value
 ha.store.delete('temp_variable');
 ```

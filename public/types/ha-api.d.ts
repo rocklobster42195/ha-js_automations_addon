@@ -110,6 +110,8 @@ interface HA {
         get<T = any>(key: string): T;
         /** Deletes a value from the store. */
         delete(key: string): void;
+        /** Subscribes to changes of a specific store key. */
+        on(key: string, callback: (newValue: any, oldValue: any) => void): void;
     };
 
     /** Real-time cache of all Home Assistant states. */

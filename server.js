@@ -228,7 +228,36 @@ async function startSystem() {
 
 // --- ROUTERS ---
 const scriptsRouter = require('./routes/scripts')(workerManager, depManager, stateManager, io, SCRIPTS_DIR, STORAGE_DIR, LIBRARIES_DIR);
-const storeRouter = require('./routes/store')(storeManager);
+
+// PROXY: Damit Änderungen aus dem Store Explorer (UI) auch an die Worker gesendet werden
+const storeManagerUiWrapper = new Proxy(storeManager, {
+    get(target, prop) {
+        if (prop === 'set') {
+            return (key, value, owner, isSecret) => {
+                const current = target.data[key]?.value;
+                const res = target.set(key, value, owner, isSecret);
+                // Nur senden, wenn sich der Wert geändert hat
+                if (current !== value) {
+                    workerManager.broadcastToWorkers({ type: 'store_update', key, value });
+                }
+                return res;
+            };
+        }
+        if (prop === 'delete') {
+            return (key) => {
+                const exists = target.data[key] !== undefined;
+                const res = target.delete(key);
+                if (exists) {
+                    workerManager.broadcastToWorkers({ type: 'store_update', key, value: undefined });
+                }
+                return res;
+            };
+        }
+        return target[prop];
+    }
+});
+
+const storeRouter = require('./routes/store')(storeManagerUiWrapper);
 const systemRouter = require('./routes/system')(connector, logManager, () => systemOptions);
 
 app.use('/api/scripts', scriptsRouter);
