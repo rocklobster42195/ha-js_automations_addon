@@ -95,7 +95,7 @@ function registerCompletionProviders() {
         provideCompletionItems: function(model, position, context) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
             
-            if (textUntilPosition.match(/ha\.(updateState|on|onStateChange)\(\s*['"]$/) || 
+            if (textUntilPosition.match(/ha\.(update|on|onStateChange|getState|getAttr|getStateValue)\(\s*['"]$/) || 
                 textUntilPosition.match(/ha\.states\[\s*['"]$/) ||
                 textUntilPosition.match(/ha\.on\(\s*\[[^\]]*['"]$/)) {
                 return {
@@ -182,17 +182,61 @@ function registerCompletionProviders() {
 async function configureMonaco() {
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, checkJs: true, allowJs: true });
     try {
-        // apiFetch is global from app.js
+        // 1. Load Static API Definitions from file
+        let apiDefinitions = '';
+        try {
+            const resApi = await fetch('types/ha-api.d.ts');
+            if (resApi.ok) {
+                apiDefinitions = await resApi.text();
+            }
+        } catch (e) { console.warn("Failed to load ha-api.d.ts", e); }
+
+        // 2. Load Services for IntelliSense
+        let serviceMapDef = 'type ServiceMap = Record<string, Record<string, any>>;\n';
+        try {
+            const resSvc = await apiFetch('api/ha/services');
+            if (resSvc.ok) {
+                const services = await resSvc.json();
+                const domains = Object.keys(services).sort();
+                
+                const lines = domains.map(d => {
+                    const domainServices = services[d];
+                    const serviceLines = Object.keys(domainServices).map(s => {
+                        const sData = domainServices[s];
+                        const fields = sData.fields || {};
+                        const fieldProps = Object.keys(fields).map(f => `${f}?: any;`);
+                        
+                        // Common fields & Index Signature (allow extra props)
+                        if (!fields.entity_id) fieldProps.unshift('entity_id?: string | string[];');
+                        fieldProps.push('[key: string]: any;');
+
+                        return `'${s}': { ${fieldProps.join(' ')} };`;
+                    });
+                    return `'${d}': {\n${serviceLines.join('\n')}\n};`;
+                });
+                serviceMapDef = `interface ServiceMap {\n${lines.join('\n')}\n}`;
+            }
+        } catch (e) { console.warn("Failed to load services for types", e); }
+
+        // 3. Load Dynamic Entities from Server
         const res = await apiFetch('api/scripts/entities.d.ts/content');
         const data = await res.json();
+        
         if (data.content) {
             const matches = data.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g);
             if (matches) {
                 allEntities = matches.map(m => m.replace(/"/g, '')).sort();
                 console.log(`✅ Loaded ${allEntities.length} Entities.`);
             }
+            
+            // Merge Dynamic Entities with Static API
             const entities = data.content.replace(/export /g, '').replace(/type EntityID =\s+\|/g, 'type EntityID = ');
-            const lib = `${entities}\n\ninterface HAAttributes { friendly_name?: string; unit_of_measurement?: string; icon?: string; device_class?: string; state_class?: 'measurement' | 'total' | 'total_increasing'; entity_picture?: string; last_updated_by?: string; [key: string]: any; }\ninterface HA { log(message: any): void; error(message: any): void; callService(domain: string, service: string, data?: Record<string, any>): void; updateState(entityId: EntityID, state: any, attributes?: HAAttributes): void; store: { val: Record<string, any>; set(key: string, value: any, isSecret?: boolean): void; get(key: string): any; delete(key: string): void; }; states: Record<EntityID, { state: string; attributes: any; }>; on(pattern: EntityID | string | string[], callback: (event: any) => void): void; onStop(callback: () => void): void; select(pattern: string): { count: number; each(callback: (entity: any) => void): void; map<T>(callback: (entity: any) => T): T[]; }; }\ndeclare var ha: HA;\ndeclare var axios: any;\ndeclare function schedule(cron: string, callback: () => void): void;\ndeclare function sleep(ms: number): Promise<void>;`;
+            
+            // Merge everything: Entities + Static API (with placeholders replaced)
+            let staticLib = apiDefinitions.replace(/type EntityID = string;/, '');
+            staticLib = staticLib.replace(/type ServiceMap = Record<string, Record<string, any>>;/, serviceMapDef);
+            
+            const lib = `${entities}\n\n${staticLib}`;
             monaco.languages.typescript.javascriptDefaults.addExtraLib(lib, 'file:///ha-api.d.ts');
         }
     } catch (e) {}
@@ -232,7 +276,8 @@ function insertCodeSnippet(type) {
     else if (type === 'listener') template = "ha.on('${1:entity_id}', (e) => {\n\t${2:// code}\n});";
     else if (type === 'listener_array') template = "ha.on(['${1:entity_1}', '${2:entity_2}'], (e) => {\n\t${3:// code}\n});";
     else if (type === 'state') template = "ha.states['${1:entity_id}']";
-    else if (type === 'update_state') template = "ha.updateState('${1:sensor.my_sensor}', '${2:state_value}', {\n\tfriendly_name: '${3:Name}',\n\tunit_of_measurement: '${4:EUR}',\n\ticon: '${5:mdi:robot}',\n\tdevice_class: '${6:monetary}',\n\tentity_picture: '${7:https://...}',\n\tlast_updated_by: '${8:JS-Automation}'\n});";
+    else if (type === 'register') template = "ha.register('sensor.${1:my_sensor}', {\n\tname: '${2:My Sensor}',\n\ticon: '${3:mdi:eye}',\n\tarea: '${4:Area}',\n\tlabels: ['${5:Label}']\n});";
+    else if (type === 'update_state') template = "ha.update('${1:sensor.my_sensor}', '${2:state_value}', {\n\tfriendly_name: '${3:Name}',\n\tunit_of_measurement: '${4:EUR}',\n\ticon: '${5:mdi:robot}',\n\tdevice_class: '${6:monetary}',\n\tentity_picture: '${7:https://...}',\n\tlast_updated_by: '${8:JS-Automation}'\n});";
     else if (type === 'select') template = "ha.select('${1:light.*}').turnOff();";
     else if (type === 'on_stop') template = "ha.onStop(() => {\n\t${1:// cleanup code}\n});";
     else if (type === 'store_set') template = "ha.store.set('${1:key}', ${2:value});";
@@ -346,13 +391,36 @@ async function loadLibraryDefinitions() {
     } catch (e) { console.warn("IntelliSense Load Error", e); }
 }
 
+function loadEditorSettings() {
+    if (typeof editor === 'undefined' || !editor) return;
+    
+    // Restore Word Wrap
+    const savedWrap = localStorage.getItem('js_editor_wordwrap');
+    if (savedWrap) {
+        editor.updateOptions({ wordWrap: savedWrap });
+        const wrapButton = document.getElementById('btn-word-wrap');
+        if (wrapButton) {
+            const icon = wrapButton.querySelector('i');
+            if (icon) icon.className = `mdi mdi-wrap${savedWrap === 'on' ? '' : '-disabled'}`;
+        }
+    }
+
+    // Restore Minimap Scale
+    const savedScale = localStorage.getItem('js_editor_minimap_scale');
+    if (savedScale) {
+        editor.updateOptions({ minimap: { scale: parseInt(savedScale, 10) } });
+    }
+}
+
 // Make globally available
 window.registerCompletionProviders = registerCompletionProviders;
 window.configureMonaco = configureMonaco;
 window.updateIconDecorations = updateIconDecorations;
 window.insertCodeSnippet = insertCodeSnippet;
 window.toggleWordWrap = toggleWordWrap;
+window.toggleMinimapSize = toggleMinimapSize;
 window.openEntityPicker = openEntityPicker;
 window.closeEntityPicker = closeEntityPicker;
 window.filterEntityPicker = filterEntityPicker;
 window.loadLibraryDefinitions = loadLibraryDefinitions;
+window.loadEditorSettings = loadEditorSettings;

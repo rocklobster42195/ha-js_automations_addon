@@ -106,8 +106,40 @@ class EntitySelector {
     /** Shortcut to turn all selected entities OFF */
     turnOff(data = {}) { return this.call('turn_off', data); }
 
+    /** Expands groups to their members */
+    expand() {
+        const expanded = new Map();
+        this.list.forEach(entity => {
+            const members = entity.attributes?.entity_id;
+            if (Array.isArray(members) && members.length > 0) {
+                members.forEach(mid => {
+                    const mState = this.ha.states[mid];
+                    if (mState) expanded.set(mid, mState);
+                });
+            } else {
+                expanded.set(entity.entity_id, entity);
+            }
+        });
+        return new EntitySelector(Array.from(expanded.values()), this.ha);
+    }
+
     /** Returns the raw array of state objects */
     toArray() { return this.list; }
+}
+
+/** Helper: Checks if an entity ID matches a pattern (String, Wildcard, Array, RegExp) */
+function matches(entityId, pattern) {
+    if (typeof pattern === 'string') {
+        if (pattern === entityId) return true;
+        if (pattern.includes('*')) {
+            const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+            return regex.test(entityId);
+        }
+        return false;
+    }
+    if (Array.isArray(pattern)) return pattern.includes(entityId);
+    if (pattern instanceof RegExp) return pattern.test(entityId);
+    return false;
 }
 
 /**
@@ -135,12 +167,44 @@ function ensureMessageListener() {
             // FIX: Update cache immediately so ha.states is current in the callback
             if (msg.state) states[msg.entity_id] = msg.state;
 
-            subscriptionCallbacks.forEach(sub => sub.callback({
-                entity_id: msg.entity_id,
-                state: msg.state.state,
-                old_state: msg.old_state?.state,
-                attributes: msg.state.attributes
-            }));
+            subscriptionCallbacks.forEach(sub => {
+                // 1. Check Pattern Match
+                if (!matches(msg.entity_id, sub.pattern)) return;
+
+                // 2. Check Filter Logic (if present)
+                if (sub.filter && sub.filter !== 'any') {
+                    const valNew = msg.state?.state;
+                    const valOld = msg.old_state?.state;
+                    
+                    // Helper for numeric conversion
+                    const nNew = parseFloat(valNew);
+                    const nOld = parseFloat(valOld);
+                    // Check if values are valid numbers for numeric comparisons
+                    const isNum = !isNaN(nNew) && (sub.threshold === undefined ? !isNaN(nOld) : true);
+                    
+                    // Determine comparison value (Threshold or Old Value)
+                    const compVal = sub.threshold !== undefined ? parseFloat(sub.threshold) : nOld;
+                    const compValStr = sub.threshold !== undefined ? String(sub.threshold) : valOld;
+
+                    let match = false;
+                    switch (sub.filter) {
+                        case 'ne': match = sub.threshold !== undefined ? valNew != compValStr : valNew !== valOld; break;
+                        case 'eq': match = sub.threshold !== undefined ? valNew == compValStr : valNew === valOld; break;
+                        case 'gt': match = isNum && nNew > compVal; break;
+                        case 'ge': match = isNum && nNew >= compVal; break;
+                        case 'lt': match = isNum && nNew < compVal; break;
+                        case 'le': match = isNum && nNew <= compVal; break;
+                    }
+                    if (!match) return;
+                }
+
+                sub.callback({
+                    entity_id: msg.entity_id,
+                    state: msg.state.state,
+                    old_state: msg.old_state?.state,
+                    attributes: msg.state.attributes
+                });
+            });
         }
 
         // Handle master request to stop gracefully
@@ -175,6 +239,32 @@ const ha = {
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
     
+    update: (entityId, arg2, arg3) => {
+        let state = arg2;
+        let attributes = arg3;
+
+        // Overload: ha.update(id, { attributes }) -> Keep current state
+        if (attributes === undefined && typeof arg2 === 'object' && arg2 !== null && !Array.isArray(arg2)) {
+            const current = states[entityId];
+            state = current ? current.state : undefined;
+            attributes = arg2;
+        }
+
+        // ALIAS: name -> friendly_name (für Konsistenz mit ha.register)
+        if (attributes && attributes.name && !attributes.friendly_name) {
+            attributes = { ...attributes, friendly_name: attributes.name };
+            delete attributes.name;
+        }
+
+        // ALIAS: unit -> unit_of_measurement
+        if (attributes && attributes.unit && !attributes.unit_of_measurement) {
+            attributes = { ...attributes, unit_of_measurement: attributes.unit };
+            delete attributes.unit;
+        }
+
+        parentPort.postMessage({ type: 'update_state', entityId, state, attributes: attributes || {} });
+    },
+    
     /**
      * Registriert eine native Home Assistant Entität (via Integration).
      * Erstellt sie neu oder aktualisiert die Konfiguration, falls vorhanden.
@@ -182,12 +272,42 @@ const ha = {
      * @param {object} config - Konfiguration (name, icon, type, unit_of_measurement, etc.)
      */
     register: (entityId, config = {}) => {
+        // ALIAS: unit -> unit_of_measurement
+        if (config.unit && !config.unit_of_measurement) {
+            config = { ...config, unit_of_measurement: config.unit };
+            delete config.unit;
+        }
         // Wir senden den Intent an den Hauptprozess, der entscheidet (Integration vs. Legacy)
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },
     
     // Real-time Data
     states: states,
+    getState: (entityId) => states[entityId],
+    getAttr: (entityId, attr) => states[entityId]?.attributes?.[attr],
+    getStateValue: (entityId) => {
+        const val = states[entityId]?.state;
+        if (val === undefined) return undefined;
+        if (val === 'on') return true;
+        if (val === 'off') return false;
+        const num = Number(val);
+        if (!isNaN(num) && val.trim() !== '') return num;
+        return val;
+    },
+    getGroupMembers: (entityId) => {
+        const s = states[entityId];
+        return (s && Array.isArray(s.attributes?.entity_id)) ? s.attributes.entity_id : [];
+    },
+    
+    /**
+     * Liest einen Wert aus dem Skript-Header.
+     */
+    getHeader: (key, defaultValue) => {
+        if (!key) return defaultValue;
+        const k = key.toLowerCase();
+        const val = workerData[k];
+        return val !== undefined ? val : defaultValue;
+    },
 
     select: (pattern) => {
         const allIds = Object.keys(states);
@@ -210,11 +330,23 @@ const ha = {
         return new EntitySelector(matchedStates, ha);
     },
     
-    on: (pattern, callback) => {
+    on: (pattern, arg2, arg3, arg4) => {
         parentPort.ref(); // Keep alive
         ensureMessageListener();
         parentPort.postMessage({ type: 'subscribe', pattern });
-        subscriptionCallbacks.push({ pattern, callback });
+        
+        let callback, filter, threshold;
+        if (typeof arg2 === 'function') {
+            callback = arg2;
+        } else if (typeof arg3 === 'function') {
+            filter = arg2;
+            callback = arg3;
+        } else {
+            filter = arg2;
+            threshold = arg3;
+            callback = arg4;
+        }
+        subscriptionCallbacks.push({ pattern, callback, filter, threshold });
     },
     
     onStop: (cb) => {

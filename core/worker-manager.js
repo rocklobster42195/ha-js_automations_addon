@@ -21,7 +21,8 @@ class WorkerManager extends EventEmitter {
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
-        this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> uniqueId
+        this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> Payload (Config)
+        this.scriptEntityMap = new Map(); // Trackt Zugehörigkeit: filename -> Set<entityId>
 
         // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -51,6 +52,43 @@ class WorkerManager extends EventEmitter {
 
     getScriptStats(filename) {
         return this.stats.get(filename);
+    }
+
+    /**
+     * Sendet alle registrierten nativen Entitäten erneut an HA (z.B. nach Reconnect).
+     */
+    async republishNativeEntities() {
+        if (!this.haConnector || this.nativeEntities.size === 0) return;
+        this.emit('log', { source: 'System', message: `Republishing ${this.nativeEntities.size} native entities...`, level: 'info' });
+        
+        for (const [entityId, payload] of this.nativeEntities) {
+            try {
+                await this.haConnector.callService('js_automations', 'create_entity', payload);
+            } catch (e) {
+                this.emit('log', { source: 'System', message: `Failed to republish ${entityId}: ${e.message}`, level: 'warn' });
+            }
+        }
+    }
+
+    /**
+     * Löscht alle nativen Entitäten, die von einem bestimmten Skript erstellt wurden.
+     */
+    async removeScriptEntities(filename) {
+        if (!this.scriptEntityMap.has(filename)) return;
+        
+        const entities = this.scriptEntityMap.get(filename);
+        this.emit('log', { source: 'System', message: `Cleaning up ${entities.size} native entities for deleted script: ${path.basename(filename)}`, level: 'info' });
+        
+        for (const entityId of entities) {
+            const payload = this.nativeEntities.get(entityId);
+            if (payload && payload.unique_id && this.haConnector) {
+                try {
+                    await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
+                } catch (e) { /* Ignore errors during cleanup */ }
+            }
+            this.nativeEntities.delete(entityId);
+        }
+        this.scriptEntityMap.delete(filename);
     }
 
     /**
@@ -121,7 +159,7 @@ class WorkerManager extends EventEmitter {
                     } catch (e) {
                         // Fallback bei Fehler (z.B. Integration entladen)
                         this.emit('log', { source: 'System', message: `Native Update failed for ${msg.entityId}, falling back to legacy.`, level: 'warn' });
-                        this.nativeEntities.delete(msg.entityId);
+                        // Wir löschen es hier nicht sofort, damit ein Republish noch möglich ist, falls es nur ein temporärer Fehler war
                         await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                     }
                 } else {
@@ -135,10 +173,43 @@ class WorkerManager extends EventEmitter {
 
                 this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
 
+                // --- RESOLVE METADATA (Area & Labels) ---
+                const { areas, labels } = await this.haConnector.getHAMetadata();
+                
+                const resolveId = (input, list, idField) => {
+                    if (!input || typeof input !== 'string') return undefined;
+                    const cleanInput = input.trim();
+                    if (!cleanInput || !list) return undefined;
+                    const lowerInput = cleanInput.toLowerCase();
+                    // 1. ID Match
+                    const directMatch = list.find(item => item[idField] === cleanInput);
+                    if (directMatch) return directMatch[idField];
+                    // 2. Name Match
+                    const nameMatch = list.find(item => item.name && item.name.toLowerCase() === lowerInput);
+                    return nameMatch ? nameMatch[idField] : undefined;
+                };
+
+                // Area auflösen (unterstützt config.area_id und config.area)
+                let resolvedAreaId = config.area_id;
+                if (!resolvedAreaId && config.area) {
+                    resolvedAreaId = resolveId(config.area, areas, 'area_id');
+                    if (!resolvedAreaId) this.emit('log', { source: 'System', message: `⚠️ Could not resolve Area '${config.area}' for ${entityId}`, level: 'warn' });
+                }
+
+                // Labels auflösen (unterstützt Namen und IDs gemischt)
+                let resolvedLabels = [];
+                if (config.labels && Array.isArray(config.labels)) {
+                    resolvedLabels = config.labels.map(l => {
+                        const id = resolveId(l, labels, 'label_id');
+                        if (!id) this.emit('log', { source: 'System', message: `⚠️ Could not resolve Label '${l}' for ${entityId}`, level: 'warn' });
+                        return id;
+                    }).filter(id => id);
+                }
+
                 const payload = {
                     entity_id: entityId,
                     unique_id: config.unique_id || entityId,
-                    name: config.name || entityId,
+                    name: config.name || config.friendly_name || entityId,
                     icon: config.icon,
                     attributes: config.attributes || {}
                 };
@@ -150,9 +221,13 @@ class WorkerManager extends EventEmitter {
                 
                 // Map common attributes to payload.attributes
                 // Map common attributes to the top-level payload for the integration
-                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'area_id', 'labels', 'device_info'].forEach(key => {
+                // NOTE: area_id und labels behandeln wir separat oben
+                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'].forEach(key => {
                     if (config[key]) payload[key] = config[key];
                 });
+
+                if (resolvedAreaId) payload.area_id = resolvedAreaId;
+                if (resolvedLabels.length > 0) payload.labels = resolvedLabels;
 
                 // AUTO-INJECT DEVICE INFO if missing
                 // Damit landen Sensoren automatisch im Gerät des Skripts
@@ -169,7 +244,14 @@ class WorkerManager extends EventEmitter {
                 try {
                     // Wir senden den Befehl und warten nicht auf eine Antwort, aber fangen Fehler ab.
                     await this.haConnector.callService('js_automations', 'create_entity', payload);
-                    this.nativeEntities.set(entityId, payload.unique_id);
+                    this.nativeEntities.set(entityId, payload);
+                    
+                    // Track ownership for cleanup
+                    if (!this.scriptEntityMap.has(scriptMeta.filename)) {
+                        this.scriptEntityMap.set(scriptMeta.filename, new Set());
+                    }
+                    this.scriptEntityMap.get(scriptMeta.filename).add(entityId);
+
                     this.emit('log', { source: 'System', message: `Successfully sent registration for ${entityId}`, level: 'debug' });
                 } catch (e) {
                     // Dieser Fehler wird geworfen, wenn die Integration nicht da ist oder der Payload falsch ist.

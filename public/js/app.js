@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 theme: 'vs-dark',
                 automaticLayout: true,
                 fontSize: 13,
-                minimap: { enabled: false },
+                minimap: { enabled: true },
                 suggest: { showWords: false }
             });
 
@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { id: 'snip-log', type: 'log', label: 'snippet_log', group: '90_snippets_general', order: 1 },
                 { id: 'snip-service', type: 'service', label: 'snippet_service', group: '90_snippets_general', order: 2 },
                 { id: 'snip-listener', type: 'listener', label: 'snippet_listener', group: '90_snippets_general', order: 3 },
+                { id: 'snip-register', type: 'register', label: 'snippet_register', group: '91_snippets_state', order: 0 },
                 { id: 'snip-state', type: 'state', label: 'snippet_state', group: '91_snippets_state', order: 1 },
                 { id: 'snip-update', type: 'update_state', label: 'snippet_update_state', group: '91_snippets_state', order: 2 },
                 { id: 'snip-store-set', type: 'store_set', label: 'snippet_store_set', group: '92_snippets_store', order: 1 },

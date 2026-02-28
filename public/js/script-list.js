@@ -8,7 +8,9 @@ var collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections')
 
 async function loadScripts() {
     // Refresh Metadata (Labels, Areas) in background
-    if (typeof loadHAMetadata === 'function') loadHAMetadata();
+    if (typeof loadHAMetadata === 'function') {
+        try { await loadHAMetadata(); } catch (e) { console.debug("Metadata load error", e); }
+    }
 
     // apiFetch is global from app.js
     const res = await apiFetch('api/scripts');
@@ -78,6 +80,7 @@ function renderScripts(scripts, updateGlobal = true) {
 
     // 1. Gruppieren nach Label
     const groups = {};
+    const groupDisplayNames = {};
     const NO_GROUP = '___none___';
     const LIB_GROUP = '___libraries___';
 
@@ -85,9 +88,21 @@ function renderScripts(scripts, updateGlobal = true) {
         // Check if it is a library (based on path)
         const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
         
-        const groupKey = isLib ? LIB_GROUP : ((script.label && script.label.trim() !== '') ? script.label : NO_GROUP);
-        if (!groups[groupKey]) groups[groupKey] = [];
-        groups[groupKey].push(script);
+        const rawLabel = (script.label && script.label.trim() !== '') ? script.label : NO_GROUP;
+        const groupKey = isLib ? LIB_GROUP : rawLabel;
+        
+        const normalizedKey = (groupKey === NO_GROUP || groupKey === LIB_GROUP) ? groupKey : groupKey.toLowerCase();
+
+        if (!groups[normalizedKey]) {
+            groups[normalizedKey] = [];
+            groupDisplayNames[normalizedKey] = groupKey;
+        } else {
+            // Falls der bisherige Anzeigename nur Kleinbuchstaben enthält, der neue aber nicht -> Update auf "schönere" Schreibweise
+            if (groupDisplayNames[normalizedKey] === normalizedKey && groupKey !== normalizedKey) {
+                groupDisplayNames[normalizedKey] = groupKey;
+            }
+        }
+        groups[normalizedKey].push(script);
     });
 
     // 2. Gruppen sortieren (Alphabetisch, "Nicht zugeordnet" ganz unten)
@@ -106,10 +121,10 @@ function renderScripts(scripts, updateGlobal = true) {
         groupDiv.className = 'script-group';
 
         // Einklapp-Zustand prüfen, bei Suche immer ausklappen
-        const isCollapsed = isSearchActive ? false : collapsedSections.includes(key);
+        const isCollapsed = isSearchActive ? false : collapsedSections.some(s => s.toLowerCase() === key.toLowerCase());
 
         // --- HEADER ERSTELLEN ---
-        let headerName = key === NO_GROUP ? i18next.t('group_none') : key;
+        let headerName = key === NO_GROUP ? i18next.t('group_none') : (groupDisplayNames[key] || key);
         let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
         let iconStyle = '';
 
@@ -118,9 +133,10 @@ function renderScripts(scripts, updateGlobal = true) {
             iconClass = "mdi-bookshelf";
         }
 
-        if (key !== NO_GROUP && typeof haData !== 'undefined') {
-            const haLabel = haData.labels.find(l => l.name === key);
+        if (key !== NO_GROUP && typeof haData !== 'undefined' && haData && Array.isArray(haData.labels)) {
+            const haLabel = haData.labels.find(l => l.name.toLowerCase() === key);
             if (haLabel) {
+                headerName = haLabel.name;
                 if (haLabel.icon) iconClass = haLabel.icon.replace(':', '-');
                 if (haLabel.color) iconStyle = `color: ${haLabel.color};`;
             }
@@ -154,7 +170,7 @@ function renderScripts(scripts, updateGlobal = true) {
             if (nowHidden) {
                 if (!collapsedSections.includes(key)) collapsedSections.push(key);
             } else {
-                collapsedSections = collapsedSections.filter(s => s !== key);
+                collapsedSections = collapsedSections.filter(s => s.toLowerCase() !== key.toLowerCase());
             }
             localStorage.setItem('js_collapsed_sections', JSON.stringify(collapsedSections));
         };

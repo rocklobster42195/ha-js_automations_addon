@@ -94,7 +94,7 @@ async function startSystem() {
         await connector.connect();
         
         // Integration Check (Ping)
-        const hasIntegration = await connector.checkIntegrationAvailable();
+        let hasIntegration = await connector.checkIntegrationAvailable();
         const intMsg = hasIntegration 
             ? "✅ Native Integration (js_automations) detected." 
             : "⚠️ Native Integration not found. Using Legacy Mode (HTTP).";
@@ -118,11 +118,13 @@ async function startSystem() {
 
         // Lifecycle Events
         workerManager.on('script_start', ({ filename, meta }) => {
+            // State Persistence: Save started state for everything except buttons
+            if (!meta || meta.expose !== 'button') {
+                stateManager.saveScriptStarted(filename);
+            }
+
             // Nur Switches bekommen Status-Updates (Buttons sind stateless)
             if (!meta || meta.expose !== 'switch') return;
-
-            // FIX: Save state for autostart
-            stateManager.saveScriptStarted(filename);
 
             const scriptName = path.basename(filename, '.js');
             // FIX: Ensure entityId and unique_id are lowercase to match creation
@@ -143,11 +145,17 @@ async function startSystem() {
         });
 
         workerManager.on('script_exit', (d) => {
-            // Nur Switches bekommen Status-Updates
-            if (d.meta && d.meta.expose === 'switch') {
-                if (d.type === 'error' || d.reason.includes('finished') || d.reason.includes('stopped by user')) {
+            // State Persistence: Save stopped state for everything except buttons
+            // We ignore 'restarting' to preserve the state during updates
+            if (!d.meta || d.meta.expose !== 'button') {
+                const isPermanentStop = d.type === 'error' || d.reason === 'finished' || d.reason === 'by user' || d.reason.includes('stopped by user');
+                if (isPermanentStop) {
                     stateManager.saveScriptStopped(d.filename);
                 }
+            }
+
+            // Nur Switches bekommen Status-Updates
+            if (d.meta && d.meta.expose === 'switch') {
                 const scriptName = path.basename(d.filename, '.js');
 
                 // FIX: Ensure entityId and unique_id are lowercase to match creation
@@ -203,6 +211,11 @@ async function startSystem() {
                 try {
                     await connector.connect();
                     console.log("✅ HA Reconnected!");
+                    
+                    // Re-Check Integration & Re-Register Entities
+                    hasIntegration = await connector.checkIntegrationAvailable();
+                    await entityManager.createExposedEntities(hasIntegration);
+                    await workerManager.republishNativeEntities();
                 } catch (e) {
                     console.error("❌ Reconnection failed:", e.message);
                 } finally {

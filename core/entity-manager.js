@@ -17,8 +17,31 @@ class EntityManager {
         this.startWatcher();
     }
 
+    /**
+     * Versucht, einen Namen (z.B. "Wohnzimmer") in eine ID (z.B. "wohnzimmer") aufzulösen.
+     */
+    resolveId(input, list, idField) {
+        if (!input || typeof input !== 'string') return undefined;
+        const cleanInput = input.trim();
+        if (!cleanInput || !list || list.length === 0) return undefined;
+
+        const lowerInput = cleanInput.toLowerCase();
+        
+        // 1. Direkter ID Match
+        const directMatch = list.find(item => item[idField] === cleanInput);
+        if (directMatch) return directMatch[idField];
+
+        // 2. Namens-Match (Case-Insensitive)
+        const nameMatch = list.find(item => item.name && item.name.toLowerCase() === lowerInput);
+        return nameMatch ? nameMatch[idField] : undefined;
+    }
+
     async createExposedEntities(hasIntegration = false) {
         const scripts = await this.workerManager.getScripts();
+        
+        // Metadaten für Lookup laden
+        const { areas, labels } = await this.haConnection.getHAMetadata();
+
         for (const scriptPath of scripts) {
             // Skip libraries (they are passive and live in /libraries subfolder)
             if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
@@ -31,18 +54,39 @@ class EntityManager {
 
             const domain = meta.expose === 'button' ? 'button' : 'switch';
             const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
+            const entityIcon = domain === 'button' ? 'mdi:play' : meta.icon;
+            
+            // Check current state (for reconnects/restarts)
+            const isRunning = this.workerManager.workers.has(scriptPath);
+            const initialState = (domain === 'switch' && isRunning) ? 'on' : 'off';
 
             if (hasIntegration) {
                 // Native Creation (Persistent & Unique ID)
                 const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
+
+                // IDs auflösen
+                const areaId = this.resolveId(meta.area, areas, 'area_id');
+                
+                // Labels auflösen (Array oder Komma-String)
+                let resolvedLabels = [];
+                if (meta.label) {
+                    const rawLabels = Array.isArray(meta.label) ? meta.label : String(meta.label).split(',');
+                    resolvedLabels = rawLabels.map(l => {
+                        const id = this.resolveId(l, labels, 'label_id');
+                        if (!id) console.warn(`[EntityManager] ⚠️ Could not resolve Label '${l.trim()}' for ${scriptName}`);
+                        return id;
+                    }).filter(id => id);
+                }
+
+                if (meta.area && !areaId) console.warn(`[EntityManager] ⚠️ Could not resolve Area '${meta.area}' for ${scriptName}`);
                 
                 const payload = {
                     entity_id: entityId,
                     unique_id: uniqueId,
                     name: meta.name,
-                    icon: meta.icon,
-                    area_id: meta.area || undefined,
-                    labels: meta.label ? [meta.label] : [],
+                    icon: entityIcon,
+                    area_id: areaId,
+                    labels: resolvedLabels,
                     device_info: {
                         identifiers: [`js_automations_script_${scriptName}`],
                         name: meta.name || scriptName,
@@ -57,7 +101,8 @@ class EntityManager {
 
                 // Switch braucht einen initialen State
                 if (domain === 'switch') {
-                    payload.state = 'off';
+                    payload.state = initialState;
+                    if (isRunning) payload.icon = 'mdi:play';
                 }
 
                 await this.haConnection.callService('js_automations', 'create_entity', {
@@ -70,13 +115,18 @@ class EntityManager {
                 if (domain === 'switch' || domain === 'button') {
                     this.haConnection.createEntity(domain, scriptName, 'js_automations', {
                         friendly_name: meta.name,
-                        icon: meta.icon,
+                        icon: entityIcon,
                     });
+                    
+                    // Bei Legacy müssen wir den State separat setzen, falls er 'on' sein soll
+                    if (initialState === 'on') {
+                        this.haConnection.updateState(entityId, 'on', { icon: 'mdi:play' });
+                    }
                 }
             }
 
             this.stateManager.registerEntity(entityId, scriptPath);
-            this.stateManager.set(entityId, 'off');
+            this.stateManager.set(entityId, initialState);
         }
     }
 
@@ -85,57 +135,153 @@ class EntityManager {
         
         // Simple debounce map to avoid double events on save
         const debounceTimers = new Map();
+        
+        const onWatch = (dir, eventType, filename) => {
+            if (filename && filename.endsWith('.js')) {
+                const fullPath = path.join(dir, filename);
+                if (debounceTimers.has(fullPath)) clearTimeout(debounceTimers.get(fullPath));
+                
+                debounceTimers.set(fullPath, setTimeout(() => {
+                    this.processSingleScript(fullPath);
+                }, 500));
+            }
+        };
 
         try {
-            fs.watch(this.workerManager.scriptsDir, (eventType, filename) => {
-                if (filename && filename.endsWith('.js')) {
-                    if (debounceTimers.has(filename)) clearTimeout(debounceTimers.get(filename));
-                    
-                    debounceTimers.set(filename, setTimeout(() => {
-                        this.processSingleScript(path.join(this.workerManager.scriptsDir, filename));
-                    }, 500));
-                }
-            });
+            // Watch Root
+            fs.watch(this.workerManager.scriptsDir, (eventType, filename) => onWatch(this.workerManager.scriptsDir, eventType, filename));
+            
+            // Watch Libraries (Explicitly for Linux compatibility)
+            const libDir = path.join(this.workerManager.scriptsDir, 'libraries');
+            if (fs.existsSync(libDir)) {
+                fs.watch(libDir, (eventType, filename) => onWatch(libDir, eventType, filename));
+            }
         } catch (e) {
             console.error("[EntityManager] Failed to watch scripts directory:", e);
         }
     }
 
     async processSingleScript(scriptPath) {
-        if (!fs.existsSync(scriptPath)) return;
+        const scriptName = path.basename(scriptPath, '.js');
+
+        // --- DELETION HANDLING ---
+        if (!fs.existsSync(scriptPath)) {
+            console.log(`[EntityManager] Script deleted: ${scriptName}. Cleaning up entities...`);
+            
+            // 1. Clean up dynamic entities (via WorkerManager)
+            await this.workerManager.removeScriptEntities(scriptPath);
+
+            // 2. Clean up exposed entities (Switch/Button) - Blind cleanup based on ID pattern
+            const hasIntegration = await this.haConnection.checkIntegrationAvailable();
+            if (hasIntegration) {
+                const domains = ['switch', 'button'];
+                for (const domain of domains) {
+                    const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
+                    try {
+                        await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: uniqueId });
+                    } catch (e) { /* Ignore if not exists */ }
+                }
+            }
+            return;
+        }
         
         try {
             const meta = ScriptParser.parse(scriptPath);
-            if (!meta.expose) return;
+            const fileName = path.basename(scriptPath);
+
+            // 1. Library Handling: Check dependents
+            if (path.basename(path.dirname(scriptPath)) === 'libraries') {
+                const runningScripts = Array.from(this.workerManager.workers.keys());
+                for (const runningScriptFile of runningScripts) {
+                    const runningScriptPath = path.join(this.workerManager.scriptsDir, runningScriptFile);
+                    // Parse running script to check includes (lightweight op)
+                    const runningMeta = ScriptParser.parse(runningScriptPath);
+                    
+                    const depends = runningMeta.includes && runningMeta.includes.some(lib => {
+                        return lib === fileName || lib === scriptName || lib + '.js' === fileName;
+                    });
+
+                    if (depends) {
+                        console.log(`[EntityManager] Restarting ${runningScriptFile} due to library update (${fileName}).`);
+                        this.workerManager.startScript(runningScriptFile);
+                    }
+                }
+                return; // Libraries don't have entities
+            }
+
+            // Wir entfernen den Early-Return, um auch Löschungen zu verarbeiten
+            // if (!meta.expose) return;
 
             const hasIntegration = await this.haConnection.checkIntegrationAvailable();
-            const scriptName = path.basename(scriptPath, '.js');
-            const domain = meta.expose === 'button' ? 'button' : 'switch';
-            const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
-
-            if (hasIntegration) {
-                const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
-                const payload = {
-                    entity_id: entityId,
-                    unique_id: uniqueId,
-                    name: meta.name,
-                    icon: meta.icon,
-                    area_id: meta.area || undefined,
-                    labels: meta.label ? [meta.label] : [],
-                    device_info: {
-                        identifiers: [`js_automations_script_${scriptName}`],
-                        name: meta.name || scriptName,
-                        manufacturer: "JS Automations",
-                        model: "Script",
-                    },
-                    attributes: { source: 'JS Automations Addon', script: scriptName }
-                };
-                // Note: We do NOT send 'state' here to avoid resetting a running switch to 'off' on save.
-                
-                await this.haConnection.callService('js_automations', 'create_entity', payload);
-            }
             
-            this.stateManager.registerEntity(entityId, scriptPath);
+            // Metadaten für Lookup laden
+            const { areas, labels } = await this.haConnection.getHAMetadata();
+            
+            // Wir prüfen beide möglichen Domänen, um ggf. alte Typen zu löschen (z.B. Wechsel von switch zu button)
+            const domains = ['switch', 'button'];
+
+            for (const domain of domains) {
+                const shouldExist = meta.expose === domain;
+                const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
+                const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
+                const entityIcon = domain === 'button' ? 'mdi:play' : meta.icon;
+
+                if (shouldExist) {
+                    // --- CREATE / UPDATE ---
+                    if (hasIntegration) {
+                        // IDs auflösen
+                        const areaId = this.resolveId(meta.area, areas, 'area_id');
+                        
+                        // Labels auflösen (Array oder Komma-String)
+                        let resolvedLabels = [];
+                        if (meta.label) {
+                            const rawLabels = Array.isArray(meta.label) ? meta.label : String(meta.label).split(',');
+                            resolvedLabels = rawLabels.map(l => {
+                                const id = this.resolveId(l, labels, 'label_id');
+                                if (!id) console.warn(`[EntityManager] ⚠️ Could not resolve Label '${l.trim()}' for ${scriptName}`);
+                                return id;
+                            }).filter(id => id);
+                        }
+
+                        if (meta.area && !areaId) console.warn(`[EntityManager] ⚠️ Could not resolve Area '${meta.area}' for ${scriptName}`);
+
+                        const payload = {
+                            entity_id: entityId,
+                            unique_id: uniqueId,
+                            name: meta.name,
+                            icon: entityIcon,
+                            area_id: areaId,
+                            labels: resolvedLabels,
+                            device_info: {
+                                identifiers: [`js_automations_script_${scriptName}`],
+                                name: meta.name || scriptName,
+                                manufacturer: "JS Automations",
+                                model: "Script",
+                            },
+                            attributes: { source: 'JS Automations Addon', script: scriptName }
+                        };
+                        // Note: We do NOT send 'state' here to avoid resetting a running switch to 'off' on save.
+                        await this.haConnection.callService('js_automations', 'create_entity', payload);
+                    } else {
+                        // Legacy Update (Best Effort)
+                        this.haConnection.createEntity(domain, scriptName, 'js_automations', {
+                            friendly_name: meta.name,
+                            icon: entityIcon,
+                        });
+                    }
+                    this.stateManager.registerEntity(entityId, scriptPath);
+                } else {
+                    // --- DELETE / CLEANUP ---
+                    if (hasIntegration) {
+                        try {
+                            await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: uniqueId });
+                        } catch (e) {
+                            // Ignorieren, falls Entität nicht existierte
+                        }
+                    }
+                    // Legacy Entitäten können nicht ohne Restart gelöscht werden
+                }
+            }
         } catch (e) {
             console.error(`[EntityManager] Error processing ${scriptPath}:`, e);
         }

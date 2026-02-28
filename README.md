@@ -193,6 +193,17 @@ ha.on(/^sensor\..*_humidity$/, (e) => {
 ha.on(['input_boolean.test', 'switch.garden'], (e) => {
     ha.log("One of the tracked entities changed");
 });
+
+// --- Filters & Thresholds ---
+// Run only if value increases ('gt' = greater than old value)
+ha.on('sensor.power_usage', 'gt', (e) => {
+    ha.log(`Power usage went up: ${e.state}`);
+});
+
+// Run only if value is greater than threshold (25)
+ha.on('sensor.temperature', 'gt', 25, (e) => {
+    ha.warn("It's getting hot!");
+});
 ```
 
 ### 3. Reading States (`ha.states`)
@@ -205,6 +216,20 @@ const name = ha.states['sensor.outdoor_temp'].attributes.friendly_name;
 if (parseFloat(temp) > 25) {
     ha.log(`It is hot in ${name}`);
 }
+
+// --- Helper Methods ---
+// Automatically converts state to Number or Boolean ('on'->true)
+const tempNum = ha.getStateValue('sensor.outdoor_temp'); // e.g. 25.5
+const isLightOn = ha.getStateValue('light.kitchen');     // e.g. true
+
+// Get a specific attribute directly
+const level = ha.getAttr('sensor.battery', 'battery_level');
+
+// Get group members as array
+const lights = ha.getGroupMembers('group.living_room_lights');
+
+// Read values from the script header (@name super_script)
+const scriptName = ha.getHeader('name', 'script');
 ```
 
 ### 4. Setting States & Creating Sensors (`ha.updateState`)
@@ -215,14 +240,17 @@ Create virtual sensors or update existing ones directly in HA.
 ha.register('sensor.js_energy_total', {
     name: 'Total Calculated Energy',
     icon: 'mdi:transmission-tower',
-    unit_of_measurement: 'kWh',
-        area_id: 'kitchen',           // Optional: Assign to an Area
+    unit: 'kWh',               // Alias for unit_of_measurement
+        area: 'kitchen',           // Optional: Assign to an Area
         labels: ['energy', 'solar'],  // Optional: Add Labels
         initial_state: 1250.5         // Optional: Set initial value
 });
 
-// Update the value later (e.g. in a loop)
-ha.updateState('sensor.js_energy_total', 1251.0);
+// Update only the value
+ha.update('sensor.js_energy_total', 1251.0);
+
+// Update only the icon (keeps current value)
+ha.update('sensor.js_energy_total', { icon: 'mdi:flash-alert' });
 ```
 
 ### 5. Calling Services (`ha.callService`)
@@ -258,6 +286,18 @@ const lowBatteries = ha.select('sensor.*_battery_level')
   .toArray();
 
 ha.log(`Found ${lowBatteries.length} sensors with low battery.`);
+
+// --- Groups ---
+// Expand a group to its members and control them
+ha.select('group.living_room_lights')
+  .expand() // Resolves the group to individual lights
+  .turnOff();
+
+// --- Groups ---
+// Expand a group to its members and control them
+ha.select('group.living_room_lights')
+  .expand() // Resolves the group to individual lights
+  .turnOff();
 ```
 
 ### 7. Persistent Store (`ha.store`)

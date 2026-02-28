@@ -29,6 +29,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+
+ 
+
 # --- Optional: User-Skripte ignorieren? ---
 # Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
@@ -36,8 +39,9 @@ Thumbs.db
 scripts/*.js
 
 # ...aber behalte vielleicht ein Beispiel:
-# !scripts/example.js
+!scripts/gemini_demo.js
+!scripts/cleanup_tool.js
 
 
-#AI_RULES.md
+AI_RULES.md
 package-lock.json
