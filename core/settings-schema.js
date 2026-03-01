@@ -179,7 +179,7 @@ module.exports = [
                 label: 'settings.system.backup', 
                 type: 'button', 
                 buttonLabel: 'Download System Backup', 
-                actionUrl: '/api/system/backup' ,
+                actionUrl: 'api/system/backup' ,
                 hidden: true // Nur anzeigen, wenn Backup-Funktion implementiert ist
             }
         ]

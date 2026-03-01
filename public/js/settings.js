@@ -41,9 +41,14 @@ async function openSettingsTab() {
 async function loadSettingsData() {
     try {
         const [schemaRes, settingsRes] = await Promise.all([
-            fetch('/api/settings/schema'),
-            fetch('/api/settings')
+            apiFetch('api/settings/schema'),
+            apiFetch('api/settings')
         ]);
+
+        if (!schemaRes.ok || !settingsRes.ok) {
+            console.error("Settings API Error:", schemaRes.status, settingsRes.status);
+            throw new Error(`Failed to load settings (API ${settingsRes.status})`);
+        }
 
         settingsSchema = await schemaRes.json();
         window.currentSettings = await settingsRes.json();
@@ -287,7 +292,7 @@ async function saveSetting(catId, key, value) {
     const payload = { [catId]: { [key]: value } };
     
     try {
-        await fetch('/api/settings', {
+        await apiFetch('api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
