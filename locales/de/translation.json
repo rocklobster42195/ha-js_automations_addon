@@ -42,6 +42,8 @@
   "script_action_duplicate_title": "Duplizieren",
   "download_script_title": "Skript herunterladen",
   "script_action_delete_title": "Löschen",
+  "global_store_explorer_title": "Globaler Store Explorer",
+  "settings_button_title": "Einstellungen",
   "confirm_discard_changes": "Änderungen an {{filename}} verwerfen?",
   "confirm_discard_all_changes": "Alle ungespeicherten Änderungen verwerfen?",
   "confirm_delete_script": "Skript '{{filename}}' löschen?",
@@ -61,6 +63,7 @@
   "error_file_exists": "'{{filename}}' existiert bereits.",
   "error_create_failed": "Erstellen fehlgeschlagen",
   "modal_insert_entity_title": "Entity einfügen",
+  "modal_select_entity_title": "Entity auswählen",
   "modal_edit_script_title": "Skript bearbeiten",
   "modal_duplicate_script_title": "Skript duplizieren",
   "entity_search_placeholder": "Entity suchen...",
@@ -100,5 +103,46 @@
   "error_wizard_no_file": "Keine Datei ausgewählt",
   "error_wizard_url_required": "URL ist erforderlich",
   "wizard_import_warning": "Achtung: Importiere nur Code aus vertrauenswürdigen Quellen.",
-  "wizard_placeholder_optional_name": "Optional: Skriptname"
+  "wizard_placeholder_optional_name": "Optional: Skriptname",
+  "settings_title": "Einstellungen",
+  "settings": {
+    "categories": {
+      "general": "Allgemein",
+      "editor": "Editor",
+      "statusbar": "Statusleiste",
+      "system": "System",
+      "danger": "Danger Zone"
+    },
+    "general": {
+      "language": "Sprache",
+      "expert_mode": "Expertenmodus",
+      "expert_mode_desc": "Zeigt erweiterte Optionen und technische Details an (z.B. Dateipfade, Raw-Ansichten).",
+      "confirm_delete": "Löschen bestätigen",
+      "confirm_delete_desc": "Zeigt eine Sicherheitsabfrage vor dem Löschen von Skripten an."
+    },
+    "editor": {
+      "show_toolbar": "Toolbar anzeigen",
+      "font_size": "Schriftgröße",
+      "word_wrap": "Zeilenumbruch", 
+      "word_wrap_desc": "Der Zeilenumbruch kann auch über den Button in der Toolbar gesteuert werden.",
+      "minimap": "Minimap anzeigen"
+    },
+    "statusbar": {
+      "show_statusbar": "Statusleiste anzeigen",
+      "show_statusbar_desc": "Zeigt die Statusleiste am unteren Rand der Anwendung an.",
+      "slot1": "Slot 1 (Links)",
+      "slot2": "Slot 2 (Rechts)",
+      "slot3": "Slot 3",
+      "custom_entity": "Benutzerdefinierte Entität",
+      "show_sparkline": "Sparkline anzeigen",
+      "show_sparkline_desc": "Zeigt einen kleinen Verlaufsgraphen für diesen Wert an."
+    },
+    "system": {
+      "log_level": "Log Level"
+    },
+    "danger": {
+      "node_memory": "Node.js Speicher (MB)",
+      "node_memory_desc": "Maximaler Arbeitsspeicher. Erfordert Neustart."
+    }
+  }
 }

@@ -5,6 +5,15 @@
 
 var editor = null; // Global instance for editor-config.js
 
+// Capture console methods immediately to allow restoring/filtering
+const originalConsole = {
+    log: console.log,
+    debug: console.debug,
+    info: console.info,
+    warn: console.warn,
+    error: console.error
+};
+
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize Internationalization
@@ -49,6 +58,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Register Keyboard Shortcuts (Ctrl+S / Cmd+S)
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
 
+            // --- SETTINGS INTEGRATION ---
+            window.addEventListener('settings-changed', (e) => {
+                applyEditorSettings(e.detail);
+                applySystemSettings(e.detail);
+            });
+            if (window.currentSettings) {
+                // Einstellungen mit einer kleinen Verzögerung anwenden, um sicherzustellen, dass Monaco vollständig bereit ist.
+                // Dies verhindert potenzielle Race Conditions während der Editor-Initialisierung.
+                setTimeout(() => {
+                    applyEditorSettings(window.currentSettings);
+                    applySystemSettings(window.currentSettings);
+                }, 100);
+            }
+
             // Add Context Menu Action: Insert Entity
             editor.addAction({
                 id: 'insert-entity',
@@ -85,8 +108,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadMDIIcons();
     loadHAServices();
     initLogs();
+
+    // Settings laden (nach i18n init)
+    if (window.loadSettingsData) window.loadSettingsData();
     
     injectSidebarFooter();
+
+    // Statusbar starten (nachdem Footer existiert und Socket bereit ist)
+    if (window.statusBar) window.statusBar.init();
 });
 
 function injectSidebarFooter() {
@@ -94,19 +123,79 @@ function injectSidebarFooter() {
     if (!sidebar) return;
     
     const footer = document.createElement('div');
-    footer.className = 'sidebar-footer';
+    footer.className = 'sidebar-footer'; // Bestehende Klasse für Styling beibehalten
+    footer.id = 'status-bar'; // ID für globale Steuerung (z.B. Ein-/Ausblenden) hinzufügen
     footer.innerHTML = `
-        <div class="stat-item" title="Backend Heartbeat">
-            <i id="heartbeat-icon" class="mdi mdi-heart-pulse" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
+        <div class="system-indicators" style="display:flex; gap:10px; align-items:center;">
+            <div class="stat-item" title="Backend Heartbeat">
+                <div id="heartbeat-icon" class="heartbeat-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></div>
+            </div>
+            <div id="integration-status-item" class="stat-item" title="HA Integration Status">
+                <div id="integration-status-icon" class="integration-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></div>
+            </div>
         </div>
-        <div class="stat-item" title="CPU Usage">
-            <i class="mdi mdi-chip"></i> <span id="stat-cpu" style="min-width:28px; text-align:right;">0%</span>
-            <canvas id="cpu-sparkline" width="24" height="20" style="margin-left:4px; opacity:0.8;"></canvas>
-        </div>
-        <div class="stat-item" title="RAM Usage">
-            <i class="mdi mdi-memory"></i> <span id="stat-ram">0 / 0 MB</span>
-            <canvas id="ram-sparkline" width="24" height="20" style="margin-left:4px; opacity:0.8;"></canvas>
+        <div class="status-slots">
+            <div id="sb-slot1" class="sb-item sb-hidden"></div>
+            <div id="sb-slot2" class="sb-item sb-hidden"></div>
         </div>
     `;
     sidebar.appendChild(footer);
+}
+
+/**
+ * Applies settings to the Monaco Editor instance.
+ */
+function applyEditorSettings(settings) {
+    if (!editor || !settings || !settings.editor) return;
+    const conf = settings.editor;
+
+    editor.updateOptions({
+        fontSize: conf.fontSize,
+        wordWrap: conf.wordWrap,
+        minimap: { enabled: conf.minimap }
+    });
+
+    const toolbar = document.querySelector('.editor-toolbar');
+    if (toolbar) {
+        const shouldHide = !conf.showToolbar;
+        if ((toolbar.style.display === 'none') !== shouldHide) {
+            toolbar.style.display = shouldHide ? 'none' : 'flex';
+            setTimeout(() => editor.layout(), 0);
+        }
+    }
+
+    // Sync Toolbar Button UI
+    const wrapButton = document.getElementById('btn-word-wrap');
+    if (wrapButton && wrapButton.querySelector('i')) {
+        wrapButton.querySelector('i').className = `mdi mdi-wrap${conf.wordWrap === 'on' ? '' : '-disabled'}`;
+    }
+}
+
+/**
+ * Applies system settings, specifically the log level for the browser console.
+ */
+function applySystemSettings(settings) {
+    if (!settings || !settings.system) return;
+    const level = settings.system.log_level || 'info';
+
+    // Reset to original methods first
+    console.log = originalConsole.log;
+    console.debug = originalConsole.debug;
+    console.info = originalConsole.info;
+    console.warn = originalConsole.warn;
+    console.error = originalConsole.error;
+
+    // Apply filter based on level
+    if (level === 'info') {
+        console.debug = function() {};
+    } else if (level === 'warn') {
+        console.debug = function() {};
+        console.log = function() {};
+        console.info = function() {};
+    } else if (level === 'error') {
+        console.debug = function() {};
+        console.log = function() {};
+        console.info = function() {};
+        console.warn = function() {};
+    }
 }

@@ -416,9 +416,7 @@ function loadEditorSettings() {
 window.registerCompletionProviders = registerCompletionProviders;
 window.configureMonaco = configureMonaco;
 window.updateIconDecorations = updateIconDecorations;
-window.insertCodeSnippet = insertCodeSnippet;
 window.toggleWordWrap = toggleWordWrap;
-window.toggleMinimapSize = toggleMinimapSize;
 window.openEntityPicker = openEntityPicker;
 window.closeEntityPicker = closeEntityPicker;
 window.filterEntityPicker = filterEntityPicker;

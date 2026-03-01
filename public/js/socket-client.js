@@ -4,9 +4,32 @@
  */
 
 var socket = null;
-var cpuHistory = new Array(10).fill(0);
-var ramHistory = new Array(10).fill(0);
 var overlayTimeout = null;
+
+// Global function to update HA Integration Status UI
+window.updateIntegrationStatusUI = function(isConnected, isIntegrationAvailable = null) { // isConnected: Socket zum Backend, isIntegrationAvailable: Backend zu HA-Integration
+    const el = document.getElementById('integration-status-item');
+    const icon = document.getElementById('integration-status-icon');
+    if (!el || !icon) return;
+
+    if (!isConnected) {
+        el.title = 'HA Integration: Disconnected (Socket)';
+        icon.style.backgroundColor = 'var(--danger)'; // Rot
+        icon.style.opacity = '1';
+    } else if (isIntegrationAvailable === null) {
+        el.title = 'HA Integration: Checking...';
+        icon.style.backgroundColor = '#999'; // Grau
+        icon.style.opacity = '0.3'; // Gedimmt
+    } else if (isIntegrationAvailable) {
+        el.title = 'HA Integration: Available';
+        icon.style.backgroundColor = '#fff'; // Weiß
+        icon.style.opacity = '1';
+    } else {
+        el.title = 'HA Integration: Not available (Legacy Mode)';
+        icon.style.backgroundColor = 'var(--warn)'; // Orange (Warnfarbe für Legacy)
+        icon.style.opacity = '1';
+    }
+};
 
 function initSocket() {
     // BASE_PATH is global from api.js
@@ -19,9 +42,11 @@ function initSocket() {
         
         // 1. Heartbeat Icon
         if (hb) {
-            hb.parentElement.title = isConnected ? 'Connected' : 'Disconnected';
-            hb.style.color = isConnected ? '#999' : 'var(--danger)';
+            const hbParent = hb.parentElement;
+            if (hbParent) hbParent.title = `Backend Heartbeat: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
+            hb.style.backgroundColor = isConnected ? '#fff' : 'var(--danger)';
             hb.style.opacity = '1';
+            // Rotation nur bei Connected zurücksetzen (falls es mal gespinnt hat)
             if (isConnected) hb.style.transform = '';
         }
 
@@ -48,10 +73,15 @@ function initSocket() {
 
     socket.on('connect', () => {
         updateConnectionUI(true);
+        // Initial status for integration is unknown on connect
+        requestIntegrationStatus(); // Explizit den Status anfordern
+        window.updateIntegrationStatusUI(true, null);
     });
 
     socket.on('disconnect', () => {
         updateConnectionUI(false);
+        // Integration is definitely not available if socket is disconnected
+        window.updateIntegrationStatusUI(false, false);
     });
 
     socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
@@ -61,40 +91,38 @@ function initSocket() {
         const hb = document.getElementById('heartbeat-icon');
         if (hb) {
             // Falls Verbindung wieder da ist (Daten kommen), aber Icon noch rot war: Reset
-            if (hb.style.color === 'var(--danger)') {
+            if (hb.style.backgroundColor === 'var(--danger)') {
                 updateConnectionUI(true);
             }
-        }
-
-        const cpuEl = document.getElementById('stat-cpu');
-        const ramEl = document.getElementById('stat-ram');
-        if (cpuEl) {
-            cpuEl.textContent = `${data.cpu}%`;
-            if (data.cpu >= 90) cpuEl.style.color = '#ff5555';      // Red
-            else if (data.cpu >= 70) cpuEl.style.color = '#ffb86c'; // Orange
-            else if (data.cpu >= 50) cpuEl.style.color = '#f1fa8c'; // Yellow
-            else cpuEl.style.color = '';                            // Default
-            
-            drawSparkline('cpu-sparkline', cpuHistory, data.cpu, (v) => v >= 90 ? '#ff5555' : (v >= 70 ? '#ffb86c' : (v >= 50 ? '#f1fa8c' : '#666666')), 100);
-        }
-        
-        if (ramEl) {
-            const sysUsed = data.ram_used > 1024 ? (data.ram_used / 1024).toFixed(1) + ' GB' : data.ram_used + ' MB';
-            
-            // Platz sparen: Nur Node-RAM anzeigen
-            ramEl.textContent = `${data.app_ram} MB`;
-            
-            // Tooltip erweitert um System-Werte (da hier Platz ist)
-            ramEl.parentElement.title = `Node Heap: ${data.app_heap} MB (Scripts)\nNode RSS: ${data.app_ram} MB (Total)\nSystem: ${sysUsed}`;
-            
-            // RAM Sparkline (Fixe Skala: 512MB = 100%. Ermöglicht bessere visuelle Einschätzung.)
-            drawSparkline('ram-sparkline', ramHistory, data.app_ram, (v) => v >= 1024 ? '#ff5555' : (v >= 512 ? '#ffb86c' : (v >= 256 ? '#f1fa8c' : '#666666')), 512);
         }
 
         if (data.script_stats && typeof updateScriptStats === 'function') {
             updateScriptStats(data.script_stats);
         }
     });
+
+    socket.on('integration_status', (data) => {
+        console.log('Socket: Received integration_status event:', data);
+        window.updateIntegrationStatusUI(true, data.available);
+    });
+
+    /**
+     * Fordert den aktuellen Integrationsstatus vom Backend an.
+     * Wird nach dem Socket-Connect aufgerufen, um Race Conditions zu vermeiden.
+     */
+    function requestIntegrationStatus() {
+        if (!socket || !socket.connected) return;
+        socket.emit('get_integration_status', (response) => {
+            if (response && response.error) {
+                console.error("Socket: Error requesting integration status:", response.error);
+                console.error("Socket: Error requesting integration status:", response.error);
+                window.updateIntegrationStatusUI(true, false); // Annahme: Fehler bedeutet nicht verfügbar
+            } else {
+                console.log("Socket: Received integration status response:", response);
+                window.updateIntegrationStatusUI(true, response.available);
+            }
+        });
+    }
 
     // Mobile Wake-Up Handler
     // Prüft beim Aufwecken des Handys sofort den Status
@@ -110,29 +138,32 @@ function initSocket() {
     });
 }
 
-function drawSparkline(id, history, val, colorFn, maxVal) {
-    history.push(val);
-    if (history.length > 10) history.shift();
-    
-    const canvas = document.getElementById(id);
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    ctx.clearRect(0, 0, w, h);
-    
-    const barW = (w / history.length) - 1;
-    history.forEach((v, i) => {
-        ctx.fillStyle = colorFn(v);
-        const barH = Math.max(2, (v / maxVal) * h); // Mindestens 2px hoch
-        ctx.fillRect(i * (barW + 1), h - barH, barW, barH);
-    });
-}
-
 // Global helper for the overlay button
 window.manualReload = function() {
     window.location.reload();
+};
+
+/**
+ * Ruft alle HA States über den WebSocket ab.
+ * Wartet auf Verbindung, falls noch nicht verbunden.
+ */
+window.getHAStates = function() {
+    return new Promise((resolve, reject) => {
+        if (!socket) return reject(new Error("Socket not initialized"));
+        
+        const request = () => {
+            socket.emit('get_ha_states', (response) => {
+                if (response && response.error) reject(new Error(response.error));
+                else resolve(response);
+            });
+        };
+
+        if (socket.connected) request();
+        else socket.once('connect', request);
+        
+        // Timeout nach 10s (falls Server nicht antwortet)
+        setTimeout(() => reject(new Error("Socket timeout (get_ha_states)")), 10000);
+    });
 };
 
 window.initSocket = initSocket;

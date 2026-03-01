@@ -14,6 +14,7 @@
     --text-dim: #666666;
     --success: #4caf50;
     --danger: #f44336;
+    --warn: #ff9800;
     --modal-bg: #1c1c1c;
     --input-bg: #222;
     color-scheme: dark;
@@ -53,8 +54,22 @@ button:disabled { opacity: 0.1 !important; cursor: default !important; }
 }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1rem; color: #fff !important; text-transform: uppercase; letter-spacing: 0.5px; }
-.brand i { color: var(--accent); font-size: 1.5rem; }
-body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
+.nav-logo {
+    display: block;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    background-color: var(--accent);
+    -webkit-mask-image: url('../img/nodejs.svg');
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-image: url('../img/nodejs.svg');
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+}
+body.expert-mode .nav-logo { background-color: #2e7d32; } /* Expert Mode: Dark Green */
 
 .version-tag {
     font-family: monospace;
@@ -84,8 +99,52 @@ body.expert-mode .brand i { color: #2e7d32; } /* Expert Mode: Dark Green */
 }
 body.expert-mode .sidebar-footer { display: flex; }
 
+.status-slots {
+    display: flex;
+    gap: 20px;
+    margin-left: auto;
+    align-items: center;
+}
+
+/* --- STATUS BAR SLOTS --- */
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sb-hidden { display: none !important; }
+
 .stat-item { display: flex; align-items: center; gap: 6px; cursor: help; }
 .stat-item i { font-size: 0.85rem; }
+.integration-icon {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    background-color: #999;
+    -webkit-mask-image: url('../img/nodejs.svg');
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-image: url('../img/nodejs.svg');
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+}
+.heartbeat-icon {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    background-color: #999;
+    -webkit-mask-image: url('../img/home-assistant.svg');
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-image: url('../img/home-assistant.svg');
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+}
 
 .header-actions { display: flex; gap: 2px; width: 100%; }
 .header-actions button { 
@@ -735,3 +794,39 @@ input#search-input:focus { border-color: var(--accent) !important; }
     filter: grayscale(100%);
     pointer-events: none;
 }
+
+/* --- REFERENCE UI --- */
+.ref-container { display: flex; height: 100%; width: 100%; }
+.ref-sidebar { width: 220px; background: #252526; border-right: 1px solid #333; padding: 10px 0; overflow-y: auto; flex-shrink: 0; }
+.ref-link { display: block; padding: 8px 20px; color: #aaa; text-decoration: none; font-size: 0.9rem; border-left: 3px solid transparent; }
+.ref-link:hover { color: #fff; background: #333; border-left-color: var(--accent); }
+
+.ref-content { flex: 1; padding: 20px 40px; overflow-y: auto; background: #1e1e1e; }
+.ref-category { margin-bottom: 40px; }
+.ref-category h2 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; color: #fff; font-size: 1.2rem; }
+
+.ref-item { margin-bottom: 20px; background: #252526; padding: 15px; border-radius: 6px; border: 1px solid #333; position: relative; }
+.ref-header { font-family: 'Fira Code', monospace; font-size: 0.95rem; margin-bottom: 8px; color: #dcdcaa; }
+.ref-name { font-weight: bold; color: #dcdcaa; }
+.ref-params { color: #9cdcfe; }
+.ref-return { color: #4ec9b0; }
+.ref-doc { color: #999; font-size: 0.9rem; line-height: 1.5; }
+
+/* Copy Button */
+.ref-copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s;
+}
+.ref-copy-btn:hover { color: #fff; background: #333; border-radius: 4px; }
+
+/* Types Styling */
+.ref-type-item .ref-header { border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 10px; }
+.ref-keyword { color: #569cd6; font-weight: bold; }
+.ref-type-body { font-family: 'Fira Code', monospace; color: #9cdcfe; font-size: 0.85rem; white-space: pre-wrap; margin: 0; line-height: 1.4; }

@@ -231,10 +231,6 @@ function renderScripts(scripts, updateGlobal = true) {
 }
 
 function buildScriptTooltip(s) {
-    if (!document.body.classList.contains('expert-mode')) {
-        return s.description || `File: ${s.filename}`;
-    }
-
     const lines = [`File: ${s.filename}`];
     lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
     
@@ -334,7 +330,8 @@ async function deleteScript(f) {
         });
         if (!confirm(msg)) return;
     } else {
-        if (!confirm(i18next.t('confirm_delete_script', { filename: f }))) return;
+        const shouldConfirm = window.currentSettings?.general?.confirm_delete ?? true;
+        if (shouldConfirm && !confirm(i18next.t('confirm_delete_script', { filename: f }))) return;
     }
 
     await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });

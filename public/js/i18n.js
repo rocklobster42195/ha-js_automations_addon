@@ -12,9 +12,10 @@ async function initI18next() {
     // Config vom Backend laden (Sprache & Expertenmodus)
     // apiFetch ist global verfügbar (definiert in app.js oder api.js)
     try {
-        const res = await apiFetch('api/options');
+        const res = await apiFetch('api/settings');
         if (res.ok) {
-            opts = await res.json();
+            const settings = await res.json();
+            if (settings.general) opts = settings.general;
         }
     } catch (e) { console.debug("Could not load options", e); }
 

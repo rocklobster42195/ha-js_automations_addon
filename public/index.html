@@ -13,6 +13,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next-http-backend/2.5.0/i18nextHttpBackend.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <style>
+        /* Layout Fixes for Status Bar */
+        body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .app-wrapper { flex: 1; overflow: hidden; } /* border-bottom wird vom sidebar-footer übernommen */
+        /* Status Bar Styles (wird von app.js injiziert) */
+        #status-bar { height: 22px; background: #282a36; color: #fff; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-family: 'Segoe UI', sans-serif; user-select: none; z-index: 100; justify-content: space-between; border-top: 1px solid #333; }
+        .sb-item { display: flex; align-items: center; gap: 6px; cursor: default; }
+        .sb-item i { font-size: 14px; }
+        .sb-hidden { display: none !important; }
+    </style>
 </head>
 
 <body>
@@ -20,14 +30,16 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <i class="mdi mdi-nodejs"></i>
+                    <div class="nav-logo"></div>
                     <span data-i18n="header_title">JS AUTOMATIONS</span>
                     <span id="app-version" class="version-tag"></span>
                 </div>
                 <div class="header-actions">
                     <button onclick="openCreationWizard()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
                     <button onclick="loadScripts()" data-i18n="refresh_list_title" data-i18n-title title="Refresh List"><i class="mdi mdi-refresh"></i></button>
-                    <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
+                    <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" data-i18n="global_store_explorer_title" data-i18n-title title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
+                    <button id="btn-settings" onclick="openSettingsTab()" data-i18n="settings_button_title" data-i18n-title title="Settings"><i class="mdi mdi-cog"></i></button>
+                    <button id="btn-reference" onclick="openReferenceTab()" title="Command Reference" class="hidden"><i class="mdi mdi-help-circle-outline"></i></button>
                 </div>
             </div>
 
@@ -105,6 +117,25 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- SETTINGS VIEW -->
+                <div id="settings-wrapper" class="hidden" style="display: flex; flex-direction: column; height: 100%; background-color: #1e1e1e;">
+                    <div class="settings-header" style="padding: 10px 20px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
+                        <h2 style="margin: 0; font-size: 1.2rem; font-weight: 400;"><i class="mdi mdi-cog"></i> <span data-i18n="settings_title">Settings</span></h2>
+                        <div style="flex: 1;"></div>
+                        <button onclick="closeSettingsTab()" style="background: none; border: none; color: #aaa; cursor: pointer; font-size: 1.2rem;" title="Close"><i class="mdi mdi-close"></i></button>
+                    </div>
+                    <div class="settings-body" style="display: flex; flex: 1; overflow: hidden;">
+                        <!-- Left: Categories -->
+                        <div id="settings-categories" style="width: 200px; border-right: 1px solid #333; padding: 10px 0; overflow-y: auto;">
+                            <!-- Injected via JS -->
+                        </div>
+                        <!-- Right: Content -->
+                        <div id="settings-content" style="flex: 1; padding: 20px; overflow-y: auto;">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="resizer"></div>
@@ -151,6 +182,22 @@
         </div>
     </div>
 
+    <!-- Modal for Settings Entity Picker -->
+    <div id="settings-entity-picker-modal" class="modal-overlay hidden">
+        <div class="modal" style="height: 80vh; display: flex; flex-direction: column;">
+            <h3 data-i18n="modal_select_entity_title">Entity auswählen</h3>
+            <div class="search-box" style="border:none; padding: 0 0 10px 0;">
+                <div class="search-container">
+                    <input type="text" id="settings-entity-search-input" data-i18n="entity_search_placeholder" data-i18n-placeholder placeholder="Entity suchen..." oninput="filterSettingsEntityPicker()" autocomplete="off">
+                </div>
+            </div>
+            <div id="settings-entity-list" class="entity-list"></div>
+            <div class="modal-btns">
+                <button class="btn-text" onclick="closeSettingsEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Connection Lost Overlay -->
     <div id="connection-lost-overlay" class="hidden">
         <div class="reconnect-spinner"></div>
@@ -171,7 +218,10 @@
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
     <script src="js/store-explorer.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/statusbar.js"></script>
     <script src="js/creation-wizard.js"></script>
+    <script src="js/reference.js"></script>
 </body>
 
 </html>

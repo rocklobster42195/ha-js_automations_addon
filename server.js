@@ -25,6 +25,7 @@ const DependencyManager = require('./core/dependency-manager');
 const StateManager = require('./core/state-manager');
 const StoreManager = require('./core/store-manager');
 const EntityManager = require('./core/entity-manager');
+const SettingsManager = require('./core/settings-manager');
 const LogManager = require('./core/log-manager');
 const packageJson = require('./package.json');
 
@@ -48,6 +49,18 @@ const depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR); // Übergibt
 const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
 const logManager = new LogManager(STORAGE_DIR);
+
+// Initial Log Level setzen
+const currentSettings = SettingsManager.getSettings();
+if (currentSettings.system && currentSettings.system.log_level) {
+    logManager.setLevel(currentSettings.system.log_level);
+}
+// Auf Änderungen hören
+SettingsManager.on('settings_updated', (newSettings) => {
+    if (newSettings.system && newSettings.system.log_level) {
+        logManager.setLevel(newSettings.system.log_level);
+    }
+});
 
 // OPTIONS LOADING
 let systemOptions = { expert_mode: true };
@@ -76,7 +89,23 @@ let systemOptions = { expert_mode: true };
 // NPM Logs an das Frontend weiterleiten
 depManager.on('log', ({ level, message }) => {
     const entry = logManager.add(level, 'System', message);
-    io.emit('log', entry);
+    if (entry) io.emit('log', entry);
+});
+
+let hasIntegration = false; // Variable, um den Integrationsstatus zu speichern
+
+// Socket.io Event Handling
+io.on('connection', (socket) => {
+    socket.on('get_ha_states', (callback) => {
+        try {
+            callback(connector.getStates());
+        } catch (e) {
+            callback({ error: e.message });
+        }
+    });
+    socket.on('get_integration_status', (callback) => {
+        callback({ available: hasIntegration });
+    });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -94,11 +123,12 @@ async function startSystem() {
         await connector.connect();
         
         // Integration Check (Ping)
-        let hasIntegration = await connector.checkIntegrationAvailable();
+        hasIntegration = await connector.checkIntegrationAvailable(); // Status in Variable speichern
         const intMsg = hasIntegration 
             ? "✅ Native Integration (js_automations) detected." 
             : "⚠️ Native Integration not found. Using Legacy Mode (HTTP).";
-        io.emit('log', logManager.add(hasIntegration ? 'info' : 'warn', 'System', intMsg));
+        const intLogEntry = logManager.add(hasIntegration ? 'info' : 'warn', 'System', intMsg);
+        if (intLogEntry) io.emit('log', intLogEntry);
 
         workerManager.setConnector(connector);
         workerManager.setStore(storeManager);
@@ -113,6 +143,8 @@ async function startSystem() {
             if (event.event_type === 'state_changed') {
                 const { entity_id, new_state, old_state } = event.data;
                 workerManager.dispatchStateChange(entity_id, new_state, old_state);
+                // Forward to UI for Status Bar
+                io.emit('ha_state_changed', { entity_id, new_state });
             }
         });
 
@@ -176,14 +208,14 @@ async function startSystem() {
             
             // NEU: LogManager nutzen & UI Update für ALLE Skripte
             const entry = logManager.add(d.type || 'info', 'System', `${path.basename(d.filename)} ${d.reason}`);
-            io.emit('log', entry);
+            if (entry) io.emit('log', entry);
             io.emit('status_update');
         });
 
         workerManager.on('log', (data) => {
             // data = { source, message, level }
             const entry = logManager.add(data.level || 'info', data.source, data.message);
-            io.emit('log', entry);
+            if (entry) io.emit('log', entry);
         });
 
         // Autostart
@@ -227,7 +259,7 @@ async function startSystem() {
 }
 
 // --- ROUTERS ---
-const scriptsRouter = require('./routes/scripts')(workerManager, depManager, stateManager, io, SCRIPTS_DIR, STORAGE_DIR, LIBRARIES_DIR);
+const scriptsRouter = require('./routes/scripts-routes')(workerManager, depManager, stateManager, io, SCRIPTS_DIR, STORAGE_DIR, LIBRARIES_DIR);
 
 // PROXY: Damit Änderungen aus dem Store Explorer (UI) auch an die Worker gesendet werden
 const storeManagerUiWrapper = new Proxy(storeManager, {
@@ -257,11 +289,13 @@ const storeManagerUiWrapper = new Proxy(storeManager, {
     }
 });
 
-const storeRouter = require('./routes/store')(storeManagerUiWrapper);
-const systemRouter = require('./routes/system')(connector, logManager, () => systemOptions);
+const storeRouter = require('./routes/store-route')(storeManagerUiWrapper);
+const systemRouter = require('./routes/system-route')(connector, logManager, () => systemOptions);
+const settingsRouter = require('./routes/settings-route');
 
 app.use('/api/scripts', scriptsRouter);
 app.use('/api/store', storeRouter);
+app.use('/api/settings', settingsRouter);
 
 // Status-Route für Version
 app.get('/api/status', (req, res) => {
@@ -273,6 +307,16 @@ app.get('/api/ha/services', async (req, res) => {
     try {
         const services = await connector.getServices();
         res.json(services);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// FIX: Add missing route for states (Entity Picker)
+app.get('/api/ha/states', async (req, res) => {
+    try {
+        const states = await connector.getStates();
+        res.json(states);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

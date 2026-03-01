@@ -6,6 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+
 class LogManager {
     /**
      * @param {string} storageDir - Path to the .storage directory
@@ -16,6 +18,7 @@ class LogManager {
         this.maxEntries = 1000; // Keep last 1000 lines
         this.flushIntervalMs = 60000; // Flush every 60s
         this.isDirty = false;
+        this.level = 'info';
 
         // Load existing logs on startup
         this.load();
@@ -40,6 +43,12 @@ class LogManager {
         }
     }
 
+    setLevel(level) {
+        if (LOG_LEVELS[level] !== undefined) {
+            this.level = level;
+        }
+    }
+
     /**
      * Adds a new log entry to the buffer.
      * @param {string} level - 'info', 'warn', 'error', 'debug'
@@ -48,6 +57,10 @@ class LogManager {
      * @returns {object} The created log entry
      */
     add(level, source, message) {
+        const lvl = (level || 'info').toLowerCase();
+        // Filter based on current log level
+        if (LOG_LEVELS[lvl] > LOG_LEVELS[this.level]) return null;
+
         const entry = {
             ts: Date.now(),
             level: level,

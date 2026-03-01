@@ -133,9 +133,19 @@ function switchToTab(filename) {
     if (newTab.type === 'store') {
         document.getElementById('editor-wrapper').classList.add('hidden');
         document.getElementById('store-wrapper').classList.remove('hidden');
+        const settingsWrapper = document.getElementById('settings-wrapper');
+        if (settingsWrapper) settingsWrapper.classList.add('hidden');
         if (typeof window.loadStoreData === 'function') window.loadStoreData();
+    } else if (newTab.type === 'settings') {
+        document.getElementById('editor-wrapper').classList.add('hidden');
+        document.getElementById('store-wrapper').classList.add('hidden');
+        const settingsWrapper = document.getElementById('settings-wrapper');
+        if (settingsWrapper) settingsWrapper.classList.remove('hidden');
+        if (typeof window.loadSettingsData === 'function') window.loadSettingsData();
     } else {
         document.getElementById('store-wrapper').classList.add('hidden');
+        const settingsWrapper = document.getElementById('settings-wrapper');
+        if (settingsWrapper) settingsWrapper.classList.add('hidden');
         document.getElementById('editor-wrapper').classList.remove('hidden');
         
         if (editor) {
@@ -197,7 +207,7 @@ function updateToolbarUI(filename, icon, isDirty) {
     const dupBtn = document.getElementById('btn-script-duplicate');
     const deleteBtn = document.getElementById('btn-script-delete');
 
-    if (filename === 'System: Store') {
+    if (filename === 'System: Store' || filename === 'System: Settings') {
         saveBtn.disabled = true;
         saveBtn.style.opacity = '0.1';
         if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.style.opacity = '0.1'; }
@@ -287,27 +297,27 @@ function updateEditorMode(filename) {
 }
 
 async function toggleActiveScript() {
-    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.toggleScript(activeTabFilename);
+    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.toggleScript(activeTabFilename);
 }
 
 async function restartActiveScript() {
-    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.restartScript(activeTabFilename);
+    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.restartScript(activeTabFilename);
 }
 
 async function editActiveScript() {
-    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.editScript(activeTabFilename);
+    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.editScript(activeTabFilename);
 }
 
 async function duplicateActiveScript() {
-    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.duplicateScript(activeTabFilename);
+    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.duplicateScript(activeTabFilename);
 }
 
 async function deleteActiveScript() {
-    if (activeTabFilename && activeTabFilename !== 'System: Store') await window.deleteScript(activeTabFilename);
+    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.deleteScript(activeTabFilename);
 }
 
 async function downloadActiveScript() {
-    if (!activeTabFilename || activeTabFilename === 'System: Store') return;
+    if (!activeTabFilename || activeTabFilename.startsWith('System: ')) return;
 
     // Create a temporary link to trigger the download
     const link = document.createElement('a');

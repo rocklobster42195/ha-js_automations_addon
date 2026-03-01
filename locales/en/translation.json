@@ -42,6 +42,8 @@
   "script_action_duplicate_title": "Duplicate",
   "download_script_title": "Download Script",
   "script_action_delete_title": "Delete",
+  "global_store_explorer_title": "Global Store Explorer",
+  "settings_button_title": "Settings",
   "confirm_discard_changes": "Discard changes to {{filename}}?",
   "confirm_discard_all_changes": "Discard all unsaved changes?",
   "confirm_delete_script": "Delete script '{{filename}}'?",
@@ -61,6 +63,7 @@
   "error_file_exists": "'{{filename}}' already exists.",
   "error_create_failed": "Creation failed",
   "modal_insert_entity_title": "Insert Entity",
+  "modal_select_entity_title": "Select Entity",
   "modal_edit_script_title": "Edit Script",
   "modal_duplicate_script_title": "Duplicate Script",
   "entity_search_placeholder": "Search entity...",
@@ -100,5 +103,46 @@
   "error_wizard_no_file": "No file selected",
   "error_wizard_url_required": "URL is required",
   "wizard_import_warning": "Warning: Only import code from trusted sources.",
-  "wizard_placeholder_optional_name": "Optional: Script Name"
+  "wizard_placeholder_optional_name": "Optional: Script Name",
+  "settings_title": "Settings",
+  "settings": {
+    "categories": {
+      "general": "General",
+      "editor": "Editor",
+      "statusbar": "Status Bar",
+      "system": "System",
+      "danger": "Danger Zone"
+    },
+    "general": {
+      "language": "Language",
+      "expert_mode": "Expert Mode",
+      "expert_mode_desc": "Shows advanced options and technical details (e.g., file paths, raw views).",
+      "confirm_delete": "Confirm deletion",
+      "confirm_delete_desc": "Shows a confirmation dialog before deleting scripts."
+    },
+    "editor": {
+      "show_toolbar": "Show Toolbar",
+      "font_size": "Font Size",
+      "word_wrap": "Word Wrap",
+      "word_wrap_desc": "Word wrap can also be controlled via the button in the toolbar.",
+      "minimap": "Show Minimap"
+    },
+    "statusbar": {
+      "show_statusbar": "Show Status Bar",
+      "show_statusbar_desc": "Displays the status bar at the bottom of the application.",
+      "slot1": "Slot 1 (Left)",
+      "slot2": "Slot 2 (Right)",
+      "slot3": "Slot 3",
+      "custom_entity": "Custom Entity",
+      "show_sparkline": "Show Sparkline",
+      "show_sparkline_desc": "Displays a small historical graph for this value."
+    },
+    "system": {
+      "log_level": "Log Level"
+    },
+    "danger": {
+      "node_memory": "Node.js Memory (MB)",
+      "node_memory_desc": "Maximum RAM usage. Requires restart."
+    }
+  }
 }

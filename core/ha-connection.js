@@ -66,7 +66,9 @@ class HAConnector {
             const handler = (data) => {
                 const m = JSON.parse(data);
                 if (m.id === id) {
-                    (m.result || []).forEach(s => this.states[s.entity_id] = s);
+                    const results = m.result || [];
+                    console.log(`✅ WebSocket: Received ${results.length} initial states from HA.`);
+                    results.forEach(s => this.states[s.entity_id] = s);
                     this.ws.removeListener('message', handler);
                     this.generateTypeDefinitions(m.result || []);
                     res();
@@ -74,6 +76,10 @@ class HAConnector {
             };
             this.ws.on('message', handler);
         });
+    }
+
+    getStates() {
+        return Object.values(this.states);
     }
 
     send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data)); }
