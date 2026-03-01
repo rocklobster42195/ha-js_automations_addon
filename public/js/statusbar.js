@@ -7,24 +7,29 @@ const statusBar = {
     // Cache für Entity-IDs pro Slot, um Updates effizient zu filtern
     slotEntities: {
         slot1: null,
-        slot2: null
+        slot2: null,
+        slot3: null
     },
 
     // Cache für aktuelle Werte (für zeitbasiertes Rendering)
     currentValues: {
         slot1: null,
-        slot2: null
+        slot2: null,
+        slot3: null
     },
     
     // History für Sparklines (10 Datenpunkte)
     history: {
         slot1: new Array(10).fill(null),
-        slot2: new Array(10).fill(null)
+        slot2: new Array(10).fill(null),
+        slot3: new Array(10).fill(null)
     },
 
     fetchPromise: null,
 
     init() {
+        this.injectStyles();
+
         // Globalen Cache initialisieren (falls settings.js noch nicht lief)
         window.cachedEntities = window.cachedEntities || [];
 
@@ -59,9 +64,22 @@ const statusBar = {
         }
     },
 
+    injectStyles() {
+        if (document.getElementById('statusbar-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'statusbar-styles';
+        // Konzept 1: Wenn 3 Slots aktiv sind (.has-three-slots), Breite auf 33% reduzieren und Canvas ausblenden
+        style.innerHTML = `
+            .status-slots.has-three-slots .sb-item { min-width: 0; font-size: 0.8rem; }
+            .status-slots.has-three-slots.hide-sparklines canvas { display: none !important; }
+            .sb-item .val { white-space: nowrap; }
+        `;
+        document.head.appendChild(style);
+    },
+
     render(settings) {
         // Fallback: Wenn keine Settings da sind, zeige CPU/RAM als Default
-        const conf = (settings && settings.statusbar) ? settings.statusbar : { slot1: 'cpu', slot2: 'ram' };
+        const conf = (settings && settings.statusbar) ? settings.statusbar : { slot1: 'cpu', slot2: 'ram', slot3: 'none' };
 
         // Sichtbarkeit der gesamten Statusleiste steuern
         const statusBarEl = document.getElementById('status-bar');
@@ -69,8 +87,27 @@ const statusBar = {
             statusBarEl.style.display = conf.show_statusbar === false ? 'none' : 'flex';
         }
 
+        // Layout-Anpassung für 3 Slots (Konzept 1)
+        const slotsContainer = document.querySelector('.status-slots');
+        if (slotsContainer) {
+            const activeSlots = [conf.slot1, conf.slot2, conf.slot3].filter(s => s && s !== 'none').length;
+            if (activeSlots >= 3) {
+                slotsContainer.classList.add('has-three-slots');
+                // Prüfen, ob Sparklines bei Platzmangel ausgeblendet werden sollen (Default: true)
+                if (conf.hide_sparkline_on_dense !== false) {
+                    slotsContainer.classList.add('hide-sparklines');
+                } else {
+                    slotsContainer.classList.remove('hide-sparklines');
+                }
+            } else {
+                slotsContainer.classList.remove('has-three-slots');
+                slotsContainer.classList.remove('hide-sparklines');
+            }
+        }
+
         this.renderSlot('slot1', conf.slot1, conf.customEntitySlot1, conf.show_sparkline_slot1);
         this.renderSlot('slot2', conf.slot2, conf.customEntitySlot2, conf.show_sparkline_slot2);
+        this.renderSlot('slot3', conf.slot3, conf.customEntitySlot3, conf.show_sparkline_slot3);
     },
 
     renderSlot(slotId, type, customEntity, showSparkline) {
@@ -87,13 +124,13 @@ const statusBar = {
             return;
         }
 
-        const canvasHtml = (showSparkline !== false) ? '<canvas width="30" height="16" style="opacity:0.8"></canvas>' : '';
+        const canvasHtml = (showSparkline !== false) ? '<canvas width="20" height="16" style="opacity:0.8"></canvas>' : '';
 
         if (type === 'cpu') {
-            el.innerHTML = `<i class="mdi mdi-chip"></i> <span class="val">--%</span> ${canvasHtml}`;
+            el.innerHTML = `<i class="mdi mdi-chip"></i> <span class="val">---&nbsp;%</span> ${canvasHtml}`;
             el.dataset.type = 'cpu';
         } else if (type === 'ram') {
-            el.innerHTML = `<i class="mdi mdi-memory"></i> <span class="val">-- MB</span> ${canvasHtml}`;
+            el.innerHTML = `<i class="mdi mdi-memory"></i> <span class="val">---&nbsp;MB</span> ${canvasHtml}`;
             el.dataset.type = 'ram';
         } else if (type === 'custom') {
             const cleanEntity = customEntity ? customEntity.trim().toLowerCase() : '';
@@ -108,7 +145,7 @@ const statusBar = {
     updateSystemStats(data) {
         // data = { cpu, app_ram, ... }
         
-        ['slot1', 'slot2'].forEach(slotId => {
+        ['slot1', 'slot2', 'slot3'].forEach(slotId => {
             const el = document.getElementById(`sb-${slotId}`);
             if (!el || el.classList.contains('sb-hidden')) return;
             
@@ -120,7 +157,8 @@ const statusBar = {
                 if (hist.length > 10) hist.shift();
 
                 const valEl = el.querySelector('.val');
-                valEl.innerText = `${data.cpu}%`;
+                // Pad to 3 chars to prevent jumping (e.g. "  5", " 12")
+                valEl.innerText = `${Math.round(data.cpu).toString().padStart(3, '\u00A0')}\u00A0%`;
                 if (data.cpu >= 90) valEl.style.color = '#ff5555';
                 else if (data.cpu >= 70) valEl.style.color = '#ffb86c';
                 else valEl.style.color = '';
@@ -134,7 +172,8 @@ const statusBar = {
                 if (hist.length > 10) hist.shift();
 
                 const valEl = el.querySelector('.val');
-                valEl.innerText = `${data.app_ram} MB`;
+                // Pad to 4 chars to prevent jumping
+                valEl.innerText = `${Math.round(data.app_ram).toString().padStart(4, '\u00A0')}\u00A0MB`;
                 // Warnung ab 400MB (bei 512MB Limit)
                 if (data.app_ram >= 400) valEl.style.color = '#ffb86c';
                 else valEl.style.color = '';
@@ -160,13 +199,13 @@ const statusBar = {
 
     updateEntityState(data) {
         // data = { entity_id, new_state }
-        ['slot1', 'slot2'].forEach(slotId => {
+        ['slot1', 'slot2', 'slot3'].forEach(slotId => {
             const targetEntity = this.slotEntities[slotId];
             if (targetEntity && targetEntity === data.entity_id) {
                 const el = document.getElementById(`sb-${slotId}`);
                 if (el) {
                     const val = data.new_state ? data.new_state.state : 'N/A';
-                    const unit = data.new_state && data.new_state.attributes.unit_of_measurement ? ` ${data.new_state.attributes.unit_of_measurement}` : '';
+                    const unit = data.new_state && data.new_state.attributes.unit_of_measurement ? `\u00A0${data.new_state.attributes.unit_of_measurement}` : '';
                     el.querySelector('.val').innerText = `${val}${unit}`;
 
                     // Wert nur cachen, nicht zeichnen (passiert im Takt von updateSystemStats)
@@ -210,7 +249,7 @@ const statusBar = {
         if (max === min) { max += 1; min -= 1; }
         const range = max - min;
 
-        const barW = (w / data.length) - 1;
+        const barW = w / data.length;
         data.forEach((v, i) => {
             if (v === null || isNaN(v)) return;
 
@@ -225,7 +264,7 @@ const statusBar = {
             // Normalize to 0..1 based on range
             const normalized = (v - min) / range;
             const barH = Math.max(2, normalized * h); // Mindestens 2px hoch
-            ctx.fillRect(i * (barW + 1), h - barH, barW, barH);
+            ctx.fillRect(i * barW, h - barH, barW, barH);
         });
     },
 
@@ -298,7 +337,7 @@ const statusBar = {
     },
 
     updateSlotError(entityId, msg) {
-        ['slot1', 'slot2'].forEach(slotId => {
+        ['slot1', 'slot2', 'slot3'].forEach(slotId => {
             if (this.slotEntities[slotId] === entityId) {
                 const el = document.getElementById(`sb-${slotId}`);
                 if (el) {

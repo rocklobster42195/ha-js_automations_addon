@@ -27,6 +27,7 @@ const StoreManager = require('./core/store-manager');
 const EntityManager = require('./core/entity-manager');
 const SettingsManager = require('./core/settings-manager');
 const LogManager = require('./core/log-manager');
+const IntegrationManager = require('./core/integration-manager');
 const packageJson = require('./package.json');
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
@@ -49,6 +50,7 @@ const depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR); // Übergibt
 const stateManager = new StateManager(STORAGE_DIR);
 const storeManager = new StoreManager(STORAGE_DIR);
 const logManager = new LogManager(STORAGE_DIR);
+const integrationManager = new IntegrationManager(IS_ADDON ? '/config' : path.join(__dirname, 'ha_config_mock'));
 
 // Initial Log Level setzen
 const currentSettings = SettingsManager.getSettings();
@@ -290,7 +292,7 @@ const storeManagerUiWrapper = new Proxy(storeManager, {
 });
 
 const storeRouter = require('./routes/store-route')(storeManagerUiWrapper);
-const systemRouter = require('./routes/system-route')(connector, logManager, () => systemOptions);
+const systemRouter = require('./routes/system-route')(connector, logManager, () => systemOptions, integrationManager, SCRIPTS_DIR);
 const settingsRouter = require('./routes/settings-route');
 
 app.use('/api/scripts', scriptsRouter);

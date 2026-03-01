@@ -1,6 +1,6 @@
 /**
  * @name Cleanup Tool
- * @icon mdi:trash-can
+ * @icon mdi:broom
  * @description Löscht verwaiste Entitäten der JS Automations Integration.
  */
 

@@ -83,6 +83,15 @@ function renderSettingsCategories() {
         btn.style.gap = '10px';
         btn.style.color = activeCategory === cat.id ? '#fff' : '#aaa';
         btn.style.backgroundColor = activeCategory === cat.id ? '#333' : 'transparent';
+        btn.style.fontSize = '0.9rem';
+
+        // Notification Dot Logic
+        if (cat.id === 'system' && window.currentIntegrationStatus) {
+            const s = window.currentIntegrationStatus;
+            if (!s.installed || s.needs_update) {
+                btn.classList.add('has-notification');
+            }
+        }
 
         // Icon
         const icon = document.createElement('i');
@@ -162,13 +171,14 @@ function renderSettingsForm(catId) {
         label.style.display = 'block';
         label.style.marginBottom = '5px';
         label.style.fontWeight = '500';
+        label.style.fontSize = '0.9rem';
         wrapper.appendChild(label);
 
         // Description (optional)
         if (item.description) {
             const desc = document.createElement('div');
             desc.innerText = i18next.t(item.description);
-            desc.style.fontSize = '0.85rem';
+            desc.style.fontSize = '0.8rem';
             desc.style.color = '#888';
             desc.style.marginBottom = '8px';
             wrapper.appendChild(desc);
@@ -194,6 +204,7 @@ function renderSettingsForm(catId) {
             input.style.color = '#fff';
             input.style.border = '1px solid #555';
             input.style.borderRadius = '4px';
+            input.style.fontSize = '0.9rem';
             
             item.options.forEach(opt => {
                 const option = document.createElement('option');
@@ -218,6 +229,7 @@ function renderSettingsForm(catId) {
             input.style.backgroundColor = '#333';
             input.style.color = '#fff';
             input.style.border = '1px solid #555';
+            input.style.fontSize = '0.9rem';
             input.onchange = (e) => saveSetting(catId, item.key, parseFloat(e.target.value));
         }
         else if (item.type === 'entity-picker') {
@@ -227,12 +239,13 @@ function renderSettingsForm(catId) {
             textInput.id = `input-${catId}-${item.key}`;
             
             // Kürzeres Eingabefeld & Autocomplete
-            textInput.style.width = '250px';
+            textInput.style.width = '200px';
             textInput.style.padding = '5px';
             textInput.style.backgroundColor = '#333';
             textInput.style.color = '#fff';
             textInput.style.border = '1px solid #555';
             textInput.style.borderRadius = '4px';
+            textInput.style.fontSize = '0.9rem';
             textInput.setAttribute('list', 'settings-entities-datalist');
             
             textInput.onfocus = loadEntitiesForAutocomplete;
@@ -242,14 +255,21 @@ function renderSettingsForm(catId) {
         }
         else if (item.type === 'button') {
             input = document.createElement('button');
-            input.innerText = item.buttonLabel || i18next.t(item.label);
+            input.innerText = item.buttonLabel ? i18next.t(item.buttonLabel) : i18next.t(item.label);
             input.className = 'btn-primary';
-            input.style.width = '100%';
+            input.style.width = 'fit-content';
             input.style.marginTop = '5px';
+            input.style.fontSize = '0.9rem';
             input.onclick = () => {
                 if (item.actionUrl) window.location.href = item.actionUrl;
                 // Weitere Actions können hier implementiert werden
             };
+        }
+        else if (item.type === 'integration-manager') {
+            input = document.createElement('div');
+            input.id = 'integration-manager-wrapper';
+            input.style.marginTop = '5px';
+            checkIntegrationStatus(input);
         }
         else {
             // Fallback: Text / Entity-Picker
@@ -261,6 +281,7 @@ function renderSettingsForm(catId) {
             input.style.backgroundColor = '#333';
             input.style.color = '#fff';
             input.style.border = '1px solid #555';
+            input.style.fontSize = '0.9rem';
             input.onchange = (e) => saveSetting(catId, item.key, e.target.value);
         }
 
@@ -351,6 +372,90 @@ async function loadEntitiesForAutocomplete() {
     });
 }
 
+/**
+ * Prüft den Status der HA Integration und rendert die UI.
+ */
+async function checkIntegrationStatus(container, showRestartHint = false) {
+    container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#aaa;"><i class="mdi mdi-loading mdi-spin"></i> ${i18next.t('settings.system.integration_checking')}</div>`;
+    try {
+        const res = await apiFetch('api/system/integration');
+        if (res.ok) {
+            const status = await res.json();
+            
+            // Update Global State & UI Dots
+            window.currentIntegrationStatus = status;
+            if (window.updateSystemNotifications) window.updateSystemNotifications();
+
+            renderIntegrationUI(container, status, showRestartHint);
+        } else {
+            container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#f44336;">${i18next.t('settings.system.integration_check_failed')}</div>`;
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#f44336;">${i18next.t('settings.system.integration_error', { error: e.message })}</div>`;
+    }
+}
+
+function renderIntegrationUI(container, status, showRestartHint = false) {
+    let icon = 'mdi-check-circle';
+    let color = 'var(--success)';
+    let title = i18next.t('settings.system.integration_active');
+    let desc = i18next.t('settings.system.integration_installed_version', { version: status.version_installed });
+    if (showRestartHint) {
+        desc += ` <span style="color:var(--warn);">${i18next.t('settings.system.restart_required_hint')}</span>`;
+    }
+    let btnHtml = '';
+
+    if (!status.installed) {
+        icon = 'mdi-alert-circle';
+        color = 'var(--warn)';
+        title = i18next.t('settings.system.integration_missing');
+        desc = i18next.t('settings.system.integration_missing_desc');
+        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="background:var(--warn) !important; color:#000 !important;">${i18next.t('settings.system.integration_install_btn')}</button>`;
+    } else if (status.needs_update) {
+        icon = 'mdi-information';
+        color = 'var(--accent)';
+        title = i18next.t('settings.system.integration_update_available');
+        desc = i18next.t('settings.system.integration_update_desc', { installed: status.version_installed, available: status.version_available });
+        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)">${i18next.t('settings.system.integration_update_btn', { version: status.version_available })}</button>`;
+    }
+
+    container.innerHTML = `
+        <div style="width:fit-content; background:#1e1e1e; border:1px solid #383838; border-radius:6px; padding:10px; display:flex; align-items:center; gap:15px;">
+            <i class="mdi ${icon}" style="font-size:1.5rem; color:${color};"></i>
+            <div style="flex:1;">
+                <div style="font-weight:bold; font-size:0.95rem; margin-bottom:2px; color:#fff;">${title}</div>
+                <div style="color:#aaa; font-size:0.85rem;">${desc}</div>
+            </div>
+            <div>${btnHtml}</div>
+        </div>
+    `;
+}
+
+async function installIntegration(btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="mdi mdi-loading mdi-spin"></i> ${i18next.t('settings.system.integration_installing')}`;
+    
+    try {
+        const res = await apiFetch('api/system/integration/install', { method: 'POST' });
+        if (res.ok) {
+            const wrapper = document.getElementById('integration-manager-wrapper');
+            if (wrapper) checkIntegrationStatus(wrapper, true);
+        } else {
+            const err = await res.json();
+            alert(i18next.t('settings.system.integration_error_alert', { error: (err.error || "Unknown error") }));
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    } catch (e) {
+        alert(i18next.t('settings.system.integration_error_alert', { error: e.message }));
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+}
+
 // Auto-load settings on startup
 window.openSettingsTab = openSettingsTab;
 window.loadSettingsData = loadSettingsData;
+window.installIntegration = installIntegration;
+window.renderSettingsCategories = renderSettingsCategories;

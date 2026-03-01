@@ -1,7 +1,8 @@
 const express = require('express');
 const https = require('https');
+const archiver = require('archiver');
 
-module.exports = (connector, logManager, getSystemOptions) => {
+module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
@@ -30,6 +31,53 @@ module.exports = (connector, logManager, getSystemOptions) => {
     router.delete('/logs', (req, res) => {
         logManager.clear();
         res.json({ ok: true });
+    });
+
+    // Integration Manager Routes
+    router.get('/system/integration', async (req, res) => {
+        try {
+            const status = await integrationManager.getStatus();
+            res.json(status);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/system/integration/install', async (req, res) => {
+        try {
+            const status = await integrationManager.install();
+            res.json(status);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // Backup Route (ZIP Download)
+    router.get('/system/backup', (req, res) => {
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        
+        const filename = `js-automations-backup-${yyyy}${mm}${dd}-${hh}${min}.zip`;
+        
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Cache-Control', 'no-store');
+        
+        archive.pipe(res);
+        
+        // Skript-Ordner rekursiv hinzufügen, aber node_modules und git ignorieren
+        archive.glob('**/*', {
+            cwd: SCRIPTS_DIR,
+            ignore: ['**/node_modules/**', '**/.git/**']
+        });
+
+        archive.finalize();
     });
 
     return router;

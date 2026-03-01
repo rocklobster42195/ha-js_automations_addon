@@ -149,6 +149,42 @@ module.exports = [
                 default: true,
                 indent: true,
                 description: 'settings.statusbar.show_sparkline_desc'
+            },
+
+            // Slot 3
+            { 
+                key: 'slot3', 
+                label: 'settings.statusbar.slot3', 
+                type: 'select', 
+                options: [
+                    { value: 'none', label: 'Leer' }, 
+                    { value: 'cpu', label: 'CPU Usage' }, 
+                    { value: 'ram', label: 'RAM Usage' }, 
+                    { value: 'custom', label: 'Custom Entity' }
+                ], 
+                default: 'none' 
+            },
+            { 
+                key: 'customEntitySlot3', 
+                label: 'settings.statusbar.custom_entity', 
+                type: 'entity-picker', 
+                condition: { key: 'slot3', value: 'custom' }, 
+                default: '' 
+            },
+            {
+                key: 'show_sparkline_slot3',
+                label: 'settings.statusbar.show_sparkline',
+                type: 'boolean',
+                default: true,
+                indent: true,
+                description: 'settings.statusbar.show_sparkline_desc'
+            },
+            {
+                key: 'hide_sparkline_on_dense',
+                label: 'settings.statusbar.hide_sparkline_on_dense',
+                type: 'boolean',
+                default: true,
+                description: 'settings.statusbar.hide_sparkline_on_dense_desc'
             }
         ]
     },
@@ -158,11 +194,24 @@ module.exports = [
         icon: 'mdi:server',
         items: [
             { 
+                key: 'ha_integration_status', 
+                label: 'Home Assistant Integration', 
+                type: 'integration-manager' 
+            },
+            { 
                 key: 'log_level', 
                 label: 'settings.system.log_level', 
                 type: 'select', 
-                options: ['info', 'debug', 'warn', 'error'], 
+                options: ['debug','info', 'warn', 'error'], 
                 default: 'info' 
+            },
+            { 
+                key: 'backup', 
+                label: 'settings.system.backup', 
+                type: 'button', 
+                buttonLabel: 'settings.system.backup_btn', 
+                actionUrl: 'api/system/backup' ,
+                hidden: false
             },
             { 
                 key: 'node_memory', 
@@ -173,14 +222,6 @@ module.exports = [
                 max: 4096, 
                 default: 512,
                 hidden: true // Nur anzeigen, wenn die Funktion implementiert ist und ein Memory Limit gesetzt werden kann
-            },
-            { 
-                key: 'backup', 
-                label: 'settings.system.backup', 
-                type: 'button', 
-                buttonLabel: 'Download System Backup', 
-                actionUrl: 'api/system/backup' ,
-                hidden: true // Nur anzeigen, wenn Backup-Funktion implementiert ist
             }
         ]
     }

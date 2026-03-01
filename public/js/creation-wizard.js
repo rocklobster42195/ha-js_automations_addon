@@ -7,7 +7,7 @@
 const SCRIPT_TEMPLATES = {
     'empty': {
         labelKey: 'template_empty',
-        code: 'ha.log("Hello World");\n'
+        code: 'const scriptName=ha.getHeader("name");\nha.log(`\'${scriptName}\' started...`);\n'
     },
     'interval': {
         labelKey: 'template_interval',
@@ -15,7 +15,7 @@ const SCRIPT_TEMPLATES = {
     },
     'trigger': {
         labelKey: 'template_trigger',
-        code: `ha.log("Waiting for trigger...");\n\n// Beispiel: Reagiere auf Lichtschalter\n// const state = ha.states['light.wohnzimmer'];\n`
+        code: `ha.log("Waiting for trigger...");\n\nconst state = ha.states['light.living_room'];\n`
     }
 };
 

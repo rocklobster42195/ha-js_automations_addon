@@ -116,6 +116,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Statusbar starten (nachdem Footer existiert und Socket bereit ist)
     if (window.statusBar) window.statusBar.init();
+
+    // Initial System Check (Integration Status)
+    checkSystemStatus();
 });
 
 function injectSidebarFooter() {
@@ -137,10 +140,44 @@ function injectSidebarFooter() {
         <div class="status-slots">
             <div id="sb-slot1" class="sb-item sb-hidden"></div>
             <div id="sb-slot2" class="sb-item sb-hidden"></div>
+            <div id="sb-slot3" class="sb-item sb-hidden"></div>
         </div>
     `;
     sidebar.appendChild(footer);
 }
+
+async function checkSystemStatus() {
+    try {
+        const res = await fetch('api/system/integration');
+        if (res.ok) {
+            const status = await res.json();
+            window.currentIntegrationStatus = status;
+            updateSystemNotifications();
+        }
+    } catch (e) {
+        console.warn("System status check failed", e);
+    }
+}
+
+function updateSystemNotifications() {
+    const status = window.currentIntegrationStatus;
+    if (!status) return;
+    
+    const needsAttention = !status.installed || status.needs_update;
+    
+    // 1. Settings Gear Icon (Sidebar Header)
+    const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
+    if (settingsBtn) {
+        if (needsAttention) settingsBtn.classList.add('has-notification');
+        else settingsBtn.classList.remove('has-notification');
+    }
+
+    // 2. Update Settings Sidebar if open
+    if (typeof window.renderSettingsCategories === 'function') {
+        window.renderSettingsCategories();
+    }
+}
+window.updateSystemNotifications = updateSystemNotifications;
 
 /**
  * Applies settings to the Monaco Editor instance.

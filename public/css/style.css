@@ -101,7 +101,7 @@ body.expert-mode .sidebar-footer { display: flex; }
 
 .status-slots {
     display: flex;
-    gap: 20px;
+    gap: 10px;
     margin-left: auto;
     align-items: center;
 }
@@ -152,6 +152,28 @@ body.expert-mode .sidebar-footer { display: flex; }
     width: 32px; height: 32px; 
 }
 .header-actions button:hover { color: #fff !important; background: #252525 !important; }
+
+/* Notification Dot */
+.has-notification { position: relative; }
+.has-notification::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--warn);
+    border-radius: 50%;
+    border: 1px solid var(--side);
+    pointer-events: none;
+}
+
+.settings-category-item.has-notification::after {
+    top: 50%;
+    right: 15px;
+    transform: translateY(-50%);
+    border-color: transparent;
+}
 
 /* --- SEARCH FIELD (Aggressive Dark Mode) --- */
 .search-box { padding: 10px 15px; border-bottom: 1px solid var(--border); }
