@@ -2,10 +2,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.select import SelectEntity
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
-from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES
+from .entity_base import JSAutomationsBaseEntity
+from homeassistant.const import CONF_UNIQUE_ID, CONF_STATE
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -28,13 +28,8 @@ async def async_setup_entry(
         async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_select", async_add_select)
     )
 
-class JSAutomationsSelect(SelectEntity, RestoreEntity):
+class JSAutomationsSelect(JSAutomationsBaseEntity, SelectEntity):
     """Representation of a JS Automations Select Entity."""
-
-    def __init__(self, data):
-        self._attr_unique_id = data[CONF_UNIQUE_ID]
-        self._attr_should_poll = False
-        self.update_data(data)
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
@@ -43,33 +38,14 @@ class JSAutomationsSelect(SelectEntity, RestoreEntity):
         if last_state:
             self._attr_current_option = last_state.state
 
-    def update_data(self, data):
-        """Update entity state and attributes."""
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
+    def _update_specific_state(self, data):
+        """Update select specific state."""
         if CONF_STATE in data: self._attr_current_option = str(data[CONF_STATE]) if data[CONF_STATE] is not None else None
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
-
-        if CONF_DEVICE_INFO in data:
-            info = data[CONF_DEVICE_INFO].copy()
-            if "identifiers" in info and isinstance(info["identifiers"], list):
-                ids = set()
-                for x in info["identifiers"]:
-                    if isinstance(x, list):
-                        ids.add(tuple(x))
-                    else:
-                        ids.add((DOMAIN, str(x)))
-                info["identifiers"] = ids
-            self._attr_device_info = info
         
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
-            self._attr_extra_state_attributes = attrs
             if "options" in attrs: self._attr_options = attrs["options"]
-
-        if self.hass:
-            self.async_write_ha_state()
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "select_option", "value": option})
+        self.send_event("select_option", option)

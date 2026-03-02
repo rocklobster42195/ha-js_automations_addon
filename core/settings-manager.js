@@ -12,7 +12,12 @@ class SettingsManager extends EventEmitter {
     constructor() {
         super();
         this.settings = {};
+        this.saveTimer = null;
         this.init();
+
+        // Graceful Shutdown: Sicherstellen, dass ausstehende Änderungen gespeichert werden
+        process.on('SIGTERM', () => this.save());
+        process.on('SIGINT', () => this.save());
     }
 
     /**
@@ -73,15 +78,29 @@ class SettingsManager extends EventEmitter {
      */
     updateSettings(updates) {
         this.settings = this._deepMerge(this.settings, updates);
-        this.save();
+        this.triggerSave();
         this.emit('settings_updated', this.settings);
         return this.settings;
+    }
+
+    /**
+     * Startet den Timer für das Speichern (Debounce).
+     * Verhindert zu häufige Schreibzugriffe auf die SD-Karte (Raspi-Schutz).
+     */
+    triggerSave() {
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        // Speichert erst nach 2 Sekunden Ruhe
+        this.saveTimer = setTimeout(() => this.save(), 2000);
     }
 
     /**
      * Speichert den aktuellen Zustand in die Datei.
      */
     save() {
+        if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
         try {
             fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
         } catch (error) {
