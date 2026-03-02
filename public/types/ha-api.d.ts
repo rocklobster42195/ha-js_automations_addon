@@ -67,6 +67,20 @@ interface HA {
     error(message: any): void;
 
     /**
+     * Stops the execution of the current script.
+     * The script will not run again until manually started or triggered by an external event.
+     * @param reason Optional reason for stopping, which will be logged. Defaults to 'stopped by script'.
+     */
+    stop(reason?: string): void;
+
+    /**
+     * Immediately stops and restarts the current script.
+     * Useful for self-healing logic to recover from a faulty state.
+     * @param reason Optional reason for restarting, which will be logged. Defaults to 'restarted by script'.
+     */
+    restart(reason?: string): void;
+
+    /**
      * Calls a Home Assistant service.
      * @param domain The domain (e.g., 'light', 'switch')
      * @param service The service name (e.g., 'turn_on')

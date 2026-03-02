@@ -204,21 +204,65 @@ const statusBar = {
             if (targetEntity && targetEntity === data.entity_id) {
                 const el = document.getElementById(`sb-${slotId}`);
                 if (el) {
-                    const val = data.new_state ? data.new_state.state : 'N/A';
-                    const unit = data.new_state && data.new_state.attributes.unit_of_measurement ? `\u00A0${data.new_state.attributes.unit_of_measurement}` : '';
+                    let val = data.new_state ? data.new_state.state : null;
+                    let unit = '';
+
+                    if (!val || val === 'unavailable' || val === 'unknown') {
+                        val = '--';
+                    } else if (data.new_state.attributes.unit_of_measurement) {
+                        unit = `\u00A0${data.new_state.attributes.unit_of_measurement}`;
+                    }
+
                     el.querySelector('.val').innerText = `${val}${unit}`;
 
                     // Wert nur cachen, nicht zeichnen (passiert im Takt von updateSystemStats)
                     const numVal = parseFloat(val);
                     this.currentValues[slotId] = !isNaN(numVal) ? numVal : null;
 
-                    // Icon aktualisieren, falls vorhanden
-                    if (data.new_state && data.new_state.attributes.icon) {
-                        const iconName = data.new_state.attributes.icon.replace('mdi:', '');
-                        console.log(`Statusbar: Updating icon for ${data.entity_id} to mdi-${iconName}. Full icon attribute: ${data.new_state.attributes.icon}`);
-                        const iconEl = el.querySelector('i');
-                        if (iconEl) iconEl.className = `mdi mdi-${iconName}`;
+                    // Icon aktualisieren
+                    let iconName = 'bookmark'; // Default Fallback
+                    if (data.new_state) {
+                        if (data.new_state.attributes.icon) {
+                            iconName = data.new_state.attributes.icon.replace('mdi:', '');
+                        } else {
+                            // Domain-based Fallback
+                            const domain = data.entity_id.split('.')[0];
+                            const state = data.new_state.state;
+
+                            if (domain === 'sensor') iconName = 'chart-line';
+                            else if (domain === 'binary_sensor') iconName = 'radiobox-blank';
+                            else if (domain === 'switch' || domain === 'input_boolean') iconName = 'toggle-switch';
+                            else if (domain === 'light') iconName = 'lightbulb';
+                            else if (domain === 'person') iconName = 'account';
+                            else if (domain === 'sun') iconName = 'white-balance-sunny';
+                            else if (domain === 'climate') iconName = 'thermostat';
+                            else if (domain === 'weather') {
+                                const map = {
+                                    'clear-night': 'weather-night',
+                                    'cloudy': 'weather-cloudy',
+                                    'fog': 'weather-fog',
+                                    'hail': 'weather-hail',
+                                    'lightning': 'weather-lightning',
+                                    'lightning-rainy': 'weather-lightning-rainy',
+                                    'partlycloudy': 'weather-partly-cloudy',
+                                    'pouring': 'weather-pouring',
+                                    'rainy': 'weather-rainy',
+                                    'snowy': 'weather-snowy',
+                                    'snowy-rainy': 'weather-snowy-rainy',
+                                    'sunny': 'weather-sunny',
+                                    'windy': 'weather-windy',
+                                    'windy-variant': 'weather-windy-variant',
+                                    'exceptional': 'alert-circle-outline'
+                                };
+                                iconName = map[state] || 'weather-cloudy';
+                            }
+                        }
+                    } else {
+                        iconName = 'alert-circle-outline';
                     }
+
+                    const iconEl = el.querySelector('i');
+                    if (iconEl) iconEl.className = `mdi mdi-${iconName}`;
 
                     // Tooltip Update: Friendly Name + (Entity ID)
                     if (data.new_state) {
@@ -326,11 +370,11 @@ const statusBar = {
             if (state) {
                 this.updateEntityState({ entity_id: cleanId, new_state: state });
             } else {
-                this.updateSlotError(cleanId, 'N/A');
+                this.updateSlotError(cleanId, '--');
             }
         } catch (e) { 
             console.warn("Statusbar: Init fetch failed", e);
-            this.updateSlotError(cleanId, 'Err');
+            this.updateSlotError(cleanId, '--');
         } finally {
             this.fetchPromise = null;
         }
@@ -343,6 +387,8 @@ const statusBar = {
                 if (el) {
                     const valEl = el.querySelector('.val');
                     if (valEl) valEl.innerText = msg;
+                    const iconEl = el.querySelector('i');
+                    if (iconEl) iconEl.className = 'mdi mdi-alert-circle-outline';
                 }
             }
         });

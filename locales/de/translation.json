@@ -160,7 +160,11 @@
     },
     "danger": {
       "node_memory": "Node.js Speicher (MB)",
-      "node_memory_desc": "Maximaler Arbeitsspeicher. Erfordert Neustart."
+      "node_memory_desc": "Maximaler Arbeitsspeicher. Erfordert Neustart.",
+      "restart_count": "Neustart-Schutz (Anzahl)",
+      "restart_count_desc": "Maximale Anzahl an Neustarts eines Skripts, bevor es gestoppt wird.",
+      "restart_time": "Neustart-Schutz (Zeitfenster in s)",
+      "restart_time_desc": "Das Zeitfenster in Sekunden, in dem die Neustarts gezählt werden."
     }
   }
 }

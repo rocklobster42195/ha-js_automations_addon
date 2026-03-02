@@ -15,9 +15,14 @@ class WorkerManager extends EventEmitter {
         this.stopReasons = new Map();
         this.lastExitState = new Map();
         this.stats = new Map();
+        this.restartTracker = new Map(); // Trackt Startzeiten für Loop-Protection
         this.startTimes = new Map();
         this.haConnector = null;
         this.storeManager = null;
+        this.settings = {
+            restart_protection_count: 5,
+            restart_protection_time: 60000
+        };
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
@@ -30,6 +35,10 @@ class WorkerManager extends EventEmitter {
 
     setConnector(connector) { this.haConnector = connector; }
     setStore(store) { this.storeManager = store; }
+    setSettings(newSettings) {
+        this.settings = { ...this.settings, ...newSettings };
+        this.emit('log', { source: 'System', message: `Settings updated. Restart protection: ${this.settings.restart_protection_count} starts in ${this.settings.restart_protection_time / 1000}s.`, level: 'info' });
+    }
     setStorageDir(dir) { this.storageDir = dir; }
     setScriptsDir(dir) { this.scriptsDir = dir; }
 
@@ -103,6 +112,20 @@ class WorkerManager extends EventEmitter {
 
         const scriptMeta = ScriptParser.parse(fullPath);
         const { name } = scriptMeta;
+
+        // --- SAFEGUARD: Excessive Restart Protection ---
+        const now = Date.now();
+        const restarts = this.restartTracker.get(scriptMeta.filename) || [];
+        // Nur Starts der letzten 60 Sekunden behalten
+        const recentRestarts = restarts.filter(t => now - t < this.settings.restart_protection_time);
+        
+        if (recentRestarts.length >= this.settings.restart_protection_count) {
+            this.emit('log', { source: 'System', message: `🛑 Script '${name}' stopped due to excessive restart rate (>${this.settings.restart_protection_count} restarts in ${this.settings.restart_protection_time / 1000}s).`, level: 'error' });
+            this.lastExitState.set(scriptMeta.filename, 'error');
+            return; // Start abbrechen
+        }
+        recentRestarts.push(now);
+        this.restartTracker.set(scriptMeta.filename, recentRestarts);
         
         // Restart if already running
         if (this.workers.has(scriptMeta.filename)) {
@@ -297,6 +320,21 @@ class WorkerManager extends EventEmitter {
                     rss: Math.round(msg.rss / 1024 / 1024 * 100) / 100
                 });
             }
+
+            // 6. Lifecycle Control (ha.restart / ha.stop)
+            if (msg.type === 'script_lifecycle') {
+                const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
+                this.emit('log', { source: name, message: `Requesting ${msg.action}: ${reason}`, level: 'info' });
+
+                if (msg.action === 'stop') {
+                    this.stopScript(scriptMeta.filename, reason);
+                } else if (msg.action === 'restart') {
+                    this.stopScript(scriptMeta.filename, reason);
+                    // Kurze Verzögerung für Cleanup, dann Neustart
+                    // Wir nutzen fullPath aus dem Scope von startScript
+                    setTimeout(() => this.startScript(fullPath), 500);
+                }
+            }
         });
 
         worker.on('error', (err) => {
@@ -381,7 +419,7 @@ class WorkerManager extends EventEmitter {
     /**
      * Stops a script gracefully.
      */
-    stopScript(filename, reason = "by user") {
+    stopScript(filename, reason = "stopped by user") {
         const worker = this.workers.get(filename);
         if (worker) {
             this.stopReasons.set(filename, reason);

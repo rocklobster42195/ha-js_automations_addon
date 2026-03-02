@@ -46,6 +46,7 @@ function initSocket() {
             if (hbParent) hbParent.title = `Backend Heartbeat: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
             hb.style.backgroundColor = isConnected ? '#fff' : 'var(--danger)';
             hb.style.opacity = '1';
+            hb.dataset.status = isConnected ? 'connected' : 'disconnected';
             // Rotation nur bei Connected zurücksetzen (falls es mal gespinnt hat)
             if (isConnected) hb.style.transform = '';
         }
@@ -71,12 +72,15 @@ function initSocket() {
         }
     };
 
-    socket.on('connect', () => {
+    const handleConnectionEstablished = () => {
         updateConnectionUI(true);
         // Initial status for integration is unknown on connect
         requestIntegrationStatus(); // Explizit den Status anfordern
         window.updateIntegrationStatusUI(true, null);
-    });
+        if (typeof loadScripts === 'function') loadScripts();
+    };
+
+    socket.on('connect', handleConnectionEstablished);
 
     socket.on('disconnect', () => {
         updateConnectionUI(false);
@@ -90,9 +94,9 @@ function initSocket() {
     socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');
         if (hb) {
-            // Falls Verbindung wieder da ist (Daten kommen), aber Icon noch rot war: Reset
-            if (hb.style.backgroundColor === 'var(--danger)') {
-                updateConnectionUI(true);
+            // Falls wir Daten empfangen, die UI aber "getrennt" anzeigt, war es ein stiller Reconnect.
+            if (hb.dataset.status === 'disconnected') {
+                handleConnectionEstablished();
             }
         }
 

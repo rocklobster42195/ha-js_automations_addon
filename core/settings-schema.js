@@ -38,6 +38,13 @@ module.exports = [
                 description: 'settings.general.confirm_delete_desc',
                 type: 'boolean', 
                 default: true 
+            },
+            { 
+                key: 'log_level', 
+                label: 'settings.system.log_level', 
+                type: 'select', 
+                options: ['debug','info', 'warn', 'error'], 
+                default: 'info' 
             }
         ]
     },
@@ -92,7 +99,6 @@ module.exports = [
                 default: true,
                 description: 'settings.statusbar.show_statusbar_desc'
             },
-            // Slot 1
             // Slot 1
             { 
                 key: 'slot1', 
@@ -199,20 +205,20 @@ module.exports = [
                 type: 'integration-manager' 
             },
             { 
-                key: 'log_level', 
-                label: 'settings.system.log_level', 
-                type: 'select', 
-                options: ['debug','info', 'warn', 'error'], 
-                default: 'info' 
-            },
-            { 
                 key: 'backup', 
                 label: 'settings.system.backup', 
                 type: 'button', 
                 buttonLabel: 'settings.system.backup_btn', 
                 actionUrl: 'api/system/backup' ,
                 hidden: false
-            },
+            }
+        ]
+    },
+    {
+        id: 'danger',
+        label: 'settings.categories.danger',
+        icon: 'mdi:alert',
+        items: [
             { 
                 key: 'node_memory', 
                 label: 'settings.danger.node_memory', 
@@ -220,8 +226,26 @@ module.exports = [
                 type: 'number', 
                 min: 256, 
                 max: 4096, 
-                default: 512,
-                hidden: true // Nur anzeigen, wenn die Funktion implementiert ist und ein Memory Limit gesetzt werden kann
+                default: 512
+            },
+            { 
+                key: 'restart_protection_count', 
+                label: 'settings.danger.restart_count', 
+                description: 'settings.danger.restart_count_desc', 
+                type: 'number', 
+                min: 2, 
+                max: 20, 
+                default: 5 
+            },
+            { 
+                key: 'restart_protection_time', 
+                label: 'settings.danger.restart_time', 
+                description: 'settings.danger.restart_time_desc', 
+                type: 'number', 
+                min: 10, 
+                max: 300, 
+                default: 60,
+                unit: 's'
             }
         ]
     }

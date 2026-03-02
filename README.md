@@ -1,4 +1,4 @@
-# ⚡ JS Automations for Home Assistant
+# JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
 ![Version](https://img.shields.io/badge/version-2.38.0-blue)
@@ -9,7 +9,7 @@
 
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
-> 📘 **Deep Dive:** Interested in the internal architecture? Check out the [Technical Documentation](docs/TECH-README.md) or the [Project Roadmap](docs/ROADMAP.md).
+> 📘 **Deep Dive:** Interested in the internal architecture? Check out the [Technical Documentation](docs/TECH-README.md) or the [API Reference](docs/API_REFERENCE.md).
 
 ## Key Features
 
@@ -24,6 +24,7 @@
 *   **Global Libraries:** Create reusable code modules and include them in any script using the `@include` tag.
 *   **Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
 *   **Managed Lifecycle:** Scripts stop automatically when finished unless they have active listeners (Cron/Events).
+*   **Self-Healing:** Scripts can restart themselves on error using `ha.restart()` to build robust automations.
 *   **Smart Organization:** Scripts are automatically grouped by their `@label`. The sidebar headers inherit the **icon and color** directly from your Home Assistant Label Registry and are collapsible for a better overview.
 
 ---
@@ -159,201 +160,8 @@ The integrated editor is smart enough to read your libraries. When you type a fu
 ---
 
 ## API Documentation
+For a complete reference of the `ha` object and other global built-ins, please refer to the API Reference.
 
-### 1. Logging & Debugging
-Control visibility via the `@loglevel` header (debug, info, warn, error).
-
-```javascript
-ha.debug("Variable x is: " + x); // Only visible if @loglevel is debug
-ha.log("Automation started");    // Standard white log
-ha.warn("Battery is low!");      // Yellow log
-ha.error("API failed!");         // Red log (marks script as crashed)
-```
-
-### 2. Reactive Triggers (`ha.on`)
-React to changes in Home Assistant. **Using this keeps your script running.**
-
-```javascript
-// --- Single Entity ---
-ha.on('binary_sensor.front_door', (e) => {
-    ha.log(`Door is now ${e.state}`); // e.state is 'on' or 'off'
-});
-
-// --- Wildcards (Match multiple) ---
-ha.on('light.living_room_*', (e) => {
-    ha.log(`${e.attributes.friendly_name} changed to ${e.state}`);
-});
-
-// --- Regular Expressions (Advanced) ---
-ha.on(/^sensor\..*_humidity$/, (e) => {
-    ha.log(`${e.entity_id} reports ${e.state}% humidity`);
-});
-
-// --- Arrays ---
-ha.on(['input_boolean.test', 'switch.garden'], (e) => {
-    ha.log("One of the tracked entities changed");
-});
-
-// --- Filters & Thresholds ---
-// Run only if value increases ('gt' = greater than old value)
-ha.on('sensor.power_usage', 'gt', (e) => {
-    ha.log(`Power usage went up: ${e.state}`);
-});
-
-// Run only if value is greater than threshold (25)
-ha.on('sensor.temperature', 'gt', 25, (e) => {
-    ha.warn("It's getting hot!");
-});
-```
-
-### 3. Reading States (`ha.states`)
-The cache is updated in real-time. No `await` required.
-
-```javascript
-const temp = ha.states['sensor.outdoor_temp'].state;
-const name = ha.states['sensor.outdoor_temp'].attributes.friendly_name;
-
-if (parseFloat(temp) > 25) {
-    ha.log(`It is hot in ${name}`);
-}
-
-// --- Helper Methods ---
-// Automatically converts state to Number or Boolean ('on'->true)
-const tempNum = ha.getStateValue('sensor.outdoor_temp'); // e.g. 25.5
-const isLightOn = ha.getStateValue('light.kitchen');     // e.g. true
-
-// Get a specific attribute directly
-const level = ha.getAttr('sensor.battery', 'battery_level');
-
-// Get group members as array
-const lights = ha.getGroupMembers('group.living_room_lights');
-
-// Read values from the script header (@name super_script)
-const scriptName = ha.getHeader('name', 'script');
-```
-
-### 4. Setting States & Creating Sensors (`ha.updateState`)
-Create virtual sensors or update existing ones directly in HA.
-
-```javascript
-// Register the entity once (Persistent)
-ha.register('sensor.js_energy_total', {
-    name: 'Total Calculated Energy',
-    icon: 'mdi:transmission-tower',
-    unit: 'kWh',               // Alias for unit_of_measurement
-        area: 'kitchen',           // Optional: Assign to an Area
-        labels: ['energy', 'solar'],  // Optional: Add Labels
-        initial_state: 1250.5         // Optional: Set initial value
-});
-
-// Update only the value
-ha.update('sensor.js_energy_total', 1251.0);
-
-// Update only the icon (keeps current value)
-ha.update('sensor.js_energy_total', { icon: 'mdi:flash-alert' });
-```
-
-### 5. Calling Services (`ha.callService`)
-Trigger any action in Home Assistant.
-
-```javascript
-// Turn on a light with attributes
-ha.callService('light', 'turn_on', {
-    entity_id: 'light.kitchen',
-    brightness: 150,
-    rgb_color: [255, 0, 0]
-});
-
-// Send a notification
-ha.callService('notify', 'mobile_app_phone', {
-    title: 'Security Alert',
-    message: 'Motion detected in the garage!'
-});
-```
-
-### 6. Entity Selectors (`ha.select`)
-Perform bulk actions on groups of entities.
-
-```javascript
-// Turn off all lights in a specific area
-ha.select('light.*')
-  .where(l => l.attributes.area === 'Living Room')
-  .turnOff();
-
-// Find all sensors with low battery
-const lowBatteries = ha.select('sensor.*_battery_level')
-  .where(s => parseFloat(s.state) < 10)
-  .toArray();
-
-ha.log(`Found ${lowBatteries.length} sensors with low battery.`);
-
-// --- Groups ---
-// Expand a group to its members and control them
-ha.select('group.living_room_lights')
-  .expand() // Resolves the group to individual lights
-  .turnOff();
-
-// --- Groups ---
-// Expand a group to its members and control them
-ha.select('group.living_room_lights')
-  .expand() // Resolves the group to individual lights
-  .turnOff();
-```
-
-### 7. Persistent Store (`ha.store`)
-Share data across scripts or reboots. Synchronous read/write.
-
-```javascript
-// Set a value
-ha.store.set('guest_mode', true);
-
-// Read a value (synchronous)
-if (ha.store.val.guest_mode === true) {
-    ha.log("Guest mode is active");
-}
-
-// React to changes (Cross-Script Communication)
-ha.store.on('guest_mode', (newValue, oldValue) => {
-    ha.log(`Guest mode changed from ${oldValue} to ${newValue}`);
-});
-
-// Delete a value
-ha.store.delete('temp_variable');
-```
-
----
-
-## Global Built-ins
-
-No need to `require` these, they are always available.
-
-### `axios`
-Standard library for HTTP requests.
-```javascript
-async function checkWeather() {
-    const res = await axios.get('https://api.weather.com/v1/...');
-    ha.log("Temp: " + res.data.temp);
-}
-```
-
-### `schedule(cron, callback)`
-Time-based execution using CRON syntax. **Keeps script running.**
-```javascript
-// Every day at 07:30
-schedule('30 7 * * *', () => {
-    ha.log("Time to wake up!");
-});
-```
-
-### `sleep(ms)`
-Pause execution in async functions.
-```javascript
-async function sequence() {
-    ha.callService('light', 'turn_on', { entity_id: 'light.test' });
-    await sleep(2000); // wait 2 seconds
-    ha.callService('light', 'turn_off', { entity_id: 'light.test' });
-}
-```
 
 ---
 ## Internationalization
@@ -503,3 +311,43 @@ schedule('0 10 * * 0', scanBatteries);
 // Run once on startup
 scanBatteries();
 ```
+
+### Self-Healing Script (Watchdog)
+This example demonstrates how to use `ha.restart()` and `ha.stop()` to build robust automations that recover from errors automatically.
+
+```javascript
+/**
+ * @name API Watchdog
+ * @icon mdi:dog-side
+ * @description Fetches data and restarts itself on failure (max 3 times).
+ */
+
+const MAX_RETRIES = 3;
+const RETRY_KEY = 'watchdog_retries';
+
+async function fetchData() {
+    try {
+        // Simulate API call
+        const response = await axios.get('https://api.example.com/data');
+        ha.log("Data fetched successfully: " + response.status);
+        
+        // Success: Reset retry counter and stop
+        ha.store.set(RETRY_KEY, 0);
+        ha.stop("Job finished successfully");
+        
+    } catch (e) {
+        const retries = ha.store.get(RETRY_KEY) || 0;
+        
+        if (retries < MAX_RETRIES) {
+            ha.warn(`Fetch failed (${e.message}). Restarting (Attempt ${retries + 1}/${MAX_RETRIES})...`);
+            ha.store.set(RETRY_KEY, retries + 1);
+            ha.restart("API Error - Self Healing");
+        } else {
+            ha.error(`Failed after ${MAX_RETRIES} attempts. Giving up.`);
+            ha.store.set(RETRY_KEY, 0); // Reset for next manual start
+            ha.stop("Too many failures");
+        }
+    }
+}
+
+fetchData();

@@ -242,6 +242,8 @@ const ha = {
     log: (m) => sendLog('info', m),
     warn: (m) => sendLog('warn', m),
     error: (m) => sendLog('error', m),
+    stop: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'stop', reason }),
+    restart: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'restart', reason }),
     
     // Commands
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),

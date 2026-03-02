@@ -57,11 +57,27 @@ const currentSettings = SettingsManager.getSettings();
 if (currentSettings.system && currentSettings.system.log_level) {
     logManager.setLevel(currentSettings.system.log_level);
 }
+
+function updateWorkerManagerSettings(settings) {
+    const workerSettings = {};
+    if (settings.danger?.restart_protection_count) {
+        workerSettings.restart_protection_count = settings.danger.restart_protection_count;
+    }
+    if (settings.danger?.restart_protection_time) {
+        // Convert seconds from UI to milliseconds for the manager
+        workerSettings.restart_protection_time = settings.danger.restart_protection_time * 1000;
+    }
+    if (Object.keys(workerSettings).length > 0) {
+        workerManager.setSettings(workerSettings);
+    }
+}
+
 // Auf Änderungen hören
 SettingsManager.on('settings_updated', (newSettings) => {
     if (newSettings.system && newSettings.system.log_level) {
         logManager.setLevel(newSettings.system.log_level);
     }
+    updateWorkerManagerSettings(newSettings);
 });
 
 // OPTIONS LOADING
@@ -136,6 +152,9 @@ async function startSystem() {
         workerManager.setStore(storeManager);
         workerManager.setStorageDir(STORAGE_DIR); // Dem Manager den neuen Pfad sagen
         workerManager.setScriptsDir(SCRIPTS_DIR);
+
+        // Initial settings for worker manager
+        updateWorkerManagerSettings(currentSettings);
 
         const entityManager = new EntityManager(connector, workerManager, stateManager);
         await entityManager.createExposedEntities(hasIntegration);
