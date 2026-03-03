@@ -62,7 +62,10 @@ const sendLog = (level, msg) => {
 };
 
 // --- 3. CACHE & SYNC ---
-const states = workerData.initialStates || {};
+// Deep copy initialStates to prevent any potential shared references or mutation issues
+// This ensures the worker's state cache is truly isolated.
+const states = JSON.parse(JSON.stringify(workerData.initialStates || {}));
+
 const storeValues = workerData.initialStore || {};
 const storeListeners = {};
 const subscriptionCallbacks = [];
@@ -153,8 +156,13 @@ function ensureMessageListener() {
     parentPort.on('message', async (msg) => {
         // Real-time state cache sync
         if (msg.type === 'state_update') {
-            if (msg.state) states[msg.entity_id] = msg.state;
-            else delete states[msg.entity_id];
+            if (msg.state) {
+                // Deep clone the incoming state to ensure no external references are held
+                // and to create a truly independent object for the worker's cache.
+                states[msg.entity_id] = JSON.parse(JSON.stringify(msg.state));
+            } else { // msg.state is null or undefined, so delete the entity
+                delete states[msg.entity_id];
+            }
         }
 
         // Real-time global store sync
@@ -173,7 +181,7 @@ function ensureMessageListener() {
         // Handle ha.on() triggers
         if (msg.type === 'ha_event') {
             // FIX: Update cache immediately so ha.states is current in the callback
-            if (msg.state) states[msg.entity_id] = msg.state;
+            if (msg.state) states[msg.entity_id] = JSON.parse(JSON.stringify(msg.state));
 
             subscriptionCallbacks.forEach(sub => {
                 // 1. Check Pattern Match
