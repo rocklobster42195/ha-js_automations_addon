@@ -817,6 +817,22 @@ input#search-input:focus { border-color: var(--accent) !important; }
     pointer-events: none;
 }
 
+/* --- SETTINGS CATEGORIES --- */
+/* Visuelle Hervorhebung für die "Danger Zone" Einstellungen */
+.settings-category-danger {
+    background-color: rgba(244, 67, 54, 0.1); /* 10% Deckkraft der --danger Farbe */
+    border: 1px solid rgba(244, 67, 54, 0.3); /* 30% Deckkraft der --danger Farbe für den Rahmen */
+    border-radius: 8px; /* Leicht abgerundete Ecken */
+    padding: 15px; /* Innenabstand */
+    margin-top: 20px; /* Abstand nach oben */
+    margin-bottom: 20px; /* Abstand nach unten */
+}
+
+/* Optional: Für die Überschrift der Danger Zone */
+.settings-category-danger h3 {
+    color: var(--danger); /* Nutzt die definierte --danger Farbe */
+    margin-bottom: 15px;
+}
 /* --- REFERENCE UI --- */
 .ref-container { display: flex; height: 100%; width: 100%; }
 .ref-sidebar { width: 220px; background: #252526; border-right: 1px solid #333; padding: 10px 0; overflow-y: auto; flex-shrink: 0; }

@@ -128,6 +128,9 @@ function renderSettingsForm(catId) {
     const category = settingsSchema.find(c => c.id === catId);
     if (!category) return;
 
+    // Fügt die Klasse 'settings-category-danger' hinzu, wenn es die Danger Zone ist, entfernt sie sonst.
+    container.classList.toggle('settings-category-danger', catId === 'danger');
+
     // Titel der Kategorie
     const title = document.createElement('h3');
     title.innerText = i18next.t(category.label);

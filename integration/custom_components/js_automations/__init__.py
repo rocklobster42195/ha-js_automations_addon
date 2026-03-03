@@ -30,7 +30,7 @@ CONF_AVAILABLE = "available"
 _LOGGER = logging.getLogger(__name__)
 
 # As per concept, the bridge should be universal
-PLATFORMS = ["sensor", "binary_sensor", "event", "device_tracker", "switch", "button", "number", "text", "select", "light", "cover", "fan", "lock", "climate", "media_player", "vacuum", "camera", "image", "siren", "humidifier", "water_heater", "valve", "remote", "lawn_mower", "alarm_control_panel", "update", "calendar", "todo", "weather", "air_quality", "date", "time", "datetime", "scene"]
+PLATFORMS = ["sensor", "binary_sensor", "switch", "button", "number", "text", "select"]
 
 # Signal for platform communication
 SIGNAL_ADD_ENTITY = f"{DOMAIN}_add_entity"
