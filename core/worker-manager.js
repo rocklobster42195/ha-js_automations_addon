@@ -425,6 +425,7 @@ class WorkerManager extends EventEmitter {
             this.stopReasons.set(filename, reason);
             this.stats.delete(filename);
             this.startTimes.delete(filename);
+            // this.restartTracker.delete(filename); // Der Reset des Zählers wird nun im 'script_exit'-Event in server.js gehandhabt.
             // 1. Try graceful shutdown
             worker.postMessage({ type: 'stop_request' });
             // 2. Force terminate after 2 seconds if still alive
