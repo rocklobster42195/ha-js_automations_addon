@@ -5,7 +5,7 @@
   "documentation": "https://github.com/boris-k/ha-js_automations_addon",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/boris-k/ha-js_automations_addon/issues",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "codeowners": ["@rocklobster42195"],
   "requirements": []
 }
