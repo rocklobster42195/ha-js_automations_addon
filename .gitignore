@@ -41,5 +41,6 @@ scripts/*.js
 # ...aber behalte vielleicht ein Beispiel:
 !scripts/gemini_weather_demo.js
 !scripts/cleanup_tool.js
+!scripts/freifunk_client_counter.js
 
 AI_RULES.md
