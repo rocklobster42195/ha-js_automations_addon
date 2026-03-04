@@ -156,7 +156,7 @@ async function startSystem() {
         // Initial settings for worker manager
         updateWorkerManagerSettings(currentSettings);
 
-        const entityManager = new EntityManager(connector, workerManager, stateManager);
+        const entityManager = new EntityManager(connector, workerManager, stateManager, depManager);
         await entityManager.createExposedEntities(hasIntegration);
 
         // State Verteilung

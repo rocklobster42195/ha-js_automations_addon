@@ -18,7 +18,7 @@ class LogManager {
         this.maxEntries = 1000; // Keep last 1000 lines
         this.flushIntervalMs = 60000; // Flush every 60s
         this.isDirty = false;
-        this.level = 'info';
+        this.systemLogLevel = 'info'; // Global log level for system messages
 
         // Load existing logs on startup
         this.load();
@@ -44,8 +44,8 @@ class LogManager {
     }
 
     setLevel(level) {
-        if (LOG_LEVELS[level] !== undefined) {
-            this.level = level;
+        if (LOG_LEVELS[level.toLowerCase()] !== undefined) {
+            this.systemLogLevel = level.toLowerCase();
         }
     }
 
@@ -58,8 +58,13 @@ class LogManager {
      */
     add(level, source, message) {
         const lvl = (level || 'info').toLowerCase();
-        // Filter based on current log level
-        if (LOG_LEVELS[lvl] > LOG_LEVELS[this.level]) return null;
+        
+        // Apply global system log level filter only to 'System' messages
+        // Script messages are already filtered by their own @loglevel in the worker
+        if (source === 'System') {
+            if (LOG_LEVELS[lvl] > LOG_LEVELS[this.systemLogLevel]) return null;
+        }
+        // For script logs, we assume the worker has already applied the script's @loglevel filter.
 
         const entry = {
             ts: Date.now(),
