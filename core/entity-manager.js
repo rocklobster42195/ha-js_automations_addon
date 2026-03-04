@@ -6,10 +6,12 @@ const ScriptParser = require('./parser');
 class EntityManager {
 
     /**
-     * @param {object} haConnection
-     * @param {object} workerManager
+     * @param {object} haConnection - The Home Assistant connection manager.
+     * @param {object} workerManager - The worker thread manager.
+     * @param {object} stateManager - The script state persistence manager.
+     * @param {object} depManager - The dependency manager for NPM packages.
      */
-    constructor(haConnection, workerManager, stateManager) {
+    constructor(haConnection, workerManager, stateManager, depManager) {
         this.haConnection = haConnection;
         this.workerManager = workerManager;
         this.stateManager = stateManager;

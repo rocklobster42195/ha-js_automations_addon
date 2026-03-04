@@ -37,7 +37,7 @@ class WorkerManager extends EventEmitter {
     setStore(store) { this.storeManager = store; }
     setSettings(newSettings) {
         this.settings = { ...this.settings, ...newSettings };
-        this.emit('log', { source: 'System', message: `Settings updated. Restart protection: ${this.settings.restart_protection_count} starts in ${this.settings.restart_protection_time / 1000}s.`, level: 'info' });
+        this.emit('log', { source: 'System', message: `Settings updated. Restart protection: ${this.settings.restart_protection_count} starts in ${this.settings.restart_protection_time / 1000}s.`, level: 'debug' });
     }
     setStorageDir(dir) { this.storageDir = dir; }
     setScriptsDir(dir) { this.scriptsDir = dir; }

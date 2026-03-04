@@ -93,7 +93,7 @@ class DependencyManager extends EventEmitter {
         const kept = installed.filter(p => !currentSet.has(p) && requiredSet.has(p));
         
         if (kept.length > 0) {
-            this.log(`ℹ️ Shared packages retained: ${kept.join(', ')}`);
+            this.log(`ℹShared packages retained: ${kept.join(', ')}`, 'debug');
         }
 
         if (toRemove.length > 0) {
