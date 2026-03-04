@@ -1,0 +1,141 @@
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.components.vacuum import (
+    StateVacuumEntity,
+    VacuumEntityFeature,
+)
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
+from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the platform."""
+    
+    @callback
+    def async_add_vacuum(data: dict):
+        """Handle entity creation signal."""
+        unique_id = data[CONF_UNIQUE_ID]
+        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
+            return
+        entity = JSAutomationsVacuum(data)
+        hass.data[DOMAIN][DATA_ENTITIES][unique_id] = entity
+        async_add_entities([entity])
+
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_vacuum", async_add_vacuum)
+    )
+
+class JSAutomationsVacuum(StateVacuumEntity, RestoreEntity):
+    """Representation of a JS Automations Vacuum."""
+
+    def __init__(self, data):
+        self._attr_unique_id = data[CONF_UNIQUE_ID]
+        self._attr_should_poll = False
+        self.update_data(data)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state:
+            self._attr_state = last_state.state
+            if "battery_level" in last_state.attributes:
+                self._attr_battery_level = last_state.attributes["battery_level"]
+            if "fan_speed" in last_state.attributes:
+                self._attr_fan_speed = last_state.attributes["fan_speed"]
+            if "fan_speed_list" in last_state.attributes:
+                self._attr_fan_speed_list = last_state.attributes["fan_speed_list"]
+
+    def update_data(self, data):
+        """Update entity state and attributes."""
+        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
+        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
+        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
+        
+        if CONF_STATE in data:
+            self._attr_state = data[CONF_STATE]
+
+        if CONF_DEVICE_INFO in data:
+            info = data[CONF_DEVICE_INFO].copy()
+            if "identifiers" in info and isinstance(info["identifiers"], list):
+                ids = set()
+                for x in info["identifiers"]:
+                    if isinstance(x, list):
+                        ids.add(tuple(x))
+                    else:
+                        ids.add((DOMAIN, str(x)))
+                info["identifiers"] = ids
+            self._attr_device_info = info
+        
+        if CONF_ATTRIBUTES in data:
+            attrs = data[CONF_ATTRIBUTES]
+            self._attr_extra_state_attributes = {k: v for k, v in attrs.items() 
+                if k not in ["battery_level", "fan_speed", "fan_speed_list"]}
+            
+            if "battery_level" in attrs: self._attr_battery_level = int(attrs["battery_level"])
+            if "fan_speed" in attrs: self._attr_fan_speed = attrs["fan_speed"]
+            if "fan_speed_list" in attrs: self._attr_fan_speed_list = attrs["fan_speed_list"]
+            
+            # Determine supported features
+            features = 0
+            
+            # Basic features usually supported
+            features |= (
+                VacuumEntityFeature.START
+                | VacuumEntityFeature.STOP
+                | VacuumEntityFeature.PAUSE
+                | VacuumEntityFeature.RETURN_HOME
+                | VacuumEntityFeature.STATE
+                | VacuumEntityFeature.STATUS
+                | VacuumEntityFeature.BATTERY
+            )
+
+            if "fan_speed_list" in attrs:
+                features |= VacuumEntityFeature.FAN_SPEED
+            
+            features |= VacuumEntityFeature.CLEAN_SPOT
+            features |= VacuumEntityFeature.LOCATE
+            features |= VacuumEntityFeature.SEND_COMMAND
+
+            self._attr_supported_features = features
+
+        if self.hass:
+            self.async_write_ha_state()
+
+    async def async_start(self) -> None:
+        """Start or resume the cleaning task."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "start"})
+
+    async def async_stop(self, **kwargs) -> None:
+        """Stop the vacuum cleaner."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "stop"})
+
+    async def async_pause(self) -> None:
+        """Pause the cleaning task."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "pause"})
+
+    async def async_return_to_base(self, **kwargs) -> None:
+        """Set the vacuum cleaner to return to the dock."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "return_to_base"})
+
+    async def async_clean_spot(self, **kwargs) -> None:
+        """Perform a spot clean-up."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "clean_spot"})
+
+    async def async_locate(self, **kwargs) -> None:
+        """Locate the vacuum cleaner."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "locate"})
+
+    async def async_set_fan_speed(self, fan_speed: str, **kwargs) -> None:
+        """Set fan speed."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "set_fan_speed", "fan_speed": fan_speed})
+
+    async def async_send_command(self, command: str, params: dict | list | None = None, **kwargs) -> None:
+        """Send a command to a vacuum cleaner."""
+        self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "send_command", "command": command, "params": params})
