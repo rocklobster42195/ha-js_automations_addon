@@ -2,7 +2,6 @@
  * @name Freifunk Client Counter
  * @icon mdi:account-group
  * @description Counts clients in Freifunk via UniFi WebSocket
- * @area REG77
  * @label System
  * @npm node-unifi
  */
