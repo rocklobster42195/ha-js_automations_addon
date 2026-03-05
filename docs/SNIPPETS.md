@@ -491,6 +491,8 @@ ha.register('valve.bewaesserung', {
     type: 'valve',
     device_class: 'water', // water, gas
     persistent: true,
+    reports_position: true, // Aktiviert Positions-Slider
+    optimistic: true, // UI aktualisiert sofort
     attributes: {
         current_position: 0 // 0 = zu, 100 = offen
     }
