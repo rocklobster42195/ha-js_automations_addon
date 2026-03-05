@@ -38,6 +38,7 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self._attr_is_closed = False
+        self._optimistic = False
         self.update_data(data)
 
     async def async_added_to_hass(self) -> None:
@@ -55,6 +56,8 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
         if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
         if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
         if CONF_DEVICE_CLASS in data: self._attr_device_class = data[CONF_DEVICE_CLASS]
+        if "reports_position" in data: self._attr_reports_position = data["reports_position"]
+        if "optimistic" in data: self._optimistic = data["optimistic"]
         
         if CONF_STATE in data:
             state = data[CONF_STATE]
@@ -108,16 +111,40 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
 
     async def async_open_valve(self, **kwargs) -> None:
         """Open the valve."""
+        if self._optimistic:
+            self._attr_is_closed = False
+            self._attr_is_opening = False
+            self._attr_is_closing = False
+            if self.reports_position:
+                self._attr_current_valve_position = 100
+            self.async_write_ha_state()
         self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "open_valve"})
 
     async def async_close_valve(self, **kwargs) -> None:
         """Close the valve."""
+        if self._optimistic:
+            self._attr_is_closed = True
+            self._attr_is_opening = False
+            self._attr_is_closing = False
+            if self.reports_position:
+                self._attr_current_valve_position = 0
+            self.async_write_ha_state()
         self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "close_valve"})
 
     async def async_stop_valve(self, **kwargs) -> None:
         """Stop the valve."""
+        if self._optimistic:
+            self._attr_is_opening = False
+            self._attr_is_closing = False
+            self.async_write_ha_state()
         self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "stop_valve"})
 
     async def async_set_valve_position(self, position: int) -> None:
         """Set the valve position."""
+        if self._optimistic:
+            self._attr_current_valve_position = position
+            self._attr_is_closed = (position == 0)
+            self._attr_is_opening = False
+            self._attr_is_closing = False
+            self.async_write_ha_state()
         self.hass.bus.async_fire(f"{DOMAIN}_event", {"entity_id": self.entity_id, "unique_id": self._attr_unique_id, "action": "set_valve_position", "position": position})
