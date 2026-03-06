@@ -147,6 +147,7 @@ class EntityManager {
                 if (debounceTimers.has(fullPath)) clearTimeout(debounceTimers.get(fullPath));
                 
                 debounceTimers.set(fullPath, setTimeout(() => {
+                    debounceTimers.delete(fullPath); // FIX: Map-Eintrag nach Ausführung löschen
                     this.processSingleScript(fullPath);
                 }, 500));
             }
@@ -172,9 +173,14 @@ class EntityManager {
         // --- DELETION HANDLING ---
         if (!fs.existsSync(scriptPath)) {
             console.log(`[EntityManager] Script deleted: ${scriptName}. Cleaning up entities...`);
+            const fileName = path.basename(scriptPath);
             
+            // FIX: Worker stoppen, um Speicher freizugeben
+            this.workerManager.stopScript(fileName, 'file deleted');
+
             // 1. Clean up dynamic entities (via WorkerManager)
-            await this.workerManager.removeScriptEntities(scriptPath);
+            // FIX: Nutze fileName (basename) statt scriptPath (full path), da WorkerManager basenames als Key nutzt
+            await this.workerManager.removeScriptEntities(fileName);
 
             // 2. Clean up exposed entities (Switch/Button) - Blind cleanup based on ID pattern
             const hasIntegration = await this.haConnection.checkIntegrationAvailable();
