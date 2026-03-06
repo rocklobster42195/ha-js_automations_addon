@@ -31,7 +31,7 @@ process.on('uncaughtException', (err) => {
         parentPort.postMessage({
             type: 'log',
             level: 'error',
-            source: 'System',
+            source: workerData.name || 'System',
             message: `🔥 CRASH: ${err.message}\n${err.stack}`
         });
     } else {
@@ -42,7 +42,7 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason) => {
-    if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
+    if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: workerData.name || 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
 });
 
 // 🛡️ GLOBALER SIGNAL HANDLER

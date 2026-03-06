@@ -38,13 +38,6 @@ module.exports = [
                 description: 'settings.general.confirm_delete_desc',
                 type: 'boolean', 
                 default: true 
-            },
-            { 
-                key: 'log_level', 
-                label: 'settings.system.log_level', 
-                type: 'select', 
-                options: ['debug','info', 'warn', 'error'], 
-                default: 'info' 
             }
         ]
     },
@@ -200,6 +193,13 @@ module.exports = [
         icon: 'mdi:server',
         items: [
             { 
+                key: 'log_level', 
+                label: 'settings.system.log_level', 
+                type: 'select', 
+                options: ['debug','info', 'warn', 'error'], 
+                default: 'info' 
+            },
+            { 
                 key: 'ha_integration_status', 
                 label: 'Home Assistant Integration', 
                 type: 'integration-manager' 
@@ -221,12 +221,12 @@ module.exports = [
         items: [
             { 
                 key: 'node_memory', 
-                label: 'settings.danger.node_memory', 
+                label: 'settings.danger.node_memory_per_script', 
                 description: 'settings.danger.node_memory_desc', 
                 type: 'number', 
                 min: 256, 
                 max: 4096, 
-                default: 512
+                default: 256
             },
             { 
                 key: 'restart_protection_count', 

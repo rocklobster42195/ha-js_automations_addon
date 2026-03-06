@@ -3,9 +3,10 @@ const path = require('path');
 const EventEmitter = require('events');
 const schema = require('./settings-schema');
 
-// Pfad zum Speicherort der Einstellungen
-// Wir nutzen scripts/.storage/settings.json, damit es persistent ist
-const STORAGE_DIR = path.join(__dirname, '../scripts/.storage');
+// Pfad-Logik analog zu server.js, damit es im Add-on persistent ist (/config)
+const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
+const BASE_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '../scripts');
+const STORAGE_DIR = path.join(BASE_DIR, '.storage');
 const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
 
 class SettingsManager extends EventEmitter {
@@ -43,6 +44,9 @@ class SettingsManager extends EventEmitter {
                 // Merge: Defaults als Basis, User-Settings überschreiben diese
                 // Das stellt sicher, dass neue Schema-Felder auch in den Settings landen
                 this.settings = this._deepMerge(defaults, userSettings);
+
+                // Bereinigung: Entferne Keys, die nicht mehr im Schema sind
+                this._validateAndCleanup();
                 
                 // Wir speichern einmal zurück, um sicherzustellen, dass die Datei 
                 // alle aktuellen Keys (auch neue aus dem Schema) enthält.
@@ -78,6 +82,7 @@ class SettingsManager extends EventEmitter {
      */
     updateSettings(updates) {
         this.settings = this._deepMerge(this.settings, updates);
+        this._validateAndCleanup(); // Auch bei Updates sicherstellen, dass nichts Falsches reinkommt
         this.triggerSave();
         this.emit('settings_updated', this.settings);
         return this.settings;
@@ -120,6 +125,33 @@ class SettingsManager extends EventEmitter {
             });
         });
         return defaults;
+    }
+
+    /**
+     * Entfernt alle Einstellungen aus this.settings, die nicht im Schema definiert sind.
+     * Verhindert, dass "Leichen" oder Tippfehler in der JSON verbleiben.
+     */
+    _validateAndCleanup() {
+        const validKeys = {};
+        // 1. Map aller erlaubten Keys pro Kategorie erstellen
+        schema.forEach(cat => {
+            validKeys[cat.id] = new Set(cat.items.map(i => i.key));
+        });
+
+        // 2. Settings prüfen
+        for (const catId in this.settings) {
+            // Wenn Kategorie nicht im Schema -> Löschen
+            if (!validKeys[catId]) {
+                delete this.settings[catId];
+                continue;
+            }
+            // Wenn Key in Kategorie nicht im Schema -> Löschen
+            for (const key in this.settings[catId]) {
+                if (!validKeys[catId].has(key)) {
+                    delete this.settings[catId][key];
+                }
+            }
+        }
     }
 
     /**

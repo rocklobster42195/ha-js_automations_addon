@@ -104,6 +104,11 @@
   "error_wizard_url_required": "URL ist erforderlich",
   "wizard_import_warning": "Achtung: Importiere nur Code aus vertrauenswürdigen Quellen.",
   "wizard_placeholder_optional_name": "Optional: Skriptname",
+  "safe_mode_title": "SAFE MODE AKTIV",
+  "safe_mode_msg": "Bootloop erkannt. Alle Skripte wurden gestoppt, um das System zu schützen.",
+  "safe_mode_btn": "Safe Mode beenden",
+  "safe_mode_deactivated": "Safe Mode deaktiviert. Du kannst Skripte nun manuell starten.",
+  "safe_mode_failed": "Fehler beim Beenden des Safe Modes.",
   "settings_title": "Einstellungen",
   "settings": {
     "categories": {
@@ -159,8 +164,8 @@
       "integration_error_alert": "Fehler: {{error}}"
     },
     "danger": {
-      "node_memory": "Node.js Speicher (MB)",
-      "node_memory_desc": "Maximaler Arbeitsspeicher. Erfordert Neustart.",
+      "node_memory_per_script": "Speicherlimit pro Skript (MB)",
+      "node_memory_desc": "Maximaler RAM pro Skript. Verhindert, dass ein einzelnes Skript das System abstürzen lässt.",
       "restart_count": "Neustart-Schutz (Anzahl)",
       "restart_count_desc": "Maximale Anzahl an Neustarts eines Skripts, bevor es gestoppt wird.",
       "restart_time": "Neustart-Schutz (Zeitfenster in s)",

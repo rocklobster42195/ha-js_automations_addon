@@ -42,5 +42,7 @@ scripts/*.js
 !scripts/gemini_weather_demo.js
 !scripts/cleanup_tool.js
 !scripts/freifunk_client_counter.js
+!scripts/switch_manager.js
+!scripts/waschmaschine.js
 
 AI_RULES.md
