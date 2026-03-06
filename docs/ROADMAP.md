@@ -1,86 +1,52 @@
 # 🗺️ JS Automations Roadmap
 
-Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die geplanten Meilensteine mit Einschätzungen zu Komplexität und Aufwand.
+Diese Roadmap dokumentiert den Weg von der aktuellen Version (**v2.40.0**) hin zu einer professionellen Entwicklungsumgebung.
 
 ---
 
-## ✅ Meilenstein 1: Das Fundament (Abgeschlossen)
-*   **Engine:** Node.js Backend mit isolierten Worker-Threads.
-*   **HA-Bridge:** Native WebSocket-Verbindung & REST API.
-*   **Synchroner Cache:** Zugriff auf `ha.states` & `ha.store.val` ohne `await`.
-*   **NPM-Management:** Automatisches Installieren (`@npm`) und `Prune`.
-*   **Log-Levels:** Filterung im Worker (`debug`, `info`, `warn`, `error`).
-
----
-
-## ✅ Meilenstein 2: Das Cockpit (Abgeschlossen)
-*   **Layout:** Kompakte Liste, Smart Grouping nach `@label` (Icons/Farben aus HA).
-*   **IDE:** Monaco Editor Integration, Live-Logs, Dirty-State Schutz.
-*   **Persistenz:** Einklapp-Zustände im `localStorage`.
-
----
-
-## ✅ Meilenstein 3: Die Workspace-Erfahrung (Abgeschlossen)
-*Fokus: Produktivität beim Bearbeiten mehrerer Automations-Logiken.*
-
-**Multi-Tab Editing:**  Monaco-Models für jede Datei im RAM halten; Wechsel ohne Statusverlust.
-**entities.d.ts Migration:** Pfad-Verschiebung der Typ-Datei in den `.storage` Ordner.
-**Multilanguage (UI):** Dashboard auf Deutsch/Englisch (Fallback Englisch). 
-
----
-
-## 🚀 Meilenstein 4: Power-User Features (Geplant)
-*Fokus: Die Engine für komplexe Software-Strukturen öffnen.*
+## 🚀 Meilenstein 9: TypeScript Integration (In Arbeit)
+*Fokus: Typsicherheit und erstklassiges IntelliSense direkt im Browser.*
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Globaler Ordner** | **4/10** | **M** | Automatisches Laden von Shared-Functions aus `/global` in jeden Worker. |
-| **TypeScript Support** | **8/10** | **L** | Integration von Transpilern (esbuild/sucrase) & Source-Maps für Debugging. |
-| **Language Badges** | **1/10** | **S** | Kleine Markierungen (JS / TS / BLK) in der Sidebar-Liste. |
+| **CompilerManager** | **7/10** | **M** | Hintergrund-Transpilierung von `.ts` zu `.js` in `.storage/dist`. |
+| **Type Definitions** | **5/10** | **S** | Bereitstellung von `ha-api.d.ts` für das globale `ha` Objekt. |
+| **Monaco TS Mode** | **6/10** | **M** | Validierung und Autovervollständigung im Editor aktivieren. |
+| **Language Badges** | **1/10** | **S** | Optische Unterscheidung von JS und TS Scripten in der Sidebar. |
 
 ---
 
-## 🛡️ Meilenstein 5: HA-Integration & Wartung (Geplant)
-*Fokus: Tiefe Verzahnung mit dem HA-Ökosystem und Professionalisierung.*
+## 🏗️ Meilenstein 10: Server Refactoring & Modularisierung (In Arbeit)
+*Fokus: Wartbarkeit und Stabilität durch Entkopplung der server.js.*
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Englische Kommentare** | **2/10** | **S** | Refactoring des Quellcodes für internationale Lesbarkeit. |
-| **Resource Monitor** | **5/10** | **M** | Live RAM Anzeige pro Skript (via Worker-Polling). **(Frontend Ready)** |
+| **Kernel Orchestrator** | **6/10** | **M** | Zentrales Management aller Manager-Instanzen (HA, Worker, Store). |
+| **Bridge Service** | **5/10** | **M** | Saubere Trennung von internen Events und Socket.io Kommunikation. |
+| **System Service** | **4/10** | **S** | Auslagerung von Stats, Safe-Mode und Bootloop-Detection. |
+| **Code Cleanup** | **3/10** | **M** | Umstellung der verbleibenden Kommentare auf Englisch. |
 
 ---
 
-## 📦 Meilenstein 6: Script Management 2.0 (Geplant)
-*Fokus: Flexiblerer Umgang mit Dateien, Import/Export und Usability.*
+## 🧪 Meilenstein 11: Quality, Backup & Reliability (Geplant)
+*Fokus: Vertrauen in die Automatisierungen und Datensicherheit stärken.*
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Unified Creation Wizard** | **5/10** | **M** | Modal mit Tabs: *Neu* (Templates), *Upload* (Drag & Drop) und *Gist-Import*. Auto-Check auf Duplikate. |
-| **Editor Toolbar 2.0** | **3/10** | **S** | Download-Button für aktives Skript. |
-| **Advanced File Ops** | **6/10** | **M** | Umbenennen von Skripten (Rename & Restart) und "Backup All" (ZIP-Download aller Skripte). |
+| **Dry Run Mode** | **4/10** | **S** | Service-Calls nur loggen statt ausführen (Test-Modus). |
+| **Git Integration** | **7/10** | **L** | Lokale Historie (Commits bei Save) und optionaler GitHub Sync. |
+| **ZIP Backup All** | **3/10** | **S** | Ein-Klick Backup aller Scripte und Libraries als Archiv. |
+| **Unit Testing** | **8/10** | **L** | Integrierter Test-Runner für Scripte mit Mock-Entities. |
 
 ---
 
-## 🔌 Meilenstein 7: Native Integration (Geplant)
-*Fokus: Zero-Config Experience und volle Home Assistant Kompatibilität.*
+##  Meilenstein 12: Advanced Debugging (Zukunft)
+*Fokus: Tiefere Einblicke in die Laufzeit der Scripte.*
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Hybrid Architecture** | **7/10** | **L** | Add-on liefert `custom_component` mit und installiert sie bei Bedarf. |
-| **Native Entities** | **6/10** | **M** | `ha.register()` nutzt interne HA-API statt HTTP. Echte Registry-Einträge. |
-| **Installer Wizard** | **4/10** | **S** | UI-Flow zum Kopieren der Integration nach `/config`. |
-
----
-
-## ⚙️ Meilenstein 8: System Settings & Personalization (Geplant)
-*Fokus: Zentrale Konfiguration und Anpassbarkeit der Benutzeroberfläche.*
-
-| Feature | Komplexität | Aufwand | Beschreibung |
-| :--- | :---: | :---: | :--- |
-| **Settings Tab** | **4/10** | **M** | Zentraler Tab mit Split-View (Kategorien/Optionen) für alle Einstellungen. |
-| **Status Bar Config** | **5/10** | **M** | 3 Slots im Footer frei belegbar (CPU, RAM oder Custom Entity). |
-| **Expert Mode** | **2/10** | **S** | Umschalter zum Ausblenden technischer Details/Buttons in der UI. |
-| **Danger Zone** | **3/10** | **S** | Node.js RAM-Limit erhöhen und Log-Level global setzen. |
+| **Live Inspector** | **8/10** | **L** | Variablen-Werte live im Editor beobachten (Worker-V8-Bridge). |
+| **Dependency Map** | **5/10** | **M** | Visualisierung der Beziehungen zwischen Scripten, Libraries und Entities. |
 
 ---
 
@@ -89,11 +55,5 @@ Diese Roadmap dokumentiert den aktuellen stabilen Zustand (**v2.19.x**) und die 
 
 | Feature | Komplexität | Aufwand | Beschreibung |
 | :--- | :---: | :---: | :--- |
-| **Shared State UI** | **5/10** | **M** | Grafischer Explorer für den Inhalt von `ha.store.val`. |
 | **Blockly Integration** | **9/10** | **XL** | Visueller Editor mit eigener Block-Library für Home Assistant Aktionen. |
-
----
-
-## 🔧 Bekannte Herausforderungen
-
-*   **IntelliSense UI (Complexity 6):** Fix des Schwarz-auf-Schwarz Problems im Ingress-Iframe.
+| **Mobile App Support** | **6/10** | **M** | Optimierung der UI für die Home Assistant Mobile App (Ingress). |
