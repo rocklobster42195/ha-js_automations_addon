@@ -67,6 +67,9 @@ function updateWorkerManagerSettings(settings) {
         // Convert seconds from UI to milliseconds for the manager
         workerSettings.restart_protection_time = settings.danger.restart_protection_time * 1000;
     }
+    if (settings.danger?.node_memory) {
+        workerSettings.node_memory = settings.danger.node_memory;
+    }
     if (Object.keys(workerSettings).length > 0) {
         workerManager.setSettings(workerSettings);
     }
@@ -111,6 +114,8 @@ depManager.on('log', ({ level, message }) => {
 });
 
 let hasIntegration = false; // Variable, um den Integrationsstatus zu speichern
+let isSafeMode = false; // Globaler Safe Mode Status
+const CRASH_FILE = path.join(STORAGE_DIR, '.boot_crash_counter');
 
 // Socket.io Event Handling
 io.on('connection', (socket) => {
@@ -124,6 +129,8 @@ io.on('connection', (socket) => {
     socket.on('get_integration_status', (callback) => {
         callback({ available: hasIntegration });
     });
+    // Send Safe Mode status on connect
+    socket.emit('safe_mode', isSafeMode);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -131,6 +138,26 @@ app.use('/locales', express.static(path.join(__dirname, 'locales')));
 app.use(express.json());
 
 async function startSystem() {
+    // --- BOOTLOOP DETECTION ---
+    try {
+        let crashData = { count: 0, lastBoot: 0 };
+        if (fs.existsSync(CRASH_FILE)) {
+            crashData = JSON.parse(fs.readFileSync(CRASH_FILE, 'utf8'));
+        }
+        const now = Date.now();
+        // Reset counter if last boot was > 60s ago
+        if (now - crashData.lastBoot > 60000) {
+            crashData.count = 0;
+        }
+        crashData.count++;
+        crashData.lastBoot = now;
+        fs.writeFileSync(CRASH_FILE, JSON.stringify(crashData));
+
+        if (crashData.count >= 3) {
+            isSafeMode = true;
+        }
+    } catch (e) { console.error("Bootloop check failed:", e); }
+
     console.log(`🚀 Starting JS Automations Hub (v${packageJson.version})...`);
     let startMsg = `Addon started (v${packageJson.version})...`;
     if (systemOptions.expert_mode) {
@@ -138,6 +165,11 @@ async function startSystem() {
     }
     logManager.add('info', 'System', startMsg);
     try {
+        if (isSafeMode) {
+            logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');
+            io.emit('safe_mode', true);
+        }
+
         await connector.connect();
         
         // Integration Check (Ping)
@@ -239,14 +271,16 @@ async function startSystem() {
             if (entry) io.emit('log', entry);
         });
 
-        // Autostart
-        const enabled = stateManager.getEnabledScripts();
-        for (const file of enabled) {
-            const fullPath = path.join(SCRIPTS_DIR, file);
-            if (fs.existsSync(fullPath)) {
-                const meta = ScriptParser.parse(fullPath);
-                if (meta.dependencies.length > 0) await depManager.install(meta.dependencies, false);
-                workerManager.startScript(file);
+        // Autostart (Only if NOT in Safe Mode)
+        if (!isSafeMode) {
+            const enabled = stateManager.getEnabledScripts();
+            for (const file of enabled) {
+                const fullPath = path.join(SCRIPTS_DIR, file);
+                if (fs.existsSync(fullPath)) {
+                    const meta = ScriptParser.parse(fullPath);
+                    if (meta.dependencies.length > 0) await depManager.install(meta.dependencies, false);
+                    workerManager.startScript(file);
+                }
             }
         }
         
@@ -338,6 +372,18 @@ app.get('/api/ha/states', async (req, res) => {
     try {
         const states = await connector.getStates();
         res.json(states);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// SAFE MODE RESOLVER
+app.post('/api/system/safe-mode/resolve', (req, res) => {
+    try {
+        if (fs.existsSync(CRASH_FILE)) fs.unlinkSync(CRASH_FILE);
+        isSafeMode = false;
+        io.emit('safe_mode', false);
+        res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

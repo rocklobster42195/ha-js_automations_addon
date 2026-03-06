@@ -104,6 +104,11 @@
   "error_wizard_url_required": "URL is required",
   "wizard_import_warning": "Warning: Only import code from trusted sources.",
   "wizard_placeholder_optional_name": "Optional: Script Name",
+  "safe_mode_title": "SAFE MODE ACTIVE",
+  "safe_mode_msg": "Bootloop detected. All scripts have been stopped to protect the system.",
+  "safe_mode_btn": "Exit Safe Mode",
+  "safe_mode_deactivated": "Safe Mode deactivated. You can now start scripts manually.",
+  "safe_mode_failed": "Failed to resolve Safe Mode.",
   "settings_title": "Settings",
   "settings": {
     "categories": {
@@ -159,8 +164,8 @@
       "integration_error_alert": "Error: {{error}}"
     },
     "danger": {
-      "node_memory": "Node.js Memory (MB)",
-      "node_memory_desc": "Maximum RAM usage. Requires restart."
+      "node_memory_per_script": "Memory Limit per Script (MB)",
+      "node_memory_desc": "Maximum RAM per script. Prevents a single script from crashing the system."
     }
   }
 }

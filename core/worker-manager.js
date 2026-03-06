@@ -21,7 +21,8 @@ class WorkerManager extends EventEmitter {
         this.storeManager = null;
         this.settings = {
             restart_protection_count: 5,
-            restart_protection_time: 60000
+            restart_protection_time: 60000,
+            node_memory: 256
         };
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
@@ -106,7 +107,7 @@ class WorkerManager extends EventEmitter {
     startScript(filename) {
         const fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
         if (!fs.existsSync(fullPath)) {
-            this.emit('log', `[System] Script not found: ${filename}`, 'error');
+            this.emit('log', { source: 'System', message: `Script not found: ${filename}`, level: 'error' });
             return;
         }
 
@@ -143,7 +144,21 @@ class WorkerManager extends EventEmitter {
             }
         }
 
+        // Determine Memory Limit (Priority: Script Header > Settings > Default)
+        let memoryLimit = this.settings.node_memory || 256;
+        try {
+            // Quick scan for @memory tag since ScriptParser might not support it yet
+            const content = fs.readFileSync(fullPath, 'utf8');
+            const match = content.match(/@memory\s+(\d+)/);
+            if (match) {
+                memoryLimit = parseInt(match[1], 10);
+            }
+        } catch (e) { /* ignore read error, file existence checked above */ }
+
         const worker = new Worker(path.join(__dirname, 'worker-wrapper.js'), {
+            resourceLimits: {
+                maxOldGenerationSizeMb: memoryLimit
+            },
             workerData: {
                 ...scriptMeta,
                 initialStates: this.haConnector ? this.haConnector.states : {},
@@ -338,7 +353,7 @@ class WorkerManager extends EventEmitter {
         });
 
         worker.on('error', (err) => {
-            this.emit('log', `[${name}] ❌ CRITICAL: ${err.message}`, 'error');
+            this.emit('log', { source: name, message: `❌ CRITICAL: ${err.message}`, level: 'error' });
             this.lastExitState.set(scriptMeta.filename, 'error');
         });
 
