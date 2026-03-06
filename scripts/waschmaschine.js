@@ -13,8 +13,8 @@ ha.log(`'${scriptName}' gestartet...`);
 const SWITCH = 'switch.waschmaschine'; 
 const SENSOR = 'sensor.waschmaschine_status';
 const DURATION_MINUTES = 120;
+const WM_DATA = 'wm_data';
 
-// Funktion zur Benachrichtigung
 // Funktion zur Benachrichtigung mit lokalen Variationen
 function sendFinishNotifications() {
     ha.log("Waschmaschine fertig! Wähle Zufallstext...");
@@ -22,22 +22,22 @@ function sendFinishNotifications() {
     const variations =[
         // Klassisch & Freundlich
         "[sigh][bored]Die Waschmaschine ist fertig.",
-        "Der Waschgang ist beendet. [bored] Die Wäsche kann jetzt aufgehängt werden.",
+        "[bored]Der Waschgang ist beendet. Die Wäsche kann jetzt aufgehängt werden.",
         "Deine Wäsche ist frisch gewaschen und wartet im Keller auf dich.",
-        "Das Waschprogramm ist abgeschlossen. [whispering] Bitte die Wäsche zeitnah ausräumen.",
+        "Das Waschprogramm ist abgeschlossen. Bitte die Wäsche zeitnah ausräumen.",
         
         // Humorvoll & Motivierend
         "Ding Dong! Deine frisch gewaschene Wäsche verlangt nach dir.",
-        "Mission 'Saubere Kleidung' war erfolgreich. [laughing] Zeit fürs Ausräumen!",
+        "Mission 'Saubere Kleidung' war erfolgreich. Zeit fürs Ausräumen!",
         "Die Waschmaschine hat fertig geschleudert. Bitte befreie die nasse Wäsche aus der Trommel!",
-        "Achtung, Wäsche-Alarm! [laughing] Die Maschine ist durch.",
-        "Es ist Zeit für ein kleines Workout: [laughing] Wäsche aufhängen steht auf dem Plan!",
+        "Achtung, Wäsche-Alarm! Die Maschine ist durch.",
+        "<s>Es ist Zeit für ein kleines Workout.</s> [laughing] <s>Wäsche aufhängen steht auf dem Plan!</s>",
         "Operation Sauberschlüpfer erfolgreich beendet.",
                
         // Etwas drängender (damit man es nicht vergisst)
         "[sarcasm] Die Wäsche fängt leider nicht an, von selbst zu trocknen. Die Waschmaschine ist fertig!",
         "[sigh] Der nasse Wäsche-Berg wartet einsam im Keller auf dich.",
-        "Wasch-Ende erreicht. [whispering] Bitte zügig ausräumen, bevor alles knittert!"
+        "Wasch-Ende erreicht. Bitte zügig ausräumen, bevor alles knittert!"
     ];
     
     // Zufälligen Satz aus dem Array auswählen
@@ -61,12 +61,13 @@ function sendFinishNotifications() {
 
 // Haupt-Logik zur Berechnung
 function updateProgress() {
-    const finishAt = ha.store.val.wm_finish_timestamp;
+    const wmData = ha.store.get(WM_DATA);
+    const finishAt = wmData?.wm_finish_timestamp;
     const isPlugOn = ha.states[SWITCH]?.state === 'on';
 
     if (!isPlugOn) {
         ha.updateState(SENSOR, 'aus', { icon: 'mdi:washing-machine-off' });
-        if (finishAt) ha.store.delete('wm_finish_timestamp');
+        if (finishAt) ha.store.delete(WM_DATA);
         return;
     }
 
@@ -82,9 +83,9 @@ function updateProgress() {
             });
         } else {
             ha.updateState(SENSOR, 'fertig', { icon: 'mdi:washing-machine-alert' });
-            if (ha.store.val.wm_notified !== true) {
+            if (wmData?.wm_notified !== true) {
                 sendFinishNotifications();
-                ha.store.set('wm_notified', true);
+                ha.store.set(WM_DATA, { ...wmData, wm_notified: true });
             }
         }
     } else {
@@ -97,13 +98,13 @@ function updateProgress() {
  */
 function checkInitialState() {
     const isNowOn = ha.states[SWITCH]?.state === 'on';
-    const finishAt = ha.store.val.wm_finish_timestamp;
+    const wmData = ha.store.get(WM_DATA);
+    const finishAt = wmData?.wm_finish_timestamp;
 
     if (isNowOn && !finishAt) {
         ha.log("⚠️ Maschine läuft bereits, aber kein Timer im Speicher. Initialisiere Timer jetzt...");
         const endTimestamp = Date.now() + (DURATION_MINUTES * 60000);
-        ha.store.set('wm_finish_timestamp', endTimestamp);
-        ha.store.set('wm_notified', false);
+        ha.store.set(WM_DATA, { wm_finish_timestamp: endTimestamp, wm_notified: false });
     }
     updateProgress();
 }
@@ -112,13 +113,11 @@ function checkInitialState() {
 ha.on(SWITCH, (e) => {
     if (e.state === 'on' && e.old_state !== 'on') {
         const endTimestamp = Date.now() + (DURATION_MINUTES * 60000);
-        ha.store.set('wm_finish_timestamp', endTimestamp);
-        ha.store.set('wm_notified', false);
+        ha.store.set(WM_DATA, { wm_finish_timestamp: endTimestamp, wm_notified: false });
         ha.log(`Waschmaschine eingeschaltet. Timer gesetzt auf ${new Date(endTimestamp).toLocaleTimeString()}`);
         updateProgress();
     } else if (e.state === 'off') {
-        ha.store.delete('wm_finish_timestamp');
-        ha.store.delete('wm_notified');
+        ha.store.delete(WM_DATA);
         updateProgress();
     }
 });
