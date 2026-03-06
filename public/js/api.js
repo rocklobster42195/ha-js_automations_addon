@@ -4,7 +4,7 @@
  */
 
 var BASE_PATH = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
-var haData = { areas: [], labels: [], services: {} };
+var haData = { areas: [], labels: [], services: {}, language: null };
 var mdiIcons = [];
 
 async function apiFetch(endpoint, options = {}) {
@@ -25,7 +25,8 @@ async function loadHAMetadata(retryCount = 0) {
             }
             haData.areas = data.areas || [];
             haData.labels = data.labels || [];
-            console.log("✅ HA Metadata loaded.");
+            haData.language = data.language || null;
+            console.log(`✅ HA Metadata loaded. Language: ${haData.language}`);
             // allScripts and renderScripts are in script-list.js
             if (typeof allScripts !== 'undefined' && allScripts.length > 0 && typeof renderScripts === 'function') {
                 renderScripts(allScripts, false);

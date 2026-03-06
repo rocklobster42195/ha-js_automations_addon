@@ -19,10 +19,11 @@ module.exports = [
                 label: 'settings.general.language', 
                 type: 'select', 
                 options: [
+                    { value: 'auto', label: 'settings.general.language_auto' }, 
                     { value: 'de', label: 'Deutsch' }, 
                     { value: 'en', label: 'English' }
                 ], 
-                default: 'de' 
+                default: 'auto' 
             },
             { 
                 key: 'expert_mode', 

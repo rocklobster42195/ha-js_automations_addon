@@ -103,17 +103,24 @@ class HAConnector {
     }
 
     async getHAMetadata() {
-        if (!this.isReady) return { areas: [], labels: [] };
-        const idA = this.msgId++; const idL = this.msgId++;
+        if (!this.isReady) return { areas: [], labels: [], language: 'en' };
+        const idA = this.msgId++; const idL = this.msgId++; const idC = this.msgId++;
         this.send({ id: idA, type: 'config/area_registry/list' });
         this.send({ id: idL, type: 'config/label_registry/list' });
+        this.send({ id: idC, type: 'get_config' });
         return new Promise((res) => {
-            const out = { areas: [], labels: [] }; let c = 0;
+            const out = { areas: [], labels: [], language: 'en' }; let c = 0;
             const h = (d) => {
                 const m = JSON.parse(d);
                 if (m.id === idA) { out.areas = m.result || []; c++; }
                 if (m.id === idL) { out.labels = m.result || []; c++; }
-                if (c === 2) { this.ws.removeListener('message', h); res(out); }
+                if (m.id === idC) {
+                    if (m.result && m.result.language) {
+                        out.language = m.result.language.split('-')[0];
+                    }
+                    c++;
+                }
+                if (c === 3) { this.ws.removeListener('message', h); res(out); }
             };
             this.ws.on('message', h);
         });
@@ -140,6 +147,28 @@ class HAConnector {
                 this.ws.removeListener('message', handler);
                 reject(new Error("Service Call Timeout"));
             }, 5000);
+        });
+    }
+
+    /**
+     * Ruft die Home Assistant Konfiguration ab (inkl. Sprache).
+     */
+    async getHAConfig() {
+        if (!this.isReady) return {};
+        const id = this.msgId++;
+        this.send({ id, type: 'get_config' });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    if (msg.id === id) {
+                        this.ws.removeListener('message', handler);
+                        resolve(msg.result || {});
+                    }
+                } catch (e) { /* ignore parse errors */ }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve({}); }, 5000);
         });
     }
 

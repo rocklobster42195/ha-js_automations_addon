@@ -25,7 +25,18 @@ async function initI18next() {
         document.getElementById('btn-clear-server-logs')?.classList.remove('hidden');
     }
 
-    if (!lang && opts.ui_language) lang = opts.ui_language;
+    if (!lang && opts.ui_language && opts.ui_language !== 'auto') lang = opts.ui_language;
+
+    // Wenn 'auto' gewählt ist, versuchen wir die HA Sprache zu laden
+    if (!lang && opts.ui_language === 'auto') {
+        try {
+            const res = await apiFetch('api/ha/metadata');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.language) lang = data.language;
+            }
+        } catch (e) { console.debug("Could not load HA language", e); }
+    }
 
     // Fallback: Browser-Sprache
     if (!lang) lang = navigator.language.split('-')[0];
@@ -43,6 +54,17 @@ async function initI18next() {
             }
         });
     updateUIWithTranslations();
+
+    // Falls wir nach einem Reload (z.B. Sprachwechsel) die Settings wieder öffnen sollen
+    if (urlParams.get('open') === 'settings') {
+        setTimeout(() => {
+            if (typeof window.openSettingsTab === 'function') window.openSettingsTab();
+            // Parameter aus der URL entfernen, ohne die Seite neu zu laden
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('open');
+            window.history.replaceState({}, document.title, newUrl.toString());
+        }, 300);
+    }
 }
 
 function updateUIWithTranslations() {
