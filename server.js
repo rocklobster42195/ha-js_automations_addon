@@ -85,28 +85,6 @@ SettingsManager.on('settings_updated', (newSettings) => {
 
 // OPTIONS LOADING
 let systemOptions = { expert_mode: true };
-// function loadSystemOptions() {
-//     if (IS_ADDON && fs.existsSync('/data/options.json')) {
-//         try {
-//             systemOptions = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
-//         } catch (e) { console.error("Failed to load options.json", e); }
-//     } else if (fs.existsSync(path.join(__dirname, 'config.yaml'))) {
-//         // Fallback for local dev: Parse config.yaml (simple regex)
-//         try {
-//             const yaml = fs.readFileSync(path.join(__dirname, 'config.yaml'), 'utf8');
-//             const expertMatch = yaml.match(/expert_mode:\s*(true|false)/);
-//             if (expertMatch) {
-//                 systemOptions.expert_mode = expertMatch[1] === 'true';
-//             }
-//             const langMatch = yaml.match(/ui_language:\s*["']?([a-z]{2})["']?/);
-//             if (langMatch) {
-//                 systemOptions.ui_language = langMatch[1];
-//             }
-//         } catch (e) { console.error("Failed to parse config.yaml", e); }
-//     }
-// }
-// loadSystemOptions();
-
 // NPM Logs an das Frontend weiterleiten
 depManager.on('log', ({ level, message }) => {
     const entry = logManager.add(level, 'System', message);

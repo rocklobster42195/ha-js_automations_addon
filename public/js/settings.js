@@ -216,7 +216,7 @@ function renderSettingsForm(catId) {
                 const optLabel = typeof opt === 'object' ? opt.label : opt;
                 
                 option.value = optVal;
-                option.innerText = optLabel;
+                option.innerText = i18next.t(optLabel, { defaultValue: optLabel });
                 if (optVal === value) option.selected = true;
                 input.appendChild(option);
             });
@@ -325,7 +325,10 @@ async function saveSetting(catId, key, value) {
 
         // Reload bei Sprachänderung erzwingen
         if (catId === 'general' && key === 'ui_language') {
-            window.location.reload();
+            // Wir hängen einen Parameter an, damit wir nach dem Reload wissen, dass wir die Settings öffnen sollen
+            const url = new URL(window.location.href);
+            url.searchParams.set('open', 'settings');
+            window.location.href = url.toString();
         }
     } catch (e) {
         console.error("Save failed", e);

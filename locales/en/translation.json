@@ -112,6 +112,7 @@
   "settings_title": "Settings",
   "settings": {
     "categories": {
+      "language": "Language",
       "general": "General",
       "editor": "Editor",
       "statusbar": "Status Bar",
@@ -120,6 +121,7 @@
     },
     "general": {
       "language": "Language",
+      "language_auto": "Auto (Home Assistant)",
       "expert_mode": "Expert Mode",
       "expert_mode_desc": "Shows advanced options and technical details (e.g., file paths, raw views).",
       "confirm_delete": "Confirm deletion",
