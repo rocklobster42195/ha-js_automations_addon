@@ -84,6 +84,11 @@ class WorkerManager extends EventEmitter {
      * Löscht alle nativen Entitäten, die von einem bestimmten Skript erstellt wurden.
      */
     async removeScriptEntities(filename) {
+        // FIX: Metadaten immer bereinigen, auch wenn keine Entitäten da sind (verhindert Memory Leaks)
+        this.lastExitState.delete(filename);
+        this.restartTracker.delete(filename);
+        this.stopReasons.delete(filename);
+
         if (!this.scriptEntityMap.has(filename)) return;
         
         const entities = this.scriptEntityMap.get(filename);
