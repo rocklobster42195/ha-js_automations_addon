@@ -2,7 +2,7 @@ const express = require('express');
 const https = require('https');
 const archiver = require('archiver');
 
-module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR) => {
+module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR, systemService) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
@@ -78,6 +78,15 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
         });
 
         archive.finalize();
+    });
+
+    router.post('/system/safe-mode/resolve', (req, res) => {
+        const success = systemService.resolveSafeMode();
+        if (success) {
+            res.json({ success: true });
+        } else {
+            res.status(500).json({ error: 'Failed to resolve safe mode.' });
+        }
     });
 
     return router;

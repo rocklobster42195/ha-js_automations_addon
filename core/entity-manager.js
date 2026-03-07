@@ -1,7 +1,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const ScriptParser = require('./parser');
+const ScriptHeaderParser = require('./script-header-parser');
 
 class EntityManager {
 
@@ -48,7 +48,7 @@ class EntityManager {
             // Skip libraries (they are passive and live in /libraries subfolder)
             if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
 
-            const meta = ScriptParser.parse(scriptPath);
+            const meta = ScriptHeaderParser.parse(scriptPath);
             const scriptName = path.basename(scriptPath, '.js');
             
             // Nur wenn @expose gesetzt ist, erstellen wir eine Entität
@@ -197,7 +197,7 @@ class EntityManager {
         }
         
         try {
-            const meta = ScriptParser.parse(scriptPath);
+            const meta = ScriptHeaderParser.parse(scriptPath);
             const fileName = path.basename(scriptPath);
 
             // 1. Library Handling: Check dependents
@@ -206,7 +206,7 @@ class EntityManager {
                 for (const runningScriptFile of runningScripts) {
                     const runningScriptPath = path.join(this.workerManager.scriptsDir, runningScriptFile);
                     // Parse running script to check includes (lightweight op)
-                    const runningMeta = ScriptParser.parse(runningScriptPath);
+                    const runningMeta = ScriptHeaderParser.parse(runningScriptPath);
                     
                     const depends = runningMeta.includes && runningMeta.includes.some(lib => {
                         return lib === fileName || lib === scriptName || lib + '.js' === fileName;

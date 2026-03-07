@@ -6,7 +6,7 @@ const { Worker } = require('worker_threads');
 const path = require('path');
 const EventEmitter = require('events');
 const fs = require('fs');
-const ScriptParser = require('./parser');
+const ScriptHeaderParser = require('./script-header-parser');
 
 class WorkerManager extends EventEmitter {
     constructor() {
@@ -116,7 +116,7 @@ class WorkerManager extends EventEmitter {
             return;
         }
 
-        const scriptMeta = ScriptParser.parse(fullPath);
+        const scriptMeta = ScriptHeaderParser.parse(fullPath);
         const { name } = scriptMeta;
 
         // --- SAFEGUARD: Excessive Restart Protection ---
@@ -152,7 +152,7 @@ class WorkerManager extends EventEmitter {
         // Determine Memory Limit (Priority: Script Header > Settings > Default)
         let memoryLimit = this.settings.node_memory || 256;
         try {
-            // Quick scan for @memory tag since ScriptParser might not support it yet
+            // Quick scan for @memory tag since ScriptHeaderParser might not support it yet
             const content = fs.readFileSync(fullPath, 'utf8');
             const match = content.match(/@memory\s+(\d+)/);
             if (match) {

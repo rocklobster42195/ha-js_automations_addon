@@ -6,7 +6,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
-const ScriptParser = require('./parser');
+const ScriptHeaderParser = require('./script-header-parser');
 
 class DependencyManager extends EventEmitter {
     constructor(scriptsDir, storageDir) {
@@ -66,7 +66,7 @@ class DependencyManager extends EventEmitter {
         const requiredSet = new Set();
 
         allFiles.forEach(filePath => {
-            const meta = ScriptParser.parse(filePath);
+            const meta = ScriptHeaderParser.parse(filePath);
             meta.dependencies.forEach(dep => {
                 dep.split(/[\s,]+/).forEach(d => {
                     requiredSet.add(this.getPackageName(d));

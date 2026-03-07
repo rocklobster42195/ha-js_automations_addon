@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const ScriptParser = require('../core/parser');
+const ScriptHeaderParser = require('../core/script-header-parser');
 const axios = require('axios');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -26,7 +26,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         if (fs.existsSync(SCRIPTS_DIR)) {
             const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
             results.push(...files.map(f => {
-                const m = ScriptParser.parse(path.join(SCRIPTS_DIR, f));
+                const m = ScriptHeaderParser.parse(path.join(SCRIPTS_DIR, f));
                 if (!m.name) m.name = f; // Fallback: Dateiname als Name, falls @name fehlt
                 m.status = workerManager.workers.has(f) ? 'running' : (workerManager.lastExitState.get(f) === 'error' ? 'error' : 'stopped');
                 m.running = m.status === 'running';
@@ -43,7 +43,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         if (fs.existsSync(LIBRARIES_DIR)) {
             const files = fs.readdirSync(LIBRARIES_DIR).filter(f => f.endsWith('.js'));
             results.push(...files.map(f => {
-                const m = ScriptParser.parse(path.join(LIBRARIES_DIR, f));
+                const m = ScriptHeaderParser.parse(path.join(LIBRARIES_DIR, f));
                 if (!m.name) m.name = f; // Fallback
                 m.status = 'stopped'; // Libraries laufen nicht eigenständig
                 m.running = false;
@@ -66,7 +66,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
                 workerManager.stopScript(filename, 'stopped by user');
             } else {
                 if (fs.existsSync(fullPath)) {
-                    const meta = ScriptParser.parse(fullPath);
+                    const meta = ScriptHeaderParser.parse(fullPath);
                     if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
                 }
                 // Wir übergeben den vollen Pfad, damit WorkerManager ihn sicher findet
@@ -77,7 +77,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             workerManager.stopScript(filename, 'restarting');
             setTimeout(async () => {
                 if (fs.existsSync(fullPath)) {
-                    const meta = ScriptParser.parse(fullPath);
+                    const meta = ScriptHeaderParser.parse(fullPath);
                     if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
                 }
                 workerManager.startScript(fullPath);
@@ -143,7 +143,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
         fs.writeFileSync(fullPath, req.body.content, 'utf8');
         
-        const meta = ScriptParser.parse(fullPath);
+        const meta = ScriptHeaderParser.parse(fullPath);
         if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
 
         if (workerManager.workers.has(filename)) {
@@ -224,7 +224,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         fs.writeFileSync(fullPath, code || 'ha.log("Ready.");\n', 'utf8');
         
         // 2. Use the central parser to write the metadata header
-        ScriptParser.updateMetadata(fullPath, req.body);
+        ScriptHeaderParser.updateMetadata(fullPath, req.body);
 
         res.json({ filename });
     });
@@ -261,7 +261,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         }
 
         // Use Parser to update metadata (handles @expose and formatting centrally)
-        ScriptParser.updateMetadata(fullPath, req.body);
+        ScriptHeaderParser.updateMetadata(fullPath, req.body);
         
         // 5. REFACTORING: Update consumers
         let updatedConsumers = 0;
@@ -306,7 +306,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             }
         }
 
-        const meta = ScriptParser.parse(fullPath);
+        const meta = ScriptHeaderParser.parse(fullPath);
         if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
         depManager.prune();
         io.emit('status_update');
