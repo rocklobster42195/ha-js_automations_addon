@@ -43,7 +43,7 @@ function initSocket() {
         // 1. Heartbeat Icon
         if (hb) {
             const hbParent = hb.parentElement;
-            if (hbParent) hbParent.title = `Backend Heartbeat: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
+            if (hbParent) hbParent.title = `HA API: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
             hb.style.backgroundColor = isConnected ? '#fff' : 'var(--danger)';
             hb.style.opacity = '1';
             hb.dataset.status = isConnected ? 'connected' : 'disconnected';
