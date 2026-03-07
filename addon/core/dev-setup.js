@@ -71,7 +71,7 @@ async function run() {
 
     // 4. .env schreiben
     const envContent = `HA_URL=${url}\nHA_TOKEN=${token.trim()}\nPORT=${port}\n`;
-    const envPath = path.join(__dirname, '../.env');
+    const envPath = path.join(__dirname, '../../.env');
     
     try {
         fs.writeFileSync(envPath, envContent);

@@ -4,7 +4,7 @@
  * boots the Kernel, and wires up the API routes.
  */
 // DEV SETUP CHECK
-if (!process.env.SUPERVISOR_TOKEN && !require('fs').existsSync(require('path').join(__dirname, '.env'))) {
+if (!process.env.SUPERVISOR_TOKEN && !require('fs').existsSync(require('path').join(__dirname, '..', '.env'))) {
     try {
         require('child_process').execSync(`"${process.execPath}" "${require('path').join(__dirname, 'core', 'dev-setup.js')}"`, { stdio: 'inherit' });
     } catch (e) { process.exit(1); }
