@@ -1,6 +1,6 @@
 {
   "name": "ha-js-automations",
-  "version": "2.41.0",
+  "version": "2.42.0",
   "description": "",
   "main": "addon/server.js",
   "scripts": {
