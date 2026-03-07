@@ -29,22 +29,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-
- 
-
 # --- Optional: User-Skripte ignorieren? ---
 # Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
-scripts/*.js
+addon/scripts
 
-# ...aber behalte vielleicht ein Beispiel:
-!scripts/gemini_weather_demo.js
-!scripts/cleanup_tool.js
-!scripts/freifunk_client_counter.js
-!scripts/switch_manager.js
-!scripts/waschmaschine.js
-
-AI_RULES.md
-
-ha-js_automations_addon.code-workspace
+#AI_RULES.md

@@ -5,7 +5,7 @@ const schema = require('./settings-schema');
 
 // Pfad-Logik analog zu server.js, damit es im Add-on persistent ist (/config)
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
-const BASE_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '../scripts');
+const BASE_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '../../scripts');
 const STORAGE_DIR = path.join(BASE_DIR, '.storage');
 const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
 

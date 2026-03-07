@@ -8,9 +8,7 @@
     ".git"
   ],
   "watch": [
-    "server.js",
-    "core/",
-    "public/"
+    "addon/"
   ],
   "ext": "js,json,html,css"
 }

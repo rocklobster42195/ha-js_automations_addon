@@ -12,6 +12,10 @@ ingress: true
 ingress_port: 3000
 panel_icon: "mdi:nodejs"
 homeassistant_api: true
+hassio_api: true
 hassio_role: manager
+panel_admin: true
 map:
   - config:rw
+options: {}
+schema: {}

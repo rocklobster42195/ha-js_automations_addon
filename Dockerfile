@@ -6,5 +6,5 @@ COPY package.json .
 RUN npm install --production
 COPY . .
 EXPOSE 3000
-# Startet Node direkt als PID 1
-CMD ["node", "server.js"]
+# Startet Node direkt als PID 1 mit dem neuen Pfad im addon-Verzeichnis
+CMD ["node", "addon/server.js"]
