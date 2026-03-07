@@ -5,7 +5,7 @@ class IntegrationManager {
     constructor(haConfigPath) {
         // Pfad innerhalb des Containers/Add-ons (Quelle)
         // Wir gehen davon aus, dass der Ordner 'integration' auf gleicher Ebene wie 'core' liegt
-        this.sourceDir = path.join(__dirname, '../../integration/custom_components/js_automations');
+        this.sourceDir = path.join(__dirname, '../integration/custom_components/js_automations');
         
         // Pfad im Home Assistant Config Ordner (Ziel)
         // Standardmäßig /config, kann aber über ENV oder Konstruktor angepasst werden
