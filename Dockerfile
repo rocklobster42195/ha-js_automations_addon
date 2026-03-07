@@ -1,4 +1,5 @@
-FROM node:24-alpine
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} node:24-alpine
 WORKDIR /app
 # System-Tools für NPM (wichtig für manche Pakete)
 RUN apk add --no-cache git python3 make g++
