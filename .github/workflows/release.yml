@@ -10,6 +10,16 @@ env:
 jobs:
   build_and_publish:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, aarch64, armv7]
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: aarch64
+            platform: linux/aarch64
+          - arch: armv7
+            platform: linux/armv7
     permissions:
       contents: read
       packages: write
@@ -36,17 +46,17 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE_NAME }}/${{ matrix.arch }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      - name: Build and push Docker image
+      - name: Build and push architecture specific Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/aarch64,linux/armv7
+          platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
