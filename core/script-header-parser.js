@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-class ScriptParser {
+class ScriptHeaderParser {
     static parse(filePath) {
         let content = '';
         try {
@@ -112,4 +112,4 @@ class ScriptParser {
         }
     }
 }
-module.exports = ScriptParser;
+module.exports = ScriptHeaderParser;

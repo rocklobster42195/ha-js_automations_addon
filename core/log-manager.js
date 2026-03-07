@@ -5,14 +5,16 @@
  */
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
 
 const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
 
-class LogManager {
+class LogManager extends EventEmitter {
     /**
      * @param {string} storageDir - Path to the .storage directory
      */
     constructor(storageDir) {
+        super();
         this.logFile = path.join(storageDir, 'logs.json');
         this.buffer = [];
         this.maxEntries = 1000; // Keep last 1000 lines
@@ -81,6 +83,7 @@ class LogManager {
         }
 
         this.isDirty = true;
+        this.emit('log_added', entry);
         return entry;
     }
 
