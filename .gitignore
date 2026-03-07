@@ -46,3 +46,5 @@ scripts/*.js
 !scripts/waschmaschine.js
 
 AI_RULES.md
+
+ha-js_automations_addon.code-workspace
