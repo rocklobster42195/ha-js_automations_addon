@@ -5,10 +5,15 @@ const packageJson = require('../../package.json');
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 
+// The root of the addon source code (where public, locales, etc. live)
+const ADDON_DIR = path.join(__dirname, '..');
+
 // Base Directories
-const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '..', 'scripts');
+const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '..', '..', 'scripts');
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
+const LOCALES_DIR = path.join(ADDON_DIR, 'locales');
+const PUBLIC_DIR = path.join(ADDON_DIR, 'public');
 
 /**
  * Ensures that the necessary script and storage directories exist.
@@ -40,9 +45,12 @@ module.exports = {
     SCRIPTS_DIR,
     STORAGE_DIR,
     LIBRARIES_DIR,
+    ADDON_DIR,
+    LOCALES_DIR,
+    PUBLIC_DIR,
     PORT: process.env.PORT || 3000,
     VERSION: packageJson.version,
     ensureDirectories,
     // Centralized path for HA configuration, used by IntegrationManager
-    HA_CONFIG_DIR: IS_ADDON ? '/config' : path.join(__dirname, '..', 'ha_config_mock'),
+    HA_CONFIG_DIR: IS_ADDON ? '/config' : path.join(__dirname, '..', '..', 'ha_config_mock'),
 };
