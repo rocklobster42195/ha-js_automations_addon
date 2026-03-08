@@ -230,7 +230,7 @@ module.exports = [
                 default: 256
             },
             { 
-                key: 'restart_protection_count', 
+                key: 'restart_count', 
                 label: 'settings.danger.restart_count', 
                 description: 'settings.danger.restart_count_desc', 
                 type: 'number', 
@@ -239,7 +239,7 @@ module.exports = [
                 default: 5 
             },
             { 
-                key: 'restart_protection_time', 
+                key: 'restart_time', 
                 label: 'settings.danger.restart_time', 
                 description: 'settings.danger.restart_time_desc', 
                 type: 'number', 
