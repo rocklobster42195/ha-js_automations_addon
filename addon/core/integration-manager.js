@@ -5,8 +5,8 @@ class IntegrationManager {
     constructor(haConfigPath) {
         // Pfad innerhalb des Containers/Add-ons (Quelle)
         const config = require('./config');
-        // ADDON_DIR ist 'addon/'. Wir gehen eine Ebene hoch zum Root, dann in 'integration'
-        this.sourceDir = path.resolve(config.ADDON_DIR, '../integration/custom_components/js_automations');
+        // Die Integration muss im addon-Ordner liegen, damit sie im Docker-Image landet
+        this.sourceDir = path.resolve(config.ADDON_DIR, 'integration', 'custom_components', 'js_automations');
         
         // Pfad im Home Assistant Config Ordner (Ziel)
         // Standardmäßig /config, kann aber über ENV oder Konstruktor angepasst werden

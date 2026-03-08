@@ -150,6 +150,7 @@ class Kernel extends EventEmitter {
                 ? "✅ Native Integration (js_automations) detected." 
                 : "⚠️ Native Integration not found. Using Legacy Mode (HTTP).";
             this.logManager.add(this.hasIntegration ? 'info' : 'warn', 'System', intMsg);
+            this.emit('integration_status_changed', this.hasIntegration);
 
             this.workerManager.setConnector(this.haConnector);
             this.workerManager.setStore(this.storeManager);
@@ -273,6 +274,7 @@ class Kernel extends EventEmitter {
                 
                 // Re-Check Integration & Re-Register Entities
                 this.hasIntegration = await this.haConnector.checkIntegrationAvailable();
+                this.emit('integration_status_changed', this.hasIntegration);
                 await this.entityManager.createExposedEntities(this.hasIntegration);
                 await this.workerManager.republishNativeEntities();
             } catch (e) {
