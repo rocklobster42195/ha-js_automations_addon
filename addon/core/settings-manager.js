@@ -2,12 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 const schema = require('./settings-schema');
-
-// Pfad-Logik analog zu server.js, damit es im Add-on persistent ist (/config)
-const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
-const BASE_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '../../scripts');
-const STORAGE_DIR = path.join(BASE_DIR, '.storage');
-const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
+const config = require('./config');
+const SETTINGS_FILE = path.join(config.STORAGE_DIR, 'settings.json');
 
 class SettingsManager extends EventEmitter {
     constructor() {
@@ -26,9 +22,9 @@ class SettingsManager extends EventEmitter {
      */
     init() {
         // Sicherstellen, dass das Verzeichnis existiert
-        if (!fs.existsSync(STORAGE_DIR)) {
+        if (!fs.existsSync(config.STORAGE_DIR)) {
             try {
-                fs.mkdirSync(STORAGE_DIR, { recursive: true });
+                fs.mkdirSync(config.STORAGE_DIR, { recursive: true });
             } catch (e) {
                 console.error('SettingsManager: Konnte Storage-Ordner nicht erstellen:', e);
             }
