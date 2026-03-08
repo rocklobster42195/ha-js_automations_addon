@@ -168,7 +168,11 @@
     },
     "danger": {
       "node_memory_per_script": "Speicherlimit pro Skript (MB)",
-      "node_memory_desc": "Maximaler RAM pro Skript. Verhindert, dass ein einzelnes Skript das System zum Absturz bringt."
+      "node_memory_desc": "Maximaler RAM pro Skript. Verhindert, dass ein einzelnes Skript das System zum Absturz bringt.",
+      "restart_count": "Max. Neustarts",
+      "restart_count_desc": "Anzahl der Abstürze innerhalb des Zeitfensters, bevor der Safe Mode aktiviert wird.",
+      "restart_time": "Zeitfenster (Sekunden)",
+      "restart_time_desc": "Zeitraum in Sekunden, in dem die Abstürze für die Bootloop-Erkennung gezählt werden."
     }
   }
 }

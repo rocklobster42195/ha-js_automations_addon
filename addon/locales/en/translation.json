@@ -167,7 +167,11 @@
     },
     "danger": {
       "node_memory_per_script": "Memory Limit per Script (MB)",
-      "node_memory_desc": "Maximum RAM per script. Prevents a single script from crashing the system."
+      "node_memory_desc": "Maximum RAM per script. Prevents a single script from crashing the system.",
+      "restart_count": "Max Restarts",
+      "restart_count_desc": "Number of crashes within the time window before Safe Mode is activated.",
+      "restart_time": "Time Window (Seconds)",
+      "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection."
     }
   }
 }

@@ -9,7 +9,7 @@ const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const ADDON_DIR = path.join(__dirname, '..');
 
 // Base Directories
-const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.join(__dirname, '..', '..', 'scripts');
+const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.resolve(__dirname, '../../scripts');
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const LOCALES_DIR = path.join(ADDON_DIR, 'locales');
@@ -52,5 +52,5 @@ module.exports = {
     VERSION: packageJson.version,
     ensureDirectories,
     // Centralized path for HA configuration, used by IntegrationManager
-    HA_CONFIG_DIR: IS_ADDON ? '/config' : path.join(__dirname, '..', '..', 'ha_config_mock'),
+    HA_CONFIG_DIR: IS_ADDON ? (fs.existsSync('/homeassistant') ? '/homeassistant' : '/config') : path.resolve(__dirname, '../../ha_config_mock'),
 };
