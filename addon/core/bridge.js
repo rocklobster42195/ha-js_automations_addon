@@ -20,6 +20,15 @@ class Bridge {
     connect() {
         const { logManager } = this.kernel;
 
+        // Handle requests from the frontend
+        this.io.on('connection', (socket) => {
+            socket.on('get_integration_status', (callback) => {
+                if (typeof callback === 'function') {
+                    callback({ available: this.kernel.hasIntegration });
+                }
+            });
+        });
+
         // --- Log Events ---
         // Forwards any log added by managers to the frontend.
         logManager.on('log_added', (entry) => {
@@ -32,6 +41,11 @@ class Bridge {
         // Relays Home Assistant state changes to the UI for the status bar.
         this.kernel.on('ha_state_changed', (data) => {
             this.io.emit('ha_state_changed', data);
+        });
+
+        // Relays integration status changes
+        this.kernel.on('integration_status_changed', (available) => {
+            this.io.emit('integration_status', { available });
         });
 
         // --- System Status Events ---

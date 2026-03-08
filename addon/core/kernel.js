@@ -88,11 +88,11 @@ class Kernel extends EventEmitter {
      */
     _updateWorkerManagerSettings(settings) {
         const workerSettings = {};
-        if (settings.danger?.restart_protection_count) {
-            workerSettings.restart_protection_count = settings.danger.restart_protection_count;
+        if (settings.danger?.restart_count) {
+            workerSettings.restart_protection_count = settings.danger.restart_count;
         }
-        if (settings.danger?.restart_protection_time) {
-            workerSettings.restart_protection_time = settings.danger.restart_protection_time * 1000;
+        if (settings.danger?.restart_time) {
+            workerSettings.restart_protection_time = settings.danger.restart_time * 1000;
         }
         if (settings.danger?.node_memory) {
             workerSettings.node_memory = settings.danger.node_memory;
