@@ -320,8 +320,10 @@ This example demonstrates how to use `ha.restart()` and `ha.stop()` to build rob
  * @name API Watchdog
  * @icon mdi:dog-side
  * @description Fetches data and restarts itself on failure (max 3 times).
+ * @npm axios
  */
 
+const axios = require('axios');
 const MAX_RETRIES = 3;
 const RETRY_KEY = 'watchdog_retries';
 

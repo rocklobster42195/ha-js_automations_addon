@@ -21,6 +21,28 @@ if (workerData.storageDir) {
     }
 }
 
+// --- AXIOS MONKEY-PATCH ---
+// This ensures that any script `require('axios')` gets the proper defaults
+// to prevent the worker process from hanging.
+const originalRequire = Module.prototype.require;
+Module.prototype.require = function(requestPath) {
+  const requiredModule = originalRequire.apply(this, arguments);
+  if (requestPath === 'axios') {
+    try {
+        const http = require('http');
+        const https = require('https');
+        requiredModule.defaults.httpAgent = new http.Agent({ keepAlive: false });
+        requiredModule.defaults.httpsAgent = new https.Agent({ keepAlive: false });
+        if (!requiredModule.defaults.headers.common) requiredModule.defaults.headers.common = {};
+        requiredModule.defaults.headers.common['Connection'] = 'close';
+    } catch(e) {
+        // This could happen if http/https are not available, though unlikely.
+        console.error("[Worker] Failed to apply essential defaults to axios:", e);
+    }
+  }
+  return requiredModule;
+};
+
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
@@ -396,25 +418,6 @@ const ha = {
 
 // Injection
 global.ha = ha;
-
-// Setup Axios Global & Defaults
-try {
-    const axios = require('axios');
-    const http = require('http');
-    const https = require('https');
-    
-    // Disable Keep-Alive to allow process to exit automatically
-    axios.defaults.httpAgent = new http.Agent({ keepAlive: false });
-    axios.defaults.httpsAgent = new https.Agent({ keepAlive: false });
-    
-    // Force Connection close header
-    if (!axios.defaults.headers.common) axios.defaults.headers.common = {};
-    axios.defaults.headers.common['Connection'] = 'close';
-
-    global.axios = axios;
-} catch (e) {
-    // Fallback if axios is not found
-}
 
 global.schedule = (exp, cb) => {
     parentPort.ref(); // Keep alive for cron

@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk add --no-cache git python3 make g++
 COPY package.json package-lock.json ./
 RUN npm install --production
-COPY addon ./addon
+COPY js_automations ./js_automations
 EXPOSE 3000
-# Startet Node direkt als PID 1 mit dem neuen Pfad im addon-Verzeichnis
-CMD ["node", "addon/server.js"]
+# Startet Node direkt als PID 1 mit dem neuen Pfad im js_automations-Verzeichnis
+CMD ["node", "js_automations/server.js"]

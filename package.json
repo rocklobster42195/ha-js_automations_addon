@@ -2,10 +2,10 @@
   "name": "ha-js-automations",
   "version": "2.42.9",
   "description": "",
-  "main": "addon/server.js",
+  "main": "js_automations/server.js",
   "scripts": {
-    "start": "node addon/server.js",
-    "dev": "nodemon addon/server.js",
+    "start": "node js_automations/server.js",
+    "dev": "nodemon js_automations/server.js",
     "version": "node tools/update-version.js"
   },
   "keywords": [],
