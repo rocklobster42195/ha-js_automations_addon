@@ -20,14 +20,7 @@ class Bridge {
     connect() {
         const { logManager } = this.kernel;
 
-        // Handle requests from the frontend
-        this.io.on('connection', (socket) => {
-            socket.on('get_integration_status', (callback) => {
-                if (typeof callback === 'function') {
-                    callback({ available: this.kernel.hasIntegration });
-                }
-            });
-        });
+
 
         // --- Log Events ---
         // Forwards any log added by managers to the frontend.

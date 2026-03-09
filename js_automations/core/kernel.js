@@ -147,11 +147,25 @@ class Kernel extends EventEmitter {
             }
 
             await this.haConnector.connect();
-            
-            this.hasIntegration = await this.haConnector.checkIntegrationAvailable();
-            const intMsg = this.hasIntegration 
-                ? "✅ Native Integration (js_automations) detected." 
-                : "⚠️ Native Integration not found. Using Legacy Mode (HTTP).";
+
+            // Retry mechanism for integration check
+            let integrationCheckAttempts = 0;
+            const maxIntegrationCheckAttempts = 5;
+            while (integrationCheckAttempts < maxIntegrationCheckAttempts) {
+                this.hasIntegration = await this.haConnector.checkIntegrationAvailable();
+                if (this.hasIntegration) {
+                    break;
+                }
+                integrationCheckAttempts++;
+                if (integrationCheckAttempts < maxIntegrationCheckAttempts) {
+                    this.logManager.add('warn', 'System', `Native Integration not found (attempt ${integrationCheckAttempts}/${maxIntegrationCheckAttempts}). Retrying in 10 seconds...`);
+                    await new Promise(resolve => setTimeout(resolve, 10000));
+                }
+            }
+
+            const intMsg = this.hasIntegration
+                ? "✅ Native Integration (js_automations) detected."
+                : "⚠️ Native Integration not found after all attempts. Using Legacy Mode (HTTP).";
             this.logManager.add(this.hasIntegration ? 'info' : 'warn', 'System', intMsg);
             this.emit('integration_status_changed', this.hasIntegration);
 
