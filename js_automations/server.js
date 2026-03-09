@@ -46,8 +46,13 @@ io.on('connection', (socket) => {
             callback({ error: e.message });
         }
     });
-    socket.on('get_integration_status', (callback) => {
-        callback({ available: kernel.hasIntegration });
+    socket.on('get_integration_status', async (callback) => {
+        try {
+            const status = await kernel.getCombinedIntegrationStatus();
+            callback(status);
+        } catch (e) {
+            callback({ error: e.message });
+        }
     });
     // The bridge now handles broadcasting the safe mode status, so we
     // don't need to send it on each connection here.

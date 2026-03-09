@@ -32,6 +32,7 @@ class Kernel extends EventEmitter {
         this.io = null;
         this.hasIntegration = false;
         this.systemOptions = { expert_mode: true }; // Default options
+        this.integrationCheckInterval = null; // For periodic checking
 
         // Manager instances
         this.logManager = null;
@@ -45,6 +46,26 @@ class Kernel extends EventEmitter {
         this.entityManager = null;
         this.bridge = null;
         this.systemService = null;
+    }
+
+    /**
+     * Gathers status from both the IntegrationManager (file-based) and HAConnector (runtime).
+     * @returns {Promise<object>} A combined status object.
+     */
+    async getCombinedIntegrationStatus() {
+        // We get the file installation status and the runtime status in parallel.
+        const [installedStatus, isRunning] = await Promise.all([
+            this.integrationManager.getStatus(),
+            this.haConnector.checkIntegrationAvailable()
+        ]);
+        
+        // This remains the single source of truth for the kernel's internal logic.
+        this.hasIntegration = isRunning;
+
+        return {
+            ...installedStatus, // contains { installed, needs_update, version_installed, version_available }
+            is_running: isRunning
+        };
     }
 
     /**
@@ -148,26 +169,18 @@ class Kernel extends EventEmitter {
 
             await this.haConnector.connect();
 
-            // Retry mechanism for integration check
-            let integrationCheckAttempts = 0;
-            const maxIntegrationCheckAttempts = 5;
-            while (integrationCheckAttempts < maxIntegrationCheckAttempts) {
-                this.hasIntegration = await this.haConnector.checkIntegrationAvailable();
-                if (this.hasIntegration) {
-                    break;
-                }
-                integrationCheckAttempts++;
-                if (integrationCheckAttempts < maxIntegrationCheckAttempts) {
-                    this.logManager.add('warn', 'System', `Native Integration not found (attempt ${integrationCheckAttempts}/${maxIntegrationCheckAttempts}). Retrying in 10 seconds...`);
-                    await new Promise(resolve => setTimeout(resolve, 10000));
-                }
+            // Initial check for the integration
+            const status = await this.getCombinedIntegrationStatus();
+            if (status.is_running) {
+                this.logManager.add('info', 'System', '✅ Native Integration (js_automations) detected on startup.');
+            } else if (status.installed) {
+                this.logManager.add('warn', 'System', '⚠️ Native Integration is installed but not running. Will check periodically.');
+                this._checkForIntegrationPeriodically();
+            } else {
+                 this.logManager.add('warn', 'System', '⚠️ Native Integration is not installed. Please install it from the settings.');
             }
+            this.emit('integration_status_changed', status);
 
-            const intMsg = this.hasIntegration
-                ? "✅ Native Integration (js_automations) detected."
-                : "⚠️ Native Integration not found after all attempts. Using Legacy Mode (HTTP).";
-            this.logManager.add(this.hasIntegration ? 'info' : 'warn', 'System', intMsg);
-            this.emit('integration_status_changed', this.hasIntegration);
 
             this.workerManager.setConnector(this.haConnector);
             this.workerManager.setStore(this.storeManager);
@@ -202,6 +215,42 @@ class Kernel extends EventEmitter {
         }
     }
 
+    /**
+     * Periodically checks for the HA integration if it wasn't found.
+     * @private
+     */
+    _checkForIntegrationPeriodically() {
+        // Prevent multiple intervals from running
+        if (this.integrationCheckInterval) {
+            return;
+        }
+
+        this.logManager.add('info', 'System', 'Starting periodic check for native integration every 30 seconds...');
+        
+        this.integrationCheckInterval = setInterval(async () => {
+            // Stop if it has been found in the meantime
+            if (this.hasIntegration) {
+                clearInterval(this.integrationCheckInterval);
+                this.integrationCheckInterval = null;
+                return;
+            }
+
+            const status = await this.getCombinedIntegrationStatus();
+            if (status.is_running) {
+                clearInterval(this.integrationCheckInterval);
+                this.integrationCheckInterval = null;
+                
+                this.logManager.add('info', 'System', '✅ Native Integration is now available.');
+                this.emit('integration_status_changed', status);
+                
+                // Trigger entity recreation/update now that we have the integration.
+                // This is crucial to "upgrade" entities from legacy to native mode.
+                await this.entityManager.createExposedEntities(this.hasIntegration);
+                await this.workerManager.republishNativeEntities();
+            }
+            // If not available, the interval continues silently.
+        }, 30000);
+    }
 
 
     /**
@@ -290,8 +339,16 @@ class Kernel extends EventEmitter {
                 this.logManager.add('info', 'System', 'HA Reconnected!');
                 
                 // Re-Check Integration & Re-Register Entities
-                this.hasIntegration = await this.haConnector.checkIntegrationAvailable();
-                this.emit('integration_status_changed', this.hasIntegration);
+                const status = await this.getCombinedIntegrationStatus();
+                this.emit('integration_status_changed', status);
+
+                if (status.is_running) {
+                    this.logManager.add('info', 'System', '✅ Native Integration re-confirmed after reconnection.');
+                } else {
+                    this.logManager.add('warn', 'System', '⚠️ Native Integration still not found after reconnection. Starting periodic check.');
+                    this._checkForIntegrationPeriodically(); // Ensure the checker is running
+                }
+
                 await this.entityManager.createExposedEntities(this.hasIntegration);
                 await this.workerManager.republishNativeEntities();
             } catch (e) {
@@ -306,6 +363,9 @@ class Kernel extends EventEmitter {
      */
     shutdown() {
         console.log('🛑 Kernel shutting down...');
+        if (this.integrationCheckInterval) {
+            clearInterval(this.integrationCheckInterval);
+        }
         if (this.workerManager) this.workerManager.shutdown();
         if (this.haConnector) this.haConnector.disconnect();
         this.emit('shutdown');

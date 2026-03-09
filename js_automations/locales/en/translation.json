@@ -173,5 +173,6 @@
       "restart_time": "Time Window (Seconds)",
       "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection."
     }
-  }
+  },
+  "banner_close_tooltip": "Close"
 }
