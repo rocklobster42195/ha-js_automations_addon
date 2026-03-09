@@ -181,16 +181,7 @@ ha.store.delete('temp_variable');
 
 ## Global Built-ins
 
-No need to `require` these, they are always available.
-
-### `axios`
-Standard library for HTTP requests.
-```javascript
-async function checkWeather() {
-    const res = await axios.get('https://api.weather.com/v1/...');
-    ha.log("Temp: " + res.data.temp);
-}
-```
+Functions that are always available in the global scope.
 
 ### `schedule(cron, callback)`
 Time-based execution using CRON syntax. **Keeps script running.**
@@ -210,3 +201,27 @@ async function sequence() {
     ha.callService('light', 'turn_off', { entity_id: 'light.test' });
 }
 ```
+
+---
+
+## NPM Packages
+
+You can use any package from NPM by declaring it in the script header. The system will automatically install it.
+
+### `axios` (HTTP Requests)
+
+`axios` is a popular library for making HTTP requests. To use it, you must declare it in your script header and `require` it.
+
+```javascript
+/**
+ * @name Weather Checker
+ * @npm axios
+ */
+const axios = require('axios');
+
+async function checkWeather() {
+    const res = await axios.get('https://api.weather.com/v1/...');
+    ha.log("Temp: " + res.data.temp);
+}
+```
+The system automatically applies important default settings to the `axios` instance (like disabling keep-alive) to prevent scripts from hanging, so you don't have to worry about complex configuration.

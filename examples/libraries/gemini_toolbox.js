@@ -4,8 +4,11 @@
  *              Requires 'gemini_api_key' in ha.store.
  *              For analyzeImage, 'ha_base_url' (and optional 'ha_token') is required.
  * @icon mdi:brain
- * @version 1.1.0
+ * @version 1.2.0
+ * @npm axios
  */
+
+const axios = require('axios');
 
 // --- API Key Instructions ---
 // 1. Visit Google AI Studio: https://aistudio.google.com/
@@ -81,7 +84,6 @@ async function _callGeminiApi(systemPrompt, userContent, allowRetry = true) {
             contents: [{ parts: parts }]
         };
 
-        // Axios is available globally in JS Automations
         const response = await axios.post(`${_GEMINI_URL}?key=${_GEMINI_API_KEY}`, payload, {
             headers: { 'Content-Type': 'application/json' },
             timeout: 10000 // 10s timeout

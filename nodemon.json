@@ -8,7 +8,7 @@
     ".git"
   ],
   "watch": [
-    "addon/"
+    "js_automations/"
   ],
   "ext": "js,json,html,css"
 }

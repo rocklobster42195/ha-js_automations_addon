@@ -1,0 +1,36 @@
+{
+  "general": {
+    "ui_language": "auto",
+    "expert_mode": true,
+    "confirm_delete": true
+  },
+  "editor": {
+    "fontSize": 14,
+    "wordWrap": "on",
+    "minimap": true,
+    "showToolbar": true
+  },
+  "statusbar": {
+    "show_statusbar": true,
+    "slot1": "cpu",
+    "customEntitySlot1": "",
+    "show_sparkline_slot1": true,
+    "slot2": "ram",
+    "customEntitySlot2": "",
+    "show_sparkline_slot2": true,
+    "slot3": "none",
+    "customEntitySlot3": "",
+    "show_sparkline_slot3": true,
+    "hide_sparkline_on_dense": true
+  },
+  "system": {
+    "log_level": "info",
+    "ha_integration_status": null,
+    "backup": null
+  },
+  "danger": {
+    "node_memory": 256,
+    "restart_protection_count": 5,
+    "restart_protection_time": 60
+  }
+}

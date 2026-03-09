@@ -1,0 +1,50 @@
+[
+  {
+    "ts": 1772884300617,
+    "level": "info",
+    "source": "System",
+    "message": "Addon started (v2.40.0)... (Expert Mode)"
+  },
+  {
+    "ts": 1772884300670,
+    "level": "info",
+    "source": "System",
+    "message": "✅ Native Integration (js_automations) detected."
+  },
+  {
+    "ts": 1772884610413,
+    "level": "info",
+    "source": "System",
+    "message": "Addon started (v2.40.0)... (Expert Mode)"
+  },
+  {
+    "ts": 1772884610470,
+    "level": "info",
+    "source": "System",
+    "message": "✅ Native Integration (js_automations) detected."
+  },
+  {
+    "ts": 1772884746074,
+    "level": "info",
+    "source": "System",
+    "message": "Addon started (v2.40.0)... (Expert Mode)"
+  },
+  {
+    "ts": 1772884746133,
+    "level": "info",
+    "source": "System",
+    "message": "✅ Native Integration (js_automations) detected."
+  },
+  {
+    "ts": 1772885086027,
+    "level": "info",
+    "source": "System",
+    "message": "Addon started (v2.40.0)... (Expert Mode)"
+  },
+  {
+    "ts": 1772885086107,
+    "level": "info",
+    "source": "System",
+    "message": "✅ Native Integration (js_automations) detected."
+  }
+]

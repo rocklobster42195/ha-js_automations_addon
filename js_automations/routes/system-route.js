@@ -1,12 +1,17 @@
 const express = require('express');
 const https = require('https');
 const archiver = require('archiver');
+const packageJson = require('../../package.json');
 
 module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR, systemService) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
         res.json(getSystemOptions());
+    });
+
+    router.get('/status', (req, res) => {
+        res.json({ version: packageJson.version });
     });
 
     router.get('/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));

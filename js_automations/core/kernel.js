@@ -5,6 +5,9 @@ const path = require('path');
 const config = require('./config');
 const ScriptHeaderParser = require('./script-header-parser');
 
+// Ensure base directories exist before any manager is initialized
+config.ensureDirectories();
+
 // Manager Imports
 const HAConnector = require('./ha-connection');
 const DependencyManager =require('./dependency-manager');

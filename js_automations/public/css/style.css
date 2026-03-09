@@ -291,17 +291,23 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .row-actions { 
     display: flex; 
     gap: 2px; 
-    opacity: 0; 
+    opacity: 1; 
     transition: opacity 0.2s; 
     flex-shrink: 0;
     align-items: center;
 }
-.script-row:hover .row-actions { opacity: 1; }
 
 .btn-row { 
     width: 28px !important; height: 28px !important; 
-    color: var(--text-dim) !important; border-radius: 4px;
+    color: var(--text-sec) !important;
+    border-radius: 4px;
 }
+
+/* Make disabled buttons more visible than global style */
+.btn-row:disabled {
+    opacity: 0.35 !important;
+}
+
 .btn-row i { font-size: 1.2rem !important; }
 .btn-row:hover { color: #fff !important; background: #333 !important; }
 

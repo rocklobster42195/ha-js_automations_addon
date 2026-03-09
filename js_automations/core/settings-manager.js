@@ -103,6 +103,10 @@ class SettingsManager extends EventEmitter {
             this.saveTimer = null;
         }
         try {
+            // Ensure directory exists before writing to prevent ENOENT
+            if (!fs.existsSync(config.STORAGE_DIR)) {
+                fs.mkdirSync(config.STORAGE_DIR, { recursive: true });
+            }
             fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
         } catch (error) {
             console.error('SettingsManager: Fehler beim Speichern:', error);
