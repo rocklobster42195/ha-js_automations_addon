@@ -174,5 +174,6 @@
       "restart_time": "Zeitfenster (Sekunden)",
       "restart_time_desc": "Zeitraum in Sekunden, in dem die Abstürze für die Bootloop-Erkennung gezählt werden."
     }
-  }
+  },
+  "banner_close_tooltip": "Schließen"
 }

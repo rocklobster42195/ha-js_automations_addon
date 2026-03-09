@@ -37,8 +37,8 @@ class Bridge {
         });
 
         // Relays integration status changes
-        this.kernel.on('integration_status_changed', (available) => {
-            this.io.emit('integration_status', { available });
+        this.kernel.on('integration_status_changed', (status) => {
+            this.io.emit('integration_status', status);
         });
 
         // --- System Status Events ---
