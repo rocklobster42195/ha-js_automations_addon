@@ -226,6 +226,11 @@ class Kernel extends EventEmitter {
      * and removes orphaned entries. Triggered hourly.
      */
     async performGlobalCleanup() {
+        if (!this.hasIntegration) {
+            this.logManager.add('debug', 'System', '[Kernel] Skipping cleanup: Native integration not running.');
+            return;
+        }
+
         this.logManager.add('debug', 'System', '[Kernel] Running hourly entity and device cleanup check...');
         
         // 1. Get all script names (without .js) from disk
@@ -275,6 +280,9 @@ class Kernel extends EventEmitter {
                 // This is crucial to "upgrade" entities from legacy to native mode.
                 await this.entityManager.createExposedEntities(this.hasIntegration);
                 await this.workerManager.republishNativeEntities();
+
+                // Now that the integration is running, perform the cleanup that was skipped at startup.
+                await this.performGlobalCleanup();
             }
             // If not available, the interval continues silently.
         }, 30000);
