@@ -218,7 +218,9 @@ class HAConnector {
      */
     async checkIntegrationAvailable() {
         const services = await this.getServices();
-        return 'js_automations' in services;
+        // Check not just for the domain, but for a key service within it.
+        // 'create_entity' is fundamental for the integration to work.
+        return !!(services && services.js_automations && services.js_automations.create_entity);
     }
 
     /**
