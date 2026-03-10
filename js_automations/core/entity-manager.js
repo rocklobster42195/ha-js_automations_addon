@@ -155,33 +155,100 @@ class EntityManager {
         const hasIntegration = await this.haConnection.checkIntegrationAvailable();
         if (!hasIntegration) return;
 
-        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Starting global cleanup of orphaned entities', level: 'debug' });
-        const registry = await this.haConnection.getEntityRegistry();
+        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Starting global cleanup of orphaned entities (using device linking)', level: 'debug' });
+        const entityReg = await this.haConnection.getEntityRegistry();
+        const deviceReg = await this.haConnection.getDeviceRegistry();
         
-        const ourEntities = registry.filter(e => e.platform === 'js_automations');
-        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found ${ourEntities.length} entities belonging to js_automations`, level: 'debug' });
-        
+        const deviceMap = new Map(deviceReg.map(d => [d.id, d]));
         const lowerActiveScripts = activeScriptNames.map(n => n.toLowerCase());
+        const noActiveScripts = lowerActiveScripts.length === 0;
 
+        const ourEntities = entityReg.filter(e => e.platform === 'js_automations');
+        
         for (const entity of ourEntities) {
-            // Wir extrahieren den Skriptnamen aus der UniqueID 
-            // Format: js_automations_{domain}_{scriptname} oder via device_info
-            const parts = entity.unique_id.split('_');
-            const scriptName = parts.slice(3).join('_'); // Alles nach js_automations_{domain}_
+            // Handle entities without a unique_id - they are always orphans if no scripts exist.
+            if (!entity.unique_id) {
+                if (noActiveScripts) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found orphaned entity ${entity.entity_id} with no unique_id. Removing...`, level: 'debug' });
+                    // Use the newly robust service to remove by entity_id
+                    await this.haConnection.callService('js_automations', 'remove_entity', { entity_id: entity.entity_id });
+                } else {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Skipping entity ${entity.entity_id} with no unique_id as scripts are still active.`, level: 'warn' });
+                }
+                continue; // Move to next entity
+            }
+
+            let scriptName = null;
+            const device = entity.device_id ? deviceMap.get(entity.device_id) : null;
+
+            if (device && device.identifiers) {
+                const mainIdentifier = device.identifiers.find(idPair => idPair.length > 1 && idPair[0] === 'js_automations' && idPair[1].startsWith('js_automations_script_'));
+                if (mainIdentifier) {
+                    scriptName = mainIdentifier[1].substring('js_automations_script_'.length);
+                }
+            }
+
+            if (!scriptName) {
+                const parts = entity.unique_id.split('_');
+                if (parts.length > 3 && parts[0] === 'js' && parts[1] === 'automations') {
+                     scriptName = parts.slice(3).join('_');
+                     this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Using current unique_id format fallback for ${entity.entity_id} -> ${scriptName}`, level: 'debug' });
+                } 
+                else if (parts.length > 2 && parts[0] === 'js' && parts[1] === 'automations') {
+                    scriptName = parts.slice(2).join('_');
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Using legacy unique_id format fallback for ${entity.entity_id} -> ${scriptName}`, level: 'debug' });
+                }
+            }
             
+            if (!scriptName) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not determine script name for ${entity.entity_id}, skipping cleanup.`, level: 'debug' });
+                continue;
+            }
+
             if (!lowerActiveScripts.includes(scriptName.toLowerCase())) {
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found orphaned entity ${entity.entity_id} (Script ${scriptName} missing). Removing from HA...`, level: 'debug' });
                 await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: entity.unique_id });
-                
-                // Sync local registry: Remove the script from WorkerManager's map to allow device cleanup
                 await this.workerManager.removeScriptEntities(scriptName + '.js');
             }
         }
 
-        // 2. Self-Healing: Re-trigger all @expose entities
-        // If the user deleted them in HA, they will be recreated here.
-        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Running self-healing for exposed entities', level: 'debug' });
+        // After cleaning entities, clean up any devices that are now empty
+        await this.cleanupOrphanedDevices();
+        
+        // Finally, run self-healing to create entities for scripts that might be missing them
         await this.createExposedEntities(true);
+    }
+
+    /**
+     * Removes devices from the 'js_automations' integration that no longer have any entities.
+     */
+    async cleanupOrphanedDevices() {
+        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Starting cleanup of orphaned devices', level: 'debug' });
+        
+        const devices = await this.haConnection.getDeviceRegistry();
+        const entities = await this.haConnection.getEntityRegistry();
+
+        // Get all devices managed by this integration
+        const ourDevices = devices.filter(d => d.manufacturer === 'JS Automations');
+        if (ourDevices.length === 0) return;
+
+        // Create a set of all device_ids that are actually in use by entities
+        const usedDeviceIds = new Set(entities.map(e => e.device_id).filter(id => id));
+
+        for (const device of ourDevices) {
+            if (!usedDeviceIds.has(device.id)) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found orphaned device "${device.name_by_user || device.name}". Removing from HA...`, level: 'debug' });
+                
+                // Extract the raw identifiers for the service call, e.g., ['js_automations_script_xyz']
+                const rawIdentifiers = device.identifiers.map(idPair => idPair[1]);
+                
+                if (rawIdentifiers.length > 0) {
+                    await this.haConnection.callService('js_automations', 'remove_device', { 
+                        identifiers: rawIdentifiers
+                    });
+                }
+            }
+        }
     }
 
     /**
@@ -245,23 +312,14 @@ class EntityManager {
     async processSingleScript(scriptPath) {
         const scriptName = path.basename(scriptPath, '.js');
 
-        // --- DELETION HANDLING ---
+        // --- DELETION HANDLING for deleted file ---
         if (!fs.existsSync(scriptPath)) {
             const fileName = path.basename(scriptPath);
             this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Script file deleted: ${fileName}. Starting cleanup for ${scriptName}`, level: 'debug' });
             
-            // Stop worker to free resources
             this.workerManager.stopScript(fileName, 'file deleted');
-
-            // 1. Clean up dynamic entities (via WorkerManager)
             await this.workerManager.removeScriptEntities(fileName);
-
-            // 2. Clean up internal state mappings
             this.stateManager.unregisterScript(scriptPath);
-
-            // NOTE: workerManager.removeScriptEntities already handles HA removal 
-            // of all entities in the registry (including exposed ones now).
-            // Device cleanup is triggered via event from WorkerManager.
             return; 
         }
         
@@ -269,107 +327,91 @@ class EntityManager {
             const meta = ScriptHeaderParser.parse(scriptPath);
             const fileName = path.basename(scriptPath);
 
-            // 1. Library Handling: Check dependents
+            // --- Library Handling: Check dependents ---
             if (path.basename(path.dirname(scriptPath)) === 'libraries') {
                 const runningScripts = Array.from(this.workerManager.workers.keys());
                 for (const runningScriptFile of runningScripts) {
                     const runningScriptPath = path.join(this.workerManager.scriptsDir, runningScriptFile);
-                    // Parse running script to check includes (lightweight op)
                     const runningMeta = ScriptHeaderParser.parse(runningScriptPath);
-                    
-                    const depends = runningMeta.includes && runningMeta.includes.some(lib => {
-                        return lib === fileName || lib === scriptName || lib + '.js' === fileName;
-                    });
-
+                    const depends = runningMeta.includes && runningMeta.includes.some(lib => lib === fileName || lib === scriptName || lib + '.js' === fileName);
                     if (depends) {
-                        console.log(`[EntityManager] Restarting ${runningScriptFile} due to library update (${fileName}).`);
                         this.workerManager.startScript(runningScriptFile);
                     }
                 }
                 return; // Libraries don't have entities
             }
 
-            // Wir entfernen den Early-Return, um auch Löschungen zu verarbeiten
-            // if (!meta.expose) return;
-
             const hasIntegration = await this.haConnection.checkIntegrationAvailable();
-            const isRunning = this.workerManager.workers.has(scriptPath);
-            
-            // Metadaten für Lookup laden
-            const { areas, labels } = await this.haConnection.getHAMetadata();
-            
-            // Wir prüfen beide möglichen Domänen, um ggf. alte Typen zu löschen (z.B. Wechsel von switch zu button)
-            const domains = ['switch', 'button'];
+            if (!hasIntegration) return;
 
-            const protectedIds = [];
-            for (const domain of domains) {
-                const shouldExist = meta.expose === domain;
-                const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
-                const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
-                
-                let entityIcon = meta.icon;
-                if (domain === 'button') entityIcon = 'mdi:play';
-                else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
-
-                if (shouldExist) {
-                    // --- CREATE / UPDATE ---
-                    if (hasIntegration) {
-                        // IDs auflösen
-                        const areaId = this.resolveId(meta.area, areas, 'area_id');
-                        
-                        // Labels auflösen (Array oder Komma-String)
-                        let resolvedLabels = [];
-                        if (meta.label) {
-                            const rawLabels = Array.isArray(meta.label) ? meta.label : String(meta.label).split(',');
-                            resolvedLabels = rawLabels.map(l => {
-                                const id = this.resolveId(l, labels, 'label_id');
-                                if (!id) console.warn(`[EntityManager] ⚠️ Could not resolve Label '${l.trim()}' for ${scriptName}`);
-                                return id;
-                            }).filter(id => id);
-                        }
-
-                        if (meta.area && !areaId) console.warn(`[EntityManager] ⚠️ Could not resolve Area '${meta.area}' for ${scriptName}`);
-
-                        const payload = {
-                            entity_id: entityId,
-                            unique_id: uniqueId,
-                            name: meta.name,
-                            icon: entityIcon,
-                            area_id: areaId,
-                            labels: resolvedLabels,
-                            device_info: {
-                                identifiers: [`js_automations_script_${scriptName}`],
-                                name: meta.name || scriptName,
-                                manufacturer: "JS Automations",
-                                model: "Script",
-                            },
-                            attributes: { source: 'JS Automations Addon', script: scriptName }
-                        };
-                        // Note: We do NOT send 'state' here to avoid resetting a running switch to 'off' on save.
-                        await this.haConnection.callService('js_automations', 'create_entity', payload);
-                    } else {
-                        // Legacy Update (Best Effort)
-                        this.haConnection.createEntity(domain, scriptName, 'js_automations', {
-                            friendly_name: meta.name,
-                            icon: entityIcon,
-                        });
-                    }
-                    this.stateManager.registerEntity(entityId, scriptPath);
-                } else {
-                    // --- DELETE / CLEANUP ---
-                    if (hasIntegration) {
-                        try {
-                            await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: uniqueId });
-                        } catch (e) {
-                            // Ignorieren, falls Entität nicht existierte
-                        }
-                    }
-                    // Legacy Entitäten können nicht ohne Restart gelöscht werden
-                }
+            // --- BRUTE-FORCE CLEANUP on every save ---
+            // To handle type changes (switch->button), we first remove both possible entities.
+            // The service call is a no-op if they don't exist.
+            try {
+                const switchUniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
+                const buttonUniqueId = `js_automations_button_${scriptName}`.toLowerCase();
+                await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: switchUniqueId });
+                await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: buttonUniqueId });
+            } catch (e) {
+                console.warn(`[EntityManager] Issue during pre-emptive entity cleanup for ${scriptName}. This might be okay.`, e);
             }
 
-            // Nach dem Update prüfen, ob das Device weg kann (falls expose entfernt wurde)
-            await this.checkDeviceCleanup(scriptName);
+            // --- EXIT if no @expose is defined ---
+            if (!meta.expose || !['switch', 'button'].includes(meta.expose)) {
+                this.workerManager.setProtectedEntities(fileName, []); // No protected entities
+                await this.checkDeviceCleanup(scriptName); // Check if the device should be removed
+                return;
+            }
+
+            // --- RE-CREATE the correct entity ---
+            const isRunning = this.workerManager.workers.has(scriptPath);
+            const { areas, labels } = await this.haConnection.getHAMetadata();
+
+            const domain = meta.expose;
+            const entityId = `${domain}.js_automations_${scriptName}`.toLowerCase();
+            const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
+            const initialState = (domain === 'switch' && isRunning) ? 'on' : 'off';
+            let entityIcon = meta.icon;
+            if (domain === 'button') entityIcon = 'mdi:play';
+            else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
+
+            const payload = {
+                entity_id: entityId,
+                unique_id: uniqueId,
+                name: meta.name,
+                icon: entityIcon,
+                area_id: this.resolveId(meta.area, areas, 'area_id'),
+                labels: [],
+                device_info: {
+                    identifiers: [`js_automations_script_${scriptName}`],
+                    name: meta.name || scriptName,
+                    manufacturer: "JS Automations",
+                    model: "Script",
+                },
+                attributes: { source: 'JS Automations Addon', script: scriptName }
+            };
+
+            if (meta.label) {
+                const rawLabels = Array.isArray(meta.label) ? meta.label : String(meta.label).split(',');
+                payload.labels = rawLabels.map(l => {
+                    const id = this.resolveId(l, labels, 'label_id');
+                    if (!id) console.warn(`[EntityManager] ⚠️ Could not resolve Label '${l.trim()}' for ${scriptName}`);
+                    return id;
+                }).filter(id => id);
+            }
+
+            if (domain === 'switch') {
+                payload.state = initialState;
+            }
+
+            await this.haConnection.callService('js_automations', 'create_entity', payload);
+            
+            const protectedIds = [entityId];
+            this.workerManager.registerEntity(fileName, entityId, payload);
+            this.stateManager.registerEntity(entityId, scriptPath);
+            this.stateManager.set(entityId, initialState);
+            this.workerManager.setProtectedEntities(fileName, protectedIds);
+
         } catch (e) {
             console.error(`[EntityManager] Error processing ${scriptPath}:`, e);
         }

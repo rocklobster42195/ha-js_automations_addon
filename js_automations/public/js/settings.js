@@ -406,33 +406,51 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
     let color = 'var(--success)';
     let title = i18next.t('settings.system.integration_active');
     let desc = i18next.t('settings.system.integration_installed_version', { version: status.version_installed });
-    if (showRestartHint) {
-        desc += ` <span style="color:var(--warn);">${i18next.t('settings.system.restart_required_hint')}</span>`;
-    }
     let btnHtml = '';
 
-    if (!status.installed) {
+    if (showRestartHint) {
+        // State 2: Files have just been copied.
+        icon = 'mdi-restart-alert';
+        color = 'var(--accent)';
+        title = i18next.t('settings.system.post_install_title', 'Step 1 Complete: Restart Required');
+        desc = i18next.t('settings.system.post_install_desc', 'The integration files have been copied. Please restart Home Assistant to continue.');
+        btnHtml = `<a href="/config/server_control" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.go_to_restart_btn', 'Go to Restart Page')}</a>`;
+    
+    } else if (!status.installed) {
+        // State 1: Component is not available at all.
         icon = 'mdi-alert-circle';
         color = 'var(--warn)';
-        title = i18next.t('settings.system.integration_missing');
-        desc = i18next.t('settings.system.integration_missing_desc');
-        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="background:var(--warn) !important; color:#000 !important;">${i18next.t('settings.system.integration_install_btn')}</button>`;
+        title = i18next.t('settings.system.integration_missing', 'Integration Required');
+        desc = i18next.t('settings.system.integration_missing_desc', "The 'JS Automations Bridge' custom component is required for native entities and devices. This will copy the integration files to your /config/custom_components directory.");
+        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="background:var(--warn) !important; color:#000 !important;">${i18next.t('settings.system.integration_install_btn', 'Copy Integration Files')}</button>`;
+    
+    } else if (status.installed && !status.configured) {
+        // State 3: Component is installed (files exist, HA restarted), but not configured via UI.
+        icon = 'mdi-plus-circle';
+        color = 'var(--accent)';
+        title = i18next.t('settings.system.post_restart_title', 'Step 2: Add Integration');
+        desc = i18next.t('settings.system.post_restart_desc', "Home Assistant has been restarted. Click the button to go to the Integrations page and add the 'JS Automations Bridge'.");
+        // Direct link to add the integration
+        btnHtml = `<a href="/config/integrations/dashboard/add?domain=js_automations" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.add_integration_btn', 'Add Integration')}</a>`;
+
     } else if (status.needs_update) {
+        // An update is available for the installed component.
         icon = 'mdi-information';
         color = 'var(--accent)';
         title = i18next.t('settings.system.integration_update_available');
         desc = i18next.t('settings.system.integration_update_desc', { installed: status.version_installed, available: status.version_available });
         btnHtml = `<button class="btn-primary" onclick="installIntegration(this)">${i18next.t('settings.system.integration_update_btn', { version: status.version_available })}</button>`;
     }
+    // Final state (else): installed, configured, and up-to-date. The default values handle this.
 
     container.innerHTML = `
-        <div style="width:fit-content; background:#1e1e1e; border:1px solid #383838; border-radius:6px; padding:10px; display:flex; align-items:center; gap:15px;">
-            <i class="mdi ${icon}" style="font-size:1.5rem; color:${color};"></i>
+        <div style="width:fit-content; max-width: 600px; background:#1e1e1e; border:1px solid #383838; border-radius:6px; padding:10px; display:flex; align-items:center; gap:15px;">
+            <i class="mdi ${icon}" style="font-size:1.8rem; color:${color}; margin-left: 5px;"></i>
             <div style="flex:1;">
                 <div style="font-weight:bold; font-size:0.95rem; margin-bottom:2px; color:#fff;">${title}</div>
                 <div style="color:#aaa; font-size:0.85rem;">${desc}</div>
             </div>
-            <div>${btnHtml}</div>
+            <div style="margin-right: 5px;">${btnHtml}</div>
         </div>
     `;
 }
