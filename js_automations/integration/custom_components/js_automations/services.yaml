@@ -38,3 +38,29 @@ create_entity:
       required: false
       selector:
         icon:
+remove_entity:
+  name: Remove Entity
+  description: Removes an entity from the Entity Registry. Provide at least one identifier.
+  fields:
+    unique_id:
+      name: Unique ID
+      description: The unique ID of the entity to remove.
+      required: false
+      selector:
+        text:
+    entity_id:
+      name: Entity ID
+      description: The entity ID of the entity to remove.
+      required: false
+      selector:
+        entity:
+remove_device:
+  name: Remove Device
+  description: Removes a device from the Device Registry.
+  fields:
+    identifiers:
+      name: Identifiers
+      description: A list of identifiers for the device (e.g., ["js_automations_test"]).
+      required: true
+      selector:
+        object:

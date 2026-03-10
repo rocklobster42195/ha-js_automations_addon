@@ -77,15 +77,20 @@ class Kernel extends EventEmitter {
         const { SCRIPTS_DIR, STORAGE_DIR, HA_CONFIG_DIR } = config;
 
         // Instantiate managers
-        this.logManager = new LogManager(STORAGE_DIR);
-        this.settingsManager = SettingsManager;
-        this.haConnector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, STORAGE_DIR);
-        this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
-        this.stateManager = new StateManager(STORAGE_DIR);
-        this.storeManager = new StoreManager(STORAGE_DIR);
-        this.integrationManager = new IntegrationManager(HA_CONFIG_DIR);
-        this.workerManager = workerManager;
-        this.entityManager = new EntityManager(this.haConnector, this.workerManager, this.stateManager, this.depManager);
+        try {
+            this.logManager = new LogManager(STORAGE_DIR);
+            this.settingsManager = SettingsManager;
+            this.haConnector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, STORAGE_DIR);
+            this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
+            this.stateManager = new StateManager(STORAGE_DIR);
+            this.storeManager = new StoreManager(STORAGE_DIR);
+            this.integrationManager = new IntegrationManager(HA_CONFIG_DIR);
+            this.workerManager = workerManager;
+            this.entityManager = new EntityManager(this.haConnector, this.workerManager, this.stateManager, this.depManager);
+        } catch (err) {
+            console.error('❌ Critical error during Kernel boot:', err);
+            process.exit(1); // Exit with error code so the supervisor can restart the container
+        }
 
         // The bridge connects the kernel to the outside world (sockets)
         this.bridge = new Bridge(this);

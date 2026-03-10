@@ -72,14 +72,26 @@ UPDATE_ENTITY_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 # Schema for the remove_entity service.
-REMOVE_ENTITY_SCHEMA = vol.Schema({
-    vol.Required(CONF_UNIQUE_ID): cv.string,
+REMOVE_ENTITY_SCHEMA = vol.Schema(
+    vol.All(
+        {
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional(CONF_UNIQUE_ID): cv.string,
+        },
+        cv.has_at_least_one_key("entity_id", CONF_UNIQUE_ID),
+    )
+)
+
+# Schema for the remove_device service.
+REMOVE_DEVICE_SCHEMA = vol.Schema({
+    vol.Required("identifiers"): vol.All(cv.ensure_list, [cv.string]),
 })
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the JS Automations component."""
     _LOGGER.info("Initializing JS Automations Bridge")
-    registry = er.async_get(hass)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
 
     # Initialize global data store
     if DOMAIN not in hass.data:
@@ -87,7 +99,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     def get_entity_id_by_unique_id(unique_id):
         """Helper to look up entity_id by unique_id for this platform."""
-        for entry in registry.entities.values():
+        if not unique_id:
+            return None
+        for entry in entity_registry.entities.values():
             if entry.platform == DOMAIN and entry.unique_id == unique_id:
                 return entry.entity_id
         return None
@@ -110,7 +124,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         # Create or update the entry in the entity registry
         # Note: We separate area_id and labels to ensure compatibility with older HA versions
         # where async_get_or_create might not accept them directly.
-        entry = registry.async_get_or_create(
+        entry = entity_registry.async_get_or_create(
             domain=domain,
             platform=DOMAIN,
             unique_id=unique_id,
@@ -130,7 +144,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         
         if update_kwargs:
             try:
-                registry.async_update_entity(entry.entity_id, **update_kwargs)
+                entity_registry.async_update_entity(entry.entity_id, **update_kwargs)
             except Exception as e:
                 _LOGGER.warning(f"Could not update registry details (area/labels) for {entry.entity_id}: {e}")
 
@@ -176,7 +190,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     update_payload["labels"] = registry_update_data[CONF_LABELS]
 
                 if update_payload:
-                    registry.async_update_entity(entity_id, **update_payload)
+                    entity_registry.async_update_entity(entity_id, **update_payload)
                     _LOGGER.debug(f"Updated registry for {entity_id} with {update_payload}")
             else:
                 _LOGGER.warning(f"Could not find entity in registry for update: uid='{unique_id}'")
@@ -184,28 +198,52 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def handle_remove_entity(call: ServiceCall):
         """Service to remove an entity from the Entity Registry and runtime."""
         data = call.data
-        unique_id = data[CONF_UNIQUE_ID]
+        unique_id = data.get(CONF_UNIQUE_ID)
+        entity_id = data.get("entity_id")
 
-        entity_id = get_entity_id_by_unique_id(unique_id)
+        # If only unique_id is provided, find the entity_id
+        if unique_id and not entity_id:
+            entity_id = get_entity_id_by_unique_id(unique_id)
 
-        if entity_id:
-            registry.async_remove(entity_id)
-            _LOGGER.debug(f"Removed entity {entity_id} from registry (UID: {unique_id})")
-        else:
-            _LOGGER.warning(f"Could not find entity in registry to remove: uid={unique_id}")
+        if not entity_id:
+            _LOGGER.warning(f"Could not find entity to remove with identifiers: {data}")
+            return
 
-        # Also remove from our runtime memory
-        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
+        # Before removing from registry, get entry to find unique_id for runtime cleanup
+        registry_entry = entity_registry.async_get(entity_id)
+        if registry_entry and not unique_id:
+            unique_id = registry_entry.unique_id
+
+        # Remove from HA registry
+        entity_registry.async_remove(entity_id)
+        _LOGGER.debug(f"Removed entity {entity_id} from registry")
+
+        # Also remove from our runtime memory, if it was loaded and we found its unique_id
+        if unique_id and unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             entity = hass.data[DOMAIN][DATA_ENTITIES].pop(unique_id)
             if entity.hass:
                 # This triggers the entity's async_will_remove_from_hass
                 await entity.async_remove(force_remove=True)
             _LOGGER.debug(f"Removed entity object from runtime (UID: {unique_id})")
 
+    async def handle_remove_device(call: ServiceCall):
+        """Service to remove a device from the Device Registry."""
+        data = call.data
+        identifiers = {(DOMAIN, identifier) for identifier in data["identifiers"]}
+        
+        device_entry = device_registry.async_get_device(identifiers=identifiers)
+
+        if device_entry:
+            device_registry.async_remove_device(device_entry.id)
+            _LOGGER.debug(f"Removed device with identifiers {identifiers} from registry.")
+        else:
+            _LOGGER.warning(f"Could not find device in registry to remove: identifiers={identifiers}")
+
     # --- Register Services ---
     hass.services.async_register(DOMAIN, "create_entity", handle_create_entity, schema=CREATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "update_entity", handle_update_entity, schema=UPDATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "remove_entity", handle_remove_entity, schema=REMOVE_ENTITY_SCHEMA)
+    hass.services.async_register(DOMAIN, "remove_device", handle_remove_device, schema=REMOVE_DEVICE_SCHEMA)
 
     return True
 
@@ -225,6 +263,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "create_entity")
         hass.services.async_remove(DOMAIN, "update_entity")
         hass.services.async_remove(DOMAIN, "remove_entity")
+        hass.services.async_remove(DOMAIN, "remove_device")
         # Clean up data
         hass.data.pop(DOMAIN, None)
 
