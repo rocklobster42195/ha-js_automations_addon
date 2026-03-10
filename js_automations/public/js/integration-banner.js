@@ -56,17 +56,17 @@
         let buttonText = '';
 
         if (type === 'install') {
-            title = t('integration_missing', 'Integration missing');
-            description = t('integration_missing_desc', 'The custom component is required for native entities.');
-            buttonText = t('integration_install_btn', 'Install Integration');
+            title = t('settings.system.integration_missing', 'Integration missing');
+            description = t('settings.system.integration_missing_desc', 'The custom component is required for native entities.');
+            buttonText = t('settings.system.integration_install_btn', 'Install Integration');
             icon.className = 'mdi mdi-package-variant';
         } else if (type === 'update') {
-            title = t('integration_update_available', 'Update available');
-            description = t('integration_update_desc', 'Installed: v{{installed}} / Available: v{{available}}', {
+            title = t('settings.system.integration_update_available', 'Update available');
+            description = t('settings.system.integration_update_desc', 'Installed: v{{installed}} / Available: v{{available}}', {
                 installed: data.version_installed,
                 available: data.version_available
             });
-            buttonText = t('integration_update_btn', 'Update to v{{version}}', { version: data.version_available });
+            buttonText = t('settings.system.integration_update_btn', 'Update to v{{version}}', { version: data.version_available });
             icon.className = 'mdi mdi-arrow-up-bold-circle-outline';
         }
 
@@ -163,7 +163,11 @@
      * @param {object} status The status object from the backend.
      */
     function handleIntegrationStatus(status) {
-        if (!status) return;
+        if (!status || typeof status !== 'object') return;
+
+        // Check if this is a full status object or just a connection update.
+        // A full status object MUST have the 'installed' property.
+        if (!('installed' in status)) return;
 
         // Check if user dismissed it in this session
         if (sessionStorage.getItem('js_automations_banner_dismissed') === 'true') {
@@ -180,6 +184,9 @@
             hideBanner();
         }
     }
+
+    // Expose globally so app.js can trigger updates after API calls
+    window.handleIntegrationStatus = handleIntegrationStatus;
     
     // Connect to Socket and listen for events
     const init = () => {

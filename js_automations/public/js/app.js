@@ -164,6 +164,11 @@ function updateSystemNotifications() {
     if (!status) return;
     
     const needsAttention = !status.installed || status.needs_update;
+
+    // Update the banner if the handler is available
+    if (typeof window.handleIntegrationStatus === 'function') {
+        window.handleIntegrationStatus(status);
+    }
     
     // 1. Settings Gear Icon (Sidebar Header)
     const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));

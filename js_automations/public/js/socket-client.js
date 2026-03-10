@@ -113,8 +113,14 @@ function initSocket() {
 
     socket.on('integration_status', (data) => {
         console.log('Socket: Received integration_status event:', data);
-        // Handle both { available: true } and boolean true
-        const available = (data && typeof data === 'object') ? data.available : data;
+        
+        // If it's a full status object (contains 'installed'), we treat it as available
+        // otherwise check for the 'available' property or boolean value.
+        let available = (data && typeof data === 'object' && 'installed' in data) ? true : null;
+        if (available === null) {
+            available = (data && typeof data === 'object') ? data.available : data;
+        }
+
         window.updateIntegrationStatusUI(true, available);
     });
 
