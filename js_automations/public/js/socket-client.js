@@ -6,6 +6,9 @@
 var socket = null;
 var overlayTimeout = null;
 
+// Cache for the last known integration status to prevent UI flickering/reset
+window._lastIntegrationStatus = undefined;
+
 // Global function to update HA Integration Status UI
 window.updateIntegrationStatusUI = function(isConnected, isIntegrationAvailable = null) { // isConnected: Socket zum Backend, isIntegrationAvailable: Backend zu HA-Integration
     const el = document.getElementById('integration-status-item');
@@ -75,8 +78,11 @@ function initSocket() {
     const handleConnectionEstablished = () => {
         updateConnectionUI(true);
         // Initial status for integration is unknown on connect
+        // Only set to null (gray) if we don't have a last known status yet
+        if (window._lastIntegrationStatus === undefined) {
+            window.updateIntegrationStatusUI(true, null);
+        }
         requestIntegrationStatus(); // Explizit den Status anfordern
-        window.updateIntegrationStatusUI(true, null);
         if (typeof loadScripts === 'function') loadScripts();
     };
 
@@ -107,7 +113,9 @@ function initSocket() {
 
     socket.on('integration_status', (data) => {
         console.log('Socket: Received integration_status event:', data);
-        window.updateIntegrationStatusUI(true, data.available);
+        // Handle both { available: true } and boolean true
+        const available = (data && typeof data === 'object') ? data.available : data;
+        window.updateIntegrationStatusUI(true, available);
     });
 
     /**
@@ -119,11 +127,12 @@ function initSocket() {
         socket.emit('get_integration_status', (response) => {
             if (response && response.error) {
                 console.error("Socket: Error requesting integration status:", response.error);
-                console.error("Socket: Error requesting integration status:", response.error);
                 window.updateIntegrationStatusUI(true, false); // Annahme: Fehler bedeutet nicht verfügbar
             } else {
                 console.log("Socket: Received integration status response:", response);
-                window.updateIntegrationStatusUI(true, response.available);
+                // Handle both { available: true } and boolean true
+                const available = (response && typeof response === 'object') ? response.available : response;
+                window.updateIntegrationStatusUI(true, available);
             }
         });
     }

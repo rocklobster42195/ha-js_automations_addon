@@ -16,11 +16,12 @@ class EntityManager {
         this.workerManager = workerManager;
         this.stateManager = stateManager;
         this.haConnection.subscribeToEvents(this.handleEvent.bind(this));
+        this.workerManager.on('request_device_cleanup', (name) => this.checkDeviceCleanup(name));
         this.startWatcher();
     }
 
     /**
-     * Versucht, einen Namen (z.B. "Wohnzimmer") in eine ID (z.B. "wohnzimmer") aufzulösen.
+     * Attempts to resolve a name (e.g., "Living Room") to an ID (e.g., "living_room") using HA metadata.
      */
     resolveId(input, list, idField) {
         if (!input || typeof input !== 'string') return undefined;
@@ -44,6 +45,8 @@ class EntityManager {
         // Metadaten für Lookup laden
         const { areas, labels } = await this.haConnection.getHAMetadata();
 
+        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Syncing exposed entities for ${scripts.length} scripts`, level: 'debug' });
+
         for (const scriptPath of scripts) {
             // Skip libraries (they are passive and live in /libraries subfolder)
             if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
@@ -51,6 +54,7 @@ class EntityManager {
             const meta = ScriptHeaderParser.parse(scriptPath);
             const scriptName = path.basename(scriptPath, '.js');
             
+            const protectedIds = [];
             // Nur wenn @expose gesetzt ist, erstellen wir eine Entität
             if (!meta.expose) continue;
 
@@ -113,6 +117,10 @@ class EntityManager {
                 await this.haConnection.callService('js_automations', 'create_entity', {
                     ...payload
                 });
+
+                // Register in central registry for lifecycle management
+                this.workerManager.registerEntity(scriptName + '.js', entityId, payload);
+                protectedIds.push(entityId);
             } else {
                 // Legacy Creation (Ephemeral)
                 // Buttons werden in Legacy als Switch simuliert (da Button-Domain nicht via HTTP setzbar ist ohne State)
@@ -132,6 +140,73 @@ class EntityManager {
 
             this.stateManager.registerEntity(entityId, scriptPath);
             this.stateManager.set(entityId, initialState);
+
+            // Mark as protected from Mark-and-Sweep
+            this.workerManager.setProtectedEntities(scriptName + '.js', protectedIds);
+        }
+    }
+
+    /**
+     * Compares the Home Assistant entity registry with local scripts.
+     * 1. Removes entities in HA that no longer have a corresponding script file.
+     * 2. Ensures all @expose entities exist (Self-Healing).
+     */
+    async cleanupOrphanedEntities(activeScriptNames) {
+        const hasIntegration = await this.haConnection.checkIntegrationAvailable();
+        if (!hasIntegration) return;
+
+        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Starting global cleanup of orphaned entities', level: 'debug' });
+        const registry = await this.haConnection.getEntityRegistry();
+        
+        const ourEntities = registry.filter(e => e.platform === 'js_automations');
+        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found ${ourEntities.length} entities belonging to js_automations`, level: 'debug' });
+        
+        const lowerActiveScripts = activeScriptNames.map(n => n.toLowerCase());
+
+        for (const entity of ourEntities) {
+            // Wir extrahieren den Skriptnamen aus der UniqueID 
+            // Format: js_automations_{domain}_{scriptname} oder via device_info
+            const parts = entity.unique_id.split('_');
+            const scriptName = parts.slice(3).join('_'); // Alles nach js_automations_{domain}_
+            
+            if (!lowerActiveScripts.includes(scriptName.toLowerCase())) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Found orphaned entity ${entity.entity_id} (Script ${scriptName} missing). Removing from HA...`, level: 'debug' });
+                await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: entity.unique_id });
+                
+                // Sync local registry: Remove the script from WorkerManager's map to allow device cleanup
+                await this.workerManager.removeScriptEntities(scriptName + '.js');
+            }
+        }
+
+        // 2. Self-Healing: Re-trigger all @expose entities
+        // If the user deleted them in HA, they will be recreated here.
+        this.workerManager.emit('log', { source: 'System', message: '[EntityManager] Running self-healing for exposed entities', level: 'debug' });
+        await this.createExposedEntities(true);
+    }
+
+    /**
+     * Checks if a script still has any associated entities.
+     * If no entities remain, the device is removed from Home Assistant.
+     */
+    async checkDeviceCleanup(scriptName) {
+        const hasIntegration = await this.haConnection.checkIntegrationAvailable();
+        if (!hasIntegration) return;
+
+        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Checking if device for ${scriptName} should be removed`, level: 'debug' });
+
+        const fileName = scriptName + '.js';
+        const dynamicEntities = this.workerManager.scriptEntityMap.get(fileName);
+        
+        // Check if @expose entities still exist by parsing the file
+        const meta = fs.existsSync(path.join(this.workerManager.scriptsDir, fileName)) 
+            ? ScriptHeaderParser.parse(path.join(this.workerManager.scriptsDir, fileName)) 
+            : { expose: null };
+
+        if (!meta.expose && (!dynamicEntities || dynamicEntities.size === 0)) {
+            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] No entities left for ${scriptName}. Removing device from HA.`, level: 'debug' });
+            await this.haConnection.callService('js_automations', 'remove_device', { 
+                identifiers: [`js_automations_script_${scriptName}`] 
+            });
         }
     }
 
@@ -172,28 +247,22 @@ class EntityManager {
 
         // --- DELETION HANDLING ---
         if (!fs.existsSync(scriptPath)) {
-            console.log(`[EntityManager] Script deleted: ${scriptName}. Cleaning up entities...`);
             const fileName = path.basename(scriptPath);
+            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Script file deleted: ${fileName}. Starting cleanup for ${scriptName}`, level: 'debug' });
             
-            // FIX: Worker stoppen, um Speicher freizugeben
+            // Stop worker to free resources
             this.workerManager.stopScript(fileName, 'file deleted');
 
             // 1. Clean up dynamic entities (via WorkerManager)
-            // FIX: Nutze fileName (basename) statt scriptPath (full path), da WorkerManager basenames als Key nutzt
             await this.workerManager.removeScriptEntities(fileName);
 
-            // 2. Clean up exposed entities (Switch/Button) - Blind cleanup based on ID pattern
-            const hasIntegration = await this.haConnection.checkIntegrationAvailable();
-            if (hasIntegration) {
-                const domains = ['switch', 'button'];
-                for (const domain of domains) {
-                    const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
-                    try {
-                        await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: uniqueId });
-                    } catch (e) { /* Ignore if not exists */ }
-                }
-            }
-            return;
+            // 2. Clean up internal state mappings
+            this.stateManager.unregisterScript(scriptPath);
+
+            // NOTE: workerManager.removeScriptEntities already handles HA removal 
+            // of all entities in the registry (including exposed ones now).
+            // Device cleanup is triggered via event from WorkerManager.
+            return; 
         }
         
         try {
@@ -232,6 +301,7 @@ class EntityManager {
             // Wir prüfen beide möglichen Domänen, um ggf. alte Typen zu löschen (z.B. Wechsel von switch zu button)
             const domains = ['switch', 'button'];
 
+            const protectedIds = [];
             for (const domain of domains) {
                 const shouldExist = meta.expose === domain;
                 const uniqueId = `js_automations_${domain}_${scriptName}`.toLowerCase();
@@ -297,6 +367,9 @@ class EntityManager {
                     // Legacy Entitäten können nicht ohne Restart gelöscht werden
                 }
             }
+
+            // Nach dem Update prüfen, ob das Device weg kann (falls expose entfernt wurde)
+            await this.checkDeviceCleanup(scriptName);
         } catch (e) {
             console.error(`[EntityManager] Error processing ${scriptPath}:`, e);
         }
