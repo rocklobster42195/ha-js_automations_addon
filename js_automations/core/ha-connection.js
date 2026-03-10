@@ -78,6 +78,26 @@ class HAConnector {
         });
     }
 
+    /**
+     * Ruft die komplette Entity-Registry von Home Assistant ab.
+     */
+    async getEntityRegistry() {
+        if (!this.isReady) return [];
+        const id = this.msgId++;
+        this.send({ id, type: 'config/entity_registry/list' });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                const msg = JSON.parse(data);
+                if (msg.id === id) {
+                    this.ws.removeListener('message', handler);
+                    resolve(msg.result || []);
+                }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve([]); }, 5000);
+        });
+    }
+
     getStates() {
         return Object.values(this.states);
     }

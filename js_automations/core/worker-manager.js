@@ -28,10 +28,61 @@ class WorkerManager extends EventEmitter {
         this.storageDir = ''; 
         this.scriptsDir = '';
         this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> Payload (Config)
-        this.scriptEntityMap = new Map(); // Trackt Zugehörigkeit: filename -> Set<entityId>
+        this.activeRunEntities = new Map(); // Track entities registered during the current script run (Mark-and-Sweep)
+        this.protectedEntities = new Map(); // Track entities from headers (@expose) to protect them from sweep: filename -> Set<entityId>
+        this.scriptEntityMap = new Map(); // RAM-Cache: filename -> Set<entityId>
+        this.registryPath = '';
 
         // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
+    }
+
+    /**
+     * Loads the persistent registry of dynamic entities from storage.
+     */
+    loadRegistry() {
+        this.registryPath = path.join(this.storageDir, 'entity_registry.json');
+        this.emit('log', { source: 'System', message: `[WorkerManager] Loading entity registry from ${this.registryPath}`, level: 'debug' });
+        if (fs.existsSync(this.registryPath)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
+                for (const [file, entitiesObj] of Object.entries(data)) {
+                    const entityIds = Object.keys(entitiesObj);
+                    this.scriptEntityMap.set(file, new Set(entityIds));
+                    
+                    // Restore nativeEntities payloads so we can delete them even after restart
+                    for (const [entityId, payload] of Object.entries(entitiesObj)) {
+                        this.nativeEntities.set(entityId, payload);
+                    }
+                }
+            } catch (e) {
+                this.emit('log', { source: 'System', message: `Failed to load entity_registry.json: ${e.message}`, level: 'error' });
+            }
+        }
+    }
+
+    /**
+     * Persists the current entity registry to a JSON file.
+     */
+    saveRegistry() {
+        if (!this.registryPath) return;
+
+        try {
+            this.emit('log', { source: 'System', message: `[WorkerManager] Saving entity registry to: ${this.registryPath}`, level: 'debug' });
+            const data = {};
+            for (const [file, entityIds] of this.scriptEntityMap.entries()) {
+                data[file] = {};
+                for (const id of entityIds) {
+                    const payload = this.nativeEntities.get(id);
+                    if (payload) {
+                        data[file][id] = payload;
+                    }
+                }
+            }
+            fs.writeFileSync(this.registryPath, JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.error("Failed to save entity_registry.json", e);
+        }
     }
 
     setConnector(connector) { this.haConnector = connector; }
@@ -40,8 +91,52 @@ class WorkerManager extends EventEmitter {
         this.settings = { ...this.settings, ...newSettings };
         this.emit('log', { source: 'System', message: `Settings updated. Restart protection: ${this.settings.restart_protection_count} starts in ${this.settings.restart_protection_time / 1000}s.`, level: 'debug' });
     }
-    setStorageDir(dir) { this.storageDir = dir; }
+    setStorageDir(dir) { 
+        this.storageDir = dir;
+        this.loadRegistry();
+        this.saveRegistry(); // Ensure file exists even if empty
+    }
     setScriptsDir(dir) { this.scriptsDir = dir; }
+
+    /**
+     * Defines which entities are "protected" (e.g. from @expose header).
+     * These will be ignored by the Mark-and-Sweep cleanup.
+     */
+    setProtectedEntities(filename, entityIds) {
+        this.protectedEntities.set(filename, new Set(entityIds));
+    }
+
+    /**
+     * Registers an entity in the central registry.
+     * Used by EntityManager for exposed entities and internally for dynamic ones.
+     */
+    registerEntity(filename, entityId, payload) {
+        this.nativeEntities.set(entityId, payload);
+        if (!this.scriptEntityMap.has(filename)) {
+            this.scriptEntityMap.set(filename, new Set());
+        }
+        this.scriptEntityMap.get(filename).add(entityId);
+        this.saveRegistry();
+    }
+
+    /**
+     * Removes a specific entity from HA and the registry.
+     */
+    async unregisterEntity(filename, entityId) {
+        const payload = this.nativeEntities.get(entityId);
+        if (payload && payload.unique_id && this.haConnector) {
+            try {
+                this.emit('log', { source: 'System', message: `[WorkerManager] Removing entity ${entityId} from HA`, level: 'debug' });
+                await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
+            } catch (e) { /* Ignore if already gone */ }
+        }
+        this.nativeEntities.delete(entityId);
+        if (this.scriptEntityMap.has(filename)) {
+            this.scriptEntityMap.get(filename).delete(entityId);
+        }
+        this.saveRegistry();
+        this.emit('request_device_cleanup', path.basename(filename, '.js'));
+    }
 
     getScripts() {
         if (!this.scriptsDir) return [];
@@ -81,29 +176,90 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Löscht alle nativen Entitäten, die von einem bestimmten Skript erstellt wurden.
+     * Removes all native entities created by a specific script.
      */
     async removeScriptEntities(filename) {
-        // FIX: Metadaten immer bereinigen, auch wenn keine Entitäten da sind (verhindert Memory Leaks)
         this.lastExitState.delete(filename);
         this.restartTracker.delete(filename);
         this.stopReasons.delete(filename);
+        this.protectedEntities.delete(filename);
+        this.emit('log', { source: 'System', message: `[WorkerManager] Cleaning up metadata for ${filename}`, level: 'debug' });
 
-        if (!this.scriptEntityMap.has(filename)) return;
-        
-        const entities = this.scriptEntityMap.get(filename);
-        this.emit('log', { source: 'System', message: `Cleaning up ${entities.size} native entities for deleted script: ${path.basename(filename)}`, level: 'info' });
-        
-        for (const entityId of entities) {
-            const payload = this.nativeEntities.get(entityId);
-            if (payload && payload.unique_id && this.haConnector) {
-                try {
-                    await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
-                } catch (e) { /* Ignore errors during cleanup */ }
+        // Case-insensitive lookup for the filename in the map
+        let actualKey = filename;
+        if (!this.scriptEntityMap.has(filename)) {
+            const lowerName = filename.toLowerCase();
+            for (const key of this.scriptEntityMap.keys()) {
+                if (key.toLowerCase() === lowerName) {
+                    actualKey = key;
+                    break;
+                }
             }
-            this.nativeEntities.delete(entityId);
         }
-        this.scriptEntityMap.delete(filename);
+
+        // Clean up entities if any exist
+        if (this.scriptEntityMap.has(actualKey)) {
+            const entities = this.scriptEntityMap.get(actualKey);
+            this.emit('log', { source: 'System', message: `Cleaning up ${entities.size} dynamic entities for script: ${path.basename(filename)}`, level: 'info' });
+            
+            for (const entityId of entities) {
+                const payload = this.nativeEntities.get(entityId);
+                if (payload && payload.unique_id && this.haConnector) {
+                    try {
+                        await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
+                    } catch (e) { /* Ignore errors during cleanup */ }
+                }
+                this.nativeEntities.delete(entityId);
+            }
+        }
+
+        this.scriptEntityMap.delete(actualKey);
+        this.saveRegistry();
+
+        // Request device cleanup check
+        this.emit('request_device_cleanup', path.basename(filename, '.js'));
+    }
+
+    /**
+     * Removes dynamic entities that were previously registered but are no longer present in the script code.
+     * This is part of the Mark-and-Sweep logic triggered after script start.
+     * @param {string} filename The script filename.
+     * @private
+     */
+    async _sweepOrphanedDynamicEntities(filename) {
+        // If the script was stopped or restarted in the meantime, we skip the sweep for this specific run
+        if (!this.workers.has(filename)) return;
+
+        const knownEntities = this.scriptEntityMap.get(filename);
+        const currentRunEntities = this.activeRunEntities.get(filename);
+        const protectedEntities = this.protectedEntities.get(filename) || new Set();
+
+        if (!knownEntities || !currentRunEntities) return;
+
+        this.emit('log', { source: 'System', message: `[WorkerManager] Running sweep for orphaned dynamic entities in ${filename}`, level: 'debug' });
+
+        for (const entityId of knownEntities) {
+            // Skip entities defined in headers (@expose)
+            if (protectedEntities.has(entityId)) continue;
+
+            if (!currentRunEntities.has(entityId)) {
+                this.emit('log', { source: 'System', message: `[WorkerManager] Entity ${entityId} is no longer requested by ${filename}. Removing from Home Assistant.`, level: 'debug' });
+                
+                const payload = this.nativeEntities.get(entityId);
+                if (payload && payload.unique_id && this.haConnector) {
+                    try {
+                        await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
+                    } catch (e) { /* Ignore errors if entity already gone */ }
+                }
+                this.nativeEntities.delete(entityId);
+                knownEntities.delete(entityId);
+            }
+        }
+
+        this.saveRegistry();
+        
+        // Check if the device should be removed (if no entities are left)
+        this.emit('request_device_cleanup', path.basename(filename, '.js'));
     }
 
     /**
@@ -140,6 +296,14 @@ class WorkerManager extends EventEmitter {
 
         this.lastExitState.delete(scriptMeta.filename);
         this.subscriptions.set(scriptMeta.filename, []);
+
+        // Initialize tracking for entities registered during this run (Mark-and-Sweep)
+        this.activeRunEntities.set(scriptMeta.filename, new Set());
+        
+        // Schedule a sweep to remove entities that are no longer in the script code.
+        // We wait 10 seconds to give the script time to perform its initial ha.register() calls.
+        this.emit('log', { source: 'System', message: `[WorkerManager] Scheduled entity sweep for ${scriptMeta.filename} in 10s`, level: 'debug' });
+        setTimeout(() => this._sweepOrphanedDynamicEntities(scriptMeta.filename), 10000);
 
         // Prepare initial data dump for the worker
         const initialStoreValues = {};
@@ -219,85 +383,17 @@ class WorkerManager extends EventEmitter {
                 const { entityId, config } = msg;
 
                 this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
-
-                // --- RESOLVE METADATA (Area & Labels) ---
-                const { areas, labels } = await this.haConnector.getHAMetadata();
-                
-                const resolveId = (input, list, idField) => {
-                    if (!input || typeof input !== 'string') return undefined;
-                    const cleanInput = input.trim();
-                    if (!cleanInput || !list) return undefined;
-                    const lowerInput = cleanInput.toLowerCase();
-                    // 1. ID Match
-                    const directMatch = list.find(item => item[idField] === cleanInput);
-                    if (directMatch) return directMatch[idField];
-                    // 2. Name Match
-                    const nameMatch = list.find(item => item.name && item.name.toLowerCase() === lowerInput);
-                    return nameMatch ? nameMatch[idField] : undefined;
-                };
-
-                // Area auflösen (unterstützt config.area_id und config.area)
-                let resolvedAreaId = config.area_id;
-                if (!resolvedAreaId && config.area) {
-                    resolvedAreaId = resolveId(config.area, areas, 'area_id');
-                    if (!resolvedAreaId) this.emit('log', { source: 'System', message: `⚠️ Could not resolve Area '${config.area}' for ${entityId}`, level: 'warn' });
-                }
-
-                // Labels auflösen (unterstützt Namen und IDs gemischt)
-                let resolvedLabels = [];
-                if (config.labels && Array.isArray(config.labels)) {
-                    resolvedLabels = config.labels.map(l => {
-                        const id = resolveId(l, labels, 'label_id');
-                        if (!id) this.emit('log', { source: 'System', message: `⚠️ Could not resolve Label '${l}' for ${entityId}`, level: 'warn' });
-                        return id;
-                    }).filter(id => id);
-                }
-
-                const payload = {
-                    entity_id: entityId,
-                    unique_id: config.unique_id || entityId,
-                    name: config.name || config.friendly_name || entityId,
-                    icon: config.icon,
-                    attributes: config.attributes || {}
-                };
-                
-                // FIX: state direkt an create_entity übergeben (Schema erwartet 'state')
-                if (config.initial_state !== undefined) {
-                    payload.state = config.initial_state;
-                }
-                
-                // Map common attributes to payload.attributes
-                // Map common attributes to the top-level payload for the integration
-                // NOTE: area_id und labels behandeln wir separat oben
-                ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'].forEach(key => {
-                    if (config[key]) payload[key] = config[key];
-                });
-
-                if (resolvedAreaId) payload.area_id = resolvedAreaId;
-                if (resolvedLabels.length > 0) payload.labels = resolvedLabels;
-
-                // AUTO-INJECT DEVICE INFO if missing
-                // Damit landen Sensoren automatisch im Gerät des Skripts
-                if (!payload.device_info) {
-                    const scriptName = path.basename(scriptMeta.filename, '.js');
-                    payload.device_info = {
-                        identifiers: [`js_automations_script_${scriptName}`],
-                        name: scriptMeta.name || scriptName,
-                        manufacturer: "JS Automations",
-                        model: "Script",
-                    };
-                }
+                const payload = await this._prepareEntityPayload(entityId, config, scriptMeta);
 
                 try {
                     // Wir senden den Befehl und warten nicht auf eine Antwort, aber fangen Fehler ab.
                     await this.haConnector.callService('js_automations', 'create_entity', payload);
-                    this.nativeEntities.set(entityId, payload);
+                    this.registerEntity(scriptMeta.filename, entityId, payload);
                     
-                    // Track ownership for cleanup
-                    if (!this.scriptEntityMap.has(scriptMeta.filename)) {
-                        this.scriptEntityMap.set(scriptMeta.filename, new Set());
+                    // Mark as active in the current run to prevent it from being swept
+                    if (this.activeRunEntities.has(scriptMeta.filename)) {
+                        this.activeRunEntities.get(scriptMeta.filename).add(entityId);
                     }
-                    this.scriptEntityMap.get(scriptMeta.filename).add(entityId);
 
                     this.emit('log', { source: 'System', message: `Successfully sent registration for ${entityId}`, level: 'debug' });
                 } catch (e) {
@@ -387,6 +483,66 @@ class WorkerManager extends EventEmitter {
         setTimeout(() => {
             if (this.workers.has(scriptMeta.filename)) worker.postMessage({ type: 'get_stats' });
         }, 1000);
+    }
+
+    /**
+     * Internal helper to prepare the payload for HA create_entity service.
+     * @private
+     */
+    async _prepareEntityPayload(entityId, config, scriptMeta) {
+        const { areas, labels } = await this.haConnector.getHAMetadata();
+        
+        const resolveId = (input, list, idField) => {
+            if (!input || typeof input !== 'string') return undefined;
+            const cleanInput = input.trim();
+            if (!cleanInput || !list) return undefined;
+            const lowerInput = cleanInput.toLowerCase();
+            const directMatch = list.find(item => item[idField] === cleanInput);
+            if (directMatch) return directMatch[idField];
+            const nameMatch = list.find(item => item.name && item.name.toLowerCase() === lowerInput);
+            return nameMatch ? nameMatch[idField] : undefined;
+        };
+
+        let resolvedAreaId = config.area_id;
+        if (!resolvedAreaId && config.area) {
+            resolvedAreaId = resolveId(config.area, areas, 'area_id');
+        }
+
+        let resolvedLabels = [];
+        if (config.labels && Array.isArray(config.labels)) {
+            resolvedLabels = config.labels.map(l => resolveId(l, labels, 'label_id')).filter(id => id);
+        }
+
+        const payload = {
+            entity_id: entityId,
+            unique_id: config.unique_id || entityId,
+            name: config.name || config.friendly_name || entityId,
+            icon: config.icon,
+            attributes: config.attributes || {}
+        };
+        
+        if (config.initial_state !== undefined) {
+            payload.state = config.initial_state;
+        }
+        
+        ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'].forEach(key => {
+            if (config[key]) payload[key] = config[key];
+        });
+
+        if (resolvedAreaId) payload.area_id = resolvedAreaId;
+        if (resolvedLabels.length > 0) payload.labels = resolvedLabels;
+
+        if (!payload.device_info) {
+            const scriptName = path.basename(scriptMeta.filename, '.js');
+            payload.device_info = {
+                identifiers: [`js_automations_script_${scriptName}`],
+                name: scriptMeta.name || scriptName,
+                manufacturer: "JS Automations",
+                model: "Script",
+            };
+        }
+
+        return payload;
     }
 
     /**

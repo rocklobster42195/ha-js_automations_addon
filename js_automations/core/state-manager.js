@@ -50,6 +50,18 @@ class StateManager {
         this.entityScriptMap.set(entityId, scriptName);
     }
 
+    /**
+     * Removes all entity mappings associated with a specific script path.
+     * @param {string} scriptPath - The full path of the script to unregister.
+     */
+    unregisterScript(scriptPath) {
+        for (const [entityId, path] of this.entityScriptMap.entries()) {
+            if (path === scriptPath) {
+                this.entityScriptMap.delete(entityId);
+            }
+        }
+    }
+
     getScriptNameForEntity(entityId) {
         return this.entityScriptMap.get(entityId);
     }

@@ -209,9 +209,37 @@ class Kernel extends EventEmitter {
             
             this.depManager.prune();
 
+            // Run an initial cleanup immediately to remove leftovers from offline time
+            await this.performGlobalCleanup();
+
+            // Start periodic cleanup (every hour)
+            setInterval(() => this.performGlobalCleanup(), 3600000);
+
         } catch (err) {
             console.error(err);
             this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
+        }
+    }
+
+    /**
+     * Compares entities in Home Assistant with existing script files
+     * and removes orphaned entries. Triggered hourly.
+     */
+    async performGlobalCleanup() {
+        this.logManager.add('debug', 'System', '[Kernel] Running hourly entity and device cleanup check...');
+        
+        // 1. Get all script names (without .js) from disk
+        const scripts = this.workerManager.getScripts().map(p => path.basename(p, '.js'));
+        
+        // 2. Clean up exposed entities and orphans
+        if (this.entityManager) {
+            await this.entityManager.cleanupOrphanedEntities(scripts);
+        }
+
+        // 3. Republish dynamic entities (ha.register) from running scripts
+        // This ensures they are recreated if manually deleted in HA.
+        if (this.workerManager) {
+            await this.workerManager.republishNativeEntities();
         }
     }
 
