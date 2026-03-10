@@ -49,7 +49,8 @@ io.on('connection', (socket) => {
     socket.on('get_integration_status', async (callback) => {
         try {
             const status = await kernel.getCombinedIntegrationStatus();
-            callback(status);
+            // Adapt for the frontend which expects an 'available' property
+            callback({ available: status.is_running });
         } catch (e) {
             callback({ error: e.message });
         }
