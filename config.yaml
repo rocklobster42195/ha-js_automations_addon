@@ -1,5 +1,5 @@
 name: "JS Automations"
-version: "2.42.12"
+version: "2.42.13"
 slug: "js_automations"
 description: "JavaScript Automations-Engine"
 image: "ghcr.io/rocklobster42195/ha-js_automations_addon/{arch}"
