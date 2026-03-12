@@ -8,18 +8,17 @@ Hier findest du hilfreiche Schnipsel für alle unterstützten Plattformen. Kopie
 Perfekt für Messwerte wie Temperatur, Luftfeuchtigkeit oder Stromverbrauch.
 
 ```javascript
-ha.register('sensor.mein_messwert', {
+ha.register('sensor.jsa_wohnzimmer_temp', {
     name: 'Wohnzimmer Temperatur',
-    type: 'sensor',
     icon: 'mdi:thermometer',
     unit_of_measurement: '°C',
     state_class: 'measurement',  // Wichtig für Statistiken
-    device_class: 'temperature',
-    persistent: true
+    device_class: 'temperature'
+    // device: 'script' // optional: 'script' (default), 'system' or 'none'
 });
 
 // Wert aktualisieren
-ha.updateState('sensor.mein_messwert', 22.5);
+ha.updateState('sensor.jsa_wohnzimmer_temp', 22.5);
 ```
 
 ## 💡 Binary Sensor
@@ -30,8 +29,7 @@ ha.register('binary_sensor.bewegung_flur', {
     name: 'Bewegungsmelder Flur',
     type: 'binary_sensor',
     device_class: 'motion', // motion, door, window, presence...
-    icon: 'mdi:run',
-    persistent: true
+    icon: 'mdi:run'
 });
 
 // Zustand setzen (true = an/erkannt, false = aus/ruhe)
@@ -45,8 +43,7 @@ Ein klassischer Schalter. Denke daran, auf Events zu hören!
 ha.register('switch.mein_schalter', {
     name: 'Kaffeemaschine',
     type: 'switch',
-    icon: 'mdi:coffee',
-    persistent: true
+    icon: 'mdi:coffee'
 });
 
 // Status setzen
@@ -60,8 +57,7 @@ Ein Taster, um Aktionen auszulösen.
 ha.register('button.neustart', {
     name: 'Server Neustart',
     type: 'button',
-    icon: 'mdi:restart',
-    persistent: true
+    icon: 'mdi:restart'
 });
 
 // Button "drücken" (Zeitstempel aktualisieren)
@@ -79,8 +75,7 @@ ha.register('number.zielwert', {
     max: 100,
     step: 0.5,
     mode: 'slider', // oder 'box'
-    unit_of_measurement: '%',
-    persistent: true
+    unit_of_measurement: '%'
 });
 
 ha.updateState('number.zielwert', 42);
@@ -95,8 +90,7 @@ ha.register('text.notiz', {
     type: 'text',
     min: 0,
     max: 255,
-    mode: 'text', // oder 'password'
-    persistent: true
+    mode: 'text' // oder 'password'
 });
 
 ha.updateState('text.notiz', 'Milch kaufen!');
@@ -122,7 +116,6 @@ Eine To-Do Liste. Items werden als Attribute verwaltet.
 ha.register('todo.einkaufsliste', {
     name: 'Einkaufsliste',
     type: 'todo',
-    persistent: true,
     attributes: {
         items: [
             { uid: '1', summary: 'Milch', status: 'needs_action' },
@@ -136,22 +129,22 @@ ha.register('todo.einkaufsliste', {
 Ein Thermostat oder eine Klimaanlage. Etwas komplexer, aber mächtig!
 
 ```javascript
-ha.register('climate.wohnzimmer', {
-    name: 'Heizung Wohnzimmer',
-    type: 'climate',
+ha.register('climate.jsa_wohnzimmer', {
+    name: 'Heizung Keller',
     min_temp: 7,
     max_temp: 30,
-    modes: ['off', 'heat', 'auto'],
+    hvac_modes: ['off', 'heat', 'auto'],
     preset_modes: ['eco', 'comfort', 'boost'],
     unit_of_measurement: '°C',
-    persistent: true,
     attributes: {
         current_temperature: 21.5,
         temperature: 22, // Zieltemperatur
-        hvac_mode: 'heat',
         preset_mode: 'comfort'
     }
 });
+
+// Modus und Temperatur setzen
+ha.updateState('climate.jsa_wohnzimmer', 'heat', { temperature: 22.5 });
 ```
 
 ## 💡 Light
@@ -162,7 +155,6 @@ ha.register('light.wohnzimmer_led', {
     name: 'LED Streifen',
     type: 'light',
     supported_color_modes: ['rgb', 'brightness'],
-    persistent: true,
     attributes: {
         brightness: 255,
         rgb_color: [255, 0, 0], // Rot
@@ -182,7 +174,6 @@ ha.register('cover.garage', {
     name: 'Garagentor',
     type: 'cover',
     device_class: 'garage',
-    persistent: true,
     attributes: {
         current_position: 0, // 0 = Geschlossen, 100 = Offen
         current_tilt_position: 50
@@ -199,7 +190,6 @@ Ventilatorsteuerung mit Geschwindigkeitsstufen.
 ha.register('fan.deckenventilator', {
     name: 'Deckenventilator',
     type: 'fan',
-    persistent: true,
     attributes: {
         percentage: 33, // Geschwindigkeit in %
         preset_modes: ['auto', 'smart'],
@@ -218,7 +208,6 @@ ha.register('media_player.radio', {
     name: 'Küchenradio',
     type: 'media_player',
     device_class: 'speaker',
-    persistent: true,
     attributes: {
         volume_level: 0.5,
         is_volume_muted: false,
@@ -239,7 +228,6 @@ Ein smartes Türschloss.
 ha.register('lock.haustuer', {
     name: 'Haustür',
     type: 'lock',
-    persistent: true,
     attributes: {
         code_format: '^\d{4}$', // 4-stelliger PIN
         changed_by: 'Benutzer',
@@ -257,7 +245,6 @@ Ein Saugroboter.
 ha.register('vacuum.robi', {
     name: 'Saugroboter',
     type: 'vacuum',
-    persistent: true,
     attributes: {
         battery_level: 85,
         fan_speed: 'standard',
@@ -275,7 +262,6 @@ Eine Sirene mit verschiedenen Tönen.
 ha.register('siren.alarm', {
     name: 'Innensirene',
     type: 'siren',
-    persistent: true,
     attributes: {
         available_tones: ['fire', 'intrusion', 'beep']
     }
@@ -291,7 +277,6 @@ Eine Kamera, die Bilder oder Streams anzeigt.
 ha.register('camera.eingang', {
     name: 'Eingangskamera',
     type: 'camera',
-    persistent: true,
     attributes: {
         stream_source: 'rtsp://192.168.1.100/stream',
         // Oder Base64 Bilddaten:
@@ -309,7 +294,6 @@ Eine Alarmanlage mit Code-Schutz.
 ha.register('alarm_control_panel.haus', {
     name: 'Alarmanlage',
     type: 'alarm_control_panel',
-    persistent: true,
     attributes: {
         code_format: 'number', // oder 'text'
         code_arm_required: true,
@@ -327,7 +311,6 @@ Verfolge den Standort von Personen oder Geräten.
 ha.register('device_tracker.mein_handy', {
     name: 'Mein Handy',
     type: 'device_tracker',
-    persistent: true,
     attributes: {
         source_type: 'gps',
         latitude: 52.5200,
@@ -347,7 +330,6 @@ Eigene Wetterdaten anzeigen.
 ha.register('weather.garten', {
     name: 'Wetterstation Garten',
     type: 'weather',
-    persistent: true,
     attributes: {
         temperature: 18.5,
         humidity: 60,
@@ -369,8 +351,7 @@ Ein Datumsauswahl-Feld.
 ha.register('date.urlaub_start', {
     name: 'Urlaubsbeginn',
     type: 'date',
-    icon: 'mdi:calendar',
-    persistent: true
+    icon: 'mdi:calendar'
 });
 
 ha.updateState('date.urlaub_start', '2023-12-24');
@@ -383,8 +364,7 @@ Ein Zeitauswahl-Feld.
 ha.register('time.wecker', {
     name: 'Weckzeit',
     type: 'time',
-    icon: 'mdi:clock',
-    persistent: true
+    icon: 'mdi:clock'
 });
 
 ha.updateState('time.wecker', '07:30:00');
@@ -397,8 +377,7 @@ Datum und Zeit kombiniert.
 ha.register('datetime.termin', {
     name: 'Nächster Termin',
     type: 'datetime',
-    icon: 'mdi:calendar-clock',
-    persistent: true
+    icon: 'mdi:calendar-clock'
 });
 
 ha.updateState('datetime.termin', '2023-12-24T18:00:00');
@@ -411,7 +390,6 @@ Zeigt an, ob ein Firmware-Update verfügbar ist.
 ha.register('update.drucker', {
     name: 'Drucker Firmware',
     type: 'update',
-    persistent: true,
     attributes: {
         installed_version: '1.0.0',
         latest_version: '1.2.0',
@@ -432,7 +410,6 @@ Feuere Ereignisse ohne dauerhaften Zustand (z.B. Türklingel).
 ha.register('event.tuerklingel', {
     name: 'Türklingel',
     type: 'event',
-    persistent: true,
     attributes: {
         event_types: ['press', 'double_press']
     }
@@ -449,7 +426,6 @@ Eine Fernbedienung.
 ha.register('remote.tv', {
     name: 'Fernseher Remote',
     type: 'remote',
-    persistent: true,
     attributes: {
         current_activity: 'Netflix',
         activity_list: ['TV', 'Netflix', 'YouTube']
@@ -467,7 +443,6 @@ ha.register('humidifier.schlafzimmer', {
     name: 'Luftbefeuchter',
     type: 'humidifier',
     device_class: 'humidifier', // oder 'dehumidifier'
-    persistent: true,
     attributes: {
         humidity: 45, // Zielwert
         mode: 'auto',
@@ -488,7 +463,6 @@ ha.register('valve.bewaesserung', {
     name: 'Gartenbewässerung',
     type: 'valve',
     device_class: 'water', // water, gas
-    persistent: true,
     reports_position: true, // Aktiviert Positions-Slider
     optimistic: true, // UI aktualisiert sofort
     attributes: {

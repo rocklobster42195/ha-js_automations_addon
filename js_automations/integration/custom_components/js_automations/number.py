@@ -4,7 +4,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
 from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE, CONF_UNIT_OF_MEASUREMENT, CONF_DEVICE_CLASS
 
 async def async_setup_entry(
@@ -32,6 +32,7 @@ class JSAutomationsNumber(NumberEntity, RestoreEntity):
     """Representation of a JS Automations Number."""
 
     def __init__(self, data):
+        self.entity_id = data["entity_id"]
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self.update_data(data)
@@ -48,24 +49,17 @@ class JSAutomationsNumber(NumberEntity, RestoreEntity):
 
     def update_data(self, data):
         """Update entity state and attributes."""
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
-        if CONF_STATE in data: self._attr_native_value = float(data[CONF_STATE]) if data[CONF_STATE] is not None else None
-        if CONF_UNIT_OF_MEASUREMENT in data: self._attr_native_unit_of_measurement = data[CONF_UNIT_OF_MEASUREMENT]
-        if CONF_DEVICE_CLASS in data: self._attr_device_class = data[CONF_DEVICE_CLASS]
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
+        self._attr_name = data.get(CONF_NAME, self._attr_name)
+        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
+        self._attr_native_unit_of_measurement = data.get(CONF_UNIT_OF_MEASUREMENT, self._attr_native_unit_of_measurement)
+        self._attr_device_class = data.get(CONF_DEVICE_CLASS, self._attr_device_class)
+        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
 
-        if CONF_DEVICE_INFO in data:
-            info = data[CONF_DEVICE_INFO].copy()
-            if "identifiers" in info and isinstance(info["identifiers"], list):
-                ids = set()
-                for x in info["identifiers"]:
-                    if isinstance(x, list):
-                        ids.add(tuple(x))
-                    else:
-                        ids.add((DOMAIN, str(x)))
-                info["identifiers"] = ids
-            self._attr_device_info = info
+        if CONF_STATE in data: self._attr_native_value = float(data[CONF_STATE]) if data[CONF_STATE] is not None else None
+
+        device_info = async_format_device_info(data)
+        if device_info:
+            self._attr_device_info = device_info
         
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]

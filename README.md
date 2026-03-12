@@ -70,6 +70,30 @@ Unlike other add-ons that rely on MQTT or ephemeral HTTP states, this bridge all
 *   **Editable:** You can change the icon, name, and area directly in the Home Assistant Device settings.
 *   **Zero Config:** No MQTT broker or complex configuration required.
 
+### Smart Device Linking (`ha.register`)
+
+When creating custom entities via `ha.register()`, you can control how the entity is grouped in Home Assistant using the `device` parameter:
+
+*   **`device: 'script'` (Default / Optional):** The entity is assigned to the device named after your script. Since this is the default, you can simply omit the `device` parameter. Deleting the script automatically removes the device and its entities.
+*   **`device: 'system'`:** The entity is assigned to the central "JS Automations" device. Ideal for global helpers or status sensors.
+*   **`device: 'none'`:** The entity is not assigned to any device and appears as a standalone entity in Home Assistant.
+
+```javascript
+ha.register('select.heating_mode', {
+    name: 'Heating Mode',
+    options: ['Off', 'Auto', 'Eco', 'Guest'],
+    device: 'system' // Groups it in the main "JS Automations" device
+});
+
+// Or simply (defaults to 'script'):
+ha.register('sensor.my_value', {
+    name: 'My local sensor'
+});
+```
+
+> [!TIP]
+> Regardless of device linking, the internal **Mark-and-Sweep** cleanup ensures that orphaned entities are removed when the parent script is deleted.
+
 ---
 
 ## Script Control (@expose)
@@ -78,7 +102,7 @@ You can expose any script as a native Home Assistant entity by setting the `@exp
 
 *   **Switch:** (`@expose switch`) Creates a toggle. `On` means the script is running, `Off` means it's stopped. Perfect for long-running loops or services.
 *   **Button:** (`@expose button`) Creates a stateless button. Pressing it starts (or restarts) the script. Ideal for one-off actions.
-*   **Entity ID:** `switch.js_automations_<script_name>` or `button.js_automations_<script_name>`
+*   **Entity ID:** `switch.jsa_<script_name>` or `button.jsa_<script_name>`
 
 ```javascript
 /**
@@ -234,7 +258,7 @@ const ical = require('node-ical');
 const CALENDAR_URL = "https://your-calendar-link.ics";
 
 // Register the sensor once
-ha.register('sensor.js_trash_tomorrow', {
+ha.register('sensor.jsa_trash_tomorrow', {
     name: 'Trash Collection Tomorrow',
     icon: 'mdi:delete-alert'
 });
@@ -262,7 +286,7 @@ async function checkTrash() {
             }
         }
 
-        ha.updateState('sensor.js_trash_tomorrow', trashType);
+        ha.updateState('sensor.jsa_trash_tomorrow', trashType);
 
     } catch (e) {
         ha.error("Calendar check failed: " + e.message);

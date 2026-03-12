@@ -7,7 +7,7 @@ from homeassistant.components.valve import (
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
 from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE, CONF_DEVICE_CLASS
 
 async def async_setup_entry(
@@ -35,6 +35,7 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
     """Representation of a JS Automations Valve."""
 
     def __init__(self, data):
+        self.entity_id = data["entity_id"]
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self._attr_is_closed = False
@@ -52,12 +53,12 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
 
     def update_data(self, data):
         """Update entity state and attributes."""
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
-        if CONF_DEVICE_CLASS in data: self._attr_device_class = data[CONF_DEVICE_CLASS]
-        if "reports_position" in data: self._attr_reports_position = data["reports_position"]
-        if "optimistic" in data: self._optimistic = data["optimistic"]
+        self._attr_name = data.get(CONF_NAME, self._attr_name)
+        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
+        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
+        self._attr_device_class = data.get(CONF_DEVICE_CLASS, self._attr_device_class)
+        self._attr_reports_position = data.get("reports_position", self._attr_reports_position)
+        self._optimistic = data.get("optimistic", self._optimistic)
         
         if CONF_STATE in data:
             state = data[CONF_STATE]
@@ -78,17 +79,8 @@ class JSAutomationsValve(ValveEntity, RestoreEntity):
                 self._attr_is_opening = False
                 self._attr_is_closing = True
 
-        if CONF_DEVICE_INFO in data:
-            info = data[CONF_DEVICE_INFO].copy()
-            if "identifiers" in info and isinstance(info["identifiers"], list):
-                ids = set()
-                for x in info["identifiers"]:
-                    if isinstance(x, list):
-                        ids.add(tuple(x))
-                    else:
-                        ids.add((DOMAIN, str(x)))
-                info["identifiers"] = ids
-            self._attr_device_info = info
+        device_info = async_format_device_info(data)
+        if device_info: self._attr_device_info = device_info
         
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]

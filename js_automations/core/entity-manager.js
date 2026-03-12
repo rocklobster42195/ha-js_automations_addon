@@ -87,27 +87,29 @@ class EntityManager {
     }
 
     /**
+     * Robust extraction helper for numeric values from various data structures.
+     * @private
+     */
+    _getNumericValue(raw, keys) {
+        if (raw === undefined || raw === null) return undefined;
+        if (typeof raw === 'object') {
+            for (const key of keys) {
+                if (raw[key] !== undefined && raw[key] !== null) return parseFloat(raw[key]);
+            }
+            return undefined;
+        }
+        return parseFloat(raw);
+    }
+
+    /**
      * Updates the actual state of the system entities in Home Assistant.
      * Called whenever the SystemService provides new statistics.
      */
     async updateSystemStates(stats) {
         if (!this.haConnection.isReady) return;
-
-        // Robust extraction helper
-        const getNumericValue = (raw, keys) => {
-            if (raw === undefined || raw === null) return undefined;
-            if (typeof raw === 'object') {
-                for (const key of keys) {
-                    if (raw[key] !== undefined && raw[key] !== null) return parseFloat(raw[key]);
-                }
-                return undefined;
-            }
-            return parseFloat(raw);
-        };
-
+        
         // Defensive extraction for CPU
-        let cpuValue = stats.cpu;
-        cpuValue = getNumericValue(cpuValue, ['usage', 'percent', 'percentage']);
+        const cpuValue = this._getNumericValue(stats.cpu, ['usage', 'percent', 'percentage']);
 
         // Defensive extraction for RAM
         // Check multiple common property names for memory stats.
@@ -118,7 +120,7 @@ class EntityManager {
         if (ramRaw === undefined) ramRaw = stats.app_ram;
         if (ramRaw === undefined) ramRaw = stats.app_heap;
 
-        let ramValue = getNumericValue(ramRaw, ['used', 'usage', 'mem_usage', 'percentage', 'percent', 'value', 'rss', 'heapUsed', 'app_ram']);
+        const ramValue = this._getNumericValue(ramRaw, ['used', 'usage', 'mem_usage', 'percentage', 'percent', 'value', 'rss', 'heapUsed', 'app_ram']);
 
         const updates = [
             { unique_id: 'jsa_system_cpu_usage', state: cpuValue },

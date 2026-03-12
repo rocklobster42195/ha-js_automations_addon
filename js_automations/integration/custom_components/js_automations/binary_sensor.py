@@ -4,7 +4,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
 from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE, CONF_DEVICE_CLASS
 
 async def async_setup_entry(
@@ -32,6 +32,7 @@ class JSAutomationsBinarySensor(BinarySensorEntity, RestoreEntity):
     """Representation of a JS Automations Binary Sensor."""
 
     def __init__(self, data):
+        self.entity_id = data["entity_id"]
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self.update_data(data)
@@ -44,26 +45,20 @@ class JSAutomationsBinarySensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = last_state.state == "on"
 
     def update_data(self, data):
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
+        """Update entity state and attributes."""
+        self._attr_name = data.get(CONF_NAME, self._attr_name)
+        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
+        self._attr_extra_state_attributes = data.get(CONF_ATTRIBUTES, self._attr_extra_state_attributes)
+        self._attr_device_class = data.get(CONF_DEVICE_CLASS, self._attr_device_class)
+        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
+
         if CONF_STATE in data: 
             val = data[CONF_STATE]
             self._attr_is_on = val == "on" or val is True
-        if CONF_ATTRIBUTES in data: self._attr_extra_state_attributes = data[CONF_ATTRIBUTES]
-        if CONF_DEVICE_CLASS in data: self._attr_device_class = data[CONF_DEVICE_CLASS]
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
 
-        if CONF_DEVICE_INFO in data:
-            info = data[CONF_DEVICE_INFO].copy()
-            if "identifiers" in info and isinstance(info["identifiers"], list):
-                ids = set()
-                for x in info["identifiers"]:
-                    if isinstance(x, list):
-                        ids.add(tuple(x))
-                    else:
-                        ids.add((DOMAIN, str(x)))
-                info["identifiers"] = ids
-            self._attr_device_info = info
+        device_info = async_format_device_info(data)
+        if device_info:
+            self._attr_device_info = device_info
         
         if self.hass:
             self.async_write_ha_state()

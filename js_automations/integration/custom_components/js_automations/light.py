@@ -39,6 +39,7 @@ class JSAutomationsLight(LightEntity, RestoreEntity):
     """Representation of a JS Automations Light."""
 
     def __init__(self, data):
+        self.entity_id = data["entity_id"]
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self._attr_is_on = False
@@ -61,9 +62,9 @@ class JSAutomationsLight(LightEntity, RestoreEntity):
 
     def update_data(self, data):
         """Update entity state and attributes."""
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
+        self._attr_name = data.get(CONF_NAME, self._attr_name)
+        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
+        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
         
         if CONF_STATE in data:
             self._attr_is_on = data[CONF_STATE] == "on" or data[CONF_STATE] is True
