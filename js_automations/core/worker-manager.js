@@ -514,7 +514,7 @@ class WorkerManager extends EventEmitter {
         }
 
         const payload = {
-            entity_id: entityId,
+            entity_id: entityId.replace('js_automations_', 'jsa_'),
             unique_id: config.unique_id || entityId,
             name: config.name || config.friendly_name || entityId,
             icon: config.icon,
@@ -535,7 +535,7 @@ class WorkerManager extends EventEmitter {
         if (!payload.device_info) {
             const scriptName = path.basename(scriptMeta.filename, '.js');
             payload.device_info = {
-                identifiers: [`js_automations_script_${scriptName}`],
+                identifiers: [['js_automations', `jsa_script_${scriptName}`]],
                 name: scriptMeta.name || scriptName,
                 manufacturer: "JS Automations",
                 model: "Script",

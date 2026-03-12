@@ -1,11 +1,18 @@
 # JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-2.43.2-blue)
+![Version](https://img.shields.io/badge/version-2.43.2-darkgreen)
+![Status](https://img.shields.io/badge/status-beta-red)
+![Integration](https://img.shields.io/badge/integration-1.2.1-orange)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 <p align="center">
-  <img src="docs/images/ui.png" width="800" alt="Web UI des Add-ons">
+  <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/images/ui.png" width="800" alt="Web UI des Add-ons">
 </p>
+
+> [!IMPORTANT]
+> **Project Status: Pre-release**
+> This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
 **JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
@@ -81,7 +88,6 @@ You can expose any script as a native Home Assistant entity by setting the `@exp
  */
 
 // This script will have a switch named "switch.js_automations_my_awesome_script"
-// with the "mdi:robot-happy" icon.
 ```
 
 ---
@@ -168,7 +174,7 @@ For a complete reference of the `ha` object and other global built-ins, please r
 
 The user interface is available in both German and English.
 - **Automatic Detection:** The language is automatically chosen based on your browser's settings.
-- **Manual Override:** You can force a specific language for testing by adding the `?lng=` query parameter to the URL. For example, `?lng=en` will switch the UI to English.
+- **Manual Override:** You can force a specific language in settings.
 
 ---
 

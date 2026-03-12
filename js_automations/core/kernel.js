@@ -86,7 +86,17 @@ class Kernel extends EventEmitter {
             this.storeManager = new StoreManager(STORAGE_DIR);
             this.integrationManager = new IntegrationManager(HA_CONFIG_DIR);
             this.workerManager = workerManager;
-            this.entityManager = new EntityManager(this.haConnector, this.workerManager, this.stateManager, this.depManager);
+
+            // Create SystemService before EntityManager so we can pass it
+            this.systemService = new SystemService(config, this.workerManager);
+            
+            this.entityManager = new EntityManager(
+                this.haConnector, 
+                this.workerManager, 
+                this.stateManager, 
+                this.depManager,
+                this.systemService
+            );
         } catch (err) {
             console.error('❌ Critical error during Kernel boot:', err);
             process.exit(1); // Exit with error code so the supervisor can restart the container
@@ -94,9 +104,6 @@ class Kernel extends EventEmitter {
 
         // The bridge connects the kernel to the outside world (sockets)
         this.bridge = new Bridge(this);
-
-        // System service for health monitoring
-        this.systemService = new SystemService(config, this.workerManager);
 
         console.log('✅ Kernel booted successfully. All managers instantiated.');
         
@@ -162,9 +169,6 @@ class Kernel extends EventEmitter {
         const { VERSION, SCRIPTS_DIR } = config;
 
         let startMsg = `Addon started (v${VERSION})...`;
-        if (this.systemOptions.expert_mode) {
-            startMsg += " (Expert Mode)";
-        }
         this.logManager.add('info', 'System', startMsg);
         
         try {
@@ -317,23 +321,10 @@ class Kernel extends EventEmitter {
     
     _onScriptStart({ filename, meta }) {
         if (!meta || meta.expose !== 'button') {
+            // StateManager still tracks by filename for persistence, 
+            // but EntityManager now handles the HA state via events.
             this.stateManager.saveScriptStarted(filename);
         }
-        if (!meta || meta.expose !== 'switch') return;
-        
-        const scriptName = path.basename(filename, '.js');
-        const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
-        const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
-        this.stateManager.set(entityId, 'on');
-        
-        const payload = { unique_id: uniqueId, state: 'on', icon: 'mdi:stop' };
-        if (this.hasIntegration) {
-            this.logManager.add('debug', 'System', `Updating system switch state via service: ${JSON.stringify(payload)}`);
-            this.haConnector.callService('js_automations', 'update_entity', payload);
-        } else {
-            this.haConnector.updateState(entityId, 'on', { icon: 'mdi:stop' });
-        }
-        this.emit('status_update');
     }
 
     _onScriptExit(d) {
@@ -343,22 +334,6 @@ class Kernel extends EventEmitter {
                 this.stateManager.saveScriptStopped(d.filename);
             }
         }
-
-        if (d.meta && d.meta.expose === 'switch') {
-            const scriptName = path.basename(d.filename, '.js');
-            const entityId = `switch.js_automations_${scriptName}`.toLowerCase();
-            const uniqueId = `js_automations_switch_${scriptName}`.toLowerCase();
-            this.stateManager.set(entityId, 'off');
-            
-            const payload = { unique_id: uniqueId, state: 'off', icon: 'mdi:play' };
-            if (this.hasIntegration) {
-                this.logManager.add('debug', 'System', `Updating system switch state via service: ${JSON.stringify(payload)}`);
-                this.haConnector.callService('js_automations', 'update_entity', payload);
-            } else {
-                this.haConnector.updateState(entityId, 'off', { icon: 'mdi:play' });
-            }
-        }
-        
         this.logManager.add(d.type || 'info', 'System', `${path.basename(d.filename)} ${d.reason}`);
         this.emit('status_update');
     }

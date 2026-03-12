@@ -22,19 +22,31 @@ const rootDir = path.resolve(__dirname, '..');
 const configPath = path.join(rootDir, 'config.yaml');
 const readmePath = path.join(rootDir, 'README.md');
 const packagePath = path.join(rootDir, 'package.json');
+const manifestPath = path.join(rootDir, 'js_automations/integration/custom_components/js_automations/manifest.json');
 
 // 1. Neue Version aus package.json lesen (wurde von npm bereits aktualisiert)
 const pkg = require(packagePath);
 const newVersion = pkg.version;
+const license = pkg.license || 'MIT';
+const integrationVersion = require(manifestPath).version;
 
 console.log(`🔄 Synchronisiere Version ${newVersion}...`);
 
 // 2. Alte Version aus config.yaml ermitteln (um sie in der README zu ersetzen)
 let oldVersion = null;
+let archs = [];
 if (fs.existsSync(configPath)) {
     const configContent = fs.readFileSync(configPath, 'utf8');
+    
+    // Version finden
     const match = configContent.match(/^version: ["']?([\d\.]+)["']?/m);
     if (match) oldVersion = match[1];
+
+    // Architekturen finden (extrahiert alle Einträge unter 'arch:')
+    const archSection = configContent.match(/arch:[\s\S]*?(\s+-\s+.*)+/);
+    if (archSection) {
+        archs = archSection[0].split('\n').filter(line => line.includes('-')).map(line => line.replace('-', '').trim());
+    }
 }
 
 // 3. config.yaml aktualisieren
@@ -47,14 +59,24 @@ if (fs.existsSync(configPath)) {
 }
 
 // 4. README.md aktualisieren
-if (fs.existsSync(readmePath) && oldVersion) {
+if (fs.existsSync(readmePath)) {
     let content = fs.readFileSync(readmePath, 'utf8');
-    if (content.includes(oldVersion)) {
-        // Ersetzt alle Vorkommen der alten Version durch die neue
-        content = content.split(oldVersion).join(newVersion);
-        fs.writeFileSync(readmePath, content);
-        console.log(`✅ README.md aktualisiert`);
-    }
+    
+    // Aktualisiere Add-on Version Badge
+    content = content.replace(/(badge\/version-)([\d\.]+)(-darkgreen)/, `$1${newVersion}$3`);
+    
+    // Aktualisiere Integration Version Badge
+    content = content.replace(/(badge\/integration-)([\d\.]+)(-orange)/, `$1${integrationVersion}$3`);
+
+    // Aktualisiere Lizenz Badge
+    content = content.replace(/(badge\/license-)([\w\.\-]+)(-blue)/, `$1${license}$3`);
+
+    // Aktualisiere Architekturen Badge
+    const archString = archs.join('%20%7C%20'); // URL-encoded pipe "|"
+    content = content.replace(/(badge\/arch-)(.*)(-lightgrey)/, `$1${archString}$3`);
+
+    fs.writeFileSync(readmePath, content);
+    console.log(`✅ README.md Badges aktualisiert (Add-on: ${newVersion}, Integration: ${integrationVersion})`);
 }
 
 // 5. Dateien für den Commit stagen (WICHTIG für npm version)

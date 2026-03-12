@@ -108,10 +108,8 @@ Ein Dropdown-Menü mit festen Optionen.
 ```javascript
 ha.register('select.modus', {
     name: 'Betriebsmodus',
-    type: 'select',
     options: ['Eco', 'Standard', 'Turbo'],
     icon: 'mdi:menu',
-    persistent: true
 });
 
 ha.updateState('select.modus', 'Turbo');
