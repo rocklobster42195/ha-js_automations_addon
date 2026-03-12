@@ -7,7 +7,7 @@ from homeassistant.components.weather import (
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE
+from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
 from homeassistant.const import (
     CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE,
     UnitOfTemperature, UnitOfPressure, UnitOfSpeed, UnitOfLength, UnitOfPrecipitationDepth
@@ -44,6 +44,7 @@ class JSAutomationsWeather(WeatherEntity, RestoreEntity):
     _attr_native_precipitation_unit = UnitOfPrecipitationDepth.MILLIMETERS
 
     def __init__(self, data):
+        self.entity_id = data["entity_id"]
         self._attr_unique_id = data[CONF_UNIQUE_ID]
         self._attr_should_poll = False
         self._forecast_daily = None
@@ -60,24 +61,15 @@ class JSAutomationsWeather(WeatherEntity, RestoreEntity):
 
     def update_data(self, data):
         """Update entity state and attributes."""
-        if CONF_NAME in data: self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data: self._attr_icon = data[CONF_ICON]
-        if CONF_AVAILABLE in data: self._attr_available = data[CONF_AVAILABLE]
+        self._attr_name = data.get(CONF_NAME, self._attr_name)
+        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
+        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
         
         if CONF_STATE in data:
             self._attr_condition = data[CONF_STATE]
 
-        if CONF_DEVICE_INFO in data:
-            info = data[CONF_DEVICE_INFO].copy()
-            if "identifiers" in info and isinstance(info["identifiers"], list):
-                ids = set()
-                for x in info["identifiers"]:
-                    if isinstance(x, list):
-                        ids.add(tuple(x))
-                    else:
-                        ids.add((DOMAIN, str(x)))
-                info["identifiers"] = ids
-            self._attr_device_info = info
+        device_info = async_format_device_info(data)
+        if device_info: self._attr_device_info = device_info
         
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]

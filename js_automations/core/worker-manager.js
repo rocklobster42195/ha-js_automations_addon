@@ -518,21 +518,44 @@ class WorkerManager extends EventEmitter {
             unique_id: config.unique_id || entityId,
             name: config.name || config.friendly_name || entityId,
             icon: config.icon,
-            attributes: config.attributes || {}
+            attributes: { ...(config.attributes || {}) }
         };
         
         if (config.initial_state !== undefined) {
             payload.state = config.initial_state;
         }
         
-        ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'].forEach(key => {
+        const haStandardKeys = ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'];
+        const internalKeys = ['entity_id', 'unique_id', 'name', 'friendly_name', 'icon', 'state', 'initial_state', 'area_id', 'area', 'labels', 'device', 'attributes', 'type'];
+
+        // Move known HA root keys to payload
+        haStandardKeys.forEach(key => {
             if (config[key]) payload[key] = config[key];
+        });
+
+        // Move all other "unknown" keys (like options, min, max, step, mode) to attributes
+        // so the python platforms can access them.
+        Object.keys(config).forEach(key => {
+            if (!haStandardKeys.includes(key) && !internalKeys.includes(key)) {
+                payload.attributes[key] = config[key];
+            }
         });
 
         if (resolvedAreaId) payload.area_id = resolvedAreaId;
         if (resolvedLabels.length > 0) payload.labels = resolvedLabels;
 
-        if (!payload.device_info) {
+        // Smart Device Linking
+        if (config.device === 'system') {
+            payload.device_info = {
+                identifiers: [['js_automations', 'jsa_system_device']],
+                name: "JS Automations",
+                manufacturer: "JS Automations",
+                model: "System",
+            };
+        } else if (config.device === 'none') {
+            delete payload.device_info;
+        } else if (!payload.device_info) {
+            // Default: 'script'
             const scriptName = path.basename(scriptMeta.filename, '.js');
             payload.device_info = {
                 identifiers: [['js_automations', `jsa_script_${scriptName}`]],

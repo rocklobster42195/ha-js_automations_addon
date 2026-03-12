@@ -17,6 +17,7 @@ from homeassistant.const import (
     CONF_UNIQUE_ID,
     CONF_STATE,
     CONF_UNIT_OF_MEASUREMENT,
+    CONF_STATE_CLASS,
     CONF_DEVICE_CLASS,
 )
 
@@ -49,6 +50,7 @@ CREATE_ENTITY_SCHEMA = vol.Schema({
     vol.Optional(CONF_ICON): cv.string,
     vol.Optional(CONF_UNIT_OF_MEASUREMENT): cv.string,
     vol.Optional(CONF_DEVICE_CLASS): cv.string,
+    vol.Optional(CONF_STATE_CLASS): cv.string,
     vol.Optional(CONF_STATE): vol.Any(str, int, float, bool, None),
     vol.Optional(CONF_ATTRIBUTES, default={}): dict,
     vol.Optional(CONF_AREA_ID): cv.string,
@@ -86,6 +88,26 @@ REMOVE_ENTITY_SCHEMA = vol.Schema(
 REMOVE_DEVICE_SCHEMA = vol.Schema({
     vol.Required("identifiers"): vol.All(cv.ensure_list, [cv.string]),
 })
+
+@callback
+def async_format_device_info(data: dict) -> dict:
+    """Helper to format device info correctly for Home Assistant."""
+    if CONF_DEVICE_INFO not in data:
+        return None
+        
+    info = data[CONF_DEVICE_INFO].copy()
+    if "identifiers" in info and isinstance(info["identifiers"], list):
+        ids = set()
+        for x in info["identifiers"]:
+            if isinstance(x, list):
+                # Converts [['domain', 'id']] to {('domain', 'id')}
+                ids.add(tuple(x))
+            else:
+                # Fallback for simple string IDs
+                ids.add((DOMAIN, str(x)))
+        info["identifiers"] = ids
+    return info
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the JS Automations component."""
