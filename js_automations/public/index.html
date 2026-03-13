@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JS Automations</title>
     <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -18,7 +19,7 @@
         body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         .app-wrapper { flex: 1; overflow: hidden; } /* border-bottom wird vom sidebar-footer übernommen */
         /* Status Bar Styles (wird von app.js injiziert) */
-        #status-bar { height: 22px; background: #282a36; color: #fff; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-family: 'Segoe UI', sans-serif; user-select: none; z-index: 100; justify-content: space-between; border-top: 1px solid #333; }
+        #status-bar { height: 22px; background: #282a36; color: #fff; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-family: 'Segoe UI', sans-serif; -webkit-user-select: none; user-select: none; z-index: 100; justify-content: space-between; border-top: 1px solid #333; }
         .sb-item { display: flex; align-items: center; gap: 6px; cursor: default; }
         .sb-item i { font-size: 14px; }
         .sb-hidden { display: none !important; }
@@ -46,7 +47,7 @@
             <div class="search-box">
                 <div class="search-container">
                     <input type="text" id="search-input" data-i18n="search_placeholder" data-i18n-placeholder placeholder="Suchen..." oninput="filterScripts()">
-                    <button id="clear-search-btn" class="hidden" onclick="clearSearch()"><i class="mdi mdi-close"></i></button>
+                    <button id="clear-search-btn" class="hidden" onclick="clearSearch()" title="Clear search"><i class="mdi mdi-close"></i></button>
                 </div>
             </div>
 
@@ -105,7 +106,7 @@
                         <h4>Global Store (ha.store)</h4>
                         <div class="store-search-box">
                             <input type="text" id="store-search" class="store-search-input" placeholder="Filter..." oninput="renderStoreTable()">
-                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()"><i class="mdi mdi-close"></i></button>
+                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()" title="Clear filter"><i class="mdi mdi-close"></i></button>
                         </div>
                         <button onclick="clearStore()" title="Clear All (Delete everything)" style="color:var(--danger)"><i class="mdi mdi-delete-alert"></i></button>
                         <button onclick="loadStoreData()" title="Refresh"><i class="mdi mdi-refresh"></i></button>
@@ -145,8 +146,8 @@
                     <div style="display:flex; align-items:center; gap:20px;">
                         <span data-i18n="log_header">LOGS</span>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span data-i18n="log_filter_label" style="font-size:0.8rem; opacity:0.7;">Filter:</span>
-                            <select id="logFilter" onchange="filterLogs()" style="background:#333; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 5px; font-size:0.8rem;">
+                            <label for="logFilter" data-i18n="log_filter_label" style="font-size:0.8rem; opacity:0.7;">Filter:</label>
+                            <select id="logFilter" onchange="filterLogs()">
                                 <option value="ALL" data-i18n="log_filter_all">All</option>
                                 <option value="System">System</option>
                             </select>
