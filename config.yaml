@@ -11,7 +11,7 @@ startup: "services"
 boot: "auto"
 ingress: true
 ingress_port: 3000
-panel_icon: "mdi:nodejs"
+panel_icon: "mdi:robot-happy-outline"
 homeassistant_api: true
 hassio_api: true
 hassio_role: manager
