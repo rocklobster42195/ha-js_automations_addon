@@ -221,7 +221,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     font-size: 0.7rem; font-weight: bold; text-transform: uppercase;
     border-bottom: 1px solid #222; border-top: 1px solid var(--border);
     display: flex; justify-content: space-between; cursor: pointer;
-    cursor: pointer;
+    -webkit-user-select: none; /* Safari */
     user-select: none; /* Verhindert Textmarkierung beim Doppelklick */
     transition: background 0.2s, opacity 0.2s;
 }
@@ -405,12 +405,13 @@ input#search-input:focus { border-color: var(--accent) !important; }
 
 /* Log Filter / Protocol Filter */
 .log-header select, .log-header input {
-    background-color: #222 !important;
-    border: 1px solid #333 !important;
-    color: #aaa !important;
-    border-radius: 4px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 3px;
     outline: none;
     padding: 2px 5px;
+    font-size: 0.8rem;
 }
 
 .log-header select option {
@@ -424,7 +425,9 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .modal-overlay { 
     position: fixed !important; top: 0; left: 0; width: 100vw; height: 100vh; 
     background: rgba(0,0,0,0.85) !important; z-index: 9999 !important; 
-    display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center; 
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
 }
 .modal { 
     background: var(--modal-bg) !important; border: 1px solid var(--border) !important; 
@@ -804,6 +807,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     align-items: center;
     justify-content: center;
     color: #fff;
+    -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
 }
 .reconnect-spinner {
