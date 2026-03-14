@@ -21,34 +21,27 @@ class IntegrationManager {
         const installedManifest = this._readManifest(this.targetDir);
 
         const devMode = !config.IS_ADDON;
-
-        // Wenn intern keine Integration liegt (z.B. im Dev-Mode ohne Build), Fehler melden
-        if (!internalManifest) {
-            return { 
-                installed: !!installedManifest, 
-                error: devMode ? null : 'Internal integration source not found', 
-                version_available: '0.0.0', 
-                version_installed: installedManifest ? installedManifest.version : '0.0.0',
-                dev_mode: devMode,
-                target_path: this.targetDir
-            };
-        }
-
-        const versionAvailable = internalManifest.version;
+        const versionAvailable = internalManifest ? internalManifest.version : '0.0.0';
         const versionInstalled = installedManifest ? installedManifest.version : null;
 
         // In HA geladen?
         const isLoaded = loadedComponents.includes('js_automations');
 
-        // Im Dev-Mode gilt die Integration als "installiert", wenn sie entweder im Mock-Ordner
-        // liegt oder bereits im Remote-HA aktiv ist.
-        const installed = devMode ? (isLoaded || !!versionInstalled) : !!versionInstalled;
-        
-        // Aktiv bedeutet: In HA geladen UND die Versionen stimmen überein
+        // Installiert ist sie, wenn Dateien da sind ODER HA sie bereits geladen hat
+        const installed = !!versionInstalled || isLoaded;
+                
         // Im Dev-Mode vergleichen wir die laufende Version mit dem lokalen Quellcode (Source)
-        const referenceVersion = devMode ? versionAvailable : versionInstalled;
-        const versionMismatch = runningVersion && referenceVersion && runningVersion !== referenceVersion;
+        const referenceVersion = devMode ? versionAvailable : (versionInstalled || '0.0.0');
+        // Mismatch wenn:
+        // 1. Integration geladen, aber liefert keine Version (zu alt)
+        // 2. Version geliefert, aber weicht von der Referenz ab
+        const versionMismatch = (isLoaded && !runningVersion) || 
+                               !!(runningVersion && referenceVersion !== '0.0.0' && runningVersion !== referenceVersion);
+
         const active = isLoaded && !versionMismatch;
+
+        // Im Dev-Mode ignorieren wir den Mock-Ordner für den Update-Banner.
+        const needsUpdate = devMode ? false : (installed ? (versionInstalled !== versionAvailable) : true);
 
         return {
             installed,
@@ -57,11 +50,12 @@ class IntegrationManager {
             version_installed: versionInstalled || '0.0.0',
             version_available: versionAvailable,
             version_running: runningVersion || '0.0.0',
-            needs_update: installed ? (versionInstalled !== versionAvailable) : true,
+            needs_update: needsUpdate,
             // Neustart fällig, wenn Dateien da, aber nicht geladen ODER falsche Version aktiv
             needs_restart: installed && (!isLoaded || versionMismatch),
             dev_mode: devMode,
-            target_path: this.targetDir
+            target_path: this.targetDir,
+            error: (!internalManifest && !devMode) ? 'Internal integration source not found' : null
         };
     }
 
