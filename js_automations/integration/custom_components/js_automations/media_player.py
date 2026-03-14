@@ -33,8 +33,12 @@ class JSAutomationsMediaPlayer(JSAutomationsBaseEntity, MediaPlayerEntity):
         attrs = last_state.attributes
         self._attr_volume_level = attrs.get("volume_level")
         self._attr_is_volume_muted = attrs.get("is_volume_muted")
-        self._attr_source = attrs.get("source")
         self._attr_source_list = attrs.get("source_list")
+        
+        if "source" in attrs:
+            source = attrs["source"]
+            if not self._attr_source_list or source in self._attr_source_list:
+                self._attr_source = source
 
     def update_data(self, data):
         """Update Media Player spezifische Daten."""
@@ -47,8 +51,14 @@ class JSAutomationsMediaPlayer(JSAutomationsBaseEntity, MediaPlayerEntity):
             attrs = data[CONF_ATTRIBUTES]
             if "volume_level" in attrs: self._attr_volume_level = float(attrs["volume_level"])
             if "is_volume_muted" in attrs: self._attr_is_volume_muted = bool(attrs["is_volume_muted"])
-            if "source" in attrs: self._attr_source = attrs["source"]
+            
+            # Update source_list first for validation
             if "source_list" in attrs: self._attr_source_list = attrs["source_list"]
+            
+            if "source" in attrs:
+                source = attrs["source"]
+                if not self._attr_source_list or source in self._attr_source_list:
+                    self._attr_source = source
             
             if "media_title" in attrs: self._attr_media_title = attrs["media_title"]
             if "media_artist" in attrs: self._attr_media_artist = attrs["media_artist"]
@@ -83,23 +93,45 @@ class JSAutomationsMediaPlayer(JSAutomationsBaseEntity, MediaPlayerEntity):
             for key in managed_keys:
                 self._attr_extra_state_attributes.pop(key, None)
 
-        if self.hass:
-            self.async_write_ha_state()
+    async def async_turn_on(self) -> None: 
+        self._attr_state = "on"
+        self.async_write_ha_state()
+        self._fire_js_event("turn_on")
 
-    async def async_turn_on(self) -> None: self._fire_js_event("turn_on")
-    async def async_turn_off(self) -> None: self._fire_js_event("turn_off")
+    async def async_turn_off(self) -> None: 
+        self._attr_state = "off"
+        self.async_write_ha_state()
+        self._fire_js_event("turn_off")
 
     async def async_set_volume_level(self, volume: float) -> None:
+        self._attr_volume_level = volume
+        self.async_write_ha_state()
         self._fire_js_event("set_volume_level", {"volume_level": volume})
 
     async def async_mute_volume(self, mute: bool) -> None:
+        self._attr_is_volume_muted = mute
+        self.async_write_ha_state()
         self._fire_js_event("mute_volume", {"mute": mute})
 
-    async def async_media_play(self) -> None: self._fire_js_event("media_play")
-    async def async_media_pause(self) -> None: self._fire_js_event("media_pause")
-    async def async_media_stop(self) -> None: self._fire_js_event("media_stop")
+    async def async_media_play(self) -> None: 
+        self._attr_state = "playing"
+        self.async_write_ha_state()
+        self._fire_js_event("media_play")
+
+    async def async_media_pause(self) -> None: 
+        self._attr_state = "paused"
+        self.async_write_ha_state()
+        self._fire_js_event("media_pause")
+
+    async def async_media_stop(self) -> None: 
+        self._attr_state = "idle"
+        self.async_write_ha_state()
+        self._fire_js_event("media_stop")
+
     async def async_media_next_track(self) -> None: self._fire_js_event("media_next_track")
     async def async_media_previous_track(self) -> None: self._fire_js_event("media_previous_track")
 
     async def async_select_source(self, source: str) -> None:
+        self._attr_source = source
+        self.async_write_ha_state()
         self._fire_js_event("select_source", {"source": source})

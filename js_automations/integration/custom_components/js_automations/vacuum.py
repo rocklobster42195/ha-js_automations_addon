@@ -47,8 +47,15 @@ class JSAutomationsVacuum(JSAutomationsBaseEntity, StateVacuumEntity):
 
             # Native Properties (Reinigungsprogramme/Status)
             if "battery_level" in attrs: self._attr_battery_level = int(attrs["battery_level"])
-            if "fan_speed" in attrs: self._attr_fan_speed = attrs["fan_speed"]
+            
+            # Erst die Liste aktualisieren, falls vorhanden
             if "fan_speed_list" in attrs: self._attr_fan_speed_list = attrs["fan_speed_list"]
+            
+            # Dann den Speed setzen (Validierung)
+            if "fan_speed" in attrs:
+                speed = attrs["fan_speed"]
+                if not self._attr_fan_speed_list or speed in self._attr_fan_speed_list:
+                    self._attr_fan_speed = speed
             
             # Bereinigung der Extra Attributes
             managed_keys = ["battery_level", "fan_speed", "fan_speed_list"]
@@ -74,17 +81,31 @@ class JSAutomationsVacuum(JSAutomationsBaseEntity, StateVacuumEntity):
 
             self._attr_supported_features = features
 
-        if self.hass:
-            self.async_write_ha_state()
-
-    async def async_start(self) -> None: self._fire_js_event("start")
-    async def async_stop(self, **kwargs) -> None: self._fire_js_event("stop")
-    async def async_pause(self) -> None: self._fire_js_event("pause")
-    async def async_return_to_base(self, **kwargs) -> None: self._fire_js_event("return_to_base")
-    async def async_clean_spot(self, **kwargs) -> None: self._fire_js_event("clean_spot")
+    async def async_start(self) -> None: 
+        self._attr_state = "cleaning"
+        self.async_write_ha_state()
+        self._fire_js_event("start")
+    async def async_stop(self, **kwargs) -> None: 
+        self._attr_state = "idle"
+        self.async_write_ha_state()
+        self._fire_js_event("stop")
+    async def async_pause(self) -> None: 
+        self._attr_state = "paused"
+        self.async_write_ha_state()
+        self._fire_js_event("pause")
+    async def async_return_to_base(self, **kwargs) -> None: 
+        self._attr_state = "returning"
+        self.async_write_ha_state()
+        self._fire_js_event("return_to_base")
+    async def async_clean_spot(self, **kwargs) -> None: 
+        self._attr_state = "cleaning"
+        self.async_write_ha_state()
+        self._fire_js_event("clean_spot")
     async def async_locate(self, **kwargs) -> None: self._fire_js_event("locate")
 
     async def async_set_fan_speed(self, fan_speed: str, **kwargs) -> None:
+        self._attr_fan_speed = fan_speed
+        self.async_write_ha_state()
         self._fire_js_event("set_fan_speed", {"fan_speed": fan_speed})
 
     async def async_send_command(self, command: str, params: dict | list | None = None, **kwargs) -> None:

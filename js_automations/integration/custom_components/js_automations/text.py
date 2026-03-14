@@ -51,4 +51,6 @@ class JSAutomationsText(JSAutomationsBaseEntity, TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         """Set new value."""
+        self._attr_native_value = value
+        self.async_write_ha_state()
         self._fire_js_event("set_value", {"value": value})

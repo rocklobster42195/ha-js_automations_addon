@@ -64,4 +64,6 @@ class JSAutomationsNumber(JSAutomationsBaseEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set new value."""
+        self._attr_native_value = value
+        self.async_write_ha_state()
         self._fire_js_event("set_value", {"value": value})

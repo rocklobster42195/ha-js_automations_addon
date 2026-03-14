@@ -54,6 +54,3 @@ class JSAutomationsSensor(JSAutomationsBaseEntity, SensorEntity):
                     self._attr_native_value = val
             else:
                 self._attr_native_value = val
-
-        if self.hass:
-            self.async_write_ha_state()

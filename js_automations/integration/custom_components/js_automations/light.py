@@ -42,7 +42,13 @@ class JSAutomationsLight(JSAutomationsBaseEntity, LightEntity):
         self._attr_brightness = attrs.get(ATTR_BRIGHTNESS)
         self._attr_rgb_color = attrs.get(ATTR_RGB_COLOR)
         self._attr_color_temp_kelvin = attrs.get(ATTR_COLOR_TEMP_KELVIN)
-        self._attr_effect = attrs.get(ATTR_EFFECT)
+        self._attr_effect_list = attrs.get("effect_list")
+        
+        if ATTR_EFFECT in attrs:
+            effect = attrs[ATTR_EFFECT]
+            if not self._attr_effect_list or effect in self._attr_effect_list:
+                self._attr_effect = effect
+                
         self._attr_color_mode = attrs.get("color_mode", ColorMode.ONOFF)
         if "supported_color_modes" in attrs:
             self._attr_supported_color_modes = set(attrs["supported_color_modes"])
@@ -61,8 +67,13 @@ class JSAutomationsLight(JSAutomationsBaseEntity, LightEntity):
             if "brightness" in attrs: self._attr_brightness = int(attrs["brightness"])
             if "rgb_color" in attrs: self._attr_rgb_color = tuple(attrs["rgb_color"])
             if "color_temp_kelvin" in attrs: self._attr_color_temp_kelvin = int(attrs["color_temp_kelvin"])
-            if "effect" in attrs: self._attr_effect = attrs["effect"]
+            
+            # Update effect_list first for validation
             if "effect_list" in attrs: self._attr_effect_list = attrs["effect_list"]
+            if "effect" in attrs:
+                effect = attrs["effect"]
+                if not self._attr_effect_list or effect in self._attr_effect_list:
+                    self._attr_effect = effect
             
             # 2. Bereinigen der Extra Attributes
             managed_keys = [
@@ -100,13 +111,25 @@ class JSAutomationsLight(JSAutomationsBaseEntity, LightEntity):
             else:
                 self._attr_color_mode = ColorMode.ONOFF
 
-            if self.hass:
-                self.async_write_ha_state()
-
     async def async_turn_on(self, **kwargs):
         """Turn the entity on."""
+        self._attr_is_on = True
+        if ATTR_BRIGHTNESS in kwargs:
+            self._attr_brightness = kwargs[ATTR_BRIGHTNESS]
+        if ATTR_RGB_COLOR in kwargs:
+            self._attr_rgb_color = kwargs[ATTR_RGB_COLOR]
+            self._attr_color_mode = ColorMode.RGB
+        if ATTR_COLOR_TEMP_KELVIN in kwargs:
+            self._attr_color_temp_kelvin = kwargs[ATTR_COLOR_TEMP_KELVIN]
+            self._attr_color_mode = ColorMode.COLOR_TEMP
+        if ATTR_EFFECT in kwargs:
+            self._attr_effect = kwargs[ATTR_EFFECT]
+        
+        self.async_write_ha_state()
         self._fire_js_event("turn_on", kwargs)
 
     async def async_turn_off(self, **kwargs):
         """Turn the entity off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")
