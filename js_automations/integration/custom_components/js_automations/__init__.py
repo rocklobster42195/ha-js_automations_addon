@@ -11,15 +11,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, split_entity_id, callback
 from homeassistant.helpers import config_validation as cv, entity_registry as er, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import (
     CONF_NAME,
     CONF_ICON,
     CONF_UNIQUE_ID,
     CONF_STATE,
     CONF_UNIT_OF_MEASUREMENT,
-    CONF_STATE_CLASS,
     CONF_DEVICE_CLASS,
+    ATTR_ENTITY_ID,
 )
+from .const import CONF_STATE_CLASS
 
 DOMAIN = "js_automations"
 CONF_ATTRIBUTES = "attributes"
@@ -109,6 +111,121 @@ def async_format_device_info(data: dict) -> dict:
     return info
 
 
+class JSAutomationsBaseEntity(RestoreEntity):
+    """Abstrakte Basisklasse für alle JS Automations Entitäten."""
+
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+
+    # Liste der Keys, die nativ von der Basisklasse oder HA verarbeitet werden
+    # und daher nicht in den extra_state_attributes erscheinen sollten.
+    _base_managed_keys = {
+        CONF_NAME, 
+        CONF_ICON, 
+        CONF_AVAILABLE, 
+        CONF_UNIT_OF_MEASUREMENT, 
+        CONF_DEVICE_CLASS, 
+        CONF_STATE_CLASS,
+        CONF_DEVICE_INFO,
+        CONF_AREA_ID,
+        CONF_LABELS
+    }
+
+    def __init__(self, data: dict) -> None:
+        """Initialisierung mit dem initialen Datenpaket."""
+        self.entity_id = data["entity_id"]
+        self._attr_unique_id = data[CONF_UNIQUE_ID]
+        self._attr_extra_state_attributes = {}
+        
+        # Initiales Daten-Processing
+        self.update_data(data)
+
+    async def async_added_to_hass(self) -> None:
+        """Wird aufgerufen, wenn die Entität zu HA hinzugefügt wird."""
+        await super().async_added_to_hass()
+        
+        # State Restore Logik (Standard für alle)
+        if (last_state := await self.async_get_last_state()) is not None:
+            self._restore_state(last_state)
+
+    def _restore_state(self, last_state):
+        """Kann von Subklassen überschrieben werden (z.B. für numerisches Casting)."""
+        self._attr_available = True # Gehe davon aus, dass sie nach Restore da ist
+
+    def update_data(self, data: dict) -> None:
+        """Zentrale Methode zum Verarbeiten von Updates via Service."""
+        # Registry-nahe Attribute
+        if CONF_NAME in data:
+            self._attr_name = data[CONF_NAME]
+        if CONF_ICON in data:
+            self._attr_icon = data[CONF_ICON]
+        if CONF_AVAILABLE in data:
+            self._attr_available = data[CONF_AVAILABLE]
+
+        # Plattform-Attribute
+        if CONF_UNIT_OF_MEASUREMENT in data:
+            self._attr_native_unit_of_measurement = data[CONF_UNIT_OF_MEASUREMENT]
+        if CONF_DEVICE_CLASS in data:
+            self._attr_device_class = data[CONF_DEVICE_CLASS]
+        if CONF_STATE_CLASS in data:
+            self._attr_state_class = data[CONF_STATE_CLASS]
+
+        # Device Linking
+        if device_info := async_format_device_info(data):
+            self._attr_device_info = device_info
+
+        # Extra Attribute verarbeiten und Basis-Keys filtern
+        if CONF_ATTRIBUTES in data:
+            attrs = data[CONF_ATTRIBUTES].copy()
+            for key in self._base_managed_keys:
+                attrs.pop(key, None)
+            
+            self._attr_extra_state_attributes.update(attrs)
+
+        if self.hass:
+            self.async_write_ha_state()
+
+    def _fire_js_event(self, action: str, data: dict = None) -> None:
+        """Feuert ein Event auf dem HA Bus für das Add-on."""
+        event_data = {
+            "domain": self.platform.domain,
+            "action": action,
+            ATTR_ENTITY_ID: self.entity_id,
+            CONF_UNIQUE_ID: self.unique_id,
+        }
+        if data:
+            event_data.update(data)
+            
+        self.hass.bus.async_fire(f"{DOMAIN}_event", event_data)
+
+
+async def async_setup_js_platform(hass, domain, entity_class, async_add_entities):
+    """Zentraler Helper für das Setup aller Plattformen."""
+    
+    @callback
+    def async_add_js_entity(data: dict):
+        """Erstellt das Objekt und registriert es im globalen Store."""
+        unique_id = data[CONF_UNIQUE_ID]
+        
+        # Verhindert Duplikate im Runtime Memory
+        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
+            _LOGGER.debug("Entity %s already loaded, skipping creation.", unique_id)
+            return
+            
+        try:
+            entity = entity_class(data)
+            hass.data[DOMAIN][DATA_ENTITIES][unique_id] = entity
+            async_add_entities([entity])
+        except Exception as e:
+            _LOGGER.error("Failed to create %s entity %s: %s", domain, unique_id, e)
+
+    
+    # Cleanup beim Entladen sicherstellen
+    # Hinweis: Da wir hier keine ConfigEntry haben, müssen wir das Signal-Handle manuell verwalten 
+    # oder die Plattform-Datei übernimmt das (wie bisher).
+    return async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_{domain}", async_add_js_entity)
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the JS Automations component."""
     _LOGGER.info("Initializing JS Automations Bridge")
@@ -119,34 +236,53 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {DATA_ENTITIES: {}}
 
+    return True
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up JS Automations from a config entry."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+
     def get_entity_id_by_unique_id(unique_id):
         """Helper to look up entity_id by unique_id for this platform."""
         if not unique_id:
             return None
-        for entry in entity_registry.entities.values():
-            if entry.platform == DOMAIN and entry.unique_id == unique_id:
-                return entry.entity_id
+        for reg_entry in entity_registry.entities.values():
+            if reg_entry.platform == DOMAIN and reg_entry.unique_id == unique_id:
+                return reg_entry.entity_id
         return None
 
-    # --- Service Handlers ---
-
+    # --- Service Handlers (Inside setup_entry for correct lifecycle) ---
+    
     async def handle_create_entity(call: ServiceCall):
         """Service to create or update an entity's registration and set its initial state."""
         data = call.data
         unique_id = data[CONF_UNIQUE_ID]
         domain, object_id = split_entity_id(data["entity_id"])
 
-        # If entity object already exists, this is a configuration update, not a creation.
+        # --- Device Area-Handling ---
+        # Falls Geräte-Infos und ein Bereich vorhanden sind, aktualisieren wir das Gerät zuerst.
+        # So wird sichergestellt, dass das Gerät im richtigen Bereich landet.
+        if CONF_DEVICE_INFO in data and CONF_AREA_ID in data:
+            device_info = async_format_device_info(data)
+            if device_info and "identifiers" in device_info:
+                dev_entry = device_registry.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers=device_info["identifiers"],
+                )
+                if dev_entry.area_id != data[CONF_AREA_ID]:
+                    device_registry.async_update_device(
+                        dev_entry.id, area_id=data[CONF_AREA_ID]
+                    )
+                    _LOGGER.debug(f"Moved device {dev_entry.id} to area {data[CONF_AREA_ID]}")
+
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             _LOGGER.debug(f"Entity {unique_id} already exists. Treating as a configuration update.")
-            # Forward to the update handler to apply registry changes
             await handle_update_entity(call)
             return
 
-        # Create or update the entry in the entity registry
-        # Note: We separate area_id and labels to ensure compatibility with older HA versions
-        # where async_get_or_create might not accept them directly.
-        entry = entity_registry.async_get_or_create(
+        # Registration
+        reg_entry = entity_registry.async_get_or_create(
             domain=domain,
             platform=DOMAIN,
             unique_id=unique_id,
@@ -166,9 +302,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         
         if update_kwargs:
             try:
-                entity_registry.async_update_entity(entry.entity_id, **update_kwargs)
+                entity_registry.async_update_entity(reg_entry.entity_id, **update_kwargs)
             except Exception as e:
-                _LOGGER.warning(f"Could not update registry details (area/labels) for {entry.entity_id}: {e}")
+                _LOGGER.warning(f"Could not update registry details (area/labels) for {reg_entry.entity_id}: {e}")
 
         _LOGGER.debug(f"Registered/Updated entity in registry: {domain}.{object_id} (UID: {unique_id})")
 
@@ -181,15 +317,23 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         data = call.data
         unique_id = data[CONF_UNIQUE_ID]
 
-        # Allow pinging the service to check availability without logging warnings
         if unique_id == "___ping___":
             return
 
-        # --- Update Entity Object (State/Attributes) ---
+        # --- Device Area-Handling (auch bei Updates) ---
+        if CONF_DEVICE_INFO in data and CONF_AREA_ID in data:
+            device_info = async_format_device_info(data)
+            if device_info and "identifiers" in device_info:
+                dev_entry = device_registry.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers=device_info["identifiers"],
+                )
+                if dev_entry.area_id != data[CONF_AREA_ID]:
+                    device_registry.async_update_device(dev_entry.id, area_id=data[CONF_AREA_ID])
+
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             entity = hass.data[DOMAIN][DATA_ENTITIES][unique_id]
-            # The entity object should have a method to process new data
-            entity.update_data(data)
+            entity.update_data(data) # MS11 BaseEntity Logic
         else:
             _LOGGER.warning(f"Could not update state for unknown entity object: uid='{unique_id}'. The entity might not be loaded yet.")
 
@@ -254,24 +398,18 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         identifiers = {(DOMAIN, identifier) for identifier in data["identifiers"]}
         
         device_entry = device_registry.async_get_device(identifiers=identifiers)
-
         if device_entry:
             device_registry.async_remove_device(device_entry.id)
             _LOGGER.debug(f"Removed device with identifiers {identifiers} from registry.")
         else:
             _LOGGER.warning(f"Could not find device in registry to remove: identifiers={identifiers}")
 
-    # --- Register Services ---
+    # Register Services
     hass.services.async_register(DOMAIN, "create_entity", handle_create_entity, schema=CREATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "update_entity", handle_update_entity, schema=UPDATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "remove_entity", handle_remove_entity, schema=REMOVE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "remove_device", handle_remove_device, schema=REMOVE_DEVICE_SCHEMA)
 
-    return True
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up JS Automations from a config entry."""
-    # Forward setup to all platforms. They will set up their listeners.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

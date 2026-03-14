@@ -9,5 +9,8 @@
       "abort": {
         "single_instance_allowed": "Es ist nur eine einzige Instanz der JS Automations Bridge erlaubt."
       }
+    },
+    "create_entry": {
+      "default": "Die JS Automations Bridge wurde erfolgreich installiert. Du kannst nun mit der Erstellung von Automatisierungen in JavaScript beginnen."
     }
   }

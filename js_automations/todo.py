@@ -8,6 +8,7 @@ from homeassistant.components.todo import (
     TodoItemStatus,
 )
 from . import (
+    DOMAIN,
     JSAutomationsBaseEntity,
     async_setup_js_platform,
     CONF_ATTRIBUTES,
@@ -53,6 +54,8 @@ class JSAutomationsTodo(JSAutomationsBaseEntity, TodoListEntity):
             if "items" in attrs:
                 self._update_items_from_list(attrs["items"])
                 self._attr_extra_state_attributes.pop("items", None)
+
+        if self.hass:
             self.async_write_ha_state()
 
     def _update_items_from_list(self, raw_items: list[dict]):
