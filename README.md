@@ -1,9 +1,9 @@
 # JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-2.44.2-darkgreen)
+![Version](https://img.shields.io/badge/version-2.44.3-darkgreen)
 ![Status](https://img.shields.io/badge/status-beta-red)
-![Integration](https://img.shields.io/badge/integration-2.0.2-orange)
+![Integration](https://img.shields.io/badge/integration-2.1.0-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 <p align="center">
