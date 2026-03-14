@@ -52,24 +52,36 @@ class JSAutomationsClimate(JSAutomationsBaseEntity, ClimateEntity):
         if CONF_UNIT_OF_MEASUREMENT in data:
             self._attr_temperature_unit = data[CONF_UNIT_OF_MEASUREMENT]
 
-        # State in HA for climate is hvac_mode
-        if CONF_STATE in data and data[CONF_STATE]:
-            self._attr_hvac_mode = data[CONF_STATE]
-
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
             
-            # 1. Native Properties extrahieren
+            # 1. Listen zuerst aktualisieren (Validierungs-Basis)
+            if "hvac_modes" in attrs: self._attr_hvac_modes = attrs["hvac_modes"]
+            if "preset_modes" in attrs: self._attr_preset_modes = attrs["preset_modes"]
+            if "fan_modes" in attrs: self._attr_fan_modes = attrs["fan_modes"]
+
+            # 2. Native Properties extrahieren mit Validierung
             if "current_temperature" in attrs: self._attr_current_temperature = float(attrs["current_temperature"])
             if "temperature" in attrs: self._attr_target_temperature = float(attrs["temperature"])
-            if "hvac_modes" in attrs: self._attr_hvac_modes = attrs["hvac_modes"]
             if "min_temp" in attrs: self._attr_min_temp = float(attrs["min_temp"])
             if "max_temp" in attrs: self._attr_max_temp = float(attrs["max_temp"])
             if "target_temp_step" in attrs: self._attr_target_temperature_step = float(attrs["target_temp_step"])
-            if "preset_mode" in attrs: self._attr_preset_mode = attrs["preset_mode"]
-            if "preset_modes" in attrs: self._attr_preset_modes = attrs["preset_modes"]
-            if "fan_mode" in attrs: self._attr_fan_mode = attrs["fan_mode"]
-            if "fan_modes" in attrs: self._attr_fan_modes = attrs["fan_modes"]
+            
+            if "preset_mode" in attrs:
+                p_mode = attrs["preset_mode"]
+                if not self._attr_preset_modes or p_mode in self._attr_preset_modes:
+                    self._attr_preset_mode = p_mode
+            
+            if "fan_mode" in attrs:
+                f_mode = attrs["fan_mode"]
+                if not self._attr_fan_modes or f_mode in self._attr_fan_modes:
+                    self._attr_fan_mode = f_mode
+
+        # State (HVAC Mode) zuletzt setzen, um gegen die (evtl. neue) Liste zu prüfen
+        if CONF_STATE in data and data[CONF_STATE]:
+            new_hvac_mode = data[CONF_STATE]
+            if not self._attr_hvac_modes or new_hvac_mode in self._attr_hvac_modes:
+                self._attr_hvac_mode = new_hvac_mode
             
             # 2. Bereinigen der Extra Attributes (verhindert Duplikate in der UI)
             managed_keys = [
@@ -92,15 +104,21 @@ class JSAutomationsClimate(JSAutomationsBaseEntity, ClimateEntity):
                 features |= ClimateEntityFeature.TURN_ON
 
             self._attr_supported_features = features
-            if self.hass:
-                self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
+        self._attr_hvac_mode = hvac_mode
+        self.async_write_ha_state()
         self._fire_js_event("set_hvac_mode", {"hvac_mode": hvac_mode})
 
     async def async_set_temperature(self, **kwargs) -> None:
         """Set new target temperature."""
+        if ATTR_TEMPERATURE in kwargs:
+            self._attr_target_temperature = kwargs[ATTR_TEMPERATURE]
+        if "hvac_mode" in kwargs:
+            self._attr_hvac_mode = kwargs["hvac_mode"]
+        self.async_write_ha_state()
+        
         data = {}
         if ATTR_TEMPERATURE in kwargs: data["temperature"] = kwargs[ATTR_TEMPERATURE]
         if "hvac_mode" in kwargs: data["hvac_mode"] = kwargs["hvac_mode"]
@@ -108,8 +126,12 @@ class JSAutomationsClimate(JSAutomationsBaseEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
+        self._attr_preset_mode = preset_mode
+        self.async_write_ha_state()
         self._fire_js_event("set_preset_mode", {"preset_mode": preset_mode})
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new fan mode."""
+        self._attr_fan_mode = fan_mode
+        self.async_write_ha_state()
         self._fire_js_event("set_fan_mode", {"fan_mode": fan_mode})

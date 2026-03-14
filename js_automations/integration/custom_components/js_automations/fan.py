@@ -49,8 +49,14 @@ class JSAutomationsFan(JSAutomationsBaseEntity, FanEntity):
             attrs = data[CONF_ATTRIBUTES]
             
             if "percentage" in attrs: self._attr_percentage = int(attrs["percentage"])
-            if "preset_mode" in attrs: self._attr_preset_mode = attrs["preset_mode"]
+            
+            # Erst die Modi-Liste, dann der aktuelle Modus
             if "preset_modes" in attrs: self._attr_preset_modes = attrs["preset_modes"]
+            if "preset_mode" in attrs:
+                mode = attrs["preset_mode"]
+                if not self._attr_preset_modes or mode in self._attr_preset_modes:
+                    self._attr_preset_mode = mode
+
             if "oscillating" in attrs: self._attr_oscillating = bool(attrs["oscillating"])
             
             # Features berechnen
@@ -66,11 +72,15 @@ class JSAutomationsFan(JSAutomationsBaseEntity, FanEntity):
             for key in managed_keys:
                 self._attr_extra_state_attributes.pop(key, None)
 
-        if self.hass:
-            self.async_write_ha_state()
-
     async def async_turn_on(self, percentage: int | None = None, preset_mode: str | None = None, **kwargs) -> None:
         """Turn the fan on."""
+        self._attr_is_on = True
+        if percentage is not None:
+            self._attr_percentage = percentage
+        if preset_mode is not None:
+            self._attr_preset_mode = preset_mode
+        self.async_write_ha_state()
+
         data = {}
         if percentage is not None:
             data["percentage"] = percentage
@@ -80,16 +90,28 @@ class JSAutomationsFan(JSAutomationsBaseEntity, FanEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the fan off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed of the fan."""
+        self._attr_percentage = percentage
+        if percentage == 0:
+            self._attr_is_on = False
+        else:
+            self._attr_is_on = True
+        self.async_write_ha_state()
         self._fire_js_event("set_percentage", {"percentage": percentage})
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
+        self._attr_preset_mode = preset_mode
+        self.async_write_ha_state()
         self._fire_js_event("set_preset_mode", {"preset_mode": preset_mode})
 
     async def async_oscillate(self, oscillating: bool) -> None:
         """Set oscillation."""
+        self._attr_oscillating = oscillating
+        self.async_write_ha_state()
         self._fire_js_event("oscillate", {"oscillating": oscillating})

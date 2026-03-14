@@ -34,13 +34,14 @@ class JSAutomationsSwitch(JSAutomationsBaseEntity, SwitchEntity):
             val = data[CONF_STATE]
             self._attr_is_on = val == "on" or val is True
 
-        if self.hass:
-            self.async_write_ha_state()
-
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the entity on."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
         self._fire_js_event("turn_on")
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the entity off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")

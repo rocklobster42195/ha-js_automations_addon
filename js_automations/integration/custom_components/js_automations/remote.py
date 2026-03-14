@@ -34,10 +34,15 @@ class JSAutomationsRemote(JSAutomationsBaseEntity, RemoteEntity):
     def _restore_state(self, last_state):
         """Zustand für Remote wiederherstellen."""
         super()._restore_state(last_state)
-        self._attr_is_on = last_state.state == "on"
+        
         attrs = last_state.attributes
-        self._attr_current_activity = attrs.get("current_activity")
         self._attr_activity_list = attrs.get("activity_list")
+        self._attr_is_on = last_state.state == "on"
+        
+        if "current_activity" in attrs:
+            activity = attrs["current_activity"]
+            if not self._attr_activity_list or activity in self._attr_activity_list:
+                self._attr_current_activity = activity
 
     def update_data(self, data):
         """Update Remote spezifische Daten."""
@@ -49,8 +54,13 @@ class JSAutomationsRemote(JSAutomationsBaseEntity, RemoteEntity):
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
             
-            if "current_activity" in attrs: self._attr_current_activity = attrs["current_activity"]
+            # Update activity_list first for validation
             if "activity_list" in attrs: self._attr_activity_list = attrs["activity_list"]
+            
+            if "current_activity" in attrs:
+                activity = attrs["current_activity"]
+                if not self._attr_activity_list or activity in self._attr_activity_list:
+                    self._attr_current_activity = activity
             
             # Determine supported features
             features = 0
@@ -64,17 +74,21 @@ class JSAutomationsRemote(JSAutomationsBaseEntity, RemoteEntity):
             for key in managed_keys:
                 self._attr_extra_state_attributes.pop(key, None)
 
-        if self.hass:
-            self.async_write_ha_state()
-
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the remote on."""
+        self._attr_is_on = True
+        if ATTR_ACTIVITY in kwargs:
+            self._attr_current_activity = kwargs[ATTR_ACTIVITY]
+        self.async_write_ha_state()
+
         data = {}
         if ATTR_ACTIVITY in kwargs: data["activity"] = kwargs[ATTR_ACTIVITY]
         self._fire_js_event("turn_on", data)
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the remote off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")
 
     async def async_send_command(self, command: list[str], **kwargs) -> None:

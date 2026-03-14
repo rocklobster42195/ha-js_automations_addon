@@ -30,7 +30,7 @@ class JSAutomationsAlarmControlPanel(JSAutomationsBaseEntity, AlarmControlPanelE
     def _restore_state(self, last_state):
         """Zustand für Alarm Control Panel wiederherstellen."""
         super()._restore_state(last_state)
-        self._attr_alarm_state = last_state.state
+        self._attr_state = last_state.state
         attrs = last_state.attributes
         self._attr_changed_by = attrs.get("changed_by")
         cf = attrs.get("code_format")
@@ -44,7 +44,7 @@ class JSAutomationsAlarmControlPanel(JSAutomationsBaseEntity, AlarmControlPanelE
         super().update_data(data)
         
         if CONF_STATE in data:
-            self._attr_alarm_state = data[CONF_STATE]
+            self._attr_state = data[CONF_STATE]
 
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
@@ -79,28 +79,42 @@ class JSAutomationsAlarmControlPanel(JSAutomationsBaseEntity, AlarmControlPanelE
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Send disarm command."""
+        self._attr_state = "disarmed"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_disarm", {"code": code})
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm home command."""
+        self._attr_state = "armed_home"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_arm_home", {"code": code})
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command."""
+        self._attr_state = "armed_away"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_arm_away", {"code": code})
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         """Send arm night command."""
+        self._attr_state = "armed_night"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_arm_night", {"code": code})
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
         """Send arm vacation command."""
+        self._attr_state = "armed_vacation"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_arm_vacation", {"code": code})
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
         """Send arm custom bypass command."""
+        self._attr_state = "arming"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_arm_custom_bypass", {"code": code})
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Send alarm trigger command."""
+        self._attr_state = "triggered"
+        self.async_write_ha_state()
         self._fire_js_event("alarm_trigger", {"code": code})

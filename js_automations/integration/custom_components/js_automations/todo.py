@@ -78,6 +78,8 @@ class JSAutomationsTodo(JSAutomationsBaseEntity, TodoListEntity):
 
     async def async_create_todo_item(self, item: TodoItem) -> None:
         """Add an item to the todo list."""
+        self._items.append(item)
+        self.async_write_ha_state()
         self.hass.bus.async_fire(
             f"{DOMAIN}_event",
             {
@@ -95,6 +97,8 @@ class JSAutomationsTodo(JSAutomationsBaseEntity, TodoListEntity):
 
     async def async_update_todo_item(self, item: TodoItem) -> None:
         """Update a todo item."""
+        self._items = [item if it.uid == item.uid else it for it in self._items]
+        self.async_write_ha_state()
         self.hass.bus.async_fire(
             f"{DOMAIN}_event",
             {
@@ -113,6 +117,8 @@ class JSAutomationsTodo(JSAutomationsBaseEntity, TodoListEntity):
 
     async def async_delete_todo_items(self, uids: list[str]) -> None:
         """Delete todo items."""
+        self._items = [it for it in self._items if it.uid not in uids]
+        self.async_write_ha_state()
         self.hass.bus.async_fire(
             f"{DOMAIN}_event",
             {

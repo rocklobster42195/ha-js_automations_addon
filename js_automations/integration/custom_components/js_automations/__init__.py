@@ -145,6 +145,10 @@ class JSAutomationsBaseEntity(RestoreEntity):
     def _restore_state(self, last_state):
         """Kann von Subklassen überschrieben werden (z.B. für numerisches Casting)."""
         self._attr_available = True # Gehe davon aus, dass sie nach Restore da ist
+        
+        # Standard-Restore für Optionen (wichtig für Select, Humidifier, etc.)
+        if "options" in last_state.attributes:
+            self._attr_options = last_state.attributes["options"]
 
     def update_data(self, data: dict) -> None:
         """Zentrale Methode zum Verarbeiten von Updates via Service."""
@@ -168,12 +172,23 @@ class JSAutomationsBaseEntity(RestoreEntity):
         if device_info := async_format_device_info(data):
             self._attr_device_info = device_info
 
-        # Extra Attribute filtern (nur was nicht nativ existiert)
+        # Attribute & Optionen sauber verarbeiten
         if CONF_ATTRIBUTES in data:
-            self._attr_extra_state_attributes.update(data[CONF_ATTRIBUTES])
+            attrs = data[CONF_ATTRIBUTES].copy()
+            
+            # 'options' extrahieren (entweder aus root 'data' oder aus 'attributes')
+            # Wir löschen sie aus attrs, damit sie nicht doppelt in den Attributen auftauchen
+            options = data.get("options")
+            if "options" in attrs:
+                options = attrs.pop("options")
+            
+            if options is not None:
+                self._attr_options = options
 
-        if self.hass:
-            self.async_write_ha_state()
+            # MS11: Vollständiges Ersetzen statt .update().
+            # Dies stellt sicher, dass veraltete Attribute aus dem Add-on-Cache 
+            # nicht in Home Assistant "überleben".
+            self._attr_extra_state_attributes = attrs
 
     def _fire_js_event(self, action: str, data: dict = None) -> None:
         """Feuert ein Event auf dem HA Bus für das Add-on."""
@@ -296,6 +311,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             entity = hass.data[DOMAIN][DATA_ENTITIES][unique_id]
             entity.update_data(data) # MS11 BaseEntity Logic
+            
+            # Zentraler Schreibbefehl nach dem vollständigen Update
+            if entity.hass:
+                entity.async_write_ha_state()
         else:
             _LOGGER.warning(f"Could not update state for unknown entity object: uid='{unique_id}'. The entity might not be loaded yet.")
 

@@ -44,8 +44,16 @@ class JSAutomationsHumidifier(JSAutomationsBaseEntity, HumidifierEntity):
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
             if "humidity" in attrs: self._attr_target_humidity = int(attrs["humidity"])
-            if "mode" in attrs: self._attr_mode = attrs["mode"]
+            
+            # Erst die Modi-Liste aktualisieren (Validierungsbasis)
             if "available_modes" in attrs: self._attr_available_modes = attrs["available_modes"]
+            
+            # Dann den Modus mit Validierung setzen
+            if "mode" in attrs:
+                mode = attrs["mode"]
+                if not self._attr_available_modes or mode in self._attr_available_modes:
+                    self._attr_mode = mode
+
             if "min_humidity" in attrs: self._attr_min_humidity = int(attrs["min_humidity"])
             if "max_humidity" in attrs: self._attr_max_humidity = int(attrs["max_humidity"])
             
@@ -61,21 +69,26 @@ class JSAutomationsHumidifier(JSAutomationsBaseEntity, HumidifierEntity):
             for key in managed_keys:
                 self._attr_extra_state_attributes.pop(key, None)
 
-        if self.hass:
-            self.async_write_ha_state()
-
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the entity on."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
         self._fire_js_event("turn_on")
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the entity off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")
 
     async def async_set_humidity(self, humidity: int) -> None:
         """Set new target humidity."""
+        self._attr_target_humidity = humidity
+        self.async_write_ha_state()
         self._fire_js_event("set_humidity", {"humidity": humidity})
 
     async def async_set_mode(self, mode: str) -> None:
         """Set new mode."""
+        self._attr_mode = mode
+        self.async_write_ha_state()
         self._fire_js_event("set_mode", {"mode": mode})

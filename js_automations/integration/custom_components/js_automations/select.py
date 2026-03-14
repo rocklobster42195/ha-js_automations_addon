@@ -28,27 +28,26 @@ class JSAutomationsSelect(JSAutomationsBaseEntity, SelectEntity):
     def _restore_state(self, last_state):
         """Zustand für Select wiederherstellen."""
         super()._restore_state(last_state)
-        self._attr_current_option = last_state.state
-        if "options" in last_state.attributes:
-            self._attr_options = last_state.attributes["options"]
+
+        if last_state.state not in ("unknown", "unavailable"):
+            # Prüfen, ob der wiederhergestellte Zustand valide ist (sofern Optionen bekannt)
+            if not hasattr(self, "_attr_options") or not self._attr_options or last_state.state in self._attr_options:
+                self._attr_current_option = last_state.state
 
     def update_data(self, data):
         """Update Select spezifische Daten."""
-        super().update_data(data)
+        super().update_data(data) # Verarbeitet Optionen, Name, Icon, etc.
 
         if CONF_STATE in data:
-            self._attr_current_option = str(data[CONF_STATE]) if data[CONF_STATE] is not None else None
-
-        if CONF_ATTRIBUTES in data:
-            attrs = data[CONF_ATTRIBUTES]
-            if "options" in attrs:
-                self._attr_options = attrs["options"]
-                # Bereinigen der Extra Attributes (verhindert Duplikate in der UI)
-                self._attr_extra_state_attributes.pop("options", None)
-
-        if self.hass:
-            self.async_write_ha_state()
+            new_state = str(data[CONF_STATE]) if data[CONF_STATE] is not None else None
+            # Validierung: Nur setzen, wenn es eine erlaubte Option ist
+            if not hasattr(self, "_attr_options") or not self._attr_options or new_state in self._attr_options:
+                self._attr_current_option = new_state
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        self._fire_js_event("select_option", {"value": option})
+        self._attr_current_option = option
+        self.async_write_ha_state()
+
+        # Wir senden 'state', damit e.state im JS-Listener korrekt befüllt ist
+        self._fire_js_event("select_option", {"state": option})

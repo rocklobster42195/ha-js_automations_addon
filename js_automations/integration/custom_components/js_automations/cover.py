@@ -79,18 +79,37 @@ class JSAutomationsCover(JSAutomationsBaseEntity, CoverEntity):
                 self.async_write_ha_state()
 
     async def async_open_cover(self, **kwargs):
+        self._attr_is_opening = True
+        self._attr_is_closing = False
+        self._attr_is_closed = False
+        self.async_write_ha_state()
         self._fire_js_event("open_cover")
     async def async_close_cover(self, **kwargs):
+        self._attr_is_closing = True
+        self._attr_is_opening = False
+        self.async_write_ha_state()
         self._fire_js_event("close_cover")
     async def async_stop_cover(self, **kwargs):
+        self._attr_is_opening = False
+        self._attr_is_closing = False
+        self.async_write_ha_state()
         self._fire_js_event("stop_cover")
     async def async_set_cover_position(self, **kwargs):
+        self._attr_current_cover_position = kwargs[ATTR_POSITION]
+        self.async_write_ha_state()
         self._fire_js_event("set_cover_position", {"position": kwargs[ATTR_POSITION]})
     async def async_open_cover_tilt(self, **kwargs):
+        self._attr_current_cover_tilt_position = 100
+        self.async_write_ha_state()
         self._fire_js_event("open_cover_tilt")
     async def async_close_cover_tilt(self, **kwargs):
+        self._attr_current_cover_tilt_position = 0
+        self.async_write_ha_state()
         self._fire_js_event("close_cover_tilt")
     async def async_stop_cover_tilt(self, **kwargs):
+        self.async_write_ha_state()
         self._fire_js_event("stop_cover_tilt")
     async def async_set_cover_tilt_position(self, **kwargs):
+        self._attr_current_cover_tilt_position = kwargs[ATTR_TILT_POSITION]
+        self.async_write_ha_state()
         self._fire_js_event("set_cover_tilt_position", {"tilt_position": kwargs[ATTR_TILT_POSITION]})

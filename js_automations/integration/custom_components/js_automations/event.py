@@ -46,6 +46,3 @@ class JSAutomationsEvent(JSAutomationsBaseEntity, EventEntity):
                 if event_type in (self._attr_event_types or []):
                     # Wir triggern das Event mit den verbleibenden Attributen als Payload
                     self._trigger_event(event_type, attrs)
-
-        if self.hass:
-            self.async_write_ha_state()

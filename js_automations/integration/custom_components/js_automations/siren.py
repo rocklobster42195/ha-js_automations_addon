@@ -60,13 +60,14 @@ class JSAutomationsSiren(JSAutomationsBaseEntity, SirenEntity):
             for key in managed_keys:
                 self._attr_extra_state_attributes.pop(key, None)
 
-        if self.hass:
-            self.async_write_ha_state()
-
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the siren on."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
         self._fire_js_event("turn_on", kwargs)
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the siren off."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         self._fire_js_event("turn_off")

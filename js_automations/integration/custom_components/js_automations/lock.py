@@ -81,10 +81,18 @@ class JSAutomationsLock(JSAutomationsBaseEntity, LockEntity):
 
     async def async_lock(self, **kwargs) -> None:
         """Lock the device."""
+        self._attr_is_locking = True
+        self._attr_is_unlocking = False
+        self._attr_is_jammed = False
+        self.async_write_ha_state()
         self._fire_js_event("lock", kwargs)
 
     async def async_unlock(self, **kwargs) -> None:
         """Unlock the device."""
+        self._attr_is_unlocking = True
+        self._attr_is_locking = False
+        self._attr_is_jammed = False
+        self.async_write_ha_state()
         self._fire_js_event("unlock", kwargs)
 
     async def async_open(self, **kwargs) -> None:
