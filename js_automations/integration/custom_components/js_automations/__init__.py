@@ -8,9 +8,17 @@ import logging
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, split_entity_id, callback
+from homeassistant import loader
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    split_entity_id,
+    callback,
+)
 from homeassistant.helpers import config_validation as cv, entity_registry as er, device_registry as dr
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_send, async_dispatcher_connect
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import (
     CONF_NAME,
@@ -117,20 +125,6 @@ class JSAutomationsBaseEntity(RestoreEntity):
     _attr_has_entity_name = False
     _attr_should_poll = False
 
-    # Liste der Keys, die nativ von der Basisklasse oder HA verarbeitet werden
-    # und daher nicht in den extra_state_attributes erscheinen sollten.
-    _base_managed_keys = {
-        CONF_NAME, 
-        CONF_ICON, 
-        CONF_AVAILABLE, 
-        CONF_UNIT_OF_MEASUREMENT, 
-        CONF_DEVICE_CLASS, 
-        CONF_STATE_CLASS,
-        CONF_DEVICE_INFO,
-        CONF_AREA_ID,
-        CONF_LABELS
-    }
-
     def __init__(self, data: dict) -> None:
         """Initialisierung mit dem initialen Datenpaket."""
         self.entity_id = data["entity_id"]
@@ -174,13 +168,9 @@ class JSAutomationsBaseEntity(RestoreEntity):
         if device_info := async_format_device_info(data):
             self._attr_device_info = device_info
 
-        # Extra Attribute verarbeiten und Basis-Keys filtern
+        # Extra Attribute filtern (nur was nicht nativ existiert)
         if CONF_ATTRIBUTES in data:
-            attrs = data[CONF_ATTRIBUTES].copy()
-            for key in self._base_managed_keys:
-                attrs.pop(key, None)
-            
-            self._attr_extra_state_attributes.update(attrs)
+            self._attr_extra_state_attributes.update(data[CONF_ATTRIBUTES])
 
         if self.hass:
             self.async_write_ha_state()
@@ -219,7 +209,6 @@ async def async_setup_js_platform(hass, domain, entity_class, async_add_entities
         except Exception as e:
             _LOGGER.error("Failed to create %s entity %s: %s", domain, unique_id, e)
 
-    
     # Cleanup beim Entladen sicherstellen
     # Hinweis: Da wir hier keine ConfigEntry haben, müssen wir das Signal-Handle manuell verwalten 
     # oder die Plattform-Datei übernimmt das (wie bisher).
@@ -259,22 +248,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data = call.data
         unique_id = data[CONF_UNIQUE_ID]
         domain, object_id = split_entity_id(data["entity_id"])
-
-        # --- Device Area-Handling ---
-        # Falls Geräte-Infos und ein Bereich vorhanden sind, aktualisieren wir das Gerät zuerst.
-        # So wird sichergestellt, dass das Gerät im richtigen Bereich landet.
-        if CONF_DEVICE_INFO in data and CONF_AREA_ID in data:
-            device_info = async_format_device_info(data)
-            if device_info and "identifiers" in device_info:
-                dev_entry = device_registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers=device_info["identifiers"],
-                )
-                if dev_entry.area_id != data[CONF_AREA_ID]:
-                    device_registry.async_update_device(
-                        dev_entry.id, area_id=data[CONF_AREA_ID]
-                    )
-                    _LOGGER.debug(f"Moved device {dev_entry.id} to area {data[CONF_AREA_ID]}")
 
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             _LOGGER.debug(f"Entity {unique_id} already exists. Treating as a configuration update.")
@@ -319,17 +292,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         if unique_id == "___ping___":
             return
-
-        # --- Device Area-Handling (auch bei Updates) ---
-        if CONF_DEVICE_INFO in data and CONF_AREA_ID in data:
-            device_info = async_format_device_info(data)
-            if device_info and "identifiers" in device_info:
-                dev_entry = device_registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers=device_info["identifiers"],
-                )
-                if dev_entry.area_id != data[CONF_AREA_ID]:
-                    device_registry.async_update_device(dev_entry.id, area_id=data[CONF_AREA_ID])
 
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             entity = hass.data[DOMAIN][DATA_ENTITIES][unique_id]
@@ -404,11 +366,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.warning(f"Could not find device in registry to remove: identifiers={identifiers}")
 
+    async def handle_get_info(call: ServiceCall) -> ServiceResponse:
+        """Service to return version information for the add-on."""
+        integration = await loader.async_get_integration(hass, DOMAIN)
+        return {"version": integration.version}
+
     # Register Services
     hass.services.async_register(DOMAIN, "create_entity", handle_create_entity, schema=CREATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "update_entity", handle_update_entity, schema=UPDATE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "remove_entity", handle_remove_entity, schema=REMOVE_ENTITY_SCHEMA)
     hass.services.async_register(DOMAIN, "remove_device", handle_remove_device, schema=REMOVE_DEVICE_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, "get_info", handle_get_info, supports_response=SupportsResponse.ONLY
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

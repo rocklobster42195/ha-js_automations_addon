@@ -10,7 +10,6 @@ from homeassistant.const import (
     CONF_STATE,
     CONF_UNIT_OF_MEASUREMENT,
     CONF_DEVICE_CLASS,
-    CONF_STATE_CLASS,
 )
 
 async def async_setup_entry(

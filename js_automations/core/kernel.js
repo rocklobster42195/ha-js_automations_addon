@@ -53,18 +53,22 @@ class Kernel extends EventEmitter {
      * @returns {Promise<object>} A combined status object.
      */
     async getCombinedIntegrationStatus() {
-        // We get the file installation status and the runtime status in parallel.
-        const [installedStatus, isRunning] = await Promise.all([
-            this.integrationManager.getStatus(),
+        // 1. Fetch the HA configuration to get the list of loaded components
+        // 2. Check if the integration's services are functional and get its version
+        const [haConfig, runtimeInfo] = await Promise.all([
+            this.haConnector.getHAConfig(),
             this.haConnector.checkIntegrationAvailable()
         ]);
+
+        const loadedComponents = haConfig.components || [];
+        const installedStatus = await this.integrationManager.getStatus(loadedComponents, runtimeInfo.version);
         
         // This remains the single source of truth for the kernel's internal logic.
-        this.hasIntegration = isRunning;
+        this.hasIntegration = runtimeInfo.available;
 
         return {
             ...installedStatus, // contains { installed, needs_update, version_installed, version_available }
-            is_running: isRunning,
+            is_running: runtimeInfo.available,
             is_connected: this.haConnector.isReady
         };
     }
