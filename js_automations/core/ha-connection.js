@@ -234,13 +234,30 @@ class HAConnector {
 
     /**
      * Prüft, ob die Integration (Custom Component) geladen ist.
-     * Sendet 'get_services' und sucht nach 'js_automations'.
+     * @returns {Promise<{available: boolean, version?: string}>}
      */
     async checkIntegrationAvailable() {
         const services = await this.getServices();
-        // Check not just for the domain, but for a key service within it.
-        // 'create_entity' is fundamental for the integration to work.
-        return !!(services && services.js_automations && services.js_automations.create_entity);
+        const api = services && services.js_automations;
+        
+        if (!api || !api.create_entity) {
+            return { available: false };
+        }
+
+        let version = null;
+        if (api.get_info) {
+            try {
+                const result = await this.callService('js_automations', 'get_info', {});
+                version = result?.version || null;
+            } catch (err) {
+                // Fail silently if the service call fails (e.g. old version doesn't support response)
+            }
+        }
+
+        return {
+            available: true,
+            version
+        };
     }
 
     /**

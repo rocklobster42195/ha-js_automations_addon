@@ -13,8 +13,10 @@ class IntegrationManager {
 
     /**
      * Prüft Versionen und Installationsstatus.
+     * @param {string[]} [loadedComponents] Liste der in HA geladenen Komponenten (aus hass.config.components)
+     * @param {string} [runningVersion] Die tatsächlich in HA laufende Version der Integration
      */
-    async getStatus() {
+    async getStatus(loadedComponents = [], runningVersion = null) {
         const internalManifest = this._readManifest(this.sourceDir);
         const installedManifest = this._readManifest(this.targetDir);
 
@@ -34,13 +36,30 @@ class IntegrationManager {
 
         const versionAvailable = internalManifest.version;
         const versionInstalled = installedManifest ? installedManifest.version : null;
-        const installed = !!versionInstalled;
+
+        // In HA geladen?
+        const isLoaded = loadedComponents.includes('js_automations');
+
+        // Im Dev-Mode gilt die Integration als "installiert", wenn sie entweder im Mock-Ordner
+        // liegt oder bereits im Remote-HA aktiv ist.
+        const installed = devMode ? (isLoaded || !!versionInstalled) : !!versionInstalled;
+        
+        // Aktiv bedeutet: In HA geladen UND die Versionen stimmen überein
+        // Im Dev-Mode vergleichen wir die laufende Version mit dem lokalen Quellcode (Source)
+        const referenceVersion = devMode ? versionAvailable : versionInstalled;
+        const versionMismatch = runningVersion && referenceVersion && runningVersion !== referenceVersion;
+        const active = isLoaded && !versionMismatch;
 
         return {
             installed,
+            active,
+            is_loaded: isLoaded,
             version_installed: versionInstalled || '0.0.0',
             version_available: versionAvailable,
+            version_running: runningVersion || '0.0.0',
             needs_update: installed ? (versionInstalled !== versionAvailable) : true,
+            // Neustart fällig, wenn Dateien da, aber nicht geladen ODER falsche Version aktiv
+            needs_restart: installed && (!isLoaded || versionMismatch),
             dev_mode: devMode,
             target_path: this.targetDir
         };
