@@ -55,21 +55,11 @@ button:disabled { opacity: 0.1 !important; cursor: default !important; }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1rem; color: #fff !important; text-transform: uppercase; letter-spacing: 0.5px; }
 .nav-logo {
-    display: block;
-    width: 1.8rem;
-    height: 1.8rem;
+    font-size: 1.8rem;
+    color: var(--accent);
     flex-shrink: 0;
-    background-color: var(--accent);
-    -webkit-mask-image: url('../img/nodejs.svg');
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    -webkit-mask-size: contain;
-    mask-image: url('../img/nodejs.svg');
-    mask-repeat: no-repeat;
-    mask-position: center;
-    mask-size: contain;
 }
-body.expert-mode .nav-logo { background-color: #2e7d32; } /* Expert Mode: Dark Green */
+body.expert-mode .nav-logo { color: #2e7d32; } /* Expert Mode: Dark Green */
 
 .version-tag {
     font-family: monospace;
@@ -117,33 +107,9 @@ body.expert-mode .sidebar-footer { display: flex; }
 
 .stat-item { display: flex; align-items: center; gap: 6px; cursor: help; }
 .stat-item i { font-size: 0.85rem; }
-.integration-icon {
-    display: inline-block;
-    width: 0.9rem;
-    height: 0.9rem;
-    background-color: #999;
-    -webkit-mask-image: url('../img/nodejs.svg');
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    -webkit-mask-size: contain;
-    mask-image: url('../img/nodejs.svg');
-    mask-repeat: no-repeat;
-    mask-position: center;
-    mask-size: contain;
-}
-.heartbeat-icon {
-    display: inline-block;
-    width: 0.9rem;
-    height: 0.9rem;
-    background-color: #999;
-    -webkit-mask-image: url('../img/home-assistant.svg');
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    -webkit-mask-size: contain;
-    mask-image: url('../img/home-assistant.svg');
-    mask-repeat: no-repeat;
-    mask-position: center;
-    mask-size: contain;
+.integration-icon, .heartbeat-icon {
+    font-size: 0.9rem;
+    color: #999;
 }
 
 .header-actions { display: flex; gap: 2px; width: 100%; }
@@ -829,20 +795,63 @@ input#search-input:focus { border-color: var(--accent) !important; }
 
 /* --- SETTINGS CATEGORIES --- */
 /* Visuelle Hervorhebung für die "Danger Zone" Einstellungen */
-.settings-category-danger {
-    background-color: rgba(244, 67, 54, 0.1); /* 10% Deckkraft der --danger Farbe */
-    border: 1px solid rgba(244, 67, 54, 0.3); /* 30% Deckkraft der --danger Farbe für den Rahmen */
-    border-radius: 8px; /* Leicht abgerundete Ecken */
-    padding: 15px; /* Innenabstand */
-    margin-top: 20px; /* Abstand nach oben */
-    margin-bottom: 20px; /* Abstand nach unten */
+#settings-content {
+    scroll-behavior: smooth;
+    padding: 20px 40px 100px 40px !important;
 }
 
-/* Optional: Für die Überschrift der Danger Zone */
-.settings-category-danger h3 {
-    color: var(--danger); /* Nutzt die definierte --danger Farbe */
-    margin-bottom: 15px;
+.settings-section {
+    scroll-margin-top: 20px;
+    margin-bottom: 50px; /* Einheitlicher Abstand zwischen den Kapiteln */
 }
+
+.settings-item-wrapper {
+    margin-bottom: 20px;
+}
+
+.settings-item-wrapper:last-child {
+    margin-bottom: 0;
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.settings-section h3 {
+    margin-top: 0;
+    margin-bottom: 25px;
+    font-size: 1.2rem;
+    color: #fff; /* Neutrales Weiß statt Akzentfarbe */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.settings-category-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #aaa;
+    background-color: transparent;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.settings-category-item:hover { background-color: #252525; color: #fff; }
+.settings-category-item.active { 
+    background-color: #333 !important; 
+    color: #fff !important; 
+    border-right: 3px solid var(--accent);
+}
+
+.settings-category-danger {
+    background-color: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 8px;
+    padding: 15px;}
 /* --- REFERENCE UI --- */
 .ref-container { display: flex; height: 100%; width: 100%; }
 .ref-sidebar { width: 220px; background: #252526; border-right: 1px solid #333; padding: 10px 0; overflow-y: auto; flex-shrink: 0; }

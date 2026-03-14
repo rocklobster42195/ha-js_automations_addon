@@ -99,7 +99,7 @@
         btn.onclick = (e) => {
             e.stopPropagation(); // prevent banner click
             if (typeof openSettingsTab === 'function') {
-                openSettingsTab('integration');
+                openSettingsTab('installer');
             }
         };
         
@@ -134,7 +134,7 @@
 
         banner.onclick = () => {
              if (typeof openSettingsTab === 'function') {
-                openSettingsTab('integration');
+                openSettingsTab('installer');
             }
         };
 
@@ -174,6 +174,13 @@
             return;
         }
 
+        // Hide banner in Dev-Mode or if a restart is already pending
+        const isRestartPending = sessionStorage.getItem('jsa_integration_restart_pending') === 'true';
+        if (status.dev_mode || isRestartPending) {
+            hideBanner();
+            return;
+        }
+
         // Condition to show banner: not installed OR needs update
         const needsBanner = !status.installed || status.needs_update;
 
@@ -187,6 +194,7 @@
 
     // Expose globally so app.js can trigger updates after API calls
     window.handleIntegrationStatus = handleIntegrationStatus;
+    window.hideIntegrationBanner = hideBanner;
     
     // Connect to Socket and listen for events
     const init = () => {
