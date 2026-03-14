@@ -1,77 +1,51 @@
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.event import (
     EventEntity,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
-from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE, CONF_DEVICE_CLASS
+from . import (
+    JSAutomationsBaseEntity,
+    async_setup_js_platform,
+    CONF_ATTRIBUTES,
+)
+from homeassistant.const import CONF_STATE
 
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the platform."""
-    
-    @callback
-    def async_add_event(data: dict):
-        """Handle entity creation signal."""
-        unique_id = data[CONF_UNIQUE_ID]
-        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
-            return
-        entity = JSAutomationsEvent(data)
-        hass.data[DOMAIN][DATA_ENTITIES][unique_id] = entity
-        async_add_entities([entity])
-
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_event", async_add_event)
+    """Set up the JS Automations event platform."""
+    connection = await async_setup_js_platform(
+        hass, "event", JSAutomationsEvent, async_add_entities
     )
+    config_entry.async_on_unload(connection)
 
-class JSAutomationsEvent(EventEntity, RestoreEntity):
+class JSAutomationsEvent(JSAutomationsBaseEntity, EventEntity):
     """Representation of a JS Automations Event Entity."""
 
-    def __init__(self, data):
-        self.entity_id = data["entity_id"]
-        self._attr_unique_id = data[CONF_UNIQUE_ID]
-        self._attr_should_poll = False
-        self._attr_event_types = []
-        self.update_data(data)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
+    _attr_event_types: list[str] = []
 
     def update_data(self, data):
-        """Update entity state and attributes."""
-        self._attr_name = data.get(CONF_NAME, self._attr_name)
-        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
-        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
-        self._attr_device_class = data.get(CONF_DEVICE_CLASS, self._attr_device_class)
+        """Update Event spezifische Daten und Trigger-Logik."""
+        super().update_data(data)
 
-        device_info = async_format_device_info(data)
-        if device_info: self._attr_device_info = device_info
-
-        # Handle attributes and event triggering
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES].copy()
             
-            # Update event_types if provided (definition)
+            # Definition der Typen
             if "event_types" in attrs:
                 self._attr_event_types = attrs.pop("event_types")
-            
-            # If state is provided, it means we want to fire an event
+                # Verhindere, dass die Typenliste in den Attributen angezeigt wird
+                self._attr_extra_state_attributes.pop("event_types", None)
+
+            # Trigger Logik
             if CONF_STATE in data and data[CONF_STATE]:
                 event_type = str(data[CONF_STATE])
-                # Only trigger if it's a valid event type
-                if event_type in self._attr_event_types:
-                    # Use remaining attributes as event data
+                if event_type in (self._attr_event_types or []):
+                    # Wir triggern das Event mit den verbleibenden Attributen als Payload
                     self._trigger_event(event_type, attrs)
-            else:
-                # If no state is provided, treat remaining attributes as entity attributes
-                self._attr_extra_state_attributes = attrs
 
         if self.hass:
             self.async_write_ha_state()

@@ -1,15 +1,17 @@
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.weather import (
     WeatherEntity,
     WeatherEntityFeature,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
+from . import (
+    JSAutomationsBaseEntity,
+    async_setup_js_platform,
+    CONF_ATTRIBUTES,
+)
 from homeassistant.const import (
-    CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE,
+    CONF_STATE,
     UnitOfTemperature, UnitOfPressure, UnitOfSpeed, UnitOfLength, UnitOfPrecipitationDepth
 )
 
@@ -18,23 +20,13 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the platform."""
-    
-    @callback
-    def async_add_weather(data: dict):
-        """Handle entity creation signal."""
-        unique_id = data[CONF_UNIQUE_ID]
-        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
-            return
-        entity = JSAutomationsWeather(data)
-        hass.data[DOMAIN][DATA_ENTITIES][unique_id] = entity
-        async_add_entities([entity])
-
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_weather", async_add_weather)
+    """Set up the JS Automations weather platform."""
+    connection = await async_setup_js_platform(
+        hass, "weather", JSAutomationsWeather, async_add_entities
     )
+    config_entry.async_on_unload(connection)
 
-class JSAutomationsWeather(WeatherEntity, RestoreEntity):
+class JSAutomationsWeather(JSAutomationsBaseEntity, WeatherEntity):
     """Representation of a JS Automations Weather Entity."""
 
     _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
@@ -43,64 +35,44 @@ class JSAutomationsWeather(WeatherEntity, RestoreEntity):
     _attr_native_visibility_unit = UnitOfLength.KILOMETERS
     _attr_native_precipitation_unit = UnitOfPrecipitationDepth.MILLIMETERS
 
-    def __init__(self, data):
-        self.entity_id = data["entity_id"]
-        self._attr_unique_id = data[CONF_UNIQUE_ID]
-        self._attr_should_poll = False
-        self._forecast_daily = None
-        self._forecast_hourly = None
-        self._forecast_twice_daily = None
-        self.update_data(data)
+    _forecast_daily = None
+    _forecast_hourly = None
+    _forecast_twice_daily = None
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state:
-             self._attr_condition = last_state.state
+    def _restore_state(self, last_state):
+        """Zustand für Weather wiederherstellen."""
+        super()._restore_state(last_state)
+        self._attr_condition = last_state.state
 
     def update_data(self, data):
-        """Update entity state and attributes."""
-        self._attr_name = data.get(CONF_NAME, self._attr_name)
-        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
-        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
-        
+        """Update Weather spezifische Daten."""
+        super().update_data(data)
+
         if CONF_STATE in data:
             self._attr_condition = data[CONF_STATE]
 
-        device_info = async_format_device_info(data)
-        if device_info: self._attr_device_info = device_info
-        
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
-            self._attr_extra_state_attributes = {k: v for k, v in attrs.items() 
-                if k not in [
-                    "temperature", "pressure", "humidity", "wind_speed", "wind_bearing", 
-                    "visibility", "ozone", "cloud_coverage", "uv_index", "dew_point", "apparent_temperature",
-                    "temperature_unit", "pressure_unit", "wind_speed_unit", "visibility_unit", "precipitation_unit",
-                    "forecast_daily", "forecast_hourly", "forecast_twice_daily"
-                ]}
-            
+
             if "temperature" in attrs: self._attr_native_temperature = float(attrs["temperature"])
             if "pressure" in attrs: self._attr_native_pressure = float(attrs["pressure"])
             if "humidity" in attrs: self._attr_native_humidity = float(attrs["humidity"])
             if "wind_speed" in attrs: self._attr_native_wind_speed = float(attrs["wind_speed"])
             if "wind_bearing" in attrs: self._attr_wind_bearing = float(attrs["wind_bearing"])
             if "visibility" in attrs: self._attr_native_visibility = float(attrs["visibility"])
-            if "ozone" in attrs: self._attr_ozone = float(attrs["ozone"])
-            if "cloud_coverage" in attrs: self._attr_cloud_coverage = float(attrs["cloud_coverage"])
-            if "uv_index" in attrs: self._attr_uv_index = float(attrs["uv_index"])
-            if "dew_point" in attrs: self._attr_native_dew_point = float(attrs["dew_point"])
-            if "apparent_temperature" in attrs: self._attr_native_apparent_temperature = float(attrs["apparent_temperature"])
 
-            # Units
             if "temperature_unit" in attrs: self._attr_native_temperature_unit = attrs["temperature_unit"]
             if "pressure_unit" in attrs: self._attr_native_pressure_unit = attrs["pressure_unit"]
             if "wind_speed_unit" in attrs: self._attr_native_wind_speed_unit = attrs["wind_speed_unit"]
-            if "visibility_unit" in attrs: self._attr_native_visibility_unit = attrs["visibility_unit"]
-            if "precipitation_unit" in attrs: self._attr_native_precipitation_unit = attrs["precipitation_unit"]
 
-            # Forecasts
+            # Cleanup
+            managed_keys = ["temperature", "pressure", "humidity", "wind_speed", "wind_bearing", 
+                            "visibility", "temperature_unit", "pressure_unit", "wind_speed_unit",
+                            "forecast_daily", "forecast_hourly", "forecast_twice_daily"]
+            for key in managed_keys:
+                self._attr_extra_state_attributes.pop(key, None)
+
+            # Forecast handling
             features = 0
             if "forecast_daily" in attrs:
                 self._forecast_daily = attrs["forecast_daily"]
@@ -108,9 +80,6 @@ class JSAutomationsWeather(WeatherEntity, RestoreEntity):
             if "forecast_hourly" in attrs:
                 self._forecast_hourly = attrs["forecast_hourly"]
                 features |= WeatherEntityFeature.FORECAST_HOURLY
-            if "forecast_twice_daily" in attrs:
-                self._forecast_twice_daily = attrs["forecast_twice_daily"]
-                features |= WeatherEntityFeature.FORECAST_TWICE_DAILY
             
             self._attr_supported_features = features
 
@@ -119,9 +88,5 @@ class JSAutomationsWeather(WeatherEntity, RestoreEntity):
 
     async def async_forecast_daily(self) -> list[dict] | None:
         return self._forecast_daily
-
     async def async_forecast_hourly(self) -> list[dict] | None:
         return self._forecast_hourly
-
-    async def async_forecast_twice_daily(self) -> list[dict] | None:
-        return self._forecast_twice_daily

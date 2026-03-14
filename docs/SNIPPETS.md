@@ -1,136 +1,135 @@
 # ✂️ Code Snippets
 
-Hier findest du hilfreiche Schnipsel für alle unterstützten Plattformen. Kopiere sie einfach in dein Skript und passe sie an! 🚀
+Here you will find helpful snippets for all supported platforms. Just copy them into your script and adapt them to your needs! 🚀
 
 ---
 
 ## 🌡️ Sensor
-Perfekt für Messwerte wie Temperatur, Luftfeuchtigkeit oder Stromverbrauch.
+Perfect for measuring values like temperature, humidity, or power consumption.
 
 ```javascript
-ha.register('sensor.jsa_wohnzimmer_temp', {
-    name: 'Wohnzimmer Temperatur',
+ha.register('sensor.jsa_living_room_temp', {
+    name: 'Living Room Temperature',
     icon: 'mdi:thermometer',
     unit_of_measurement: '°C',
-    state_class: 'measurement',  // Wichtig für Statistiken
+    state_class: 'measurement',  // Important for long-term statistics
     device_class: 'temperature'
-    // device: 'script' // optional: 'script' (default), 'system' or 'none'
 });
 
-// Wert aktualisieren
-ha.updateState('sensor.jsa_wohnzimmer_temp', 22.5);
+// Update value
+ha.updateState('sensor.jsa_living_room_temp', 22.5);
 ```
 
 ## 💡 Binary Sensor
-Für Ja/Nein Zustände wie Bewegung, Tür offen/zu oder Anwesenheit.
+For yes/no states like motion, door open/closed, or presence.
 
 ```javascript
-ha.register('binary_sensor.bewegung_flur', {
-    name: 'Bewegungsmelder Flur',
+ha.register('binary_sensor.motion_hallway', {
+    name: 'Hallway Motion',
     type: 'binary_sensor',
     device_class: 'motion', // motion, door, window, presence...
     icon: 'mdi:run'
 });
 
-// Zustand setzen (true = an/erkannt, false = aus/ruhe)
-ha.updateState('binary_sensor.bewegung_flur', true);
+// Set state (true = on/detected, false = off/clear)
+ha.updateState('binary_sensor.motion_hallway', true);
 ```
 
 ## 🔌 Switch
-Ein klassischer Schalter. Denke daran, auf Events zu hören!
+A classic toggle switch. Remember to listen for events!
 
 ```javascript
-ha.register('switch.mein_schalter', {
-    name: 'Kaffeemaschine',
+ha.register('switch.my_switch', {
+    name: 'Coffee Machine',
     type: 'switch',
     icon: 'mdi:coffee'
 });
 
-// Status setzen
-ha.updateState('switch.mein_schalter', 'on');
+// Set state
+ha.updateState('switch.my_switch', 'on');
 ```
 
 ## 🔘 Button
-Ein Taster, um Aktionen auszulösen.
+A momentary button to trigger actions.
 
 ```javascript
-ha.register('button.neustart', {
-    name: 'Server Neustart',
+ha.register('button.restart', {
+    name: 'Server Restart',
     type: 'button',
     icon: 'mdi:restart'
 });
 
-// Button "drücken" (Zeitstempel aktualisieren)
-ha.updateState('button.neustart', new Date().toISOString());
+// "Press" button (updates timestamp)
+ha.updateState('button.restart', new Date().toISOString());
 ```
 
 ## 🔢 Number
-Ein Schieberegler oder Eingabefeld für Zahlen.
+A slider or input field for numeric values.
 
 ```javascript
-ha.register('number.zielwert', {
-    name: 'Zieltemperatur',
+ha.register('number.target_value', {
+    name: 'Target Temperature',
     type: 'number',
     min: 0,
     max: 100,
     step: 0.5,
-    mode: 'slider', // oder 'box'
+    mode: 'slider', // or 'box'
     unit_of_measurement: '%'
 });
 
-ha.updateState('number.zielwert', 42);
+ha.updateState('number.target_value', 42);
 ```
 
 ## 📝 Text
-Ein Textfeld für Eingaben.
+A text input field.
 
 ```javascript
-ha.register('text.notiz', {
-    name: 'Wichtige Notiz',
+ha.register('text.note', {
+    name: 'Important Note',
     type: 'text',
     min: 0,
     max: 255,
-    mode: 'text' // oder 'password'
+    mode: 'text' // or 'password'
 });
 
-ha.updateState('text.notiz', 'Milch kaufen!');
+ha.updateState('text.note', 'Buy milk!');
 ```
 
 ## 📋 Select
-Ein Dropdown-Menü mit festen Optionen.
+A dropdown menu with predefined options.
 
 ```javascript
-ha.register('select.modus', {
-    name: 'Betriebsmodus',
+ha.register('select.mode', {
+    name: 'Operation Mode',
     options: ['Eco', 'Standard', 'Turbo'],
     icon: 'mdi:menu',
 });
 
-ha.updateState('select.modus', 'Turbo');
+ha.updateState('select.mode', 'Turbo');
 ```
 
 ## ✅ Todo
-Eine To-Do Liste. Items werden als Attribute verwaltet.
+A to-do list. Items are managed as attributes.
 
 ```javascript
-ha.register('todo.einkaufsliste', {
-    name: 'Einkaufsliste',
+ha.register('todo.shopping_list', {
+    name: 'Shopping List',
     type: 'todo',
     attributes: {
         items: [
-            { uid: '1', summary: 'Milch', status: 'needs_action' },
-            { uid: '2', summary: 'Kaffee', status: 'completed' }
+            { uid: '1', summary: 'Milk', status: 'needs_action' },
+            { uid: '2', summary: 'Coffee', status: 'completed' }
         ]
     }
 });
 ```
 
 ## ❄️ Climate
-Ein Thermostat oder eine Klimaanlage. Etwas komplexer, aber mächtig!
+A thermostat or air conditioner. Complex but powerful!
 
 ```javascript
-ha.register('climate.jsa_wohnzimmer', {
-    name: 'Heizung Keller',
+ha.register('climate.jsa_living_room', {
+    name: 'Basement Heating',
     min_temp: 7,
     max_temp: 30,
     hvac_modes: ['off', 'heat', 'auto'],
@@ -138,44 +137,44 @@ ha.register('climate.jsa_wohnzimmer', {
     unit_of_measurement: '°C',
     attributes: {
         current_temperature: 21.5,
-        temperature: 22, // Zieltemperatur
+        temperature: 22, // Target temperature
         preset_mode: 'comfort'
     }
 });
 
-// Modus und Temperatur setzen
-ha.updateState('climate.jsa_wohnzimmer', 'heat', { temperature: 22.5 });
+// Set mode and temperature
+ha.updateState('climate.jsa_living_room', 'heat', { temperature: 22.5 });
 ```
 
 ## 💡 Light
-Lichtsteuerung mit Helligkeit und Farbe.
+Light control with brightness and color.
 
 ```javascript
-ha.register('light.wohnzimmer_led', {
-    name: 'LED Streifen',
+ha.register('light.living_room_led', {
+    name: 'LED Strip',
     type: 'light',
     supported_color_modes: ['rgb', 'brightness'],
     attributes: {
         brightness: 255,
-        rgb_color: [255, 0, 0], // Rot
+        rgb_color: [255, 0, 0], // Red
         effect_list: ['Rainbow', 'Pulse']
     }
 });
 
-// Einschalten
-ha.updateState('light.wohnzimmer_led', 'on', { brightness: 128 });
+// Turn on
+ha.updateState('light.living_room_led', 'on', { brightness: 128 });
 ```
 
 ## 🪟 Cover
-Für Rollläden, Jalousien oder Garagentore.
+For blinds, shutters, or garage doors.
 
 ```javascript
 ha.register('cover.garage', {
-    name: 'Garagentor',
+    name: 'Garage Door',
     type: 'cover',
     device_class: 'garage',
     attributes: {
-        current_position: 0, // 0 = Geschlossen, 100 = Offen
+        current_position: 0, // 0 = Closed, 100 = Open
         current_tilt_position: 50
     }
 });
@@ -184,35 +183,35 @@ ha.updateState('cover.garage', 'closed');
 ```
 
 ## 💨 Fan
-Ventilatorsteuerung mit Geschwindigkeitsstufen.
+Fan control with speed percentages.
 
 ```javascript
-ha.register('fan.deckenventilator', {
-    name: 'Deckenventilator',
+ha.register('fan.ceiling_fan', {
+    name: 'Ceiling Fan',
     type: 'fan',
     attributes: {
-        percentage: 33, // Geschwindigkeit in %
+        percentage: 33, // Speed in %
         preset_modes: ['auto', 'smart'],
         oscillating: false
     }
 });
 
-ha.updateState('fan.deckenventilator', 'on');
+ha.updateState('fan.ceiling_fan', 'on');
 ```
 
 ## 📺 Media Player
-Steuere Musik oder Videos.
+Control music or videos.
 
 ```javascript
 ha.register('media_player.radio', {
-    name: 'Küchenradio',
+    name: 'Kitchen Radio',
     type: 'media_player',
     device_class: 'speaker',
     attributes: {
         volume_level: 0.5,
         is_volume_muted: false,
-        source: 'Radio Bob',
-        source_list: ['Radio Bob', 'Sunshine Live'],
+        source: 'Radio Rock',
+        source_list: ['Radio Rock', 'Electronic FM'],
         media_title: 'Highway to Hell',
         media_artist: 'AC/DC'
     }
@@ -222,28 +221,28 @@ ha.updateState('media_player.radio', 'playing');
 ```
 
 ## 🔒 Lock
-Ein smartes Türschloss.
+A smart door lock.
 
 ```javascript
-ha.register('lock.haustuer', {
-    name: 'Haustür',
+ha.register('lock.front_door', {
+    name: 'Front Door',
     type: 'lock',
     attributes: {
-        code_format: '^\d{4}$', // 4-stelliger PIN
-        changed_by: 'Benutzer',
+        code_format: '^\d{4}$', // 4-digit PIN
+        changed_by: 'User',
         supports_open: true
     }
 });
 
-ha.updateState('lock.haustuer', 'locked');
+ha.updateState('lock.front_door', 'locked');
 ```
 
 ## 🤖 Vacuum
-Ein Saugroboter.
+A robotic vacuum cleaner.
 
 ```javascript
 ha.register('vacuum.robi', {
-    name: 'Saugroboter',
+    name: 'Robot Vacuum',
     type: 'vacuum',
     attributes: {
         battery_level: 85,
@@ -255,80 +254,12 @@ ha.register('vacuum.robi', {
 ha.updateState('vacuum.robi', 'docked'); // cleaning, docked, paused, idle...
 ```
 
-## 🚨 Siren
-Eine Sirene mit verschiedenen Tönen.
-
-```javascript
-ha.register('siren.alarm', {
-    name: 'Innensirene',
-    type: 'siren',
-    attributes: {
-        available_tones: ['fire', 'intrusion', 'beep']
-    }
-});
-
-ha.updateState('siren.alarm', 'on');
-```
-
-## 📷 Camera
-Eine Kamera, die Bilder oder Streams anzeigt.
-
-```javascript
-ha.register('camera.eingang', {
-    name: 'Eingangskamera',
-    type: 'camera',
-    attributes: {
-        stream_source: 'rtsp://192.168.1.100/stream',
-        // Oder Base64 Bilddaten:
-        // image_data_b64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
-    }
-});
-
-ha.updateState('camera.eingang', 'idle');
-```
-
-## 🛡️ Alarm Control Panel
-Eine Alarmanlage mit Code-Schutz.
-
-```javascript
-ha.register('alarm_control_panel.haus', {
-    name: 'Alarmanlage',
-    type: 'alarm_control_panel',
-    attributes: {
-        code_format: 'number', // oder 'text'
-        code_arm_required: true,
-        changed_by: 'Keypad'
-    }
-});
-
-ha.updateState('alarm_control_panel.haus', 'disarmed'); // armed_home, armed_away, triggered...
-```
-
-## 📍 Device Tracker
-Verfolge den Standort von Personen oder Geräten.
-
-```javascript
-ha.register('device_tracker.mein_handy', {
-    name: 'Mein Handy',
-    type: 'device_tracker',
-    attributes: {
-        source_type: 'gps',
-        latitude: 52.5200,
-        longitude: 13.4050,
-        gps_accuracy: 20,
-        battery_level: 65
-    }
-});
-
-ha.updateState('device_tracker.mein_handy', 'home'); // oder 'not_home'
-```
-
 ## 🌦️ Weather
-Eigene Wetterdaten anzeigen.
+Display custom weather data.
 
 ```javascript
-ha.register('weather.garten', {
-    name: 'Wetterstation Garten',
+ha.register('weather.garden', {
+    name: 'Garden Weather Station',
     type: 'weather',
     attributes: {
         temperature: 18.5,
@@ -344,131 +275,38 @@ ha.register('weather.garten', {
 });
 ```
 
-## 📅 Date
-Ein Datumsauswahl-Feld.
-
-```javascript
-ha.register('date.urlaub_start', {
-    name: 'Urlaubsbeginn',
-    type: 'date',
-    icon: 'mdi:calendar'
-});
-
-ha.updateState('date.urlaub_start', '2023-12-24');
-```
-
-## 🕒 Time
-Ein Zeitauswahl-Feld.
-
-```javascript
-ha.register('time.wecker', {
-    name: 'Weckzeit',
-    type: 'time',
-    icon: 'mdi:clock'
-});
-
-ha.updateState('time.wecker', '07:30:00');
-```
-
-## 📆 Datetime
-Datum und Zeit kombiniert.
-
-```javascript
-ha.register('datetime.termin', {
-    name: 'Nächster Termin',
-    type: 'datetime',
-    icon: 'mdi:calendar-clock'
-});
-
-ha.updateState('datetime.termin', '2023-12-24T18:00:00');
-```
-
 ## 🔄 Update
-Zeigt an, ob ein Firmware-Update verfügbar ist.
+Indicates if a firmware update is available.
 
 ```javascript
-ha.register('update.drucker', {
-    name: 'Drucker Firmware',
+ha.register('update.printer', {
+    name: 'Printer Firmware',
     type: 'update',
     attributes: {
         installed_version: '1.0.0',
         latest_version: '1.2.0',
-        release_summary: 'Bugfixes und Performance-Verbesserungen',
+        release_summary: 'Bugfixes and performance improvements',
         release_url: 'https://example.com/release',
         in_progress: false
     }
 });
 
-// Status ist die installierte Version (oder null)
-ha.updateState('update.drucker', '1.0.0');
+// State is the installed version (or null)
+ha.updateState('update.printer', '1.0.0');
 ```
 
 ## ⚡ Event
-Feuere Ereignisse ohne dauerhaften Zustand (z.B. Türklingel).
+Fire events without a persistent state (e.g., doorbell).
 
 ```javascript
-ha.register('event.tuerklingel', {
-    name: 'Türklingel',
+ha.register('event.doorbell', {
+    name: 'Doorbell',
     type: 'event',
     attributes: {
         event_types: ['press', 'double_press']
     }
 });
 
-// Event feuern
-ha.updateState('event.tuerklingel', 'press');
-```
-
-## 📱 Remote
-Eine Fernbedienung.
-
-```javascript
-ha.register('remote.tv', {
-    name: 'Fernseher Remote',
-    type: 'remote',
-    attributes: {
-        current_activity: 'Netflix',
-        activity_list: ['TV', 'Netflix', 'YouTube']
-    }
-});
-
-ha.updateState('remote.tv', 'on');
-```
-
-## 💧 Humidifier
-Luftbefeuchter steuern.
-
-```javascript
-ha.register('humidifier.schlafzimmer', {
-    name: 'Luftbefeuchter',
-    type: 'humidifier',
-    device_class: 'humidifier', // oder 'dehumidifier'
-    attributes: {
-        humidity: 45, // Zielwert
-        mode: 'auto',
-        available_modes: ['auto', 'sleep', 'baby'],
-        min_humidity: 30,
-        max_humidity: 80
-    }
-});
-
-ha.updateState('humidifier.schlafzimmer', 'on');
-```
-
-## 🚰 Valve
-Ein Ventil für Wasser oder Gas.
-
-```javascript
-ha.register('valve.bewaesserung', {
-    name: 'Gartenbewässerung',
-    type: 'valve',
-    device_class: 'water', // water, gas
-    reports_position: true, // Aktiviert Positions-Slider
-    optimistic: true, // UI aktualisiert sofort
-    attributes: {
-        current_position: 0 // 0 = zu, 100 = offen
-    }
-});
-
-ha.updateState('valve.bewaesserung', 'closed'); // open, closed, opening, closing
+// Fire event
+ha.updateState('event.doorbell', 'press');
 ```

@@ -1,62 +1,53 @@
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from . import DOMAIN, SIGNAL_ADD_ENTITY, DATA_ENTITIES, CONF_ATTRIBUTES, CONF_DEVICE_INFO, CONF_AVAILABLE, async_format_device_info
-from homeassistant.const import CONF_UNIQUE_ID, CONF_NAME, CONF_ICON, CONF_STATE
+from . import (
+    JSAutomationsBaseEntity,
+    async_setup_js_platform,
+    CONF_ATTRIBUTES,
+)
+from homeassistant.const import CONF_STATE
 
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the platform."""
-    
-    @callback
-    def async_add_device_tracker(data: dict):
-        """Handle entity creation signal."""
-        unique_id = data[CONF_UNIQUE_ID]
-        if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
-            return
-        entity = JSAutomationsDeviceTracker(data)
-        hass.data[DOMAIN][DATA_ENTITIES][unique_id] = entity
-        async_add_entities([entity])
-
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, f"{SIGNAL_ADD_ENTITY}_device_tracker", async_add_device_tracker)
+    """Set up the JS Automations device tracker platform."""
+    connection = await async_setup_js_platform(
+        hass, "device_tracker", JSAutomationsDeviceTracker, async_add_entities
     )
+    config_entry.async_on_unload(connection)
 
-class JSAutomationsDeviceTracker(TrackerEntity, RestoreEntity):
+class JSAutomationsDeviceTracker(JSAutomationsBaseEntity, TrackerEntity):
     """Representation of a JS Automations Device Tracker."""
 
-    def __init__(self, data):
-        self.entity_id = data["entity_id"]
-        self._attr_unique_id = data[CONF_UNIQUE_ID]
-        self._attr_should_poll = False
-        self.update_data(data)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
+    def _restore_state(self, last_state):
+        """Zustand für Device Tracker wiederherstellen."""
+        super()._restore_state(last_state)
+        attrs = last_state.attributes
+        self._attr_latitude = attrs.get("latitude")
+        self._attr_longitude = attrs.get("longitude")
+        self._attr_gps_accuracy = attrs.get("gps_accuracy")
+        self._attr_battery_level = attrs.get("battery_level")
+        self._attr_source_type = attrs.get("source_type")
+        self._attr_location_name = attrs.get("location_name")
 
     def update_data(self, data):
-        """Update entity state and attributes."""
-        self._attr_name = data.get(CONF_NAME, self._attr_name)
-        self._attr_icon = data.get(CONF_ICON, self._attr_icon)
-        self._attr_available = data.get(CONF_AVAILABLE, self._attr_available)
+        """Update Tracker spezifische Daten."""
+        super().update_data(data)
         
         if CONF_ATTRIBUTES in data:
             attrs = data[CONF_ATTRIBUTES]
-            self._attr_extra_state_attributes = {k: v for k, v in attrs.items() 
-                if k not in ["latitude", "longitude", "battery_level", "source_type", "gps_accuracy", "location_name", "ip_address", "mac_address", "hostname"]}
-            
+
+            # GPS & Core Tracker Daten
             if "latitude" in attrs: self._attr_latitude = float(attrs["latitude"])
             if "longitude" in attrs: self._attr_longitude = float(attrs["longitude"])
             if "gps_accuracy" in attrs: self._attr_gps_accuracy = int(attrs["gps_accuracy"])
             if "battery_level" in attrs: self._attr_battery_level = int(attrs["battery_level"])
             
+            # Bestimmung des Source Type
             if "source_type" in attrs: 
                 self._attr_source_type = attrs["source_type"]
             elif "latitude" in attrs:
@@ -64,20 +55,24 @@ class JSAutomationsDeviceTracker(TrackerEntity, RestoreEntity):
             else:
                 self._attr_source_type = SourceType.ROUTER
 
+            # Netzwerk-Identifikatoren
             if "location_name" in attrs: self._attr_location_name = attrs["location_name"]
             if "ip_address" in attrs: self._attr_ip_address = attrs["ip_address"]
             if "mac_address" in attrs: self._attr_mac_address = attrs["mac_address"]
             if "hostname" in attrs: self._attr_hostname = attrs["hostname"]
 
-        # If state is provided (e.g. 'home', 'not_home'), use it as location_name if no GPS
-        if CONF_STATE in data:
-            state = data[CONF_STATE]
-            # If no GPS data provided in this update or previously set, assume state is location name
-            if not getattr(self, "_attr_latitude", None):
-                self._attr_location_name = state
+            # Cleanup der Extra Attributes
+            managed_keys = [
+                "latitude", "longitude", "gps_accuracy", "battery_level", 
+                "source_type", "location_name", "ip_address", "mac_address", "hostname"
+            ]
+            for key in managed_keys:
+                self._attr_extra_state_attributes.pop(key, None)
 
-        device_info = async_format_device_info(data)
-        if device_info: self._attr_device_info = device_info
-        
+        # Fallback: Falls 'state' (z.B. 'home') geliefert wird und kein GPS da ist, nutze dies als Ort
+        if CONF_STATE in data:
+            if not getattr(self, "_attr_latitude", None):
+                self._attr_location_name = data[CONF_STATE]
+
         if self.hass:
             self.async_write_ha_state()
