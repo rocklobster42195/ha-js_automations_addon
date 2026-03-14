@@ -3,40 +3,23 @@
  * Handles real-time communication with the backend.
  */
 
-var socket = null;
+window.socket = null;
 var overlayTimeout = null;
 
 // Cache for the last known integration status to prevent UI flickering/reset
 window._lastIntegrationStatus = undefined;
 
 // Global function to update HA Integration Status UI
-window.updateIntegrationStatusUI = function(isConnected, isIntegrationAvailable = null) { // isConnected: Socket zum Backend, isIntegrationAvailable: Backend zu HA-Integration
-    const el = document.getElementById('integration-status-item');
-    const icon = document.getElementById('integration-status-icon');
-    if (!el || !icon) return;
-
-    if (!isConnected) {
-        el.title = 'HA Integration: Disconnected (Socket)';
-        icon.style.backgroundColor = 'var(--danger)'; // Rot
-        icon.style.opacity = '1';
-    } else if (isIntegrationAvailable === null) {
-        el.title = 'HA Integration: Checking...';
-        icon.style.backgroundColor = '#999'; // Grau
-        icon.style.opacity = '0.3'; // Gedimmt
-    } else if (isIntegrationAvailable) {
-        el.title = 'HA Integration: Available';
-        icon.style.backgroundColor = '#fff'; // Weiß
-        icon.style.opacity = '1';
-    } else {
-        el.title = 'HA Integration: Not available (Legacy Mode)';
-        icon.style.backgroundColor = 'var(--warn)'; // Orange (Warnfarbe für Legacy)
-        icon.style.opacity = '1';
+window.updateIntegrationStatusUI = function() {
+    // Legacy wrapper to maintain compatibility with other scripts
+    if (typeof window.updateSystemNotifications === 'function') {
+        window.updateSystemNotifications();
     }
 };
 
 function initSocket() {
     // BASE_PATH is global from api.js
-    socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
+    window.socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
     
     // Helper: UI Update für Herz & Overlay zentral steuern
     const updateConnectionUI = (isConnected) => {
@@ -47,7 +30,8 @@ function initSocket() {
         if (hb) {
             const hbParent = hb.parentElement;
             if (hbParent) hbParent.title = `HA API: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
-            hb.style.backgroundColor = isConnected ? '#fff' : 'var(--danger)';
+            hb.className = `mdi ${isConnected ? 'mdi-circle-slice-8' : 'mdi-circle-outline'} heartbeat-icon`;
+            hb.style.color = isConnected ? '#fff' : 'var(--danger)';
             hb.style.opacity = '1';
             hb.dataset.status = isConnected ? 'connected' : 'disconnected';
             // Rotation nur bei Connected zurücksetzen (falls es mal gespinnt hat)
@@ -77,27 +61,23 @@ function initSocket() {
 
     const handleConnectionEstablished = () => {
         updateConnectionUI(true);
-        // Initial status for integration is unknown on connect
-        // Only set to null (gray) if we don't have a last known status yet
-        if (window._lastIntegrationStatus === undefined) {
-            window.updateIntegrationStatusUI(true, null);
-        }
+        if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
+        // Don't reset UI to gray here, rely on existing status from fetch
         requestIntegrationStatus(); // Explizit den Status anfordern
         if (typeof loadScripts === 'function') loadScripts();
     };
 
-    socket.on('connect', handleConnectionEstablished);
+    window.socket.on('connect', handleConnectionEstablished);
 
-    socket.on('disconnect', () => {
+    window.socket.on('disconnect', () => {
         updateConnectionUI(false);
-        // Integration is definitely not available if socket is disconnected
-        window.updateIntegrationStatusUI(false, false);
+        if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
     });
 
-    socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
-    socket.on('status_update', () => { if(typeof loadScripts === 'function') loadScripts(); });
+    window.socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
+    window.socket.on('status_update', () => { if(typeof loadScripts === 'function') loadScripts(); });
     
-    socket.on('system_stats', (data) => {
+    window.socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');
         if (hb) {
             // Falls wir Daten empfangen, die UI aber "getrennt" anzeigt, war es ein stiller Reconnect.
@@ -111,17 +91,21 @@ function initSocket() {
         }
     });
 
-    socket.on('integration_status', (data) => {
-        console.log('Socket: Received integration_status event:', data);
+    window.socket.on('integration_status', (data) => {
+        console.log('Socket: Received integration_status update:', data);
         
-        // If it's a full status object (contains 'installed'), we treat it as available
-        // otherwise check for the 'available' property or boolean value.
-        let available = (data && typeof data === 'object' && 'installed' in data) ? true : null;
-        if (available === null) {
-            available = (data && typeof data === 'object') ? data.available : data;
-        }
+        window._lastIntegrationStatus = data;
+        // Update global status used by app.js logic
+        window.currentIntegrationStatus = data;
+
+        const available = (data && typeof data === 'object') ? (data.is_running || data.available) : data;
 
         window.updateIntegrationStatusUI(true, available);
+
+        // Global notification update (updates banner and settings categories)
+        if (typeof window.updateSystemNotifications === 'function') {
+            window.updateSystemNotifications();
+        }
     });
 
     /**
@@ -129,16 +113,18 @@ function initSocket() {
      * Wird nach dem Socket-Connect aufgerufen, um Race Conditions zu vermeiden.
      */
     function requestIntegrationStatus() {
-        if (!socket || !socket.connected) return;
-        socket.emit('get_integration_status', (response) => {
+        if (!window.socket || !window.socket.connected) return;
+        window.socket.emit('get_integration_status', (response) => {
             if (response && response.error) {
                 console.error("Socket: Error requesting integration status:", response.error);
-                window.updateIntegrationStatusUI(true, false); // Annahme: Fehler bedeutet nicht verfügbar
+                if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
             } else {
                 console.log("Socket: Received integration status response:", response);
-                // Handle both { available: true } and boolean true
-                const available = (response && typeof response === 'object') ? response.available : response;
-                window.updateIntegrationStatusUI(true, available);
+                
+                window.currentIntegrationStatus = response;
+                
+                // Trigger global UI update
+                if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
             }
         });
     }
@@ -148,10 +134,10 @@ function initSocket() {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             console.log('📱 App active: Checking connection...');
-            if (!socket.connected) {
+            if (window.socket && !window.socket.connected) {
                 console.log('🔌 Socket disconnected. Forcing reconnect...');
                 updateConnectionUI(false);
-                socket.connect();
+                window.socket.connect();
             }
         }
     });
@@ -168,17 +154,17 @@ window.manualReload = function() {
  */
 window.getHAStates = function() {
     return new Promise((resolve, reject) => {
-        if (!socket) return reject(new Error("Socket not initialized"));
+        if (!window.socket) return reject(new Error("Socket not initialized"));
         
         const request = () => {
-            socket.emit('get_ha_states', (response) => {
+            window.socket.emit('get_ha_states', (response) => {
                 if (response && response.error) reject(new Error(response.error));
                 else resolve(response);
             });
         };
 
-        if (socket.connected) request();
-        else socket.once('connect', request);
+        if (window.socket.connected) request();
+        else window.socket.once('connect', request);
         
         // Timeout nach 10s (falls Server nicht antwortet)
         setTimeout(() => reject(new Error("Socket timeout (get_ha_states)")), 10000);
