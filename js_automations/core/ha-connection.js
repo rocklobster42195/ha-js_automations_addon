@@ -166,10 +166,12 @@ class HAConnector {
         });
     }
 
-    callService(domain, service, data) {
+    callService(domain, service, data, expectResponse = false) {
         if (!this.isReady) return Promise.reject(new Error("WebSocket not connected"));
         const id = this.msgId++;
-        this.send({ id, type: 'call_service', domain, service, service_data: data });
+        const msg = { id, type: 'call_service', domain, service, service_data: data };
+        if (expectResponse) msg.return_response = true;
+        this.send(msg);
         
         return new Promise((resolve, reject) => {
             const handler = (data) => {
@@ -247,10 +249,12 @@ class HAConnector {
         let version = null;
         if (api.get_info) {
             try {
-                const result = await this.callService('js_automations', 'get_info', {});
-                version = result?.version || null;
+                const result = await this.callService('js_automations', 'get_info', {}, true);
+                // HA wraps the ServiceResponse in a 'response' property when returned via WebSocket
+                version = result?.response?.version || result?.version || null;
             } catch (err) {
                 // Fail silently if the service call fails (e.g. old version doesn't support response)
+                console.warn(`[HAConnector] Could not fetch integration version: ${err.message}`);
             }
         }
 

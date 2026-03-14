@@ -98,7 +98,8 @@ function renderSettingsCategories() {
         // Notification Dot Logic
         if (cat.id === 'system' && window.currentIntegrationStatus) {
             const s = window.currentIntegrationStatus;
-            if (!s.installed || s.needs_update) {
+            // Im Dev-Mode keine Notification-Dots anzeigen, da der User manuell verwaltet
+            if (!s.dev_mode && (!s.installed || s.needs_update)) {
                 btn.classList.add('has-notification');
             }
         }
@@ -495,12 +496,17 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
 
     if (status.dev_mode) {
         // Developer Mode: Manual management
-        icon = 'mdi-developer-board';
-        color = 'var(--warn)';
+        icon = status.active ? 'mdi-check-circle' : 'mdi-developer-board';
+        color = status.active ? 'var(--success)' : 'var(--warn)';
         title = i18next.t('settings.system.integration_dev_mode');
-        desc = i18next.t('settings.system.integration_dev_mode_desc');
-        //desc = i18next.t('settings.system.integration_dev_mode_desc') + 
-        //       `<br><small style="color:#888; font-family:monospace;">${i18next.t('settings.system.integration_dev_mode_path', { path: status.target_path })}</small>`;
+        
+        if (status.active) {
+            desc = i18next.t('settings.system.integration_active') + ` (v${status.version_running})`;
+        } else if (status.is_running) {
+            desc = `Version Mismatch: HA führt v${status.version_running} aus, lokaler Quellcode ist v${status.version_available}.`;
+        } else {
+            desc = i18next.t('settings.system.integration_dev_mode_desc');
+        }
         btnHtml = ''; 
 
     } else if (isRestartPending && !status.is_running) {
