@@ -8,12 +8,15 @@ const SETTINGS_TAB_ID = 'System: Settings';
 let activeCategory = null;
 let settingsEntityTarget = null;
 window.cachedEntities = window.cachedEntities || [];
+let isProgrammaticScroll = false;
+let pendingScrollTarget = null;
 
 /**
  * Öffnet den Settings-Tab und lädt die Daten.
  */
-async function openSettingsTab() {
+async function openSettingsTab(targetId = null) {
     console.log("Opening Settings Tab...");
+    pendingScrollTarget = targetId;
     
     // Haupt-Container sichtbar machen (falls noch keine Tabs offen waren)
     const section = document.getElementById('editor-section');
@@ -33,6 +36,11 @@ async function openSettingsTab() {
     
     if (window.renderTabs) window.renderTabs();
     if (window.switchToTab) window.switchToTab(SETTINGS_TAB_ID);
+
+    // Falls bereits geladen, sofort scrollen
+    if (settingsSchema && targetId) {
+        setTimeout(() => scrollToSection(targetId), 100);
+    }
 }
 
 /**
@@ -55,10 +63,17 @@ async function loadSettingsData() {
         window.dispatchEvent(new CustomEvent('settings-changed', { detail: window.currentSettings }));
         
         renderSettingsCategories();
-    
-        // Erste Kategorie standardmäßig öffnen, falls noch keine aktiv
-        if (!activeCategory && settingsSchema && settingsSchema.length > 0) {
-            switchSettingsCategory(settingsSchema[0].id);
+        renderAllSettings();
+        initScrollSpy();
+
+        // Check for deep linking
+        if (pendingScrollTarget) {
+            const target = pendingScrollTarget;
+            pendingScrollTarget = null;
+            setTimeout(() => scrollToSection(target), 200);
+        } else if (settingsSchema && settingsSchema.length > 0) {
+            // Standardmäßig die erste Kategorie markieren
+            setActiveCategoryUI(settingsSchema[0].id);
         }
     } catch (error) {
         console.error("Failed to load settings:", error);
@@ -71,19 +86,14 @@ async function loadSettingsData() {
  */
 function renderSettingsCategories() {
     const container = document.getElementById('settings-categories');
+    if (!container || !settingsSchema) return;
+
     container.innerHTML = '';
 
     settingsSchema.forEach(cat => {
         const btn = document.createElement('div');
         btn.className = `settings-category-item ${activeCategory === cat.id ? 'active' : ''}`;
-        btn.style.padding = '10px 20px';
-        btn.style.cursor = 'pointer';
-        btn.style.display = 'flex';
-        btn.style.alignItems = 'center';
-        btn.style.gap = '10px';
-        btn.style.color = activeCategory === cat.id ? '#fff' : '#aaa';
-        btn.style.backgroundColor = activeCategory === cat.id ? '#333' : 'transparent';
-        btn.style.fontSize = '0.9rem';
+        btn.dataset.id = cat.id;
 
         // Notification Dot Logic
         if (cat.id === 'system' && window.currentIntegrationStatus) {
@@ -104,49 +114,118 @@ function renderSettingsCategories() {
         btn.appendChild(icon);
         btn.appendChild(label);
 
-        btn.onclick = () => switchSettingsCategory(cat.id);
+        // Ensure no inline styles override our CSS classes
+        btn.style.backgroundColor = '';
+        btn.style.color = '';
+
+        btn.onclick = () => {
+            isProgrammaticScroll = true;
+            scrollToSection(cat.id);
+            setActiveCategoryUI(cat.id);
+            
+            // Hide integration banner immediately if "system" category is clicked
+            if (cat.id === 'system' && typeof window.hideIntegrationBanner === 'function') {
+                window.hideIntegrationBanner();
+            }
+
+            // Re-enable ScrollSpy tracking after scroll animation
+            setTimeout(() => { isProgrammaticScroll = false; }, 800);
+        };
         container.appendChild(btn);
     });
 }
 
-/**
- * Wechselt die aktive Kategorie und rendert das Formular rechts.
- */
-function switchSettingsCategory(catId) {
+function setActiveCategoryUI(catId) {
     activeCategory = catId;
-    renderSettingsCategories(); // Update Active State Styles
-    renderSettingsForm(catId);
+    document.querySelectorAll('.settings-category-item').forEach(item => {
+        const isActive = item.dataset.id === catId;
+        item.classList.toggle('active', isActive);
+    });
+}
+
+function scrollToSection(id) {
+    let element = document.getElementById(`settings-section-${id}`);
+    
+    // Special handle for installer anchor
+    if (id === 'integration' || id === 'installer') {
+        element = document.getElementById('settings-installer-anchor') || document.getElementById('settings-section-system');
+    }
+
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 /**
- * Rendert das Formular für eine Kategorie basierend auf dem Schema.
+ * Initialisiert ScrollSpy mit IntersectionObserver.
  */
-function renderSettingsForm(catId) {
+function initScrollSpy() {
+    const content = document.getElementById('settings-content');
+    const sections = document.querySelectorAll('.settings-section');
+    
+    const options = {
+        root: content,
+        rootMargin: '-10% 0px -70% 0px',
+        threshold: 0
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        if (isProgrammaticScroll) return;
+        
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const catId = entry.target.id.replace('settings-section-', '');
+                setActiveCategoryUI(catId);
+
+                // Hide integration banner when reaching the system section (where the installer lives)
+                if (catId === 'system' && typeof window.hideIntegrationBanner === 'function') {
+                    window.hideIntegrationBanner();
+                }
+            }
+        });
+    }, options);
+
+    sections.forEach(section => observer.observe(section));
+}
+
+/**
+ * Rendert alle Kategorien untereinander.
+ */
+function renderAllSettings() {
     const container = document.getElementById('settings-content');
     container.innerHTML = '';
 
-    const category = settingsSchema.find(c => c.id === catId);
-    if (!category) return;
+    // Shared Datalist für Autocomplete einfügen
+    const dl = document.createElement('datalist');
+    dl.id = 'settings-entities-datalist';
+    container.appendChild(dl);
 
-    // Fügt die Klasse 'settings-category-danger' hinzu, wenn es die Danger Zone ist, entfernt sie sonst.
-    container.classList.toggle('settings-category-danger', catId === 'danger');
+    settingsSchema.forEach(category => {
+        const section = document.createElement('section');
+        section.id = `settings-section-${category.id}`;
+        section.className = 'settings-section';
+        if (category.id === 'danger') section.classList.add('settings-category-danger');
 
-    // Titel der Kategorie
-    const title = document.createElement('h3');
-    title.innerText = i18next.t(category.label);
-    title.style.marginTop = '0';
-    title.style.borderBottom = '1px solid #444';
-    title.style.paddingBottom = '10px';
-    container.appendChild(title);
+        // Titel der Kategorie
+        const title = document.createElement('h3');
+        const icon = document.createElement('i');
+        icon.className = `mdi ${category.icon.replace('mdi:', 'mdi-')}`;
+        title.appendChild(icon);
+        const titleText = document.createElement('span');
+        titleText.innerText = i18next.t(category.label);
+        title.appendChild(titleText);
+        section.appendChild(title);
 
-    // Shared Datalist für Autocomplete einfügen (falls noch nicht existent)
-    if (!document.getElementById('settings-entities-datalist')) {
-        const dl = document.createElement('datalist');
-        dl.id = 'settings-entities-datalist';
-        container.appendChild(dl);
-    }
+        renderSettingsItems(category, section);
+        container.appendChild(section);
+    });
+}
 
-    // Items iterieren
+/**
+ * Rendert die Items einer Kategorie in ein Ziel-Element.
+ */
+function renderSettingsItems(category, section) {
+    const catId = category.id;
     category.items.forEach(item => {
         // Wenn das Item als versteckt markiert ist, nicht rendern
         if (item.hidden) return;
@@ -160,7 +239,7 @@ function renderSettingsForm(catId) {
         }
 
         const wrapper = document.createElement('div');
-        wrapper.style.marginBottom = '20px';
+        wrapper.className = 'settings-item-wrapper';
         // Einrückung für abhängige Felder (Custom Entity, Sparkline)
         if (item.indent || (item.condition && (item.condition.key === 'slot1' || item.condition.key === 'slot2'))) {
             wrapper.style.marginLeft = '20px';
@@ -270,12 +349,14 @@ function renderSettingsForm(catId) {
         }
         else if (item.type === 'integration-manager') {
             input = document.createElement('div');
-            input.id = 'integration-manager-wrapper';
+            input.id = 'settings-installer-anchor'; // Sprungpunkt für Installer
+            const innerWrapper = document.createElement('div');
+            innerWrapper.id = 'integration-manager-wrapper';
+            input.appendChild(innerWrapper);
             input.style.marginTop = '5px';
-            checkIntegrationStatus(input);
+            checkIntegrationStatus(innerWrapper);
         }
         else {
-            // Fallback: Text / Entity-Picker
             input = document.createElement('input');
             input.type = 'text';
             input.value = value;
@@ -289,7 +370,7 @@ function renderSettingsForm(catId) {
         }
 
         wrapper.appendChild(input);
-        container.appendChild(wrapper);
+        section.appendChild(wrapper);
 
         // Wenn das Item als inaktiv markiert ist, das Input-Feld deaktivieren und visuell anpassen
         if (item.active === false) {
@@ -309,8 +390,8 @@ async function saveSetting(catId, key, value) {
     window.currentSettings[catId][key] = value;
     window.dispatchEvent(new CustomEvent('settings-changed', { detail: window.currentSettings }));
 
-    // Wenn sich ein Feld ändert, das andere beeinflusst (Condition), neu rendern
-    renderSettingsForm(catId);
+    // Wenn sich ein Feld ändert, das andere beeinflusst, das UI aktualisieren
+    renderAllSettings();
 
     // API Call
     const payload = { [catId]: { [key]: value } };
@@ -404,7 +485,25 @@ async function checkIntegrationStatus(container, showRestartHint = false) {
 function renderIntegrationUI(container, status, showRestartHint = false) {
     let icon, color, title, desc, btnHtml = '';
 
-    if (showRestartHint) {
+    // Check if a restart is pending (either passed as arg or stored in session)
+    const isRestartPending = showRestartHint || sessionStorage.getItem('jsa_integration_restart_pending') === 'true';
+
+    if (status.is_running) {
+        // If it's running, clear any pending restart flags
+        sessionStorage.removeItem('jsa_integration_restart_pending');
+    }
+
+    if (status.dev_mode) {
+        // Developer Mode: Manual management
+        icon = 'mdi-developer-board';
+        color = 'var(--warn)';
+        title = i18next.t('settings.system.integration_dev_mode');
+        desc = i18next.t('settings.system.integration_dev_mode_desc');
+        //desc = i18next.t('settings.system.integration_dev_mode_desc') + 
+        //       `<br><small style="color:#888; font-family:monospace;">${i18next.t('settings.system.integration_dev_mode_path', { path: status.target_path })}</small>`;
+        btnHtml = ''; 
+
+    } else if (isRestartPending && !status.is_running) {
         // State 2: Files have just been copied.
         icon = 'mdi-restart-alert';
         color = 'var(--accent)';
@@ -412,16 +511,22 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
         desc = i18next.t('settings.system.post_install_desc');
         btnHtml = `<a href="/config/server_control" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.go_to_restart_btn')}</a>`;
     
-    } else if (!status.installed) {
-        // State 1: Component is not available at all.
-        icon = 'mdi-alert-circle';
-        color = 'var(--warn)';
-        title = i18next.t('settings.system.integration_missing');
-        desc = i18next.t('settings.system.integration_missing_desc');
-        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="background:var(--warn) !important; color:#000 !important;">${i18next.t('settings.system.integration_install_btn')}</button>`;
+    } else if (!status.installed || status.needs_update) {
+        // State 1: Component missing OR Update available
+        const isUpdate = status.installed && status.needs_update;
+        icon = isUpdate ? 'mdi-information' : 'mdi-alert-circle';
+        color = isUpdate ? 'var(--accent)' : 'var(--warn)';
+        title = i18next.t(isUpdate ? 'settings.system.integration_update_available' : 'settings.system.integration_missing');
+        desc = isUpdate 
+            ? i18next.t('settings.system.integration_update_desc', { installed: status.version_installed, available: status.version_available })
+            : i18next.t('settings.system.integration_missing_desc');
+        
+        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="${!isUpdate ? 'background:var(--warn) !important; color:#000 !important;' : ''}">
+            ${isUpdate ? i18next.t('settings.system.integration_update_btn', { version: status.version_available }) : i18next.t('settings.system.integration_install_btn')}
+        </button>`;
     
-    } else if (status.installed && !status.configured) {
-        // State 3: Component is installed (files exist, HA restarted), but not configured via UI.
+    } else if (status.installed && !status.is_running) {
+        // State 3: Component is installed but not active in HA (Step 2).
         icon = 'mdi-plus-circle';
         color = 'var(--accent)';
         title = i18next.t('settings.system.post_restart_title');
@@ -429,13 +534,6 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
         // Direct link to add the integration
         btnHtml = `<a href="/config/integrations/dashboard/add?domain=js_automations" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.add_integration_btn')}</a>`;
 
-    } else if (status.needs_update) {
-        // An update is available for the installed component.
-        icon = 'mdi-information';
-        color = 'var(--accent)';
-        title = i18next.t('settings.system.integration_update_available');
-        desc = i18next.t('settings.system.integration_update_desc', { installed: status.version_installed || '?', available: status.version_available });
-        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)">${i18next.t('settings.system.integration_update_btn', { version: status.version_available })}</button>`;
     } else {
         // Final state: installed, configured, and up-to-date.
         icon = 'mdi-check-circle';
@@ -467,6 +565,9 @@ async function installIntegration(btn) {
     try {
         const res = await apiFetch('api/system/integration/install', { method: 'POST' });
         if (res.ok) {
+            // Mark restart as pending in session storage
+            sessionStorage.setItem('jsa_integration_restart_pending', 'true');
+            
             const wrapper = document.getElementById('integration-manager-wrapper');
             if (wrapper) checkIntegrationStatus(wrapper, true);
         } else {
