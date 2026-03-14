@@ -131,10 +131,10 @@ function injectSidebarFooter() {
     footer.innerHTML = `
         <div class="system-indicators" style="display:flex; gap:10px; align-items:center;">
             <div class="stat-item" title="Backend Heartbeat">
-                <div id="heartbeat-icon" class="heartbeat-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></div>
+                <i id="heartbeat-icon" class="mdi mdi-circle-outline heartbeat-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
             </div>
             <div id="integration-status-item" class="stat-item" title="HA Integration Status">
-                <div id="integration-status-icon" class="integration-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></div>
+                <i id="integration-status-icon" class="mdi mdi-circle-outline integration-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
             </div>
         </div>
         <div class="status-slots">
@@ -151,7 +151,12 @@ async function checkSystemStatus() {
         const res = await fetch('api/system/integration');
         if (res.ok) {
             const status = await res.json();
-            window.currentIntegrationStatus = status;
+            
+            // Optimistic update: Only overwrite if we don't have a status yet 
+            // or if the new status is actually "better" (connected)
+            if (!window.currentIntegrationStatus || status.is_connected || status.is_running) {
+                window.currentIntegrationStatus = status;
+            }
             updateSystemNotifications();
         }
     } catch (e) {
@@ -161,9 +166,66 @@ async function checkSystemStatus() {
 
 function updateSystemNotifications() {
     const status = window.currentIntegrationStatus;
+
+    // Update Icon State
+    const intIcon = document.getElementById('integration-status-icon');
+    const intItem = document.getElementById('integration-status-item');
+    if (intIcon) {
+        // Check if socket is actually connected
+        const isSocketConnected = window.socket && window.socket.connected;
+
+        // The bridge is "running" if:
+        // 1. The status object says so (fetch/socket)
+        // 2. OR we have cached entities (proof that data is flowing)
+        const hasEntities = window.cachedEntities && window.cachedEntities.length > 0;
+        const isRunning = !!(status && (status.is_running || status.available || status.is_connected)) || 
+                          !!(window._lastIntegrationStatus && (window._lastIntegrationStatus.is_connected || window._lastIntegrationStatus.is_running)) ||
+                          hasEntities;
+
+        const isDev = !!(status && status.dev_mode);
+
+        if (!isSocketConnected) {
+            intIcon.className = 'mdi mdi-circle-outline integration-icon';
+            intIcon.style.color = 'var(--danger)';
+            intIcon.style.opacity = '1';
+            if (intItem) intItem.title = 'HA Integration: Disconnected (Socket)';
+        } else if (!status && !isRunning) {
+            // Checking status...
+            intIcon.className = 'mdi mdi-circle-outline integration-icon';
+            intIcon.style.color = '#999';
+            intIcon.style.opacity = '0.3';
+            if (intItem) intItem.title = 'HA Integration: Checking...';
+        } else if (isRunning) {
+            // Fully active and running
+            intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
+            intIcon.style.color = '#fff';
+            intIcon.style.opacity = '1';
+            if (intItem) intItem.title = 'HA Integration: Active';
+        } else if (isDev && !isRunning) {
+            // Dev Mode but not running yet
+            intIcon.className = 'mdi mdi-circle-outline integration-icon';
+            intIcon.style.color = 'var(--warn)';
+            intIcon.style.opacity = '1';
+            if (intItem) intItem.title = 'HA Integration: Developer Mode (Bridge disconnected)';
+        } else if (status.installed) {
+            // Files present but bridge not active (Legacy or Restart required)
+            intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
+            intIcon.style.color = 'var(--warn)';
+            intIcon.style.opacity = '1';
+            if (intItem) intItem.title = 'HA Integration: Files present, not running (Legacy/Restart needed)';
+        } else {
+            // Missing or not installed
+            intIcon.className = 'mdi mdi-circle-outline integration-icon';
+            intIcon.style.color = '';
+            intIcon.style.opacity = '0.3';
+            if (intItem) intItem.title = 'HA Integration: Not installed';
+        }
+    }
+
     if (!status) return;
-    
-    const needsAttention = !status.installed || status.needs_update;
+
+    // No notification dot in Dev-Mode for missing files
+    const needsAttention = !status.dev_mode && (!status.installed || status.needs_update);
 
     // Update the banner if the handler is available
     if (typeof window.handleIntegrationStatus === 'function') {

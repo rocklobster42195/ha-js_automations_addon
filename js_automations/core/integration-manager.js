@@ -1,16 +1,14 @@
 const fs = require('fs');
 const path = require('path');
+const config = require('./config');
 
 class IntegrationManager {
     constructor(haConfigPath) {
-        // Pfad innerhalb des Containers/Add-ons (Quelle)
-        const config = require('./config');
         // Die Integration muss im addon-Ordner liegen, damit sie im Docker-Image landet
         this.sourceDir = path.resolve(config.ADDON_DIR, 'integration', 'custom_components', 'js_automations');
         
         // Pfad im Home Assistant Config Ordner (Ziel)
-        // Standardmäßig /config, kann aber über ENV oder Konstruktor angepasst werden
-        this.targetDir = path.join(haConfigPath || '/config', 'custom_components', 'js_automations');
+        this.targetDir = path.join(haConfigPath || config.HA_CONFIG_DIR, 'custom_components', 'js_automations');
     }
 
     /**
@@ -20,9 +18,18 @@ class IntegrationManager {
         const internalManifest = this._readManifest(this.sourceDir);
         const installedManifest = this._readManifest(this.targetDir);
 
+        const devMode = !config.IS_ADDON;
+
         // Wenn intern keine Integration liegt (z.B. im Dev-Mode ohne Build), Fehler melden
         if (!internalManifest) {
-            return { installed: false, error: 'Internal integration source not found', version_available: '0.0.0', version_installed: '0.0.0' };
+            return { 
+                installed: !!installedManifest, 
+                error: devMode ? null : 'Internal integration source not found', 
+                version_available: '0.0.0', 
+                version_installed: installedManifest ? installedManifest.version : '0.0.0',
+                dev_mode: devMode,
+                target_path: this.targetDir
+            };
         }
 
         const versionAvailable = internalManifest.version;
@@ -33,7 +40,9 @@ class IntegrationManager {
             installed,
             version_installed: versionInstalled || '0.0.0',
             version_available: versionAvailable,
-            needs_update: installed ? (versionInstalled !== versionAvailable) : true
+            needs_update: installed ? (versionInstalled !== versionAvailable) : true,
+            dev_mode: devMode,
+            target_path: this.targetDir
         };
     }
 
@@ -41,6 +50,10 @@ class IntegrationManager {
      * Installiert oder aktualisiert die Integration.
      */
     async install() {
+        if (!config.IS_ADDON) {
+            throw new Error("Installation is disabled in Developer Mode to prevent overwriting local files.");
+        }
+
         if (!fs.existsSync(this.sourceDir)) {
             throw new Error("Source integration files not found in Add-on.");
         }

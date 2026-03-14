@@ -64,7 +64,8 @@ class Kernel extends EventEmitter {
 
         return {
             ...installedStatus, // contains { installed, needs_update, version_installed, version_available }
-            is_running: isRunning
+            is_running: isRunning,
+            is_connected: this.haConnector.isReady
         };
     }
 
