@@ -21,10 +21,10 @@
 ## Key Features
 
 *   **Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
+*   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
 *   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
 *   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
-*   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
 *   **Script Control:** Expose any script as a `switch` or `button` entity via the `@expose` tag for easy dashboard integration.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
 *   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
@@ -68,6 +68,7 @@ JS Automations features a unique **Hybrid Architecture**. It includes a lightwei
 Unlike other add-ons that rely on MQTT or ephemeral HTTP states, this bridge allows JS Automations to register **true native entities** in the Home Assistant Registry.
 *   **Persistent:** Entities survive Home Assistant reboots.
 *   **Editable:** You can change the icon, name, and area directly in the Home Assistant Device settings.
+*   **Integration-like:** Build custom logic that provides devices and entities appearing natively in Home Assistant.
 *   **Zero Config:** No MQTT broker or complex configuration required.
 
 ### Smart Device Linking (`ha.register`)
@@ -111,7 +112,7 @@ You can expose any script as a native Home Assistant entity by setting the `@exp
  * @icon mdi:robot-happy
  */
 
-// This script will have a switch named "switch.js_automations_my_awesome_script"
+// This script will have a switch named "switch.jsa_my_awesome_script"
 ```
 
 ---
@@ -140,6 +141,19 @@ All script outputs are captured by the central **Log Manager**.
 *   **Live Stream:** View logs in real-time in the dashboard IDE.
 *   **History:** Access past logs via the "Logs" tab in the UI.
 *   **Levels:** Filter by `info`, `warn`, `error`, or `debug` (configurable per script via `@loglevel`).
+
+---
+
+## Live Status Bar
+
+For all you control freaks and data junkies, the IDE includes a configurable live status bar in the footer. It's your personal dashboard for monitoring the addon's health and your most critical entities.
+
+You get three slots to display what matters most:
+*   **CPU Load:** See if a script is pushing the limits or just chilling out.
+*   **RAM Usage:** The ultimate weapon against memory leaks. Watch your script's memory grow and intervene before it's too late.
+*   **Any HA Entity:** Pin any entity from Home Assistant directly to the footer. Keep an eye on your front door sensor, the current energy price, or simply whether the sun is up (`sun.sun`). Why? Because you can.
+
+Each metric comes with a mini **sparkline graph**, giving you an at-a-glance history of the last few moments.
 
 ---
 
