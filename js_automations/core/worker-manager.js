@@ -164,7 +164,7 @@ class WorkerManager extends EventEmitter {
      */
     async republishNativeEntities() {
         if (!this.haConnector || this.nativeEntities.size === 0) return;
-        this.emit('log', { source: 'System', message: `Republishing ${this.nativeEntities.size} native entities...`, level: 'info' });
+        this.emit('log', { source: 'System', message: `Republishing ${this.nativeEntities.size} native entities...`, level: 'debug' });
         
         for (const [entityId, payload] of this.nativeEntities) {
             try {
