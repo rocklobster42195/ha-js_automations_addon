@@ -204,7 +204,7 @@ The integrated editor is smart enough to read your libraries. When you type a fu
 ---
 
 ## API Documentation
-For a complete reference of the `ha` object and other global built-ins, please refer to the API Reference.
+For a complete reference of the `ha` object and other global built-ins, please refer to the [API Reference](API_REFERENCE.md).
 
 
 ---
