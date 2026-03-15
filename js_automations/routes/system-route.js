@@ -3,7 +3,7 @@ const https = require('https');
 const archiver = require('archiver');
 const packageJson = require('../../package.json');
 
-module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR, systemService) => {
+module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR, systemService, getCombinedStatus) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
@@ -41,7 +41,7 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
     // Integration Manager Routes
     router.get('/system/integration', async (req, res) => {
         try {
-            const status = await integrationManager.getStatus();
+            const status = await getCombinedStatus();
             res.json(status);
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -50,7 +50,8 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
 
     router.post('/system/integration/install', async (req, res) => {
         try {
-            const status = await integrationManager.install();
+            await integrationManager.install();
+            const status = await getCombinedStatus();
             res.json(status);
         } catch (e) {
             res.status(500).json({ error: e.message });
