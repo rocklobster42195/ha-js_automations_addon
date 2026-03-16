@@ -152,13 +152,16 @@ class JSAutomationsBaseEntity(RestoreEntity):
 
     def update_data(self, data: dict) -> None:
         """Zentrale Methode zum Verarbeiten von Updates via Service."""
+        # Combine attributes and root data to support JS helpers passing icon/name in attributes
+        combined = {**data.get(CONF_ATTRIBUTES, {}), **data}
+
         # Registry-nahe Attribute
-        if CONF_NAME in data:
-            self._attr_name = data[CONF_NAME]
-        if CONF_ICON in data:
-            self._attr_icon = data[CONF_ICON]
-        if CONF_AVAILABLE in data:
-            self._attr_available = data[CONF_AVAILABLE]
+        if CONF_NAME in combined:
+            self._attr_name = combined[CONF_NAME]
+        if CONF_ICON in combined:
+            self._attr_icon = combined[CONF_ICON]
+        if CONF_AVAILABLE in combined:
+            self._attr_available = combined[CONF_AVAILABLE]
 
         # Plattform-Attribute
         if CONF_UNIT_OF_MEASUREMENT in data:
@@ -319,8 +322,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning(f"Could not update state for unknown entity object: uid='{unique_id}'. The entity might not be loaded yet.")
 
         # --- Update Entity Registry (Name, Icon, Area, Labels) ---
+        combined_data = {**data.get(CONF_ATTRIBUTES, {}), **data}
         registry_update_data = {
-            key: value for key, value in data.items()
+            key: value for key, value in combined_data.items()
             if key in (CONF_NAME, CONF_ICON, CONF_AREA_ID, CONF_LABELS)
         }
         if registry_update_data:
