@@ -166,6 +166,7 @@ async function checkSystemStatus() {
 
 function updateSystemNotifications() {
     const status = window.currentIntegrationStatus;
+    const isSocketConnected = window.socket && window.socket.connected;
 
     // Update Icon State
     const intIcon = document.getElementById('integration-status-icon');
@@ -222,48 +223,16 @@ function updateSystemNotifications() {
         }
     }
 
-    // If the socket is disconnected, we can't trust the update/install status from the 'status' object.
-    // So, we prevent showing a notification based on potentially stale data.
-    const isSocketConnected = window.socket && window.socket.connected;
     if (!isSocketConnected) {
-        const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
-        if (settingsBtn) {
-            settingsBtn.classList.remove('has-notification');
-        }
-        // Also clear the integration banner message
-        if (typeof window.handleIntegrationStatus === 'function') {
-            window.handleIntegrationStatus(null);
-        }
         if (typeof window.renderSettingsCategories === 'function') {
             window.renderSettingsCategories(); // Update settings UI with disconnected state
         }
-        return; // Stop here
     }
-
-    const isSocketConnected = window.socket && window.socket.connected;
 
     if (!status) return;
 
-    // --- Logic for Settings Notification Dot & Banner ---
-    
-    // Base condition for the notification: Is an update needed or is the integration not installed?
-    const needsUpdateAttention = !status.dev_mode && (!status.installed || status.needs_update);
-    let showDot = needsUpdateAttention;
-
-    // If the socket is disconnected, we need to be smart to avoid showing the dot incorrectly.
-    if (!isSocketConnected) {
-        // If the status says the integration IS installed, then the disconnect is temporary.
-        // In this case, we should HIDE the notification, as the update status might be stale.
-        if (status.installed) {
-            showDot = false;
-        }
-        // If status.installed is false, showDot remains true, which is correct (to show "not installed").
-    }
-
-    // Update the banner
+    // Update the banner (Status Bar in Header)
     if (typeof window.handleIntegrationStatus === 'function') {
-        // If disconnected BUT the integration is known to be installed, it's a temporary connection loss.
-        // We can pass `null` to the banner to let it show a generic "disconnected" message.
         if (!isSocketConnected && status.installed) {
             window.handleIntegrationStatus(null);
         } else {
@@ -271,11 +240,13 @@ function updateSystemNotifications() {
         }
     }
 
-    // Apply the final decision to the settings button
+    // --- Logic for Settings Notification Dot ---
+    // The dot indicates if an update is available or the integration is missing.
+    // This should be visible regardless of the current socket connection state.
+    const showDot = !status.dev_mode && (!status.installed || status.needs_update);
     const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
     if (settingsBtn) {
-        if (showDot) settingsBtn.classList.add('has-notification');
-        else settingsBtn.classList.remove('has-notification');
+        settingsBtn.classList.toggle('has-notification', showDot);
     }
     
     // Update Settings Sidebar if open
