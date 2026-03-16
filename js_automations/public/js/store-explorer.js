@@ -221,12 +221,14 @@ async function saveStoreItemFromModal() {
     // Bei Secrets speichern wir Strings oft als Strings, aber JSON ist auch erlaubt.
     let value = valStr;
     try {
+        const trimmedVal = valStr.trim();
         // Nur parsen wenn es wie JSON aussieht ({...} oder [...])
-        if (valStr.trim().startsWith('{') || valStr.trim().startsWith('[')) {
-            value = JSON.parse(valStr);
+        if (trimmedVal.startsWith('{') || trimmedVal.startsWith('[')) {
+            value = JSON.parse(trimmedVal);
         }
     } catch (e) {
-        // Ignore, keep as string
+        // It looked like JSON but failed to parse. Alert the user!
+        alert(`Invalid JSON format: ${e.message}\n\nThe value will be saved as a string.`);
     }
 
     try {

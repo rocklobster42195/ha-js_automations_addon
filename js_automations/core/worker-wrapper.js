@@ -79,7 +79,18 @@ const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;
 
 const sendLog = (level, msg) => {
     if (LOG_LEVELS[level] >= scriptLevel) {
-        parentPort.postMessage({ type: 'log', level, message: msg });
+        let finalMessage = msg;
+        if (msg instanceof Error) {
+            finalMessage = msg.stack || msg.toString();
+        } else if (typeof msg === 'object' && msg !== null) {
+            try {
+                // Pretty-print for better readability in logs
+                finalMessage = JSON.stringify(msg, null, 2);
+            } catch (e) {
+                finalMessage = '[Unserializable Object]';
+            }
+        }
+        parentPort.postMessage({ type: 'log', level, message: String(finalMessage) });
     }
 };
 
