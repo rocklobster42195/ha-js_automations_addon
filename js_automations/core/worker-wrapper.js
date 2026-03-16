@@ -37,7 +37,13 @@ Module.prototype.require = function(requestPath) {
         requiredModule.defaults.headers.common['Connection'] = 'close';
     } catch(e) {
         // This could happen if http/https are not available, though unlikely.
-        console.error("[Worker] Failed to apply essential defaults to axios:", e);
+        if (parentPort) {
+            parentPort.postMessage({ 
+                type: 'log', 
+                level: 'error', 
+                message: `[Worker] Failed to apply essential defaults to axios: ${e.message}` 
+            });
+        }
     }
   }
   return requiredModule;
@@ -206,7 +212,11 @@ function ensureMessageListener() {
 
             if (storeListeners[msg.key]) {
                 storeListeners[msg.key].forEach(cb => {
-                    try { cb(msg.value, oldValue); } catch (e) { console.error(`Store Listener Error (${msg.key}):`, e); }
+                    try { 
+                        cb(msg.value, oldValue); 
+                    } catch (e) { 
+                        ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`); 
+                    }
                 });
             }
         }
@@ -247,19 +257,27 @@ function ensureMessageListener() {
                     if (!match) return;
                 }
 
-                sub.callback({
-                    entity_id: msg.entity_id,
-                    state: msg.state.state,
-                    old_state: msg.old_state?.state,
-                    attributes: msg.state.attributes
-                });
+                try {
+                    sub.callback({
+                        entity_id: msg.entity_id,
+                        state: msg.state.state,
+                        old_state: msg.old_state?.state,
+                        attributes: msg.state.attributes
+                    });
+                } catch (e) {
+                    ha.error(`Error in ha.on callback for ${msg.entity_id}: ${e.message}\n${e.stack}`);
+                }
             });
         }
 
         // Handle master request to stop gracefully
         if (msg.type === 'stop_request') {
             for (const cb of stopCallbacks) {
-                try { await cb(); } catch (e) { console.error("onStop Error:", e); }
+                try { 
+                    await cb(); 
+                } catch (e) { 
+                    ha.error(`onStop Error: ${e.message}\n${e.stack}`); 
+                }
             }
             process.exit(0);
         }
@@ -434,51 +452,53 @@ global.schedule = (exp, cb) => {
     parentPort.ref(); // Keep alive for cron
     ensureMessageListener();
     // Lazy Load Cron only when used
-    return require('node-cron').schedule(exp, cb);
+    return require('node-cron').schedule(exp, async () => {
+        try {
+            await cb();
+        } catch (e) {
+            ha.error(`Scheduled Task Error (${exp}): ${e.message}\n${e.stack}`);
+        }
+    });
 };
 global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
 // --- 5. LIBRARY INJECTION ---
 function loadLibraries() {
     const scriptPath = workerData.path;
-    try {
-        // 1. Skript-Inhalt lesen, um Header zu parsen
-        const content = fs.readFileSync(scriptPath, 'utf8');
+    // 1. Skript-Inhalt lesen, um Header zu parsen
+    const content = fs.readFileSync(scriptPath, 'utf8');
+    
+    // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
+    // Matches: @include lib1.js, lib2.js
+    const includeMatches = content.matchAll(/@include\s+(.+)/g);
+    const librariesToLoad = new Set();
+
+    for (const match of includeMatches) {
+        match[1].split(',').forEach(lib => {
+            const cleanName = lib.trim();
+            if (cleanName) librariesToLoad.add(cleanName);
+        });
+    }
+
+    // 3. Libraries laden und ausführen
+    if (librariesToLoad.size > 0) {
+        // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
+        const libDir = path.join(path.dirname(scriptPath), 'libraries');
         
-        // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
-        // Matches: @include lib1.js, lib2.js
-        const includeMatches = content.matchAll(/@include\s+(.+)/g);
-        const librariesToLoad = new Set();
-
-        for (const match of includeMatches) {
-            match[1].split(',').forEach(lib => {
-                const cleanName = lib.trim();
-                if (cleanName) librariesToLoad.add(cleanName);
-            });
-        }
-
-        // 3. Libraries laden und ausführen
-        if (librariesToLoad.size > 0) {
-            // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
-            const libDir = path.join(path.dirname(scriptPath), 'libraries');
+        librariesToLoad.forEach(libName => {
+            // .js Endung sicherstellen
+            if (!libName.endsWith('.js')) libName += '.js';
             
-            librariesToLoad.forEach(libName => {
-                // .js Endung sicherstellen
-                if (!libName.endsWith('.js')) libName += '.js';
-                
-                const libPath = path.join(libDir, libName);
-                
-                if (fs.existsSync(libPath)) {
-                    const libCode = fs.readFileSync(libPath, 'utf8');
-                    // Führt den Code im globalen Kontext dieses Workers aus
-                    vm.runInThisContext(libCode, { filename: libPath });
-                } else {
-                    ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
-                }
-            });
-        }
-    } catch (e) {
-        ha.error(`Library Injection Error: ${e.message}`);
+            const libPath = path.join(libDir, libName);
+            
+            if (fs.existsSync(libPath)) {
+                const libCode = fs.readFileSync(libPath, 'utf8');
+                // Führt den Code im globalen Kontext dieses Workers aus
+                vm.runInThisContext(libCode, { filename: libPath });
+            } else {
+                ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
+            }
+        });
     }
 }
 
