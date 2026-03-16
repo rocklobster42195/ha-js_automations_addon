@@ -313,6 +313,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         if unique_id in hass.data[DOMAIN][DATA_ENTITIES]:
             entity = hass.data[DOMAIN][DATA_ENTITIES][unique_id]
+            entity_id = entity.entity_id
             entity.update_data(data) # MS11 BaseEntity Logic
             
             # Zentraler Schreibbefehl nach dem vollständigen Update
@@ -320,15 +321,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entity.async_write_ha_state()
         else:
             _LOGGER.warning(f"Could not update state for unknown entity object: uid='{unique_id}'. The entity might not be loaded yet.")
+            entity_id = get_entity_id_by_unique_id(unique_id)
 
         # --- Update Entity Registry (Name, Icon, Area, Labels) ---
+        # This ensures that icons/names passed via ha.update (even in attributes) 
+        # are persisted in the HA Entity Registry to override UI defaults.
         combined_data = {**data.get(CONF_ATTRIBUTES, {}), **data}
         registry_update_data = {
             key: value for key, value in combined_data.items()
             if key in (CONF_NAME, CONF_ICON, CONF_AREA_ID, CONF_LABELS)
         }
-        if registry_update_data:
-            entity_id = get_entity_id_by_unique_id(unique_id)
+        if registry_update_data and entity_id:
             if entity_id:
                 update_payload = {}
                 if CONF_NAME in registry_update_data:
