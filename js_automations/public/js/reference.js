@@ -170,13 +170,13 @@ const referenceManager = {
         // 3. Categorize
         const categories = {
             'Logging': ['ha.log', 'ha.warn', 'ha.error', 'ha.debug'],
-            'Events & Triggers': ['ha.on', 'ha.onStop', 'schedule'],
+            'Events & Triggers': ['ha.on', 'ha.onStop', 'ha.onError', 'schedule'],
             'State Management': ['ha.getState', 'ha.update', 'ha.register', 'ha.getAttr', 'ha.getStateValue'],
             'Services': ['ha.callService'],
             'Data Store': ['ha.store'],
             'Utilities': ['sleep', 'axios', 'ha.getHeader', 'ha.getGroupMembers'],
             'Selectors': ['ha.select'],
-            'Types & Interfaces': ['HAAttributes', 'HAState', 'EntitySelector', 'ServiceMap', 'ChangeFilter', 'EntityID']
+            'Types & Interfaces': ['HAAttributes', 'HAState', 'EntitySelector', 'ServiceMap', 'ChangeFilter', 'EntityID', 'StateChangeData', 'BackgroundErrorData']
         };
 
         const result = {};

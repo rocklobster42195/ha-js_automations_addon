@@ -93,7 +93,7 @@ Create virtual sensors or update existing ones directly in HA.
 
 ```javascript
 // Register the entity once (Persistent)
-ha.register('sensor.js_energy_total', {
+ha.register('sensor.energy_total', {
     name: 'Total Calculated Energy',
     icon: 'mdi:transmission-tower',
     unit: 'kWh',                    // Alias for unit_of_measurement
@@ -103,10 +103,10 @@ ha.register('sensor.js_energy_total', {
 });
 
 // Update only the value
-ha.update('sensor.js_energy_total', 1251.0);
+ha.update('sensor.energy_total', 1251.0);
 
 // Update only the icon (keeps current value)
-ha.update('sensor.js_energy_total', { icon: 'mdi:flash-alert' });
+ha.update('sensor.energy_total', { icon: 'mdi:flash-alert' });
 ```
 
 ### 6. Calling Services (`ha.callService`)
@@ -175,6 +175,23 @@ ha.store.on('guest_mode', (newValue, oldValue) => {
 
 // Delete a value
 ha.store.delete('temp_variable');
+```
+
+### 9. Global Error Handling (`ha.onError`)
+Define a global "catch-all" function to handle uncaught exceptions and unhandled promise rejections. This does **not** replace `try/catch` blocks, which should still be used for predictable errors.
+
+Instead, `ha.onError` acts as a safety net for unexpected errors, especially those from asynchronous operations or third-party libraries. It allows you to perform cleanup, log detailed information, or attempt a recovery, like restarting the script.
+
+```javascript
+ha.onError((error) => {
+    // Log the unexpected error
+    ha.error(`A critical, unhandled error occurred: ${error.message}`);
+    ha.error(error.stack); // Log the full stack trace for debugging
+
+    // Attempt to recover by restarting the script in 10 seconds
+    ha.log('Attempting to restart script in 10 seconds...');
+    setTimeout(() => ha.restart(), 10000);
+});
 ```
 
 ---

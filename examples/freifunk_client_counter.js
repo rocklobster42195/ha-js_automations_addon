@@ -23,6 +23,16 @@ const unifi = new Unifi.Controller({
   sslverify: false
 });
 
+// This handler catches non-fatal background errors from the wrapper,
+// like the WebSocket dropping unexpectedly.
+ha.onError((err) => {
+    if (err.type === 'background' && err.message.includes('WebSocket')) {
+        ha.warn(`[Freifunk Counter] A background WebSocket error occurred: ${err.message}`);
+        ha.warn(`[Freifunk Counter] The script continues to run, but the connection may be unstable and will try to reconnect.`);
+        // Optional: You could implement a counter here to restart the script after multiple errors.
+    }
+});
+
 let lastCount = -1;
 let debounceTimer;
 ha.register('sensor.freifunk_clients', {
