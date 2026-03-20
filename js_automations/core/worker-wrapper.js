@@ -55,6 +55,42 @@ parentPort.unref();
 // 🛡️ GLOBALER CRASH HANDLER
 // Fängt Fehler ab, die das Skript sonst kommentarlos beenden würden.
 process.on('uncaughtException', (err) => {
+    // Known Issue: node-unifi wirft manchmal Fehler aus internen Timeouts,
+    // wenn die Verbindung noch aufgebaut wird. Wir ignorieren diese, damit das Skript weiterläuft.
+    if (err.message && err.message.includes('WebSocket is not open')) {
+        if (parentPort) {
+            parentPort.postMessage({
+                type: 'log',
+                level: 'warn',
+                source: workerData.name || 'System',
+                message: `⚠️ Background Error Suppressed: ${err.message}`
+            });
+
+            // Notify the script itself if a handler is registered
+            if (errorCallbacks.length > 0) {
+                const errorData = { 
+                    message: err.message, 
+                    stack: err.stack,
+                    type: 'background' // To identify the error source
+                };
+                errorCallbacks.forEach(cb => {
+                    try {
+                        cb(errorData);
+                    } catch (e) {
+                        // Log an error if the user's error handler itself crashes
+                        parentPort.postMessage({
+                            type: 'log',
+                            level: 'error',
+                            source: workerData.name || 'System',
+                            message: `🔥 CRASH inside ha.onError handler: ${e.message}\n${e.stack}`
+                        });
+                    }
+                });
+            }
+        }
+        return; // Prozess NICHT beenden!
+    }
+
     if (parentPort) {
         parentPort.postMessage({
             type: 'log',
@@ -109,6 +145,7 @@ const storeValues = workerData.initialStore || {};
 const storeListeners = {};
 const subscriptionCallbacks = [];
 const stopCallbacks = [];
+const errorCallbacks = [];
 let isListening = false;
 
 /**
@@ -421,6 +458,13 @@ const ha = {
     onStop: (cb) => {
         ensureMessageListener();
         stopCallbacks.push(cb);
+    },
+
+    onError: (cb) => {
+        if (typeof cb === 'function') {
+            errorCallbacks.push(cb);
+            parentPort.ref(); // Keep process alive if an error handler is used
+        }
     },
 
     // Persistent Store
