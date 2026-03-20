@@ -241,12 +241,21 @@ function updateSystemNotifications() {
     }
 
     // --- Logic for Settings Notification Dot ---
-    // The dot indicates if an update is available or the integration is missing.
-    // This should be visible regardless of the current socket connection state.
-    const showDot = !status.dev_mode && (!status.installed || status.needs_update);
+    // The dot indicates if an update is available or a restart is required.
+    // This is independent of the socket connection state.
     const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
     if (settingsBtn) {
-        settingsBtn.classList.toggle('has-notification', showDot);
+        // Reset state first
+        settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
+
+        if (!status.dev_mode) {
+            // Priority: Restart (Lila) > Update/Install (Orange)
+            if (status.needs_restart) {
+                settingsBtn.classList.add('badge-info');
+            } else if (!status.installed || status.needs_update) {
+                settingsBtn.classList.add('badge-warning');
+            }
+        }
     }
     
     // Update Settings Sidebar if open

@@ -99,8 +99,13 @@ function renderSettingsCategories() {
         if (cat.id === 'system' && window.currentIntegrationStatus) {
             const s = window.currentIntegrationStatus;
             // Im Dev-Mode keine Notification-Dots anzeigen, da der User manuell verwaltet
-            if (!s.dev_mode && (!s.installed || s.needs_update)) {
-                btn.classList.add('has-notification');
+            if (!s.dev_mode) {
+                // Priorität: Neustart (Lila) > Update/Install (Orange)
+                if (s.needs_restart) {
+                    btn.classList.add('badge-info'); // Lila (CSS muss definiert sein)
+                } else if (!s.installed || s.needs_update) {
+                    btn.classList.add('badge-warning'); // Orange
+                }
             }
         }
 
@@ -461,6 +466,20 @@ async function loadEntitiesForAutocomplete() {
 }
 
 /**
+ * Triggert den HA Neustart.
+ */
+async function restartHA() {
+    if (!confirm(i18next.t('settings.system.confirm_restart_ha'))) return;
+    
+    try {
+        await apiFetch('api/system/restart-ha', { method: 'POST' });
+        // UI Feedback: Connection loss overlay will handle the rest via socket events
+    } catch (e) {
+        alert(i18next.t('settings.system.integration_error_alert', { error: e.message }));
+    }
+}
+
+/**
  * Prüft den Status der HA Integration und rendert die UI.
  */
 async function checkIntegrationStatus(container, showRestartHint = false) {
@@ -486,14 +505,6 @@ async function checkIntegrationStatus(container, showRestartHint = false) {
 function renderIntegrationUI(container, status, showRestartHint = false) {
     let icon, color, title, desc, btnHtml = '';
 
-    // Check if a restart is pending (either passed as arg or stored in session)
-    const isRestartPending = showRestartHint || sessionStorage.getItem('jsa_integration_restart_pending') === 'true';
-
-    if (status.is_running) {
-        // If it's running, clear any pending restart flags
-        sessionStorage.removeItem('jsa_integration_restart_pending');
-    }
-
     if (status.dev_mode) {
         // Developer Mode: Manual management
         icon = status.active ? 'mdi-check-circle' : 'mdi-developer-board';
@@ -509,13 +520,13 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
         }
         btnHtml = ''; 
 
-    } else if (isRestartPending && !status.is_running) {
-        // State 2: Files have just been copied.
+    } else if (status.needs_restart) {
+        // State 2: Files copied or mismatch -> Restart needed
         icon = 'mdi-restart-alert';
-        color = 'var(--accent)';
+        color = '#b05dff'; // Lila/Purple signaling restart
         title = i18next.t('settings.system.post_install_title');
         desc = i18next.t('settings.system.post_install_desc');
-        btnHtml = `<a href="/config/server_control" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.go_to_restart_btn')}</a>`;
+        btnHtml = `<button class="btn-primary" onclick="restartHA()" style="background-color: #6200ea;">${i18next.t('settings.system.restart_ha_btn')}</button>`;
     
     } else if (!status.installed || status.needs_update) {
         // State 1: Component missing OR Update available
@@ -531,15 +542,6 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
             ${isUpdate ? i18next.t('settings.system.integration_update_btn', { version: status.version_available }) : i18next.t('settings.system.integration_install_btn')}
         </button>`;
     
-    } else if (status.installed && !status.is_running) {
-        // State 3: Component is installed but not active in HA (Step 2).
-        icon = 'mdi-plus-circle';
-        color = 'var(--accent)';
-        title = i18next.t('settings.system.post_restart_title');
-        desc = i18next.t('settings.system.post_restart_desc');
-        // Direct link to add the integration
-        btnHtml = `<a href="/config/integrations/dashboard/add?domain=js_automations" target="_blank" rel="noopener noreferrer" class="btn-primary">${i18next.t('settings.system.add_integration_btn')}</a>`;
-
     } else {
         // Final state: installed, configured, and up-to-date.
         icon = 'mdi-check-circle';
@@ -571,8 +573,6 @@ async function installIntegration(btn) {
     try {
         const res = await apiFetch('api/system/integration/install', { method: 'POST' });
         if (res.ok) {
-            // Mark restart as pending in session storage
-            sessionStorage.setItem('jsa_integration_restart_pending', 'true');
             
             const wrapper = document.getElementById('integration-manager-wrapper');
             if (wrapper) checkIntegrationStatus(wrapper, true);
@@ -592,5 +592,6 @@ async function installIntegration(btn) {
 // Auto-load settings on startup
 window.openSettingsTab = openSettingsTab;
 window.loadSettingsData = loadSettingsData;
+window.restartHA = restartHA;
 window.installIntegration = installIntegration;
 window.renderSettingsCategories = renderSettingsCategories;

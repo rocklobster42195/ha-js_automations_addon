@@ -102,6 +102,17 @@ app.use('/api/scripts', scriptsRouter);
 app.use('/api/store', storeRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/ha', haRouter);
+
+// System Restart Route (Directly here to access integrationManager easily)
+app.post('/api/system/restart-ha', async (req, res) => {
+    try {
+        await integrationManager.restartHomeAssistant();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.use('/api', systemRouter);
 
 

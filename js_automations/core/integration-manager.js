@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
+const axios = require('axios');
 
 class IntegrationManager {
     constructor(haConfigPath) {
@@ -83,6 +84,24 @@ class IntegrationManager {
             return await this.getStatus();
         } catch (e) {
             console.error("Integration Install Failed:", e);
+            throw e;
+        }
+    }
+
+    /**
+     * Startet Home Assistant über die Supervisor API neu.
+     */
+    async restartHomeAssistant() {
+        if (!process.env.SUPERVISOR_TOKEN) {
+            throw new Error("Supervisor Token not found. Cannot restart Home Assistant.");
+        }
+        try {
+            await axios.post('http://supervisor/core/restart', {}, {
+                headers: { 'Authorization': `Bearer ${process.env.SUPERVISOR_TOKEN}` }
+            });
+            return true;
+        } catch (e) {
+            console.error("IntegrationManager: Failed to restart Home Assistant:", e.message);
             throw e;
         }
     }
