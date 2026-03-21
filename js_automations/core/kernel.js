@@ -65,11 +65,20 @@ class Kernel extends EventEmitter {
         
         // This remains the single source of truth for the kernel's internal logic.
         this.hasIntegration = runtimeInfo.available;
+        const isConnected = this.haConnector.isReady;
+
+        // Fix: Status-Flags bereinigen, wenn keine Verbindung besteht.
+        // Verhindert False-Positives (Oranger/Lila Punkt) beim Start/Reload, 
+        // da loadedComponents leer sein könnte und somit fälschlich "needs_restart" auslöst.
+        if (!isConnected) {
+            installedStatus.needs_update = false;
+            installedStatus.needs_restart = false;
+        }
 
         return {
             ...installedStatus, // contains { installed, needs_update, version_installed, version_available }
             is_running: runtimeInfo.available,
-            is_connected: this.haConnector.isReady,
+            is_connected: isConnected,
             display_version: runtimeInfo.version || (installedStatus.installed ? installedStatus.version_installed : null)
         };
     }

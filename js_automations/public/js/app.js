@@ -248,7 +248,8 @@ function updateSystemNotifications() {
         // Reset state first
         settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
 
-        if (!status.dev_mode) {
+        // Fix: Nur anzeigen, wenn Backend mit HA verbunden ist, um Fehlalarme beim Start zu vermeiden.
+        if (!status.dev_mode && status.is_connected) {
             // Priority: Restart (Lila) > Update/Install (Orange)
             if (status.needs_restart) {
                 settingsBtn.classList.add('badge-info');
