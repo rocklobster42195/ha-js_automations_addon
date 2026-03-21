@@ -454,7 +454,93 @@ const ha = {
         }
         subscriptionCallbacks.push({ pattern, callback, filter, threshold });
     },
+
+    /**
+     * Waits for a specific event or state change.
+     * Returns a Promise that resolves when the condition is met.
+     */
+    waitFor: (pattern, arg2, arg3, arg4) => {
+        return new Promise((resolve, reject) => {
+            let filter, threshold, options = {};
+
+            // Helper to identify the options object
+            const isOptions = (o) => typeof o === 'object' && o !== null && !Array.isArray(o);
+
+            if (isOptions(arg2)) {
+                options = arg2;
+            } else if (isOptions(arg3)) {
+                filter = arg2;
+                options = arg3;
+            } else if (isOptions(arg4)) {
+                filter = arg2;
+                threshold = arg3;
+                options = arg4;
+            } else {
+                if (arg2 !== undefined) filter = arg2;
+                if (arg3 !== undefined) threshold = arg3;
+            }
+
+            const timeoutMs = options.timeout || 5000;
+            let timer;
+
+            const callback = (event) => {
+                clearTimeout(timer);
+                const idx = subscriptionCallbacks.indexOf(subscription);
+                if (idx !== -1) subscriptionCallbacks.splice(idx, 1);
+                resolve(event);
+            };
+
+            const subscription = { pattern, callback, filter, threshold };
+            
+            ensureMessageListener();
+            parentPort.postMessage({ type: 'subscribe', pattern });
+            subscriptionCallbacks.push(subscription);
+
+            timer = setTimeout(() => {
+                const idx = subscriptionCallbacks.indexOf(subscription);
+                if (idx !== -1) subscriptionCallbacks.splice(idx, 1);
+                reject(new Error(`Timeout waiting for ${pattern}`));
+            }, timeoutMs);
+        });
+    },
     
+    /**
+     * Waits until a specific condition function returns true.
+     * This is useful for complex state checks involving multiple entities.
+     */
+    waitUntil: (condition, options = {}) => {
+        const overallTimeout = options.timeout || 30000; // Default 30s overall timeout
+        const pollInterval = options.pollInterval || 5000; // Default 5s wait between checks
+
+        return new Promise(async (resolve, reject) => {
+            const startTime = Date.now();
+
+            // Initial check
+            if (condition()) {
+                return resolve();
+            }
+
+            while (Date.now() - startTime < overallTimeout) {
+                try {
+                    // Wait for ANY state change to re-evaluate efficiently.
+                    // A timeout is used here to periodically re-check even if no events fire.
+                    await ha.waitFor(/.*/, { timeout: pollInterval });
+                } catch (e) {
+                    // This catch is for the ha.waitFor timeout, which is expected.
+                    // We just continue the loop to re-check the condition.
+                }
+
+                // Re-check the condition after a wait or an event
+                if (condition()) {
+                    return resolve();
+                }
+            }
+
+            // If the loop finishes, it means the overall timeout was reached.
+            reject(new Error(`waitUntil timed out after ${overallTimeout / 1000}s`));
+        });
+    },
+
     onStop: (cb) => {
         ensureMessageListener();
         stopCallbacks.push(cb);
@@ -491,6 +577,56 @@ const ha = {
 
 // Injection
 global.ha = ha;
+
+/**
+ * Helper to create a deep, recursive proxy that triggers a callback on any modification.
+ * @param {object} target The object to wrap.
+ * @param {function} onSave The callback to execute on change.
+ * @returns {Proxy}
+ */
+function createDeepProxy(target, onSave) {
+    const proxyCache = new WeakMap();
+
+    const handler = {
+        get(obj, prop) {
+            const value = Reflect.get(obj, prop);
+            if (typeof value === 'object' && value !== null) {
+                if (proxyCache.has(value)) return proxyCache.get(value);
+                const newProxy = createDeepProxy(value, onSave);
+                proxyCache.set(value, newProxy);
+                return newProxy;
+            }
+            return value;
+        },
+        set(obj, prop, value) {
+            const success = Reflect.set(obj, prop, value);
+            if (success) onSave();
+            return success;
+        },
+        deleteProperty(obj, prop) {
+            const success = Reflect.deleteProperty(obj, prop);
+            if (success) onSave();
+            return success;
+        }
+    };
+    return new Proxy(target, handler);
+}
+
+ha.persistent = (key, defaultValue = {}) => {
+    let target = ha.store.get(key);
+    if (target === undefined || target === null || typeof target !== 'object' || Array.isArray(target) !== Array.isArray(defaultValue)) {
+        target = defaultValue;
+        ha.store.set(key, target);
+    }
+
+    let saveTimeout;
+    const debouncedSave = () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => ha.store.set(key, target), 50);
+    };
+
+    return createDeepProxy(target, debouncedSave);
+};
 
 global.schedule = (exp, cb) => {
     parentPort.ref(); // Keep alive for cron

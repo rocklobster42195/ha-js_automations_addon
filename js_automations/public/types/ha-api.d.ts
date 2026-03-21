@@ -40,7 +40,7 @@ interface EntitySelector<T = HAAttributes> {
     count: number;
     /** Executes a function for each entity in the selection */
     each(callback: (entity: HAState<T>) => void): EntitySelector<T>;
-    /** Maps the selection to a new array */
+    /** Maps the selection to a new array of values. */
     map<R>(callback: (entity: HAState<T>) => R): R[];
     /** Filters the current selection */
     where(callback: (entity: HAState<T>) => boolean): EntitySelector<T>;
@@ -128,6 +128,15 @@ interface HA {
         on(key: string, callback: (newValue: any, oldValue: any) => void): void;
     };
 
+    /**
+     * Creates a "magic" persistent object that automatically saves changes.
+     * Under the hood, it uses a JS Proxy to intercept assignments and calls `ha.store.set()`.
+     * @param key The key to use in the global store.
+     * @param defaultValue The default object to create if the key doesn't exist.
+     * @returns A proxied object that you can modify directly.
+     */
+    persistent<T extends object>(key: string, defaultValue: T): T;
+
     /** Real-time cache of all Home Assistant states. */
     states: Record<EntityID, HAState>;
 
@@ -177,8 +186,44 @@ interface HA {
      */
     on<T = HAAttributes>(pattern: EntityID | string | string[] | RegExp, filter: ChangeFilter, threshold: number | string, callback: (event: { entity_id: string; state: string; old_state?: string; attributes: T; }) => void): void;
 
+    /**
+     * Waits for a state change.
+     * @param pattern Entity ID or pattern
+     * @param options Timeout settings (default: 5000ms)
+     */
+    waitFor<T = HAAttributes>(pattern: EntityID | string | string[] | RegExp, options?: { timeout?: number }): Promise<{ entity_id: string; state: string; old_state?: string; attributes: T; }>;
+
+    /**
+     * Waits for a state change with a filter.
+     * @param pattern Entity ID or pattern
+     * @param filter Condition (e.g. 'eq', 'gt')
+     * @param options Timeout settings (default: 5000ms)
+     */
+    waitFor<T = HAAttributes>(pattern: EntityID | string | string[] | RegExp, filter: ChangeFilter, options?: { timeout?: number }): Promise<{ entity_id: string; state: string; old_state?: string; attributes: T; }>;
+
+    /**
+     * Waits for a state change with a filter and threshold.
+     * @param pattern Entity ID or pattern
+     * @param filter Condition (e.g. 'eq', 'gt')
+     * @param threshold Value to compare against
+     * @param options Timeout settings (default: 5000ms)
+     */
+    waitFor<T = HAAttributes>(pattern: EntityID | string | string[] | RegExp, filter: ChangeFilter, threshold: number | string, options?: { timeout?: number }): Promise<{ entity_id: string; state: string; old_state?: string; attributes: T; }>;
+
+    /**
+     * Pauses script execution until a condition function returns true.
+     * This is useful for waiting on complex states involving multiple entities.
+     * @param condition A function that returns true when the wait should end.
+     * @param options Timeout settings. `timeout` is the maximum total wait time (default 30s).
+     * `pollInterval` is the maximum time between condition checks (default 5s).
+     */
+    waitUntil(condition: () => boolean, options?: { timeout?: number, pollInterval?: number }): Promise<void>;
+
     /** Registers a callback to run when the script stops. */
     onStop(callback: () => void): void;
+
+    /** Registers a global error handler for the script. */
+    onError(callback: (error: { message: string, stack?: string, type: string }) => void): void;
 
     /** Selects multiple entities for bulk operations. */
     select<T = HAAttributes>(pattern: string | RegExp): EntitySelector<T>;
