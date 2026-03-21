@@ -24,9 +24,12 @@
 *   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
 *   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
 *   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
-*   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead.
+*   **Complex Conditions:** Use `await ha.waitUntil()` to pause scripts until multiple conditions are met.
+*   **Linear Logic:** Use `await ha.waitFor()` to pause scripts until specific events occur, eliminating callback hell.
+*   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead. Includes safe helper functions like `ha.getStateValue()` for convenient access.
 *   **Script Control:** Expose any script as a `switch` or `button` entity via the `@expose` tag for easy dashboard integration.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
+*   **Magic Variables (`ha.persistent`):** Work with persistent data like normal objects. Changes to top-level and **nested properties** are automatically saved.
 *   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
 *   **Global Libraries:** Create reusable code modules and include them in any script using the `@include` tag.
 *   **Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
@@ -327,19 +330,18 @@ Instead of writing 50 separate automations, this script scans your entire home f
 async function scanBatteries() {
     ha.log("Starting battery scan...");
     
-    // Select all sensors ending with '_battery'
-    const lowDevices = ha.select('sensor.*_battery')
+    // Select all battery sensors, filter for low levels, and directly map them to their friendly names.
+    const lowDeviceNames = ha.select('sensor.*_battery')
         .where(s => {
             const val = parseFloat(s.state);
             return val < 15 && s.state !== 'unavailable' && s.state !== 'unknown';
         })
-        .toArray();
+        .map(s => s.attributes.friendly_name || s.entity_id); // Uses the chained .map() function
 
-    if (lowDevices.length > 0) {
-        const names = lowDevices.map(s => s.attributes.friendly_name || s.entity_id).join(', ');
+    if (lowDeviceNames.length > 0) {
+        const names = lowDeviceNames.join(', ');
         ha.warn(`Low battery levels detected: ${names}`);
         
-        // Send a persistent notification to the Home Assistant UI
         ha.callService('notify', 'persistent_notification', {
             title: 'Low Battery Alert',
             message: `The following devices need new batteries: ${names}`
@@ -366,34 +368,146 @@ This example demonstrates how to use `ha.restart()` and `ha.stop()` to build rob
  * @description Fetches data and restarts itself on failure (max 3 times).
  * @npm axios
  */
-
 const axios = require('axios');
 const MAX_RETRIES = 3;
-const RETRY_KEY = 'watchdog_retries';
+
+// This object's properties, including nested ones, will survive script restarts.
+const memory = ha.persistent('watchdog_memory', { 
+    status: { retries: 0, last_error: null } 
+});
 
 async function fetchData() {
     try {
         // Simulate API call
         const response = await axios.get('https://api.example.com/data');
         ha.log("Data fetched successfully: " + response.status);
-        
+
         // Success: Reset retry counter and stop
-        ha.store.set(RETRY_KEY, 0);
+        memory.status.retries = 0; // This nested change is automatically saved!
         ha.stop("Job finished successfully");
-        
+
     } catch (e) {
-        const retries = ha.store.get(RETRY_KEY) || 0;
-        
-        if (retries < MAX_RETRIES) {
-            ha.warn(`Fetch failed (${e.message}). Restarting (Attempt ${retries + 1}/${MAX_RETRIES})...`);
-            ha.store.set(RETRY_KEY, retries + 1);
+        if (memory.status.retries < MAX_RETRIES) {
+            ha.warn(`Fetch failed (${e.message}). Restarting (Attempt ${memory.status.retries + 1}/${MAX_RETRIES})...`);
+            memory.status.retries++; // The increment is also saved automatically
+            memory.status.last_error = e.message;
             ha.restart("API Error - Self Healing");
         } else {
             ha.error(`Failed after ${MAX_RETRIES} attempts. Giving up.`);
-            ha.store.set(RETRY_KEY, 0); // Reset for next manual start
+            memory.status.retries = 0; // Reset for the next manual run
             ha.stop("Too many failures");
         }
     }
 }
 
 fetchData();
+```
+
+### Data Transformation with `.map()`
+The `.map()` function allows you to transform the results of a `ha.select()` query directly into an array of different values, such as names or attributes. This is more efficient and leads to cleaner code than iterating with `.each()`.
+
+```javascript
+/**
+ * @name List Active Lights
+ * @icon mdi:lightbulb-group
+ * @description Creates a comma-separated list of all currently active lights.
+ * @expose button
+ */
+
+// Select all lights that are 'on' and directly map the result to an array of their names.
+const activeLightNames = ha.select('light.*')
+    .where(light => light.state === 'on')
+    .map(light => light.attributes.friendly_name || light.entity_id);
+
+if (activeLightNames.length > 0) {
+    const list = activeLightNames.join(', ');
+    ha.log(`The following lights are currently on: ${list}`);
+    
+    // You can now use this list in a notification.
+    ha.callService('notify', 'persistent_notification', {
+        title: 'Active Lights',
+        message: list
+    });
+
+} else {
+    ha.log("All lights are currently off.");
+}
+
+// Since this script has no listeners (like ha.on or schedule),
+// it will stop automatically after execution.
+// Pressing the button will run it again.
+```
+
+### Sequential Logic with `ha.waitFor()`
+
+The `ha.waitFor()` function allows you to write complex, sequential automations that read like a simple, step-by-step script. It pauses the script's execution until a specific state is reached, eliminating "callback hell" and the need for manual timers.
+
+This example opens a garage door, waits for it to be fully open, and only then turns on the light.
+
+```javascript
+/**
+ * @name Smart Garage Opener
+ * @icon mdi:garage-open-variant
+ * @description Opens the garage door and turns on the light only after the door is fully open.
+ * @expose button
+ */
+
+// The main logic must be in an 'async' function to use 'await'.
+async function openGarageSequence() {
+    const GARAGE_DOOR = 'cover.garage_door';
+    const GARAGE_LIGHT = 'light.garage_light';
+
+    ha.log('Starting garage sequence...');
+    ha.callService('cover', 'open_cover', { entity_id: GARAGE_DOOR });
+
+    try {
+        // Pause the script here and wait for the door's state to become 'open'.
+        // If it doesn't happen within 30 seconds, it will throw an error.
+        await ha.waitFor(GARAGE_DOOR, 'eq', 'open', { timeout: 30000 });
+
+        // This code only runs if ha.waitFor() was successful.
+        ha.log('Garage door is fully open. Turning on the light.');
+        ha.callService('light', 'turn_on', { entity_id: GARAGE_LIGHT });
+
+    } catch (e) {
+        // This code runs if the 30-second timeout was reached.
+        ha.error(`Garage door did not open in time! Error: ${e.message}`);
+    }
+}
+
+// Run the main function.
+openGarageSequence();
+```
+
+### Complex Conditions with `ha.waitUntil()`
+
+While `ha.waitFor()` is great for single events, `ha.waitUntil()` shines when you need to wait for a complex state involving multiple entities. It repeatedly checks a condition you provide and only continues when it returns `true`.
+
+This example waits until both the TV and the soundbar are on before setting a "Movie Time" scene.
+
+```javascript
+/**
+ * @name Movie Time Scene
+ * @icon mdi:movie-open
+ * @description Waits for TV and Soundbar to be on, then dims the lights.
+ * @expose button
+ */
+
+async function movieTime() {
+    const isReady = () => 
+        ha.getStateValue('media_player.living_room_tv') === 'on' &&
+        ha.getStateValue('switch.living_room_soundbar') === true;
+
+    if (isReady()) {
+        ha.log("TV and Soundbar are already on.");
+    } else {
+        ha.log("Waiting for TV and Soundbar to be turned on...");
+        await ha.waitUntil(isReady, { timeout: 120000 }); // Wait up to 2 minutes
+    }
+
+    ha.log("Movie time is ready! Dimming lights.");
+    ha.callService('scene', 'turn_on', { entity_id: 'scene.movie_dim' });
+}
+
+movieTime();
+```

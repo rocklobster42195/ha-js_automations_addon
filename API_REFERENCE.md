@@ -62,7 +62,51 @@ ha.on('sensor.temperature', 'gt', 25, (e) => {
 });
 ```
 
-### 4. Reading States (`ha.states`)
+### 4. Waiting for States (`ha.waitFor` / `ha.waitUntil`)
+Pause script execution until a specific condition is met, without complex callbacks. These functions return a `Promise` and are best used inside `async` functions with `await`.
+
+#### `ha.waitFor`
+Waits for a single state-change event to occur for a specific entity or pattern. It resolves with the event object once the condition is met or rejects if a timeout is reached.
+
+```javascript
+async function openGarage() {
+    // This script might be triggered by a button press
+    if (ha.states['cover.garage_door'].state === 'closed') {
+        ha.log('Opening garage door...');
+        ha.callService('cover', 'open_cover', { entity_id: 'cover.garage_door' });
+
+        try {
+            // Wait for the door to be fully open, with a 30-second timeout
+            await ha.waitFor('cover.garage_door', 'eq', 'open', { timeout: 30000 });
+            ha.log('Garage door is now open.');
+        } catch (e) {
+            ha.error('Garage door did not open in time.');
+        }
+    }
+}
+```
+
+#### `ha.waitUntil`
+Waits until a custom condition function returns `true`. This is ideal for complex scenarios involving multiple entities or attributes. The condition is checked efficiently whenever *any* state changes, and also on a regular poll interval.
+
+```javascript
+async function startMovieMode() {
+    ha.log('Starting movie mode...');
+    ha.callService('light', 'turn_off', { entity_id: 'group.living_room_lights' });
+    ha.callService('media_player', 'turn_on', { entity_id: 'media_player.tv' });
+
+    // Wait until all lights are off AND the TV is on
+    await ha.waitUntil(() => {
+        const lightsOff = ha.getStateValue('group.living_room_lights') === 'off';
+        const tvOn = ha.getStateValue('media_player.tv') === 'playing';
+        return lightsOff && tvOn;
+    }, { timeout: 45000 }); // 45s timeout
+
+    ha.log('Movie mode is active!');
+}
+```
+
+### 5. Reading States (`ha.states`)
 The cache is updated in real-time. No `await` required.
 
 ```javascript
@@ -88,7 +132,7 @@ const lights = ha.getGroupMembers('group.living_room_lights');
 const scriptName = ha.getHeader('name', 'script');
 ```
 
-### 5. Setting States & Creating Sensors (`ha.updateState`)
+### 6. Setting States & Creating Sensors (`ha.updateState`)
 Create virtual sensors or update existing ones directly in HA.
 
 ```javascript
@@ -109,7 +153,7 @@ ha.update('sensor.energy_total', 1251.0);
 ha.update('sensor.energy_total', { icon: 'mdi:flash-alert' });
 ```
 
-### 6. Calling Services (`ha.callService`)
+### 7. Calling Services (`ha.callService`)
 Trigger any action in Home Assistant.
 
 ```javascript
@@ -127,36 +171,50 @@ ha.callService('notify', 'mobile_app_phone', {
 });
 ```
 
-### 7. Entity Selectors (`ha.select`)
-Perform bulk actions on groups of entities.
+### 8. Entity Selectors (`ha.select`)
+Perform bulk actions on groups of entities. `ha.select()` returns a chainable selector object that allows you to filter, transform, and act on multiple entities at once.
+
+**Chainable Methods:**
+*   `.where(callback)`: Filters the selection based on a condition.
+*   `.map(callback)`: Transforms the selection into a new array of values.
+*   `.each(callback)`: Executes a function for each entity.
+*   `.turnOn()`, `.turnOff()`: Calls the respective service on all selected entities.
+*   `.expand()`: Expands any groups in the selection into their individual members.
+*   `.toArray()`: Returns the final selection as a raw array of state objects.
+
+**Example 1: Data Transformation with `.map()`**
+Find all sensors with low battery and create a list of their names.
 
 ```javascript
-// Turn off all lights in a specific area
+// Find all sensors with a battery level below 15%
+const lowBatteryNames = ha.select('sensor.*_battery_level')
+  .where(s => parseFloat(s.state) < 15)
+  .map(s => s.attributes.friendly_name || s.entity_id); // Transform into an array of names
+
+if (lowBatteryNames.length > 0) {
+    ha.warn(`Low battery: ${lowBatteryNames.join(', ')}`);
+}
+```
+
+**Example 2: Bulk Actions**
+Turn off all lights in a specific area.
+
+```javascript
 ha.select('light.*')
-  .where(l => l.attributes.area === 'Living Room')
-  .turnOff();
-
-// Find all sensors with low battery
-const lowBatteries = ha.select('sensor.*_battery_level')
-  .where(s => parseFloat(s.state) < 10)
-  .toArray();
-
-ha.log(`Found ${lowBatteries.length} sensors with low battery.`);
-
-// --- Groups ---
-// Expand a group to its members and control them
-ha.select('group.living_room_lights')
-  .expand() // Resolves the group to individual lights
-  .turnOff();
-
-// --- Groups ---
-// Expand a group to its members and control them
-ha.select('group.living_room_lights')
-  .expand() // Resolves the group to individual lights
+  .where(light => light.attributes.area === 'Living Room')
   .turnOff();
 ```
 
-### 8. Persistent Store (`ha.store`)
+**Example 3: Working with Groups**
+Expand a group to its members and control them individually.
+
+```javascript
+ha.select('group.all_fans')
+  .expand() // Resolves the group to its individual fan entities
+  .turnOff();
+```
+
+### 9. Persistent Store (`ha.store`)
 Share data across scripts or reboots. Synchronous read/write.
 
 ```javascript
@@ -177,7 +235,32 @@ ha.store.on('guest_mode', (newValue, oldValue) => {
 ha.store.delete('temp_variable');
 ```
 
-### 9. Global Error Handling (`ha.onError`)
+### 10. Automatic Persistent State (`ha.persistent`)
+`ha.persistent` offers a "magic" way to store data that saves automatically. It's perfect for managing complex state objects like arrays or nested data without manually calling `ha.store.set()` after every change.
+
+It returns a special proxied object. Any modification to this object (adding a property, changing a value, deleting a key) will automatically trigger a debounced save to the persistent store.
+
+```javascript
+// Get a reference to a persistent object.
+// If 'shoppingList' doesn't exist in the store, it will be initialized with this array.
+const shoppingList = ha.persistent('shoppingList', ['milk', 'bread']);
+
+ha.log(`Current list: ${shoppingList.join(', ')}`);
+
+// Just modify the array directly...
+shoppingList.push('eggs');
+
+// ...and it's automatically saved! No need to call ha.store.set().
+// After a restart, the list will be ['milk', 'bread', 'eggs'].
+
+// It also works for deep, nested objects.
+const settings = ha.persistent('my_app_settings', { notifications: { enabled: true } });
+settings.notifications.enabled = false; // This change is also saved automatically.
+```
+**Note:** This is best used for objects and arrays. For simple primitive values (like a single boolean or number), `ha.store.set()` is slightly more efficient.
+
+
+### 11. Global Error Handling (`ha.onError`)
 Define a global "catch-all" function to handle uncaught exceptions and unhandled promise rejections. This does **not** replace `try/catch` blocks, which should still be used for predictable errors.
 
 Instead, `ha.onError` acts as a safety net for unexpected errors, especially those from asynchronous operations or third-party libraries. It allows you to perform cleanup, log detailed information, or attempt a recovery, like restarting the script.
