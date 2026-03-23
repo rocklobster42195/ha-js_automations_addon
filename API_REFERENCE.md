@@ -8,6 +8,22 @@ This document provides a detailed overview of the `ha` object and other global b
 
 The `ha` object provides a comprehensive set of functions to interact with Home Assistant, manage script lifecycle, and utilize persistent storage.
 
+### 0. Internationalization (`ha.language` & `ha.localize`)
+Access the preferred language (configured in settings or automatically detected from Home Assistant) and translate strings easily.
+
+```javascript
+if (ha.language === 'de') {
+    ha.log("Guten Morgen!");
+}
+
+// Or use the helper function
+const msg = ha.localize({
+    en: 'Hello World',
+    de: 'Hallo Welt',
+    fr: 'Bonjour le monde'
+}, 'Hello World'); // Fallback
+```
+
 ### 1. Logging & Debugging
 Control visibility via the `@loglevel` header (debug, info, warn, error).
 

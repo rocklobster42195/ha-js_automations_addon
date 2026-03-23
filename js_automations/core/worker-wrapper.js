@@ -333,6 +333,23 @@ function ensureMessageListener() {
 
 // --- 4. THE GLOBAL API ---
 const ha = {
+    // Internationalization
+    language: workerData.language || 'en',
+    
+    /**
+     * Returns a localized string based on the current language.
+     * @param {object} mapping - Object mapping language codes to strings (e.g. { en: "Hi", de: "Hallo" })
+     * @param {string} [fallback] - Optional fallback string if language is not found
+     */
+    localize: (mapping, fallback) => {
+        const lang = workerData.language || 'en';
+        if (mapping[lang]) return mapping[lang];
+        // Try short code if lang is like "en-US"
+        const short = lang.split('-')[0];
+        if (mapping[short]) return mapping[short];
+        return fallback || Object.values(mapping)[0] || '';
+    },
+
     // Logging
     debug: (m) => sendLog('debug', m),
     log: (m) => sendLog('info', m),

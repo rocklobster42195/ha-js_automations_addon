@@ -175,7 +175,7 @@ class EntityManager {
         }
     }
 
-    async createExposedEntities(hasIntegration = false) {
+    async createExposedEntities(hasIntegration = false, onlyIfMissing = false) {
         const scripts = await this.workerManager.getScripts();
         
         // Metadaten für Lookup laden
@@ -255,9 +255,18 @@ class EntityManager {
                     payload.state = initialState;
                 }
 
-                await this.haConnection.callService('js_automations', 'create_entity', {
-                    ...payload
-                });
+                // SKIP Check: If onlyIfMissing is requested and entity exists/healthy
+                let skipHA = false;
+                if (onlyIfMissing) {
+                    const currentState = this.haConnection.states[entityId];
+                    if (currentState && currentState.state !== 'unavailable' && currentState.state !== 'unknown') {
+                        skipHA = true;
+                    }
+                }
+
+                if (!skipHA) {
+                    await this.haConnection.callService('js_automations', 'create_entity', payload);
+                }
 
                 // Register in central registry for lifecycle management
                 this.workerManager.registerEntity(scriptName + '.js', entityId, payload);
