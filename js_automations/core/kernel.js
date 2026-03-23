@@ -148,6 +148,9 @@ class Kernel extends EventEmitter {
         if (settings.danger?.node_memory) {
             workerSettings.node_memory = settings.danger.node_memory;
         }
+        if (settings.general?.ui_language) {
+            workerSettings.ui_language = settings.general.ui_language;
+        }
         if (Object.keys(workerSettings).length > 0) {
             this.workerManager.setSettings(workerSettings);
         }
@@ -192,6 +195,12 @@ class Kernel extends EventEmitter {
             }
 
             await this.haConnector.connect();
+
+            // Update System Language from HA Config
+            const haConfig = await this.haConnector.getHAConfig();
+            if (haConfig && haConfig.language) {
+                this.workerManager.setSystemLanguage(haConfig.language);
+            }
 
             // Initial check for the integration
             const status = await this.getCombinedIntegrationStatus();
@@ -268,7 +277,7 @@ class Kernel extends EventEmitter {
         // 3. Republish dynamic entities (ha.register) from running scripts
         // This ensures they are recreated if manually deleted in HA.
         if (this.workerManager) {
-            await this.workerManager.republishNativeEntities();
+            await this.workerManager.republishNativeEntities(true);
         }
     }
 
@@ -369,6 +378,12 @@ class Kernel extends EventEmitter {
                 console.log("✅ HA Reconnected!");
                 this.logManager.add('info', 'System', 'HA Reconnected!');
                 
+                // Update System Language
+                const haConfig = await this.haConnector.getHAConfig();
+                if (haConfig && haConfig.language) {
+                    this.workerManager.setSystemLanguage(haConfig.language);
+                }
+
                 // Re-Check Integration & Re-Register Entities
                 const status = await this.getCombinedIntegrationStatus();
                 this.emit('integration_status_changed', status);
@@ -380,8 +395,8 @@ class Kernel extends EventEmitter {
                     this._checkForIntegrationPeriodically(); // Ensure the checker is running
                 }
 
-                await this.entityManager.createExposedEntities(this.hasIntegration);
-                await this.workerManager.republishNativeEntities();
+                await this.entityManager.createExposedEntities(this.hasIntegration, true);
+                await this.workerManager.republishNativeEntities(false);
             } catch (e) {
                 console.error("❌ Reconnection failed:", e.message);
                 this.logManager.add('error', 'System', `Reconnection failed: ${e.message}`);

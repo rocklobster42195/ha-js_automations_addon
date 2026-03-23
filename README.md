@@ -211,11 +211,26 @@ For a complete reference of the `ha` object and other global built-ins, please r
 
 
 ---
-## Internationalization
+## Internationalization (UI & Scripts)
 
+The addon supports multiple languages for both the user interface and for your scripts.
+
+### UI Language
 The user interface is available in both German and English.
 - **Automatic Detection:** The language is automatically chosen based on your browser's settings.
-- **Manual Override:** You can force a specific language in settings.
+- **Manual Override:** You can force a specific language in the addon's settings.
+
+### Script Language (`ha.language` & `ha.localize`)
+You can make your scripts multilingual using `ha.language` and `ha.localize`. The language is determined automatically from Home Assistant or can be set in the add-on settings. This is especially useful for sending notifications in the user's preferred language.
+
+```javascript
+const message = ha.localize({
+    en: "The washing machine is finished.",
+    de: "Die Waschmaschine ist fertig."
+});
+
+ha.callService('notify', 'mobile_app', { message });
+```
 
 ---
 

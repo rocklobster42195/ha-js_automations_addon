@@ -57,6 +57,16 @@ interface EntitySelector<T = HAAttributes> {
 }
 
 interface HA {
+    /** The current language code (e.g. 'en', 'de', 'fr'). */
+    language: string;
+
+    /**
+     * Returns a localized string based on the current language.
+     * @param mapping Object mapping language codes to strings.
+     * @param fallback Optional fallback string.
+     */
+    localize(mapping: Record<string, string>, fallback?: string): string;
+
     /** Logs a message with level INFO. */
     log(message: any): void;
     /** Logs a message with level DEBUG. */

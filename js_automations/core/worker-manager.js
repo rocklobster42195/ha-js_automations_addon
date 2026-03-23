@@ -22,16 +22,19 @@ class WorkerManager extends EventEmitter {
         this.settings = {
             restart_protection_count: 5,
             restart_protection_time: 60000,
-            node_memory: 256
+            node_memory: 256,
+            ui_language: 'auto'
         };
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
+        this.systemLanguage = 'en';
         this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> Payload (Config)
         this.activeRunEntities = new Map(); // Track entities registered during the current script run (Mark-and-Sweep)
         this.protectedEntities = new Map(); // Track entities from headers (@expose) to protect them from sweep: filename -> Set<entityId>
         this.scriptEntityMap = new Map(); // RAM-Cache: filename -> Set<entityId>
         this.registryPath = '';
+        this.saveRegistryTimer = null; // Timer für Debounce
 
         // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -62,11 +65,11 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Persists the current entity registry to a JSON file.
+     * Führt den physischen Speichervorgang durch.
+     * @private
      */
-    saveRegistry() {
+    _performSaveRegistry() {
         if (!this.registryPath) return;
-
         try {
             this.emit('log', { source: 'System', message: `[WorkerManager] Saving entity registry to: ${this.registryPath}`, level: 'debug' });
             const data = {};
@@ -85,6 +88,21 @@ class WorkerManager extends EventEmitter {
         }
     }
 
+    /**
+     * Persists the current entity registry to a JSON file.
+     */
+    saveRegistry() {
+        if (!this.registryPath) return;
+
+        // Debounce: Bestehenden Timer abbrechen und neu starten
+        if (this.saveRegistryTimer) clearTimeout(this.saveRegistryTimer);
+
+        this.saveRegistryTimer = setTimeout(() => {
+            this._performSaveRegistry();
+            this.saveRegistryTimer = null;
+        }, 1000); // 1 Sekunde warten bevor gespeichert wird
+    }
+
     setConnector(connector) { this.haConnector = connector; }
     setStore(store) { this.storeManager = store; }
     setSettings(newSettings) {
@@ -97,6 +115,10 @@ class WorkerManager extends EventEmitter {
         this.saveRegistry(); // Ensure file exists even if empty
     }
     setScriptsDir(dir) { this.scriptsDir = dir; }
+
+    setSystemLanguage(lang) {
+        this.systemLanguage = lang;
+    }
 
     /**
      * Defines which entities are "protected" (e.g. from @expose header).
@@ -160,18 +182,55 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Sendet alle registrierten nativen Entitäten erneut an HA (z.B. nach Reconnect).
+     * Sendet alle registrierten nativen Entitäten erneut an HA.
+     * @param {boolean} onlyIfMissing - Wenn true, werden existierende Entitäten übersprungen (Integritäts-Check).
      */
-    async republishNativeEntities() {
+    async republishNativeEntities(onlyIfMissing = false) {
         if (!this.haConnector || this.nativeEntities.size === 0) return;
-        this.emit('log', { source: 'System', message: `Republishing ${this.nativeEntities.size} native entities...`, level: 'debug' });
+        
+        let count = 0;
+        const total = this.nativeEntities.size;
+        
+        if (!onlyIfMissing) {
+            this.emit('log', { source: 'System', message: `Syncing ${total} native entities...`, level: 'debug' });
+        }
         
         for (const [entityId, payload] of this.nativeEntities) {
             try {
-                await this.haConnector.callService('js_automations', 'create_entity', payload);
+                // Check current state in HA cache
+                const currentState = this.haConnector.states[entityId];
+                const isAlive = currentState && currentState.state !== 'unavailable' && currentState.state !== 'unknown';
+
+                // Scenario 1: Integrity Check (Hourly) - Skip if healthy
+                if (onlyIfMissing && isAlive) {
+                    continue;
+                }
+
+                // Scenario 2: Smart Republish (Reconnect)
+                // Preserve dynamic state (icon, attributes) instead of resetting to initial config.
+                let finalPayload = { ...payload };
+                
+                if (isAlive && !onlyIfMissing) {
+                    finalPayload.state = currentState.state;
+                    if (currentState.attributes) {
+                        if (currentState.attributes.icon) finalPayload.icon = currentState.attributes.icon;
+                        const exclude = ['friendly_name', 'icon', 'access_token', 'entity_picture', 'supported_features', 'restored'];
+                        finalPayload.attributes = { ...finalPayload.attributes }; 
+                        for (const [k, v] of Object.entries(currentState.attributes)) {
+                            if (!exclude.includes(k)) finalPayload.attributes[k] = v;
+                        }
+                    }
+                }
+
+                await this.haConnector.callService('js_automations', 'create_entity', finalPayload);
+                count++;
             } catch (e) {
                 this.emit('log', { source: 'System', message: `Failed to republish ${entityId}: ${e.message}`, level: 'warn' });
             }
+        }
+        
+        if (count > 0) {
+            this.emit('log', { source: 'System', message: `Republished ${count} entities (Skipped ${total - count} healthy ones).`, level: 'debug' });
         }
     }
 
@@ -324,6 +383,11 @@ class WorkerManager extends EventEmitter {
             }
         } catch (e) { /* ignore read error, file existence checked above */ }
 
+        // Determine Language
+        const language = (this.settings.ui_language && this.settings.ui_language !== 'auto') 
+            ? this.settings.ui_language 
+            : (this.systemLanguage || 'en');
+
         const worker = new Worker(path.join(__dirname, 'worker-wrapper.js'), {
             resourceLimits: {
                 maxOldGenerationSizeMb: memoryLimit
@@ -333,7 +397,8 @@ class WorkerManager extends EventEmitter {
                 initialStates: this.haConnector ? this.haConnector.states : {},
                 initialStore: initialStoreValues,
                 storageDir: this.storageDir,
-                loglevel: scriptMeta.loglevel || 'info'
+                loglevel: scriptMeta.loglevel || 'info',
+                language: language
             },
             env: { 
                 ...process.env, 
@@ -633,6 +698,23 @@ class WorkerManager extends EventEmitter {
                     worker.terminate();
                 }
             }, 2000);
+        }
+    }
+
+    /**
+     * Fährt den Manager herunter, speichert ausstehende Daten und stoppt Worker.
+     */
+    shutdown() {
+        // 1. Force Save Registry wenn Timer läuft
+        if (this.saveRegistryTimer) {
+            clearTimeout(this.saveRegistryTimer);
+            this.emit('log', { source: 'System', message: `[WorkerManager] Force saving registry on shutdown...`, level: 'debug' });
+            this._performSaveRegistry();
+        }
+        
+        // 2. Alle Worker stoppen
+        for (const filename of this.workers.keys()) {
+            this.stopScript(filename, 'system shutdown');
         }
     }
 }
