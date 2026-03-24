@@ -96,16 +96,14 @@ function renderSettingsCategories() {
         btn.dataset.id = cat.id;
 
         // Notification Dot Logic
-        if (cat.id === 'system' && window.currentIntegrationStatus) {
-            const s = window.currentIntegrationStatus;
-            // Im Dev-Mode keine Notification-Dots anzeigen, da der User manuell verwaltet
-            if (!s.dev_mode) {
-                // Priorität: Neustart (Lila) > Update/Install (Orange)
-                if (s.needs_restart) {
-                    btn.classList.add('badge-info'); // Lila (CSS muss definiert sein)
-                } else if (!s.installed || s.needs_update) {
-                    btn.classList.add('badge-warning'); // Orange
-                }
+        if (cat.id === 'system') {
+            // Priority 1: Restart needed (purple dot)
+            if (window.currentIntegrationStatus && window.currentIntegrationStatus.needs_restart && !window.currentIntegrationStatus.dev_mode) {
+                btn.classList.add('badge-info'); // Lila
+            }
+            // Priority 2: Addon update available (orange dot) - same as header
+            else if (window.newVersionInfo && window.newVersionInfo.update_available) {
+                btn.classList.add('badge-warning'); // Orange
             }
         }
 
@@ -129,9 +127,13 @@ function renderSettingsCategories() {
             scrollToSection(cat.id);
             setActiveCategoryUI(cat.id);
             
-            // Hide integration banner immediately if "system" category is clicked
-            if (cat.id === 'system' && typeof window.hideIntegrationBanner === 'function') {
-                window.hideIntegrationBanner();
+            // Hide integration banner & dot if "system" category is clicked
+            if (cat.id === 'system') {
+                if (typeof window.hideIntegrationBanner === 'function') {
+                    window.hideIntegrationBanner();
+                }
+                // Remove the orange dot on click, mirroring header behavior
+                btn.classList.remove('badge-warning');
             }
 
             // Re-enable ScrollSpy tracking after scroll animation
