@@ -184,5 +184,56 @@
       "restart_time_desc": "Zeitraum in Sekunden, in dem die Abstürze für die Bootloop-Erkennung gezählt werden."
     }
   },
-  "banner_close_tooltip": "Schließen"
+  "banner_close_tooltip": "Schließen",
+  "store": {
+    "title": "Globaler Store (ha.store)",
+    "loading": "Lade Daten...",
+    "load_error": "Fehler beim Laden der Daten.",
+    "empty": "Store ist leer.",
+    "no_results": "Keine Ergebnisse gefunden.",
+    "headers": {
+      "key": "Schlüssel",
+      "value": "Wert",
+      "owner": "Besitzer",
+      "updated": "Aktualisiert",
+      "accessed": "Zugriff"
+    },
+    "modal": {
+      "title_edit": "Variable bearbeiten",
+      "title_new": "Neue Variable",
+      "label_key": "Schlüssel (ID)",
+      "label_value": "Wert",
+      "label_secret": "Ist Geheimnis (Maskiert in UI)",
+      "placeholder_key": "z.B. mein_api_key",
+      "placeholder_value": "Wert"
+    },
+    "actions": {
+      "add_variable": "Variable hinzufügen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "clear_all": "Alles löschen (Gesamten Store leeren)",
+      "refresh": "Aktualisieren",
+      "filter_placeholder": "Filtern...",
+      "clear_filter": "Filter löschen",
+      "copy": "Wert kopieren",
+      "copy_key": "Schlüssel kopieren"
+    },
+    "types": {
+      "string": "TXT",
+      "number": "NUM",
+      "boolean": "BOOL",
+      "object": "OBJ",
+      "array": "LIST",
+      "null": "NULL"
+    },
+    "messages": {
+      "key_required": "Schlüssel ist erforderlich",
+      "invalid_json": "Ungültiges JSON-Format: {{error}}\n\nDer Wert wird als String gespeichert.",
+      "save_error": "Fehler beim Speichern: {{error}}",
+      "confirm_delete": "Möchten Sie den Schlüssel '{{key}}' wirklich aus dem Store löschen?",
+      "delete_error": "Fehler beim Löschen: {{error}}",
+      "confirm_clear": "WARNUNG: Möchten Sie wirklich den GANZEN Store löschen? Alle gespeicherten Variablen aller Skripte gehen verloren!",
+      "generic_error": "Fehler: {{error}}"
+    }
+  }
 }

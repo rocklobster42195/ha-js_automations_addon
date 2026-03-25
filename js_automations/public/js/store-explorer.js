@@ -5,6 +5,17 @@
 
 const STORE_TAB_ID = 'System: Store';
 let storeCache = {}; // Lokaler Cache für schnelles Filtern
+let currentSort = { column: 'key', direction: 'asc' };
+
+function sortStore(col) {
+    if (currentSort.column === col) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.column = col;
+        currentSort.direction = 'asc';
+    }
+    renderStoreTable();
+}
 
 // Öffnet den Store-Tab oder wechselt dorthin
 function openStoreTab() {
@@ -36,7 +47,7 @@ async function loadStoreData() {
     const container = document.getElementById('store-table-body');
     if (!container) return;
 
-    container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Loading data...</td></tr>';
+    container.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">${i18next.t('store.loading')}</td></tr>`;
 
     try {
         // Wir nutzen die globale apiFetch aus app.js
@@ -45,11 +56,11 @@ async function loadStoreData() {
             storeCache = await res.json();
             renderStoreTable();
         } else {
-            container.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger);">Error loading data.</td></tr>';
+            container.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${i18next.t('store.load_error')}</td></tr>`;
         }
     } catch (e) {
         console.error(e);
-        container.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${e.message}</td></tr>`;
+        container.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${e.message}</td></tr>`; // Error message stays technical usually
     }
 }
 
@@ -64,10 +75,60 @@ function renderStoreTable() {
 
     container.innerHTML = '';
 
-    const keys = Object.keys(data).sort();
+    // 1. Update Header Icons
+    const headers = ['key', 'value', 'owner', 'updated', 'accessed'];
+    headers.forEach(col => {
+        const th = document.getElementById(`th-store-${col}`);
+        if (!th) return;
+        
+        let icon = th.querySelector('.sort-icon');
+        if (!icon) {
+            icon = document.createElement('i');
+            icon.classList.add('sort-icon', 'mdi');
+            icon.style.marginLeft = '5px';
+            th.appendChild(icon);
+        }
+
+        if (currentSort.column === col) {
+            icon.className = `sort-icon mdi mdi-chevron-${currentSort.direction === 'asc' ? 'up' : 'down'}`;
+            icon.style.opacity = '1';
+        } else {
+            icon.className = 'sort-icon mdi mdi-sort';
+            icon.style.opacity = '0.3';
+        }
+    });
+
+    // 2. Sort Keys
+    const keys = Object.keys(data).sort((a, b) => {
+        const itemA = data[a];
+        const itemB = data[b];
+        
+        const getVal = (item) => (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+        const getMeta = (item) => (item && typeof item === 'object' && 'owner' in item) ? item : { owner: 'System', updated: 0, accessed: 0 };
+
+        let valA, valB;
+        if (currentSort.column === 'key') {
+            valA = a.toLowerCase(); valB = b.toLowerCase();
+        } else if (currentSort.column === 'value') {
+            valA = getVal(itemA); valB = getVal(itemB);
+            if (typeof valA === 'object') valA = JSON.stringify(valA);
+            if (typeof valB === 'object') valB = JSON.stringify(valB);
+            valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase();
+        } else if (currentSort.column === 'owner') {
+            valA = (getMeta(itemA).owner || '').toLowerCase(); valB = (getMeta(itemB).owner || '').toLowerCase();
+        } else if (currentSort.column === 'updated') {
+            valA = getMeta(itemA).updated || 0; valB = getMeta(itemB).updated || 0;
+        } else if (currentSort.column === 'accessed') {
+            valA = getMeta(itemA).accessed || 0; valB = getMeta(itemB).accessed || 0;
+        }
+
+        if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
 
     if (keys.length === 0) {
-        container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Store is empty.</td></tr>';
+        container.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">${i18next.t('store.empty')}</td></tr>`;
         return;
     }
 
@@ -81,12 +142,20 @@ function renderStoreTable() {
         const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
 
         // Filterung
-        // Bei Secrets suchen wir NICHT im Value, um Sicherheit zu wahren (oder optional doch, aber hier strikt)
+        // Filter erweitert auf 'owner'
         const searchInVal = meta.isSecret ? '' : valStr.toLowerCase();
-        if (filter && !key.toLowerCase().includes(filter) && !searchInVal.includes(filter)) {
+        const owner = (meta.owner || '').toLowerCase();
+        
+        if (filter && !key.toLowerCase().includes(filter) && !searchInVal.includes(filter) && !owner.includes(filter)) {
             return;
         }
         count++;
+
+        // Type Badge ermitteln
+        let type = typeof val;
+        if (val === null) type = 'null';
+        else if (Array.isArray(val)) type = 'array';
+        const typeLabel = i18next.t(`store.types.${type}`, { defaultValue: type.toUpperCase().substr(0, 3) });
 
         const row = document.createElement('tr');
         
@@ -110,16 +179,25 @@ function renderStoreTable() {
         }
 
         row.innerHTML = `
-            <td class="store-key">${iconHtml}${escapeHtml(key)}</td>
+            <td class="store-key">
+                <div class="key-cell-wrapper">
+                    <i class="mdi mdi-content-copy copy-btn-inline" data-key="${escapeHtml(key)}" onclick="copyText(this.dataset.key, this)" title="${i18next.t('store.actions.copy_key')}"></i>
+                    ${iconHtml}${escapeHtml(key)}
+                    <span class="store-type-badge" title="Type: ${type}">${typeLabel}</span>
+                </div>
+            </td>
             <td class="store-val-cell">${valueHtml}</td>
             <td class="store-owner">${escapeHtml(meta.owner || 'System')}</td>
             <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString() : '-'}</td>
             <td class="store-accessed">${meta.accessed ? new Date(meta.accessed).toLocaleString() : '-'}</td>
             <td class="store-actions">
-                <button onclick="editStoreItem('${key}')" title="Edit">
+                <button onclick="copyStoreItemValue('${key}', this)" title="${i18next.t('store.actions.copy')}">
+                    <i class="mdi mdi-content-copy"></i>
+                </button>
+                <button onclick="editStoreItem('${key}')" title="${i18next.t('store.actions.edit')}">
                     <i class="mdi mdi-pencil"></i>
                 </button>
-                <button onclick="deleteStoreItem('${key}')" title="Delete" class="btn-danger">
+                <button onclick="deleteStoreItem('${key}')" title="${i18next.t('store.actions.delete')}" class="btn-danger">
                     <i class="mdi mdi-delete-forever"></i>
                 </button>
             </td>
@@ -128,7 +206,7 @@ function renderStoreTable() {
     });
 
     if (count === 0) {
-        container.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">No results found.</td></tr>';
+        container.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">${i18next.t('store.no_results')}</td></tr>`;
     }
 }
 
@@ -143,6 +221,40 @@ async function editStoreItem(key) {
     if (typeof val === 'object') valStr = JSON.stringify(val, null, 2);
 
     openStoreModal(key, valStr, isSecret);
+}
+
+async function copyStoreItemValue(key, btn) {
+    const item = storeCache[key];
+    if (!item) return;
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+
+    try {
+        await navigator.clipboard.writeText(valStr);
+        // Kleines visuelles Feedback am Button
+        const originalIcon = btn.innerHTML;
+        btn.innerHTML = '<i class="mdi mdi-check"></i>';
+        btn.classList.add('btn-success');
+        setTimeout(() => {
+            btn.innerHTML = originalIcon;
+            btn.classList.remove('btn-success');
+        }, 1500);
+    } catch (err) {
+        console.error('Failed to copy: ', err);
+    }
+}
+
+async function copyText(text, el) {
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        // Visual feedback
+        const originalClass = el.className;
+        el.className = 'mdi mdi-check copy-btn-inline success';
+        setTimeout(() => {
+            el.className = originalClass;
+        }, 1500);
+    } catch (err) { console.error('Failed to copy: ', err); }
 }
 
 function openStoreModal(key = null, value = '', isSecret = false) {
@@ -162,12 +274,12 @@ function openStoreModal(key = null, value = '', isSecret = false) {
     
     if (key) {
         // Edit Mode
-        titleEl.textContent = 'Edit Variable';
+        titleEl.textContent = i18next.t('store.modal.title_edit');
         keyInput.value = key;
         keyInput.disabled = true; // Key cannot be changed (it's the ID)
     } else {
         // Create Mode
-        titleEl.textContent = 'New Variable';
+        titleEl.textContent = i18next.t('store.modal.title_new');
         keyInput.value = '';
         keyInput.disabled = false;
     }
@@ -213,7 +325,7 @@ async function saveStoreItemFromModal() {
     const isSecret = document.getElementById('store-secret-check').checked;
 
     if (!key) {
-        alert("Key is required");
+        alert(i18next.t('store.messages.key_required'));
         return;
     }
 
@@ -228,7 +340,7 @@ async function saveStoreItemFromModal() {
         }
     } catch (e) {
         // It looked like JSON but failed to parse. Alert the user!
-        alert(`Invalid JSON format: ${e.message}\n\nThe value will be saved as a string.`);
+        alert(i18next.t('store.messages.invalid_json', { error: e.message }));
     }
 
     try {
@@ -239,28 +351,28 @@ async function saveStoreItemFromModal() {
         });
         closeStoreModal();
         loadStoreData();
-    } catch (e) { alert("Error saving: " + e.message); }
+    } catch (e) { alert(i18next.t('store.messages.save_error', { error: e.message })); }
 }
 
 async function deleteStoreItem(key) {
-    if (!confirm(`Do you really want to delete the key "${key}" from the store?`)) return;
+    if (!confirm(i18next.t('store.messages.confirm_delete', { key }))) return;
 
     try {
         await apiFetch(`api/store/${key}`, { method: 'DELETE' });
         loadStoreData(); // Refresh
     } catch (e) {
-        alert("Error deleting: " + e.message);
+        alert(i18next.t('store.messages.delete_error', { error: e.message }));
     }
 }
 
 async function clearStore() {
-    if (!confirm("WARNING: Do you really want to clear the ENTIRE store? All saved variables from all scripts will be lost!")) return;
+    if (!confirm(i18next.t('store.messages.confirm_clear'))) return;
     
     try {
         await apiFetch('api/store', { method: 'DELETE' });
         loadStoreData();
     } catch (e) {
-        alert("Error: " + e.message);
+        alert(i18next.t('store.messages.generic_error', { error: e.message }));
     }
 }
 
@@ -307,25 +419,25 @@ function injectStoreComponents() {
         const modalHtml = `
         <div id="store-modal" class="modal-overlay hidden">
             <div class="modal">
-                <h3 id="store-modal-title">Store Item</h3>
+                <h3 id="store-modal-title">${i18next.t('store.modal.title_new')}</h3>
                 <div class="form-group">
-                    <label>Key (ID)</label>
-                    <input type="text" id="store-key-input" placeholder="e.g. my_api_key">
+                    <label>${i18next.t('store.modal.label_key')}</label>
+                    <input type="text" id="store-key-input" placeholder="${i18next.t('store.modal.placeholder_key')}">
                 </div>
                 <div class="form-group" style="margin-top:15px;">
-                    <label>Value</label>
+                    <label>${i18next.t('store.modal.label_value')}</label>
                     <div class="icon-input-container">
-                        <input type="text" id="store-value-input" placeholder="Value">
+                        <input type="text" id="store-value-input" placeholder="${i18next.t('store.modal.placeholder_value')}">
                         <i id="store-value-toggle" class="mdi mdi-eye-off" style="cursor:pointer; opacity:0.7;" onclick="toggleStoreValueVisibility()"></i>
                     </div>
                 </div>
                 <div class="form-group" style="margin-top:15px; flex-direction:row; align-items:center; gap:10px;">
                     <input type="checkbox" id="store-secret-check" style="width:auto !important;" onchange="toggleStoreSecretState()">
-                    <label for="store-secret-check" style="margin:0; cursor:pointer; font-size:0.9rem; color:#ddd; text-transform:none;">Is Secret (Masked in UI)</label>
+                    <label for="store-secret-check" style="margin:0; cursor:pointer; font-size:0.9rem; color:#ddd; text-transform:none;">${i18next.t('store.modal.label_secret')}</label>
                 </div>
                 <div class="modal-btns">
-                    <button class="btn-primary" onclick="saveStoreItemFromModal()">SAVE</button>
-                    <button class="btn-text" onclick="closeStoreModal()">CANCEL</button>
+                    <button class="btn-primary" onclick="saveStoreItemFromModal()">${i18next.t('store.btn_save', { defaultValue: 'SAVE' })}</button>
+                    <button class="btn-text" onclick="closeStoreModal()">${i18next.t('store.btn_cancel', { defaultValue: 'CANCEL' })}</button>
                 </div>
             </div>
         </div>`;
@@ -339,7 +451,7 @@ function injectStoreComponents() {
         const searchBox = toolbar.querySelector('.store-search-box');
         const btn = document.createElement('button');
         btn.id = 'btn-store-add';
-        btn.title = 'Add Variable';
+        btn.title = i18next.t('store.actions.add_variable');
         btn.innerHTML = '<i class="mdi mdi-plus"></i>';
         btn.onclick = () => openStoreModal();
         
@@ -362,7 +474,10 @@ window.openStoreTab = openStoreTab;
 window.loadStoreData = loadStoreData;
 window.deleteStoreItem = deleteStoreItem;
 window.editStoreItem = editStoreItem;
+window.copyStoreItemValue = copyStoreItemValue;
+window.copyText = copyText;
 window.clearStore = clearStore;
+window.sortStore = sortStore;
 window.renderStoreTable = renderStoreTable;
 window.clearStoreSearch = clearStoreSearch;
 window.openStoreModal = openStoreModal;

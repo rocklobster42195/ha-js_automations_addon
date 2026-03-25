@@ -184,5 +184,56 @@
       "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection."
     }
   },
-  "banner_close_tooltip": "Close"
+  "banner_close_tooltip": "Close",
+  "store": {
+    "title": "Global Store (ha.store)",
+    "loading": "Loading data...",
+    "load_error": "Error loading data.",
+    "empty": "Store is empty.",
+    "no_results": "No results found.",
+    "headers": {
+      "key": "Key",
+      "value": "Value",
+      "owner": "Owner",
+      "updated": "Updated",
+      "accessed": "Accessed"
+    },
+    "modal": {
+      "title_edit": "Edit Variable",
+      "title_new": "New Variable",
+      "label_key": "Key (ID)",
+      "label_value": "Value",
+      "label_secret": "Is Secret (Masked in UI)",
+      "placeholder_key": "e.g. my_api_key",
+      "placeholder_value": "Value"
+    },
+    "actions": {
+      "add_variable": "Add Variable",
+      "edit": "Edit",
+      "delete": "Delete",
+      "clear_all": "Clear All (Empty entire store)",
+      "refresh": "Refresh",
+      "filter_placeholder": "Filter...",
+      "clear_filter": "Clear filter",
+      "copy": "Copy Value",
+      "copy_key": "Copy Key"
+    },
+    "types": {
+      "string": "TXT",
+      "number": "NUM",
+      "boolean": "BOOL",
+      "object": "OBJ",
+      "array": "LIST",
+      "null": "NULL"
+    },
+    "messages": {
+      "key_required": "Key is required",
+      "invalid_json": "Invalid JSON format: {{error}}\n\nThe value will be saved as a string.",
+      "save_error": "Error saving: {{error}}",
+      "confirm_delete": "Do you really want to delete the key '{{key}}' from the store?",
+      "delete_error": "Error deleting: {{error}}",
+      "confirm_clear": "WARNING: Do you really want to clear the ENTIRE store? All saved variables from all scripts will be lost!",
+      "generic_error": "Error: {{error}}"
+    }
+  }
 }
