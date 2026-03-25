@@ -14,16 +14,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next-http-backend/2.5.0/i18nextHttpBackend.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <style>
-        /* Layout Fixes for Status Bar */
-        body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .app-wrapper { flex: 1; overflow: hidden; } /* border-bottom wird vom sidebar-footer übernommen */
-        /* Status Bar Styles (wird von app.js injiziert) */
-        #status-bar { height: 22px; background: #282a36; color: #fff; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-family: 'Segoe UI', sans-serif; -webkit-user-select: none; user-select: none; z-index: 100; justify-content: space-between; border-top: 1px solid #333; }
-        .sb-item { display: flex; align-items: center; gap: 6px; cursor: default; }
-        .sb-item i { font-size: 14px; }
-        .sb-hidden { display: none !important; }
-    </style>
 </head>
 
 <body>
@@ -103,17 +93,24 @@
                 <!-- STORE VIEW -->
                 <div id="store-wrapper" class="hidden">
                     <div class="store-toolbar">
-                        <h4>Global Store (ha.store)</h4>
+                        <h4 data-i18n="store.title">Global Store (ha.store)</h4>
                         <div class="store-search-box">
-                            <input type="text" id="store-search" class="store-search-input" placeholder="Filter..." oninput="renderStoreTable()">
-                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()" title="Clear filter"><i class="mdi mdi-close"></i></button>
+                            <input type="text" id="store-search" class="store-search-input" data-i18n="store.actions.filter_placeholder" data-i18n-placeholder placeholder="Filter..." oninput="renderStoreTable()">
+                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()" data-i18n="store.actions.clear_filter" data-i18n-title title="Clear filter"><i class="mdi mdi-close"></i></button>
                         </div>
-                        <button onclick="clearStore()" title="Clear All (Delete everything)" style="color:var(--danger)"><i class="mdi mdi-delete-alert"></i></button>
-                        <button onclick="loadStoreData()" title="Refresh"><i class="mdi mdi-refresh"></i></button>
+                        <button onclick="clearStore()" data-i18n="store.actions.clear_all" data-i18n-title title="Clear All (Delete everything)" style="color:var(--danger)"><i class="mdi mdi-delete-alert"></i></button>
+                        <button onclick="loadStoreData()" data-i18n="store.actions.refresh" data-i18n-title title="Refresh"><i class="mdi mdi-refresh"></i></button>
                     </div>
                     <div class="store-content">
                         <table class="store-table">
-                            <thead><tr><th>Key</th><th>Value</th><th>Owner</th><th>Updated</th><th>Accessed</th><th></th></tr></thead>
+                            <thead><tr>
+                                <th id="th-store-key" data-i18n="store.headers.key" onclick="sortStore('key')" style="cursor:pointer; user-select:none;">Key</th>
+                                <th id="th-store-value" data-i18n="store.headers.value" onclick="sortStore('value')" style="cursor:pointer; user-select:none;">Value</th>
+                                <th id="th-store-owner" data-i18n="store.headers.owner" onclick="sortStore('owner')" style="cursor:pointer; user-select:none;">Owner</th>
+                                <th id="th-store-updated" data-i18n="store.headers.updated" onclick="sortStore('updated')" style="cursor:pointer; user-select:none;">Updated</th>
+                                <th id="th-store-accessed" data-i18n="store.headers.accessed" onclick="sortStore('accessed')" style="cursor:pointer; user-select:none;">Accessed</th>
+                                <th></th>
+                            </tr></thead>
                             <tbody id="store-table-body"></tbody>
                         </table>
                     </div>

@@ -13,7 +13,7 @@ Wir verfolgen einen **Transpiler-Ansatz**. Der User schreibt TypeScript, das Sys
 *   **Distribution:** `/scripts/.storage/dist/`. Hier liegen die kompilierten `.js` Dateien. Die Ordnerstruktur der Sources wird hier gespiegelt.
 *   **Typings:** 
     *   `.storage/entities.d.ts` (Dynamisch generiert aus HA-States).
-    *   `.storage/ha-api.d.ts` (Statische Definition der `ha` API).
+    *   `.storage/ha-api.d.ts` (Statische Definition der `ha` API). Aktuelle Version liegt in public/types/ und wird bereits vom Monaco-Editor verwendet. Wenn die Datei verschben wird, muss ein Api-Endpunkt erzeugt werden.
 *   **Config:** `.storage/tsconfig.json` (Vom System verwaltet).
 
 ---
@@ -55,23 +55,13 @@ Damit Monaco (der Editor) rote Kringel und Autovervollständigung anzeigen kann,
 *   **Monaco Mode:** Der Editor schaltet auf `typescript` um.
 *   **Type-Loading:** Beim Laden des Editors werden die `.d.ts` Dateien aus dem Backend geladen und in die Monaco-Instanz injiziert (`monaco.languages.typescript.typescriptDefaults.addExtraLib`).
 
----
-
-## 6. Vorbereitung auf Blockly
-
-Dieses Konzept ist "Blockly-ready":
-*   Blockly generiert intern Code. Wir können Blockly so konfigurieren, dass es entweder direkt JS oder TS generiert.
-*   Dieser generierte Code fließt in dieselbe Pipeline: Er wird in `.storage/dist/` abgelegt und vom `WorkerManager` ausgeführt.
-*   Blockly-Scripte erhalten eine eigene Dateiendung (z.B. `.blk`), werden aber technisch wie TS-Sourcen behandelt, die zu JS transpiliert werden.
-
----
 
 ## 7. Implementierungs-Schritte
 
 1.  **Phase 1: Infrastruktur**
     *   Erstellen der `tsconfig.json` Vorlage.
     *   Anlegen des `dist` Ordners in `.storage`.
-    *   Erstellen der `ha-api.d.ts`.
+    *   Verschieben der `ha-api.d.ts`. Aktuelle Version liegt in public/types/.
 
 2.  **Phase 2: CompilerManager**
     *   Integration von `typescript` als NPM Dependency im Add-on.

@@ -26,10 +26,11 @@
 body, html { 
     margin: 0; padding: 0; height: 100vh; width: 100vw; 
     background: var(--bg); color: var(--text-main); 
-    font-family: 'Roboto', -apple-system, sans-serif; overflow: hidden; 
+    font-family: 'Roboto', -apple-system, sans-serif; overflow: hidden;
+    display: flex; flex-direction: column;
 }
 
-.app-wrapper { display: flex; width: 100%; height: 100%; flex-direction: row; }
+.app-wrapper { display: flex; width: 100%; flex: 1; flex-direction: row; overflow: hidden; }
 .hidden { display: none !important; }
 
 /* Buttons global zurücksetzen */
@@ -97,11 +98,30 @@ body.expert-mode .sidebar-footer { display: flex; }
 }
 
 /* --- STATUS BAR SLOTS --- */
+#status-bar {
+    height: 22px; 
+    background: #282a36; 
+    color: #fff; 
+    display: flex; 
+    align-items: center; 
+    padding: 0 10px; 
+    font-size: 12px; 
+    font-family: 'Segoe UI', sans-serif; 
+    -webkit-user-select: none; 
+    user-select: none; 
+    z-index: 100; 
+    justify-content: space-between; 
+    border-top: 1px solid #333;
+    flex-shrink: 0;
+}
+
 .sb-item {
     display: flex;
     align-items: center;
     gap: 8px;
+    cursor: default;
 }
+.sb-item i { font-size: 14px; }
 
 .sb-hidden { display: none !important; }
 
@@ -912,3 +932,13 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .ref-type-item .ref-header { border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 10px; }
 .ref-keyword { color: #569cd6; font-weight: bold; }
 .ref-type-body { font-family: 'Fira Code', monospace; color: #9cdcfe; font-size: 0.85rem; white-space: pre-wrap; margin: 0; line-height: 1.4; }
+
+/* Store Type Badge */
+.store-type-badge { font-size: 0.65rem; padding: 2px 5px; border-radius: 4px; background: #3c3c3c; color: #aaa; margin-left: 8px; vertical-align: middle; border: 1px solid #555; font-family: monospace; letter-spacing: 0.5px; }
+
+/* Store Key Copy */
+.key-cell-wrapper { display: flex; align-items: center; }
+.copy-btn-inline { cursor: pointer; opacity: 0.3; margin-right: 8px; font-size: 14px; transition: opacity 0.2s; }
+.key-cell-wrapper:hover .copy-btn-inline { opacity: 0.8; }
+.copy-btn-inline:hover { opacity: 1; color: #fff; }
+.copy-btn-inline.success { color: var(--success) !important; opacity: 1; }
