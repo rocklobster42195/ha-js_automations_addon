@@ -557,7 +557,6 @@ input#search-input:focus { border-color: var(--accent) !important; }
     border-bottom: 1px solid var(--border);
     /* Hide scrollbar */
     -ms-overflow-style: none;
-    scrollbar-width: none;
 }
 #tab-bar::-webkit-scrollbar { display: none; }
 

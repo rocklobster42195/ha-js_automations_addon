@@ -85,7 +85,7 @@
   "wizard_option_button": "Script with Button in HA",
   "wizard_option_hidden": "Standard Script",
   "wizard_option_library": "Library (Imported by others)",
-  "wizard_type_tooltip": "Switch: Creates an On/Off switch in HA.\nButton: Creates a button to start/restart.\nBackground: No entity in HA.",
+  "wizard_type_tooltip": "Determines how the script is exposed to Home Assistant. This controls the @expose header inside the script's code.\n\n- 'Switch': Creates an entity with on/off state (@expose: switch).\n- 'Button': Creates a button to execute the script (@expose: button).\n- 'Background': No visible entity in HA (no @expose).\n- 'Library': Reusable code that can be imported by other scripts (no @expose).",
   "wizard_label_template": "Template",
   "template_empty": "Empty Script",
   "template_interval": "Schedule (Interval)",
