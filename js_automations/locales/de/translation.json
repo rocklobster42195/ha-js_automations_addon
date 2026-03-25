@@ -85,7 +85,7 @@
   "wizard_option_button": "Skript mit Button in HA",
   "wizard_option_hidden": "Standard-Skript",
   "wizard_option_library": "Bibliothek (Wird von anderen importiert)",
-  "wizard_type_tooltip": "Schalter: Erstellt einen Ein/Aus-Schalter in HA.\nButton: Erstellt einen Button zum Starten/Neustarten.\nHintergrund: Keine Entität in HA.",
+  "wizard_type_tooltip": "Legt fest, wie das Skript in Home Assistant dargestellt wird. Dies steuert den @expose-Header im Skript-Code.\n\n- 'Schalter': Erstellt eine Entität mit an/aus-Zustand (@expose: switch).\n- 'Button': Erstellt eine Schaltfläche zum Ausführen (@expose: button).\n- 'Hintergrund': Keine sichtbare Entität in HA (kein @expose).\n- 'Library': Wiederverwendbarer Code, der von anderen Skripten importiert werden kann (kein @expose).",
   "wizard_label_template": "Vorlage",
   "template_empty": "Leeres Skript",
   "template_interval": "Intervall-Vorlage",
