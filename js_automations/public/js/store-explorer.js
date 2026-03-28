@@ -104,7 +104,7 @@ function renderStoreTable() {
         const itemB = data[b];
         
         const getVal = (item) => (item && typeof item === 'object' && 'value' in item) ? item.value : item;
-        const getMeta = (item) => (item && typeof item === 'object' && 'owner' in item) ? item : { owner: 'System', updated: 0, accessed: 0 };
+        const getMeta = (item) => (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: 0, accessed: 0 };
 
         let valA, valB;
         if (currentSort.column === 'key') {
@@ -137,7 +137,7 @@ function renderStoreTable() {
         const item = data[key];
         // Fallback, falls Datenstruktur mal abweicht (z.B. Legacy)
         const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
-        const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: 'System', updated: null, isSecret: false };
+        const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: null, isSecret: false };
         
         const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
 
@@ -168,7 +168,7 @@ function renderStoreTable() {
             valueHtml = `
                 <div style="display:flex; align-items:center; justify-content:space-between;">
                     <span id="secret-val-${count}" class="store-value-masked">••••••••</span>
-                    <button class="btn-row" onclick="toggleSecretDisplay('${safeKey}', 'secret-val-${count}', this)" title="Show/Hide">
+                    <button class="btn-row" onclick="toggleSecretDisplay('${safeKey}', 'secret-val-${count}', this)" title="${i18next.t('store.actions.show_hide')}">
                         <i class="mdi mdi-eye"></i>
                     </button>
                 </div>`;
@@ -183,11 +183,11 @@ function renderStoreTable() {
                 <div class="key-cell-wrapper">
                     <i class="mdi mdi-content-copy copy-btn-inline" data-key="${escapeHtml(key)}" onclick="copyText(this.dataset.key, this)" title="${i18next.t('store.actions.copy_key')}"></i>
                     ${iconHtml}${escapeHtml(key)}
-                    <span class="store-type-badge" title="Type: ${type}">${typeLabel}</span>
+                    <span class="store-type-badge" title="${i18next.t('store.types.type_label')}: ${type}">${typeLabel}</span>
                 </div>
             </td>
             <td class="store-val-cell">${valueHtml}</td>
-            <td class="store-owner">${escapeHtml(meta.owner || 'System')}</td>
+            <td class="store-owner">${escapeHtml(meta.owner || i18next.t('store.system_owner', { defaultValue: 'System' }))}</td>
             <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString() : '-'}</td>
             <td class="store-accessed">${meta.accessed ? new Date(meta.accessed).toLocaleString() : '-'}</td>
             <td class="store-actions">
@@ -219,8 +219,14 @@ async function editStoreItem(key) {
     // Value für Editor vorbereiten (JSON Stringify wenn Objekt)
     let valStr = val;
     if (typeof val === 'object') valStr = JSON.stringify(val, null, 2);
+    
+    // Typ ermitteln
+    let type = typeof val;
+    if (val === null) type = 'null';
+    else if (Array.isArray(val)) type = 'object'; // Wir gruppieren Array/Object im UI als JSON
+    else if (type === 'object') type = 'json';
 
-    openStoreModal(key, valStr, isSecret);
+    openStoreModal(key, valStr, isSecret, type);
 }
 
 async function copyStoreItemValue(key, btn) {
@@ -257,20 +263,27 @@ async function copyText(text, el) {
     } catch (err) { console.error('Failed to copy: ', err); }
 }
 
-function openStoreModal(key = null, value = '', isSecret = false) {
+function openStoreModal(key = null, value = '', isSecret = false, type = 'string') {
     const modal = document.getElementById('store-modal');
     if (!modal) return;
 
     const titleEl = document.getElementById('store-modal-title');
     const keyInput = document.getElementById('store-key-input');
     const valInput = document.getElementById('store-value-input');
+    const typeSelect = document.getElementById('store-type-input');
     const secretCheck = document.getElementById('store-secret-check');
     const toggleIcon = document.getElementById('store-value-toggle');
 
     // Reset UI
     modal.classList.remove('hidden');
-    valInput.type = isSecret ? 'password' : 'text';
+    valInput.style.webkitTextSecurity = isSecret ? 'disc' : 'none';
     toggleIcon.className = isSecret ? 'mdi mdi-eye' : 'mdi mdi-eye-off';
+
+    // Reset Validation & UI
+    [keyInput, valInput].forEach(el => el.classList.remove('invalid'));
+    ['store-key-error', 'store-value-error'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = '';
+    });
     
     if (key) {
         // Edit Mode
@@ -286,6 +299,9 @@ function openStoreModal(key = null, value = '', isSecret = false) {
 
     valInput.value = value;
     secretCheck.checked = isSecret;
+    if (typeSelect) typeSelect.value = type;
+
+    updateStoreModalUI();
 }
 
 function closeStoreModal() {
@@ -295,11 +311,13 @@ function closeStoreModal() {
 function toggleStoreValueVisibility() {
     const input = document.getElementById('store-value-input');
     const icon = document.getElementById('store-value-toggle');
-    if (input.type === 'password') {
-        input.type = 'text';
+    const isMasked = input.style.webkitTextSecurity === 'disc';
+
+    if (isMasked) {
+        input.style.webkitTextSecurity = 'none';
         icon.className = 'mdi mdi-eye-off';
     } else {
-        input.type = 'password';
+        input.style.webkitTextSecurity = 'disc';
         icon.className = 'mdi mdi-eye';
     }
 }
@@ -309,38 +327,128 @@ function toggleStoreSecretState() {
     const input = document.getElementById('store-value-input');
     const icon = document.getElementById('store-value-toggle');
     
-    // Wenn Secret aktiviert wird, Input auf Password setzen
-    if (isSecret) {
-        input.type = 'password';
-        icon.className = 'mdi mdi-eye';
-    } else {
-        input.type = 'text';
-        icon.className = 'mdi mdi-eye-off';
+    input.style.webkitTextSecurity = isSecret ? 'disc' : 'none';
+    icon.className = isSecret ? 'mdi mdi-eye' : 'mdi mdi-eye-off';
+}
+
+function updateStoreModalUI() {
+    const type = document.getElementById('store-type-input').value;
+    const prettifyBtn = document.getElementById('store-value-prettify');
+    if (prettifyBtn) {
+        prettifyBtn.style.display = (type === 'json') ? 'block' : 'none';
+    }
+    validateStoreValueInput();
+}
+
+function validateStoreKeyInput(showEmptyError = false) {
+    const keyInput = document.getElementById('store-key-input');
+    const errorEl = document.getElementById('store-key-error');
+    if (!keyInput || !errorEl) return false;
+
+    const key = keyInput.value.trim();
+
+    if (!key) {
+        if (showEmptyError) {
+            keyInput.classList.add('invalid');
+            errorEl.textContent = i18next.t('store.messages.key_required');
+        } else {
+            keyInput.classList.remove('invalid');
+            errorEl.textContent = '';
+        }
+        return false;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+        keyInput.classList.add('invalid');
+        errorEl.textContent = i18next.t('store.messages.error_invalid_key');
+        return false;
+    }
+
+    if (!keyInput.disabled && storeCache[key]) {
+        keyInput.classList.add('invalid');
+        errorEl.textContent = i18next.t('store.messages.error_duplicate_key');
+        return false;
+    }
+
+    keyInput.classList.remove('invalid');
+    errorEl.textContent = '';
+    return true;
+}
+
+function validateStoreValueInput() {
+    const valInput = document.getElementById('store-value-input');
+    const typeSelect = document.getElementById('store-type-input');
+    const errorEl = document.getElementById('store-value-error');
+    if (!valInput || !typeSelect || !errorEl) return true;
+
+    const val = valInput.value.trim();
+    const type = typeSelect.value;
+
+    // Nur validieren, wenn Typ JSON ist und etwas im Feld steht
+    if (type === 'json' && val) {
+        try {
+            JSON.parse(val);
+            valInput.classList.remove('invalid');
+            errorEl.textContent = '';
+            return true;
+        } catch (e) {
+            valInput.classList.add('invalid');
+            errorEl.textContent = i18next.t('store.messages.invalid_json', { error: e.message });
+            return false;
+        }
+    }
+
+    valInput.classList.remove('invalid');
+    errorEl.textContent = '';
+    return true;
+}
+
+function prettifyStoreJson() {
+    const valInput = document.getElementById('store-value-input');
+    const typeSelect = document.getElementById('store-type-input');
+    if (!valInput || !typeSelect || typeSelect.value !== 'json') return;
+
+    try {
+        const obj = JSON.parse(valInput.value);
+        valInput.value = JSON.stringify(obj, null, 2);
+        validateStoreValueInput();
+    } catch (e) {
+        // Falls ungültig, macht validateStoreValueInput() bereits die Fehlermeldung
     }
 }
 
 async function saveStoreItemFromModal() {
-    const key = document.getElementById('store-key-input').value.trim();
+    if (!validateStoreKeyInput(true) || !validateStoreValueInput()) return;
+
+    const keyInput = document.getElementById('store-key-input');
+    const key = keyInput.value.trim();
     let valStr = document.getElementById('store-value-input').value;
+    const selectedType = document.getElementById('store-type-input').value;
     const isSecret = document.getElementById('store-secret-check').checked;
 
-    if (!key) {
-        alert(i18next.t('store.messages.key_required'));
-        return;
-    }
-
-    // Versuchen, JSON zu parsen, wenn es kein Secret ist oder wenn es wie JSON aussieht
-    // Bei Secrets speichern wir Strings oft als Strings, aber JSON ist auch erlaubt.
     let value = valStr;
+    
     try {
-        const trimmedVal = valStr.trim();
-        // Nur parsen wenn es wie JSON aussieht ({...} oder [...])
-        if (trimmedVal.startsWith('{') || trimmedVal.startsWith('[')) {
-            value = JSON.parse(trimmedVal);
+        const isTrimmedEmpty = valStr.trim() === '';
+
+        if (selectedType === 'number') {
+            if (isTrimmedEmpty) throw new Error(i18next.t('store.messages.error_number_empty'));
+            value = Number(valStr);
+            if (isNaN(value)) throw new Error(i18next.t('store.messages.error_invalid_number'));
+        } else if (selectedType === 'boolean') {
+            if (isTrimmedEmpty) value = false;
+            value = valStr.toLowerCase() === 'true' || valStr === '1';
+        } else if (selectedType === 'json') {
+            const trimmedVal = valStr.trim();
+            if (trimmedVal.startsWith('{') || trimmedVal.startsWith('[')) {
+                value = JSON.parse(trimmedVal);
+            } else {
+                throw new Error(i18next.t('store.messages.error_invalid_json_start'));
+            }
         }
     } catch (e) {
-        // It looked like JSON but failed to parse. Alert the user!
         alert(i18next.t('store.messages.invalid_json', { error: e.message }));
+        return;
     }
 
     try {
@@ -417,19 +525,54 @@ function injectStoreComponents() {
     // 1. Inject Modal if missing
     if (!document.getElementById('store-modal')) {
         const modalHtml = `
+        <style>
+            .form-error-msg {
+                color: var(--danger, #f44336);
+                font-size: 0.75rem;
+                margin-top: 4px;
+                min-height: 1.2em;
+            }
+            #store-key-input.invalid {
+                border-color: var(--danger, #f44336) !important;
+                background-color: rgba(244, 67, 54, 0.1);
+            }
+            #store-value-input {
+                min-height: 42px;
+                max-height: 300px;
+                resize: vertical;
+                line-height: 1.4;
+                padding-top: 10px !important;
+            }
+        </style>
         <div id="store-modal" class="modal-overlay hidden">
             <div class="modal">
                 <h3 id="store-modal-title">${i18next.t('store.modal.title_new')}</h3>
-                <div class="form-group">
-                    <label>${i18next.t('store.modal.label_key')}</label>
-                    <input type="text" id="store-key-input" placeholder="${i18next.t('store.modal.placeholder_key')}">
+                <div style="display: grid; grid-template-columns: 1fr 140px; gap: 15px;">
+                    <div class="form-group">
+                        <label>${i18next.t('store.modal.label_key')}</label>
+                        <input type="text" id="store-key-input" placeholder="${i18next.t('store.modal.placeholder_key')}" oninput="validateStoreKeyInput()">
+                        <div id="store-key-error" class="form-error-msg"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>${i18next.t('store.modal.label_type')}</label>
+                        <select id="store-type-input" style="width: 100%;" onchange="updateStoreModalUI()">
+                            <option value="string">${i18next.t('store.types.string', { defaultValue: 'String' })}</option>
+                            <option value="number">${i18next.t('store.types.number', { defaultValue: 'Number' })}</option>
+                            <option value="boolean">${i18next.t('store.types.boolean', { defaultValue: 'Boolean' })}</option>
+                            <option value="json">${i18next.t('store.types.object', { defaultValue: 'JSON / Object' })}</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group" style="margin-top:15px;">
                     <label>${i18next.t('store.modal.label_value')}</label>
-                    <div class="icon-input-container">
-                        <input type="text" id="store-value-input" placeholder="${i18next.t('store.modal.placeholder_value')}">
-                        <i id="store-value-toggle" class="mdi mdi-eye-off" style="cursor:pointer; opacity:0.7;" onclick="toggleStoreValueVisibility()"></i>
+                    <div class="icon-input-container" style="align-items: flex-start; gap: 5px;">
+                        <textarea id="store-value-input" placeholder="${i18next.t('store.modal.placeholder_value')}" oninput="validateStoreValueInput()"></textarea>
+                        <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 10px;">
+                            <i id="store-value-prettify" class="mdi mdi-format-indent-increase" style="cursor:pointer; opacity:0.7; display:none;" onclick="prettifyStoreJson()" title="${i18next.t('store.actions.prettify')}"></i>
+                            <i id="store-value-toggle" class="mdi mdi-eye-off" style="cursor:pointer; opacity:0.7;" onclick="toggleStoreValueVisibility()"></i>
+                        </div>
                     </div>
+                    <div id="store-value-error" class="form-error-msg"></div>
                 </div>
                 <div class="form-group" style="margin-top:15px; flex-direction:row; align-items:center; gap:10px;">
                     <input type="checkbox" id="store-secret-check" style="width:auto !important;" onchange="toggleStoreSecretState()">
@@ -483,6 +626,10 @@ window.clearStoreSearch = clearStoreSearch;
 window.openStoreModal = openStoreModal;
 window.closeStoreModal = closeStoreModal;
 window.saveStoreItemFromModal = saveStoreItemFromModal;
+window.validateStoreKeyInput = validateStoreKeyInput;
+window.validateStoreValueInput = validateStoreValueInput;
+window.updateStoreModalUI = updateStoreModalUI;
+window.prettifyStoreJson = prettifyStoreJson;
 window.toggleStoreValueVisibility = toggleStoreValueVisibility;
 window.toggleStoreSecretState = toggleStoreSecretState;
 window.toggleSecretDisplay = toggleSecretDisplay;

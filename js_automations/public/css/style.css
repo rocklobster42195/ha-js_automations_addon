@@ -467,7 +467,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     display: flex; align-items: center; background: var(--input-bg); border: 1px solid #383838; border-radius: 6px; padding: 0 10px;
 }
 .icon-input-container:focus-within { border-color: var(--accent); }
-.icon-input-container input { border: none !important; background: transparent !important; padding: 10px 5px !important; width: 100% !important; }
+.icon-input-container input, .icon-input-container textarea { border: none !important; background: transparent !important; padding: 10px 5px !important; width: 100% !important; }
 #modal-icon-preview { font-size: 1.4rem; color: var(--accent); margin-right: 5px; }
 
 /* --- NPM TAGS INPUT --- */

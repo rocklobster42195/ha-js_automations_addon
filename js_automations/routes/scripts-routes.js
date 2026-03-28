@@ -104,7 +104,24 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
     // GET Content
     router.get('/:filename/content', (req, res) => {
         const filename = req.params.filename;
-        let fullPath = filename === 'entities.d.ts' ? path.join(STORAGE_DIR, filename) : getFilePath(filename);
+        let fullPath;
+
+        // Typdefinitionen (.d.ts) können im .storage Ordner (für dynamische Typen)
+        // oder im core/types Ordner (für statische ha-api.d.ts) liegen.
+        if (filename.endsWith('.d.ts')) {
+            let storagePath = path.join(STORAGE_DIR, filename);
+            if (fs.existsSync(storagePath)) {
+                fullPath = storagePath;
+            } else {
+                // Check core/types for static ha-api.d.ts
+                let coreTypesPath = path.join(__dirname, '../core/types', filename);
+                if (fs.existsSync(coreTypesPath)) {
+                    fullPath = coreTypesPath;
+                }
+            }
+        } else {
+            fullPath = getFilePath(filename);
+        }
         
         if (!fullPath) return res.status(404).json({error: "File not found"});
         
