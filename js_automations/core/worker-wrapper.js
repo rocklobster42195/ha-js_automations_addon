@@ -369,6 +369,19 @@ const ha = {
     // Commands
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
+
+    /**
+     * Globale Hilfsfunktion für Home Assistant Service-Calls.
+     * Format: ha.call('domain.service', { data })
+     */
+    call: (serviceId, data = {}) => {
+        const [domain, service] = (serviceId || '').split('.');
+        if (!domain || !service) {
+            ha.error(`Invalid service ID format: "${serviceId}". Expected "domain.service"`);
+            return;
+        }
+        ha.callService(domain, service, data);
+    },
     
     update: (entityId, arg2, arg3) => {
         let state = arg2;
