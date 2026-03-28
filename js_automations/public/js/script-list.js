@@ -199,6 +199,7 @@ function renderScripts(scripts, updateGlobal = true) {
             let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
+            const badge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
             // Libraries sind passiv -> Keine Controls
             const isLib = key === LIB_GROUP;
             const controlsHtml = isLib ? 
@@ -216,7 +217,7 @@ function renderScripts(scripts, updateGlobal = true) {
                 <div class="script-info">
                     <div class="script-name">${s.name}</div>
                     <div class="script-lower-row">
-                        <span class="script-filename">${s.filename}</span>
+                        <span class="script-filename">${badge}${s.filename}</span>
                         <div class="row-actions">
                             ${controlsHtml}
                         </div>
@@ -231,7 +232,8 @@ function renderScripts(scripts, updateGlobal = true) {
 }
 
 function buildScriptTooltip(s) {
-    const lines = [`File: ${s.filename}`];
+    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
+    const lines = [`File: ${s.filename} (${lang})`];
     lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
     
     if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
@@ -318,7 +320,7 @@ async function deleteScript(f) {
     const dependents = allScripts.filter(s => {
         if (!s.includes || !Array.isArray(s.includes)) return false;
         // Check exact match or without .js extension (users might write @include lib or @include lib.js)
-        return s.includes.some(inc => inc === f || inc === f.replace(/\.js$/, ''));
+        return s.includes.some(inc => inc === f || inc === f.replace(/\.(js|ts)$/, ''));
     });
 
     if (dependents.length > 0) {

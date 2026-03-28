@@ -1,4 +1,7 @@
 {
+  "wizard_label_language": "Sprache",
+  "wizard_option_javascript": "JavaScript (.js)",
+  "wizard_option_typescript": "TypeScript (.ts)",
   "store": {
     "title": "Globaler Datenspeicher (ha.store)",
     "loading": "Daten werden geladen...",

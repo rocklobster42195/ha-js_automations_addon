@@ -18,6 +18,7 @@ const IntegrationManager = require('./integration-manager');
 const SettingsManager = require('./settings-manager'); // Static-like module
 const workerManager = require('./worker-manager'); // Singleton module
 const EntityManager = require('./entity-manager');
+const CompilerManager = require('./compiler-manager');
 const Bridge = require('./bridge');
 const SystemService = require('../services/system-service');
 
@@ -44,6 +45,7 @@ class Kernel extends EventEmitter {
         this.integrationManager = null;
         this.workerManager = null;
         this.entityManager = null;
+        this.compilerManager = null;
         this.bridge = null;
         this.systemService = null;
     }
@@ -89,7 +91,7 @@ class Kernel extends EventEmitter {
      */
     boot(io) {
         this.io = io;
-        const { SCRIPTS_DIR, STORAGE_DIR, HA_CONFIG_DIR } = config;
+        const { SCRIPTS_DIR, STORAGE_DIR, HA_CONFIG_DIR, DIST_DIR } = config;
 
         // Instantiate managers
         try {
@@ -100,7 +102,13 @@ class Kernel extends EventEmitter {
             this.stateManager = new StateManager(STORAGE_DIR);
             this.storeManager = new StoreManager(STORAGE_DIR);
             this.integrationManager = new IntegrationManager(HA_CONFIG_DIR);
+            this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
             this.workerManager = workerManager;
+
+            // FIX: Initialize WorkerManager paths immediately so other managers (like EntityManager) can use them
+            this.workerManager.setStorageDir(STORAGE_DIR);
+            this.workerManager.setScriptsDir(SCRIPTS_DIR);
+            this.workerManager.setStore(this.storeManager);
 
             // Create SystemService before EntityManager so we can pass it
             this.systemService = new SystemService(config, this.workerManager);
@@ -110,7 +118,8 @@ class Kernel extends EventEmitter {
                 this.workerManager, 
                 this.stateManager, 
                 this.depManager,
-                this.systemService
+                this.systemService,
+                this.compilerManager
             );
         } catch (err) {
             console.error('❌ Critical error during Kernel boot:', err);
@@ -173,6 +182,16 @@ class Kernel extends EventEmitter {
         this.depManager.on('log', ({ level, message }) => {
             this.logManager.add(level, 'System', message);
         });
+
+        // Forward human-readable Compiler logs
+        this.compilerManager.on('log', ({ level, message }) => {
+            this.logManager.add(level, 'System', message);
+        });
+
+        // Forward technical Compiler signals (for Editor markers) via Socket only
+        this.compilerManager.on('compiler_signal', (data) => {
+            if (this.io) this.io.emit('compiler_signal', data);
+        });
     }
 
     /**
@@ -184,12 +203,36 @@ class Kernel extends EventEmitter {
 
         console.log('🚀 Kernel starting application...');
 
-        const { VERSION, SCRIPTS_DIR } = config;
+        const { VERSION, SCRIPTS_DIR, DIST_DIR } = config;
 
         let startMsg = `Addon started (v${VERSION})...`;
         this.logManager.add('info', 'System', startMsg);
         
         try {
+            this.compilerManager.ensureTsConfig();
+
+            // Clean up orphaned files in dist before starting
+            await this.compilerManager.pruneDist();
+
+            // Perform initial full compilation pass for all TypeScript files
+            this.logManager.add('debug', 'System', 'Starting initial TypeScript compilation pass...');
+            const tsFiles = [];
+            const scanForTs = (dir) => {
+                if (!fs.existsSync(dir)) return;
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        if (entry.name !== '.storage' && entry.name !== 'node_modules') scanForTs(fullPath);
+                    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+                        tsFiles.push(fullPath);
+                    }
+                }
+            };
+            scanForTs(SCRIPTS_DIR);
+            for (const tsFile of tsFiles) { await this.compilerManager.transpile(tsFile); }
+            if (tsFiles.length > 0) this.logManager.add('info', 'System', `Initial compilation pass completed. Checked ${tsFiles.length} files.`);
+
             if (this.systemService.isSafeMode) {
                 this.logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');
             }
@@ -214,11 +257,7 @@ class Kernel extends EventEmitter {
             }
             this.emit('integration_status_changed', status);
 
-
             this.workerManager.setConnector(this.haConnector);
-            this.workerManager.setStore(this.storeManager);
-            this.workerManager.setStorageDir(config.STORAGE_DIR);
-            this.workerManager.setScriptsDir(config.SCRIPTS_DIR);
 
             const currentSettings = this.settingsManager.getSettings();
             this._updateWorkerManagerSettings(currentSettings);
@@ -231,7 +270,8 @@ class Kernel extends EventEmitter {
             if (!this.systemService.isSafeMode) {
                 const enabled = this.stateManager.getEnabledScripts();
                 for (const file of enabled) {
-                    const fullPath = path.join(SCRIPTS_DIR, file);
+                    let fullPath = path.join(SCRIPTS_DIR, file);
+                    
                     if (fs.existsSync(fullPath)) {
                         const meta = ScriptHeaderParser.parse(fullPath);
                         if (meta.dependencies.length > 0) await this.depManager.install(meta.dependencies, false);
@@ -266,8 +306,8 @@ class Kernel extends EventEmitter {
 
         this.logManager.add('debug', 'System', '[Kernel] Running hourly entity and device cleanup check...');
         
-        // 1. Get all script names (without .js) from disk
-        const scripts = this.workerManager.getScripts().map(p => path.basename(p, '.js'));
+        // 1. Get all script names (without extension) from disk
+        const scripts = this.workerManager.getScripts().map(p => path.basename(p, path.extname(p)));
         
         // 2. Clean up exposed entities and orphans
         if (this.entityManager) {
@@ -341,6 +381,11 @@ class Kernel extends EventEmitter {
         this.workerManager.on('script_start', this._onScriptStart.bind(this));
         this.workerManager.on('script_exit', this._onScriptExit.bind(this));
         this.workerManager.on('log', this._onWorkerLog.bind(this));
+
+        // Notify frontend when type definitions are updated
+        this.workerManager.on('typings_generated', () => {
+            if (this.io) this.io.emit('typings_updated');
+        });
     }
     
     _onScriptStart({ filename, meta }) {

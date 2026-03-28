@@ -283,6 +283,15 @@ input#search-input:focus { border-color: var(--accent) !important; }
     margin-bottom: 2px; /* Kleiner Abstand nach unten */
 }
 
+/* Language Badges */
+.lang-badge {
+    display: inline-block; padding: 1px 4px; border-radius: 3px;
+    font-size: 10px; font-weight: bold; line-height: 1;
+    text-transform: uppercase; margin-right: 6px; vertical-align: middle;
+}
+.lang-badge-js { background-color: #f7df1e; color: #000; }
+.lang-badge-ts { background-color: #3178c6; color: #fff; }
+
 /* Untere Zeile der rechten Spalte */
 .script-lower-row {
     display: flex;

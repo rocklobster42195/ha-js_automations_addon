@@ -42,6 +42,8 @@ function renderTabs() {
             tabEl.classList.add('dirty');
         }
 
+        const badge = (window.getLanguageBadge) ? window.getLanguageBadge(tabData.filename) : '';
+
         tabEl.onclick = () => switchToTab(tabData.filename);
         
         // Live-Daten aus allScripts holen (falls vorhanden), sonst Fallback auf Tab-Daten
@@ -61,7 +63,7 @@ function renderTabs() {
 
         tabEl.innerHTML = `
             <i class="tab-icon mdi mdi-${iconName} ${statusClass}"></i>
-            <span class="tab-filename ${statusClass}">${tabData.filename}</span>
+            <span class="tab-filename ${statusClass}">${badge}${tabData.filename}</span>
             <div class="tab-close-container">
                 <span class="tab-dirty-dot">●</span>
                 <button class="tab-close-btn" onclick="event.stopPropagation(); closeTab('${tabData.filename}');">
@@ -90,11 +92,14 @@ async function openOrSwitchToTab(filename, icon) {
     try {
         const res = await apiFetch(`api/scripts/${filename}/content`);
         const data = await res.json();
+
+        const language = window.getLanguageByFilename ? window.getLanguageByFilename(filename) : 'javascript';
+        const uri = monaco.Uri.parse(`file:///${filename}`);
         
         const newTab = {
             filename: filename,
             icon: icon,
-            model: monaco.editor.createModel(data.content, 'javascript'),
+            model: monaco.editor.createModel(data.content, language, uri),
             isDirty: false,
             originalContent: data.content,
             viewState: null,

@@ -33,4 +33,4 @@ Thumbs.db
 # Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
-addon/scripts
+scripts

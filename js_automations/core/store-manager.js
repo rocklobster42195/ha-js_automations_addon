@@ -4,10 +4,11 @@
  */
 const fs = require('fs');
 const path = require('path');
-const StoreTypeGenerator = require('./store-type-generator');
+const EventEmitter = require('events');
 
-class StoreManager {
+class StoreManager extends EventEmitter {
     constructor(rootDir) {
+        super();
         this.storeFile = path.join(rootDir, 'store.json');
         this.data = {};
         this.load();
@@ -17,10 +18,6 @@ class StoreManager {
         if (fs.existsSync(this.storeFile)) {
             try {
                 this.data = JSON.parse(fs.readFileSync(this.storeFile, 'utf8'));
-                // Typen beim Start einmalig generieren
-                const keys = Object.keys(this.data);
-                console.log(`[StoreManager] Debug: Loading ${keys.length} keys. First key structure:`, keys[0] ? { key: keys[0], data: this.data[keys[0]] } : 'empty');
-                StoreTypeGenerator.generate(this.data);
             } catch (e) {
                 console.error("❌ Failed to load store.json");
                 this.data = {};
@@ -41,8 +38,7 @@ class StoreManager {
             accessed: new Date().toISOString()
         };
         this.save();
-        console.log(`[StoreManager] Debug: Key '${key}' set with value type: ${typeof value}`);
-        StoreTypeGenerator.generate(this.data);
+        this.emit('changed', { key, value });
     }
 
     get(key) {
@@ -63,7 +59,7 @@ class StoreManager {
         if (this.data[key]) {
             delete this.data[key];
             this.save();
-            StoreTypeGenerator.generate(this.data);
+            this.emit('changed', { key, deleted: true });
             return true;
         }
         return false;
@@ -72,7 +68,6 @@ class StoreManager {
     clear() {
         this.data = {};
         this.save();
-        StoreTypeGenerator.generate(this.data);
     }
 
     /** Löscht alle Variablen, die von einem bestimmten Skript erstellt wurden */
@@ -86,7 +81,6 @@ class StoreManager {
         }
         if (count > 0) {
             this.save();
-            StoreTypeGenerator.generate(this.data);
         }
         return count;
     }

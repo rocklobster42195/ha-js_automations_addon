@@ -28,6 +28,7 @@ class WorkerManager extends EventEmitter {
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
         this.scriptsDir = '';
+        this.distDir = '';
         this.systemLanguage = 'en';
         this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> Payload (Config)
         this.activeRunEntities = new Map(); // Track entities registered during the current script run (Mark-and-Sweep)
@@ -111,6 +112,7 @@ class WorkerManager extends EventEmitter {
     }
     setStorageDir(dir) { 
         this.storageDir = dir;
+        this.distDir = path.join(dir, 'dist');
         this.loadRegistry();
         this.saveRegistry(); // Ensure file exists even if empty
     }
@@ -157,7 +159,8 @@ class WorkerManager extends EventEmitter {
             this.scriptEntityMap.get(filename).delete(entityId);
         }
         this.saveRegistry();
-        this.emit('request_device_cleanup', path.basename(filename, '.js'));
+        const scriptName = path.basename(filename, path.extname(filename));
+        this.emit('request_device_cleanup', scriptName);
     }
 
     getScripts() {
@@ -276,7 +279,8 @@ class WorkerManager extends EventEmitter {
         this.saveRegistry();
 
         // Request device cleanup check
-        this.emit('request_device_cleanup', path.basename(filename, '.js'));
+        const scriptName = path.basename(filename, path.extname(filename));
+        this.emit('request_device_cleanup', scriptName);
     }
 
     /**
@@ -318,51 +322,68 @@ class WorkerManager extends EventEmitter {
         this.saveRegistry();
         
         // Check if the device should be removed (if no entities are left)
-        this.emit('request_device_cleanup', path.basename(filename, '.js'));
+        const scriptName = path.basename(filename, path.extname(filename));
+        this.emit('request_device_cleanup', scriptName);
     }
 
     /**
      * Starts a script in an isolated thread.
      */
     startScript(filename) {
-        const fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
+        let fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
+        const isTypeScript = fullPath.endsWith('.ts');
+        let executionPath = fullPath;
+
         if (!fs.existsSync(fullPath)) {
             this.emit('log', { source: 'System', message: `Script not found: ${filename}`, level: 'error' });
             return;
         }
 
+        if (isTypeScript) {
+            const relativePath = path.relative(this.scriptsDir, fullPath);
+            const compiledPath = path.join(this.distDir, relativePath.replace(/\.ts$/, '.js'));
+            
+            if (!fs.existsSync(compiledPath)) {
+                const displayFile = path.basename(filename);
+                this.emit('log', { source: 'System', message: `Compiled version for ${displayFile} not found in dist. Was it transpiled? Check logs for Compiler errors.`, level: 'error' });
+                return;
+            }
+            executionPath = compiledPath;
+        }
+
         const scriptMeta = ScriptHeaderParser.parse(fullPath);
         const { name } = scriptMeta;
+        const scriptId = scriptMeta.filename;
 
         // --- SAFEGUARD: Excessive Restart Protection ---
         const now = Date.now();
-        const restarts = this.restartTracker.get(scriptMeta.filename) || [];
+        const restarts = this.restartTracker.get(scriptId) || [];
         // Nur Starts der letzten 60 Sekunden behalten
         const recentRestarts = restarts.filter(t => now - t < this.settings.restart_protection_time);
         
         if (recentRestarts.length >= this.settings.restart_protection_count) {
             this.emit('log', { source: 'System', message: `🛑 Script '${name}' stopped due to excessive restart rate (>${this.settings.restart_protection_count} restarts in ${this.settings.restart_protection_time / 1000}s).`, level: 'error' });
-            this.lastExitState.set(scriptMeta.filename, 'error');
+            this.lastExitState.set(scriptId, 'error');
             return; // Start abbrechen
         }
         recentRestarts.push(now);
-        this.restartTracker.set(scriptMeta.filename, recentRestarts);
+        this.restartTracker.set(scriptId, recentRestarts);
         
         // Restart if already running
-        if (this.workers.has(scriptMeta.filename)) {
-            this.stopScript(scriptMeta.filename, 'restarting');
+        if (this.workers.has(scriptId)) {
+            this.stopScript(scriptId, 'restarting');
         }
 
-        this.lastExitState.delete(scriptMeta.filename);
-        this.subscriptions.set(scriptMeta.filename, []);
+        this.lastExitState.delete(scriptId);
+        this.subscriptions.set(scriptId, []);
 
         // Initialize tracking for entities registered during this run (Mark-and-Sweep)
-        this.activeRunEntities.set(scriptMeta.filename, new Set());
+        this.activeRunEntities.set(scriptId, new Set());
         
         // Schedule a sweep to remove entities that are no longer in the script code.
         // We wait 10 seconds to give the script time to perform its initial ha.register() calls.
-        this.emit('log', { source: 'System', message: `[WorkerManager] Scheduled entity sweep for ${scriptMeta.filename} in 10s`, level: 'debug' });
-        setTimeout(() => this._sweepOrphanedDynamicEntities(scriptMeta.filename), 10000);
+        this.emit('log', { source: 'System', message: `[WorkerManager] Scheduled entity sweep for ${scriptId} in 10s`, level: 'debug' });
+        setTimeout(() => this._sweepOrphanedDynamicEntities(scriptId), 10000);
 
         // Prepare initial data dump for the worker
         const initialStoreValues = {};
@@ -394,6 +415,7 @@ class WorkerManager extends EventEmitter {
             },
             workerData: {
                 ...scriptMeta,
+                path: executionPath,
                 initialStates: this.haConnector ? this.haConnector.states : {},
                 initialStore: initialStoreValues,
                 storageDir: this.storageDir,
@@ -403,7 +425,8 @@ class WorkerManager extends EventEmitter {
             env: { 
                 ...process.env, 
                 NODE_PATH: path.resolve(this.storageDir, 'node_modules') 
-            }
+            },
+            execArgv: ['--enable-source-maps']
         });
 
         worker.on('message', async (msg) => {

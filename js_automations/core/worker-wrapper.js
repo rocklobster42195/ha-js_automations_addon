@@ -670,40 +670,49 @@ global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 // --- 5. LIBRARY INJECTION ---
 function loadLibraries() {
     const scriptPath = workerData.path;
-    // 1. Skript-Inhalt lesen, um Header zu parsen
-    const content = fs.readFileSync(scriptPath, 'utf8');
-    
-    // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
-    // Matches: @include lib1.js, lib2.js
-    const includeMatches = content.matchAll(/@include\s+(.+)/g);
-    const librariesToLoad = new Set();
-
-    for (const match of includeMatches) {
-        match[1].split(',').forEach(lib => {
-            const cleanName = lib.trim();
-            if (cleanName) librariesToLoad.add(cleanName);
-        });
-    }
-
-    // 3. Libraries laden und ausführen
-    if (librariesToLoad.size > 0) {
-        // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
-        const libDir = path.join(path.dirname(scriptPath), 'libraries');
+    try {
+        // 1. Skript-Inhalt lesen, um Header zu parsen
+        const content = fs.readFileSync(scriptPath, 'utf8');
         
-        librariesToLoad.forEach(libName => {
-            // .js Endung sicherstellen
-            if (!libName.endsWith('.js')) libName += '.js';
+        // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
+        // Matches: @include lib1.js, lib2.js
+        const includeMatches = content.matchAll(/@include\s+(.+)/g);
+        const librariesToLoad = new Set();
+
+        for (const match of includeMatches) {
+            match[1].split(',').forEach(lib => {
+                const cleanName = lib.trim();
+                if (cleanName) librariesToLoad.add(cleanName);
+            });
+        }
+
+        // 3. Libraries laden und ausführen
+        if (librariesToLoad.size > 0) {
+            // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
+            const libDir = path.join(path.dirname(scriptPath), 'libraries');
             
-            const libPath = path.join(libDir, libName);
-            
-            if (fs.existsSync(libPath)) {
-                const libCode = fs.readFileSync(libPath, 'utf8');
-                // Führt den Code im globalen Kontext dieses Workers aus
-                vm.runInThisContext(libCode, { filename: libPath });
-            } else {
-                ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
-            }
-        });
+            librariesToLoad.forEach(libName => {
+                // Handle potential .ts extensions in @include or missing extensions
+                let actualLibName = libName;
+                if (actualLibName.endsWith('.ts')) {
+                    actualLibName = actualLibName.replace(/\.ts$/, '.js');
+                } else if (!actualLibName.endsWith('.js')) {
+                    actualLibName += '.js';
+                }
+                
+                const libPath = path.join(libDir, actualLibName);
+                
+                if (fs.existsSync(libPath)) {
+                    const libCode = fs.readFileSync(libPath, 'utf8');
+                    // Führt den Code im globalen Kontext dieses Workers aus
+                    vm.runInThisContext(libCode, { filename: libPath });
+                } else {
+                    ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
+                }
+            });
+        }
+    } catch (e) {
+        ha.error(e);
     }
 }
 
@@ -714,7 +723,7 @@ try {
     delete require.cache[scriptPath]; // Avoid stale code
     require(scriptPath);
 } catch (err) {
-    ha.error(`Runtime Error: ${err.message}`);
+    ha.error(err);
     console.error(`[Worker Error] ${workerData.filename}:`, err);
     // Exit after a short delay to allow log delivery
     setTimeout(() => process.exit(1), 100);

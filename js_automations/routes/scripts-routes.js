@@ -24,7 +24,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
         // 1. Automations
         if (fs.existsSync(SCRIPTS_DIR)) {
-            const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js') && !f.endsWith('.d.ts'));
+            const files = fs.readdirSync(SCRIPTS_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
             results.push(...files.map(f => {
                 const m = ScriptHeaderParser.parse(path.join(SCRIPTS_DIR, f));
                 if (!m.name) m.name = f; // Fallback: Dateiname als Name, falls @name fehlt
@@ -41,7 +41,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
         // 2. Libraries
         if (fs.existsSync(LIBRARIES_DIR)) {
-            const files = fs.readdirSync(LIBRARIES_DIR).filter(f => f.endsWith('.js'));
+            const files = fs.readdirSync(LIBRARIES_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
             results.push(...files.map(f => {
                 const m = ScriptHeaderParser.parse(path.join(LIBRARIES_DIR, f));
                 if (!m.name) m.name = f; // Fallback
@@ -99,6 +99,56 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         await depManager.prune();
         io.emit('status_update');
         res.json({ ok: true });
+    });
+
+    // GET All Typings (Bundle for Monaco)
+    router.get('/typings', (req, res) => {
+        const typings = [];
+
+        // 1. Static HA API Definition
+        const haApiPath = path.join(__dirname, '../core/types/ha-api.d.ts');
+        if (fs.existsSync(haApiPath)) {
+            typings.push({
+                filename: 'ha-api.d.ts',
+                content: fs.readFileSync(haApiPath, 'utf8')
+            });
+        }
+
+        // 2. Dynamic Entity Definitions (generated from HA states)
+        const entitiesPath = path.join(STORAGE_DIR, 'entities.d.ts');
+        if (fs.existsSync(entitiesPath)) {
+            typings.push({
+                filename: 'entities.d.ts',
+                content: fs.readFileSync(entitiesPath, 'utf8')
+            });
+        }
+
+        // 3. NPM @types (axios, lodash, etc.)
+        const typesDir = path.join(STORAGE_DIR, 'node_modules/@types');
+        if (fs.existsSync(typesDir)) {
+            const scanTypes = (dir, base = '') => {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    const relativePath = path.join(base, entry.name);
+                    if (entry.isDirectory()) {
+                        scanTypes(fullPath, relativePath);
+                    } else if (entry.name.endsWith('.d.ts')) {
+                        typings.push({
+                            filename: `node_modules/@types/${relativePath.replace(/\\/g, '/')}`,
+                            content: fs.readFileSync(fullPath, 'utf8')
+                        });
+                    }
+                }
+            };
+            try {
+                scanTypes(typesDir);
+            } catch (e) {
+                console.warn("[API] Failed to scan @types directory:", e.message);
+            }
+        }
+
+        res.json(typings);
     });
 
     // GET Content
@@ -181,13 +231,14 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
         
         const { type, name } = req.body; // 'automation' oder 'library', optional 'name'
+        const originalExt = path.extname(req.file.originalname) || '.js';
         
         // Dateinamen bereinigen (gleiche Logik wie bei Create)
         let filename;
         if (name && name.trim()) {
-            filename = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+            filename = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + originalExt;
         } else {
-            filename = path.parse(req.file.originalname).name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+            filename = path.parse(req.file.originalname).name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + originalExt;
         }
         
         const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
@@ -207,13 +258,14 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         try {
             const response = await axios.get(url, { responseType: 'text' });
             const code = response.data;
+            const urlExt = path.extname(url.split('?')[0]) || '.js';
             
             // Dateinamen aus URL ableiten und bereinigen
             let filename;
             if (name && name.trim()) {
-                filename = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+                filename = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + urlExt;
             } else {
-                filename = path.parse(path.basename(url).split('?')[0]).name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+                filename = path.parse(path.basename(url).split('?')[0]).name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + urlExt;
             }
             
             const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
@@ -232,8 +284,9 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
     // POST Create
     router.post('/', async (req, res) => {
-        const { name, type, code } = req.body;
-        const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+        const { name, type, code, extension = '.js' } = req.body;
+        const ext = extension.startsWith('.') ? extension : `.${extension}`;
+        const filename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + ext;
         const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
         const fullPath = path.join(targetDir, filename);
         
@@ -249,13 +302,14 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
     // PUT Update Metadata (Header only)
     router.put('/:filename/metadata', async (req, res) => {
         const oldFilename = req.params.filename;
-        const { name, type, icon, description, area, label, loglevel, npmModules, includes } = req.body;
+        const { name, type, icon, description, area, label, loglevel, npmModules, includes, extension } = req.body;
         
         let fullPath = getFilePath(oldFilename);
         if (!fullPath) return res.status(404).json({ error: 'File not found' });
 
         // 1. Calculate new filename & path
-        const newFilename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '.js';
+        const ext = extension || path.extname(oldFilename);
+        const newFilename = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + ext;
         const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
         const newFullPath = path.join(targetDir, newFilename);
         
@@ -284,8 +338,8 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         let updatedConsumers = 0;
         if (wasLibrary && isRenaming) {
             const allFiles = [];
-            if (fs.existsSync(SCRIPTS_DIR)) fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js')).forEach(f => allFiles.push(path.join(SCRIPTS_DIR, f)));
-            if (fs.existsSync(LIBRARIES_DIR)) fs.readdirSync(LIBRARIES_DIR).filter(f => f.endsWith('.js')).forEach(f => allFiles.push(path.join(LIBRARIES_DIR, f)));
+            if (fs.existsSync(SCRIPTS_DIR)) fs.readdirSync(SCRIPTS_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts')).forEach(f => allFiles.push(path.join(SCRIPTS_DIR, f)));
+            if (fs.existsSync(LIBRARIES_DIR)) fs.readdirSync(LIBRARIES_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts')).forEach(f => allFiles.push(path.join(LIBRARIES_DIR, f)));
 
             for (const file of allFiles) {
                 if (file === fullPath) continue; // Skip self

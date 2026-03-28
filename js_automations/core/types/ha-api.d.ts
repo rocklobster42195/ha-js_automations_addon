@@ -6,7 +6,7 @@
 
 // Placeholder for dynamically generated entities.d.ts content
 // This will be replaced by the actual content of entities.d.ts
-type EntityID = string;
+interface HAEntities { [key: string]: HAState<any>; }
 
 // Placeholder for dynamically generated store.d.ts content
 // This will be replaced by the actual content of store.d.ts
@@ -14,15 +14,21 @@ interface GlobalStoreSchema /*__JSA_STORE_SCHEMA__*/ {}
 
 // Placeholder for dynamically generated services
 // This will be replaced by the actual content of the service map
-type ServiceMap = Record<string, Record<string, any>>;
+interface ServiceMap { }
+
+/** Type that provides autocomplete for known keys in GlobalStoreSchema while allowing any string. */
+type StoreKey = keyof GlobalStoreSchema | (string & { _?: never });
+
+/** Type alias for known Home Assistant entity IDs with fallback to any string */
+type EntityID = keyof HAEntities | (string & {});
 
 /**
  * Represents a Home Assistant entity state.
  */
-interface HAState {
-    entity_id: EntityID;
+interface HAState<T = HAAttributes> {
+    entity_id: string;
     state: string;
-    attributes: Record<string, any>;
+    attributes: T;
     last_changed: string;
     last_updated: string;
     context: {
@@ -30,6 +36,65 @@ interface HAState {
         parent_id: string | null;
         user_id: string | null;
     };
+}
+
+/**
+ * Represents common Home Assistant entity attributes.
+ */
+interface HAAttributes {
+    friendly_name?: string;
+    icon?: string;
+    device_class?: string;
+    unit_of_measurement?: string;
+    [key: string]: any;
+}
+
+/** Specific attributes for light entities */
+interface LightAttributes extends HAAttributes {
+    brightness?: number;
+    color_temp?: number;
+    rgb_color?: [number, number, number];
+    xy_color?: [number, number];
+    hs_color?: [number, number];
+    effect?: string;
+    effect_list?: string[];
+    supported_color_modes?: string[];
+    color_mode?: string;
+}
+
+/** Specific attributes for media player entities */
+interface MediaPlayerAttributes extends HAAttributes {
+    volume_level?: number;
+    is_volume_muted?: boolean;
+    media_content_id?: string;
+    media_content_type?: string;
+    media_duration?: number;
+    media_position?: number;
+    media_title?: string;
+    media_artist?: string;
+    media_album_name?: string;
+    source?: string;
+    source_list?: string[];
+}
+
+/** Specific attributes for climate entities */
+interface ClimateAttributes extends HAAttributes {
+    current_temperature?: number;
+    temperature?: number;
+    target_temp_high?: number;
+    target_temp_low?: number;
+    fan_mode?: string;
+    fan_modes?: string[];
+    hvac_action?: string;
+    hvac_modes?: string[];
+    preset_mode?: string;
+    preset_modes?: string[];
+}
+
+/** Specific attributes for sensor entities */
+interface SensorAttributes extends HAAttributes {
+    state_class?: 'measurement' | 'total' | 'total_increasing';
+    last_reset?: string;
 }
 
 /**
@@ -92,10 +157,10 @@ interface HA {
 
     // --- Home Assistant Services & Entities ---
     /** Calls a Home Assistant service. */
-    callService<D extends keyof ServiceMap, S extends keyof ServiceMap[D]>(
+    callService<D extends keyof ServiceMap | (string & {}), S extends (D extends keyof ServiceMap ? keyof ServiceMap[D] : string)>(
         domain: D,
         service: S,
-        data?: ServiceMap[D][S]
+        data?: D extends keyof ServiceMap ? (S extends keyof ServiceMap[D] ? ServiceMap[D][S] : any) : any
     ): Promise<any>;
 
     /**
@@ -115,6 +180,15 @@ interface HA {
     update(entityId: EntityID, attributes: Record<string, any>): void;
 
     /**
+     * @deprecated Use ha.update() instead.
+     * Updates the state and/or attributes of an existing Home Assistant entity.
+     * @param entityId The entity ID to update.
+     * @param state The new state value.
+     * @param attributes Optional attributes to set.
+     */
+    updateState(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
+
+    /**
      * Registers a native Home Assistant entity via the JS Automations integration.
      * This creates a persistent entity in Home Assistant's registry.
      * @param entityId The desired entity ID (e.g., 'sensor.my_value').
@@ -123,7 +197,7 @@ interface HA {
     register(entityId: string, config?: Record<string, any>): void;
 
     /** A live cache of all Home Assistant entity states. */
-    readonly states: Record<EntityID, HAState>;
+    readonly states: HAEntities;
     /** Gets the current state object for a given entity ID. */
     getState(entityId: EntityID): HAState | undefined;
     /** Gets a specific attribute value for an entity. */
@@ -216,27 +290,30 @@ interface HA {
          * @param value The value to store.
          * @param isSecret If true, the value will be masked in the UI.
          */
-        set<K extends keyof GlobalStoreSchema>(key: K | (string & {}), value: K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any, isSecret?: boolean): void;
+        set<K extends keyof GlobalStoreSchema>(key: K, value: GlobalStoreSchema[K], isSecret?: boolean): void;
+        set<T = any>(key: string & { _?: never }, value: T, isSecret?: boolean): void;
 
         /**
          * Retrieves a value from the Global Store.
          * @param key The key of the value to retrieve.
          * @returns The stored value, or `undefined` if not found.
          */
-        get<K extends keyof GlobalStoreSchema>(key: K | (string & {})): (K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any) | undefined;
+        get<K extends keyof GlobalStoreSchema>(key: K): GlobalStoreSchema[K];
+        get<T = any>(key: string & { _?: never }): T | undefined;
 
         /**
          * Deletes a value from the Global Store.
          * @param key The key of the value to delete.
          */
-        delete<K extends keyof GlobalStoreSchema>(key: K | (string & {})): void;
+        delete(key: StoreKey): void;
 
         /**
          * Registers a callback to be executed when a specific store key's value changes.
          * @param key The store key to listen for changes on.
          * @param callback The function to call when the value changes.
          */
-        on<K extends keyof GlobalStoreSchema>(key: K | (string & {}), callback: (newValue: (K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any) | undefined, oldValue: (K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any) | undefined) => void): void;
+        on<K extends keyof GlobalStoreSchema>(key: K, callback: (newValue: GlobalStoreSchema[K] | undefined, oldValue: GlobalStoreSchema[K] | undefined) => void): void;
+        on<T = any>(key: string & { _?: never }, callback: (newValue: T | undefined, oldValue: T | undefined) => void): void;
     };
 
     /**
@@ -247,7 +324,8 @@ interface HA {
      * @param defaultValue An optional default value if the key is not found in the store.
      * @returns A Proxy object that automatically persists changes.
      */
-    persistent<K extends keyof GlobalStoreSchema>(key: K | (string & {}), defaultValue?: K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any): K extends keyof GlobalStoreSchema ? GlobalStoreSchema[K] : any;
+    persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
+    persistent<T = any>(key: string & { _?: never }, defaultValue?: T): T;
 }
 
 /**
