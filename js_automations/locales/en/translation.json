@@ -190,6 +190,7 @@
     "loading": "Loading data...",
     "load_error": "Error loading data.",
     "empty": "Store is empty.",
+    "system_owner": "System",
     "no_results": "No results found.",
     "headers": {
       "key": "Key",
@@ -203,22 +204,28 @@
       "title_new": "New Variable",
       "label_key": "Key (ID)",
       "label_value": "Value",
+      "label_type": "Data Type",
       "label_secret": "Is Secret (Masked in UI)",
       "placeholder_key": "e.g. my_api_key",
       "placeholder_value": "Value"
     },
+    "btn_save": "Save",
+    "btn_cancel": "Cancel",
     "actions": {
       "add_variable": "Add Variable",
       "edit": "Edit",
       "delete": "Delete",
       "clear_all": "Clear All (Empty entire store)",
       "refresh": "Refresh",
+      "show_hide": "Show/Hide",
+      "prettify": "Format JSON",
       "filter_placeholder": "Filter...",
       "clear_filter": "Clear filter",
       "copy": "Copy Value",
       "copy_key": "Copy Key"
     },
     "types": {
+      "type_label": "Type",
       "string": "TXT",
       "number": "NUM",
       "boolean": "BOOL",
@@ -228,12 +235,17 @@
     },
     "messages": {
       "key_required": "Key is required",
+      "error_duplicate_key": "A variable with this key already exists.",
+      "error_invalid_key": "Invalid Key: Only alphanumeric characters and underscores are allowed.",
       "invalid_json": "Invalid JSON format: {{error}}\n\nThe value will be saved as a string.",
       "save_error": "Error saving: {{error}}",
       "confirm_delete": "Do you really want to delete the key '{{key}}' from the store?",
       "delete_error": "Error deleting: {{error}}",
       "confirm_clear": "WARNING: Do you really want to clear the ENTIRE store? All saved variables from all scripts will be lost!",
-      "generic_error": "Error: {{error}}"
+      "generic_error": "Error: {{error}}",
+      "error_number_empty": "Number cannot be empty",
+      "error_invalid_number": "Value is not a valid number",
+      "error_invalid_json_start": "Value does not look like JSON (must start with { or [)"
     }
   }
 }

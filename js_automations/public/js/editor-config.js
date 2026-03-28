@@ -5,6 +5,7 @@
 
 var isMonacoReady = false;
 var allEntities = [];
+var allStoreKeys = [];
 window._libDisposables = []; // Speicher für Monaco Lib-Referenzen
 
 // --- MONACO CONFIG ---
@@ -177,17 +178,48 @@ function registerCompletionProviders() {
             return { suggestions: [] };
         }
     });
+
+    // HA Store Keys Provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ["'", '"'],
+        provideCompletionItems: function(model, position) {
+            const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+            
+            if (textUntilPosition.match(/ha\.store\.(get|set|delete)\(\s*['"]$/)) {
+                return {
+                    suggestions: (allStoreKeys || []).map(item => ({
+                        label: item.key,
+                        kind: monaco.languages.CompletionItemKind.Field,
+                        insertText: item.key,
+                        detail: item.type,
+                        documentation: {
+                            value: `**Store Key:** \`${item.key}\`\n\n**Type:** \`${item.type}\``,
+                            isTrusted: true
+                        }
+                    }))
+                };
+            }
+            return { suggestions: [] };
+        }
+    });
 }
 
 async function configureMonaco() {
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, checkJs: true, allowJs: true });
+    
+    // Fix potential HTML entities (e.g. &lt; instead of <) that break TypeScript parsing
+    const decodeEntities = (ts) => ts ? ts.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"') : '';
+
     try {
         // 1. Load Static API Definitions from file
         let apiDefinitions = '';
         try {
-            const resApi = await fetch('types/ha-api.d.ts');
+            // Fetch ha-api.d.ts from the backend API, like other .d.ts files
+            const apiDefUrl = BASE_PATH + 'api/scripts/ha-api.d.ts/content';
+            const resApi = await fetch(apiDefUrl);
             if (resApi.ok) {
-                apiDefinitions = await resApi.text();
+                const data = await resApi.json();
+                apiDefinitions = decodeEntities(data.content || '');
             }
         } catch (e) { console.warn("Failed to load ha-api.d.ts", e); }
 
@@ -219,27 +251,56 @@ async function configureMonaco() {
         } catch (e) { console.warn("Failed to load services for types", e); }
 
         // 3. Load Dynamic Entities from Server
-        const res = await apiFetch('api/scripts/entities.d.ts/content');
-        const data = await res.json();
+        const resEntities = await apiFetch('api/scripts/entities.d.ts/content');
+        const dataEntities = await resEntities.json();
+
+        // 4. Load Global Store Schema
+        const resStore = await apiFetch('api/scripts/store.d.ts/content');
+        const dataStore = await resStore.json();
         
-        if (data.content) {
-            const matches = data.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g);
-            if (matches) {
-                allEntities = matches.map(m => m.replace(/"/g, '')).sort();
-                console.log(`✅ Loaded ${allEntities.length} Entities.`);
-            }
-            
-            // Merge Dynamic Entities with Static API
-            const entities = data.content.replace(/export /g, '').replace(/type EntityID =\s+\|/g, 'type EntityID = ');
-            
-            // Merge everything: Entities + Static API (with placeholders replaced)
-            let staticLib = apiDefinitions.replace(/type EntityID = string;/, '');
-            staticLib = staticLib.replace(/type ServiceMap = Record<string, Record<string, any>>;/, serviceMapDef);
-            
-            const lib = `${entities}\n\n${staticLib}`;
-            monaco.languages.typescript.javascriptDefaults.addExtraLib(lib, 'file:///ha-api.d.ts');
+        // Extract entities from dataEntities.content, or use an empty array if content is missing
+        const matches = dataEntities.content ? dataEntities.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g) : null;
+        if (matches) {
+            allEntities = matches.map(m => m.replace(/"/g, '')).sort();
+            console.log(`✅ Loaded ${allEntities.length} Entities.`);
+        } else {
+            allEntities = []; // Ensure it's an empty array if no entities are found
         }
-    } catch (e) {}
+
+        // Extract store keys from dataStore.content
+        allStoreKeys = [];
+        if (dataStore.content) {
+            // Regex sucht nach "key": type;
+            const storeRegex = /"([^"]+)"\s*:\s*([^;]+);/g;
+            let match;
+            while ((match = storeRegex.exec(dataStore.content)) !== null) {
+                allStoreKeys.push({
+                    key: match[1],
+                    type: match[2].trim()
+                });
+            }
+            allStoreKeys.sort((a, b) => a.key.localeCompare(b.key));
+            console.log(`✅ Loaded ${allStoreKeys.length} Store Keys with types.`);
+        }
+
+        const storeRaw = decodeEntities(dataStore.content);
+        const entitiesRaw = decodeEntities(dataEntities.content);
+
+        // Prepare dynamic parts (remove export for internal merging, provide robust fallbacks)
+        const entitiesContent = entitiesRaw ? entitiesRaw.replace(/export /g, '') : 'type EntityID = string;';
+        const storeSchemaContent = storeRaw ? storeRaw.replace(/export /g, '') : 'interface GlobalStoreSchema {}';
+        
+        // Replace placeholders in static API with dynamic content
+        let libContent = apiDefinitions;
+        libContent = libContent.replace(/type EntityID = string;/, entitiesContent);
+        libContent = libContent.replace(/interface\s+GlobalStoreSchema\s+\/\*__JSA_STORE_SCHEMA__\*\/\s*\{\}/, storeSchemaContent);
+        libContent = libContent.replace(/type\s+ServiceMap\s+=\s+Record<string,\s+Record<string,\s+any>>;/, serviceMapDef);
+        
+        // Dispose old lib if exists to avoid "Duplicate identifier" errors
+        if (window._apiLib) window._apiLib.dispose();
+        window._apiLib = monaco.languages.typescript.javascriptDefaults.addExtraLib(libContent, 'file:///ha-api.d.ts');
+
+    } catch (e) { console.error("Error configuring Monaco:", e); }
     
     await loadLibraryDefinitions(); // NEU: Globale Libraries laden
 

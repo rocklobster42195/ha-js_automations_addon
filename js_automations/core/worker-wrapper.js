@@ -141,7 +141,15 @@ const sendLog = (level, msg) => {
 // This ensures the worker's state cache is truly isolated.
 const states = JSON.parse(JSON.stringify(workerData.initialStates || {}));
 
-const storeValues = workerData.initialStore || {};
+// Store initialisieren: Sicherstellen, dass wir nur die 'value' Felder im lokalen Cache haben,
+// falls die Datenstruktur Metadaten enthält (Refactoring Support).
+const rawStore = workerData.initialStore || {};
+const storeValues = {};
+for (const k in rawStore) {
+    const item = rawStore[k];
+    storeValues[k] = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+}
+
 const storeListeners = {};
 const subscriptionCallbacks = [];
 const stopCallbacks = [];
@@ -577,7 +585,7 @@ const ha = {
             storeValues[key] = value;
             parentPort.postMessage({ type: 'store_set', key, value, isSecret });
         },
-        get: (key) => storeValues[key],
+        get: (key) => storeValues[key], // Jetzt sicher, da oben gefiltert
         delete: (key) => {
             delete storeValues[key];
             parentPort.postMessage({ type: 'store_delete', key });
