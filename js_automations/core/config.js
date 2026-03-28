@@ -11,6 +11,7 @@ const ADDON_DIR = path.join(__dirname, '..');
 // Base Directories
 const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.resolve(__dirname, '../../scripts');
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
+const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const LOCALES_DIR = path.join(ADDON_DIR, 'locales');
 const PUBLIC_DIR = path.join(ADDON_DIR, 'public');
@@ -29,6 +30,10 @@ const ensureDirectories = () => {
             console.log(`Creating storage directory at: ${STORAGE_DIR}`);
             fs.mkdirSync(STORAGE_DIR, { recursive: true });
         }
+        if (!fs.existsSync(DIST_DIR)) {
+            console.log(`Creating dist directory at: ${DIST_DIR}`);
+            fs.mkdirSync(DIST_DIR, { recursive: true });
+        }
         if (!fs.existsSync(LIBRARIES_DIR)) {
             console.log(`Creating libraries directory at: ${LIBRARIES_DIR}`);
             fs.mkdirSync(LIBRARIES_DIR, { recursive: true });
@@ -44,6 +49,7 @@ module.exports = {
     IS_ADDON,
     SCRIPTS_DIR,
     STORAGE_DIR,
+    DIST_DIR,
     LIBRARIES_DIR,
     ADDON_DIR,
     LOCALES_DIR,

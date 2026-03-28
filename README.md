@@ -14,18 +14,20 @@
 > **Project Status: Pre-release**
 > This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
-**JS Automations** is a professional-grade JavaScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
+**JS Automations** is a professional-grade JavaScript and TypeScript execution engine for Home Assistant. It allows you to write automations using standard **Node.js** or **TypeScript** in a secure, isolated environment. With its integrated Web IDE and powerful API, it brings a developer-centric workflow to your smart home.
 
 > 📘 **Deep Dive:** Interested in the internal architecture? Check out the [Technical Documentation](docs/TECH-README.md) or the [API Reference](API_REFERENCE.md).
 
 ## Key Features
 
+*   **Native TypeScript Support:** Write robust automations with full type-safety. Scripts are automatically transpiled in the background.
+*   **Pro-Grade IntelliSense:** The IDE provides deep autocomplete for all your Home Assistant entities, services (including field descriptions), and even your custom global store keys.
 *   **Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
 *   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
 *   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
 *   **Smart Triggers:** ioBroker-inspired `ha.on()` logic supporting Wildcards, Arrays, and Regular Expressions.
 *   **Complex Conditions:** Use `await ha.waitUntil()` to pause scripts until multiple conditions are met.
-*   **Linear Logic:** Use `await ha.waitFor()` to pause scripts until specific events occur, eliminating callback hell.
+*   **Source Map Support:** Error logs point directly to your original TypeScript source lines, making debugging effortless.
 *   **Sync State Cache:** Read any Home Assistant state instantly via `ha.states` without async overhead. Includes safe helper functions like `ha.getStateValue()` for convenient access.
 *   **Script Control:** Expose any script as a `switch` or `button` entity via the `@expose` tag for easy dashboard integration.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
@@ -58,9 +60,24 @@
 ## Unified Creation Wizard
 
 The **+** button opens the new creation wizard, offering three ways to add scripts:
-1.  **New:** Start from scratch or select a template (e.g., Interval, State Trigger).
+1.  **New:** Start from scratch (JavaScript or TypeScript) or select a template.
 2.  **Upload:** Drag & drop `.js` files directly into the editor.
 3.  **Import:** Paste a raw URL (GitHub/Gist) to fetch code from the web.
+
+---
+
+## 🚀 TypeScript & IntelliSense
+
+JS Automations treats TypeScript as a first-class citizen. This isn't just syntax highlighting; it's a full development environment:
+
+*   **Live Entity Discovery:** The engine dynamically generates type definitions for your specific Home Assistant instance. When you type `ha.states['`, you get a list of your actual entities.
+*   **Typed Store:** Work with the global store (`ha.store`) and get type hints for existing keys and their values.
+*   **Automatic Transpilation:** No `tsc` commands needed. Save a `.ts` file, and the internal **Compiler Manager** handles the rest, outputting optimized code to a secure `dist` directory.
+*   **Strict Mode:** The compiler runs in strict mode by default, catching potential `null` or `undefined` errors before your script even runs.
+
+```typescript
+const stats = ha.persistent<ScriptStats>("my_stats", { runCount: 0 });
+```
 
 ---
 
@@ -231,6 +248,36 @@ const message = ha.localize({
 
 ha.callService('notify', 'mobile_app', { message });
 ```
+
+
+## 📘 Getting Started with TypeScript
+
+TypeScript support is built-in and requires zero configuration. Here is how to get the most out of it:
+
+1.  **Create a TS Script:** Open the **Creation Wizard** (+), enter a name, and make sure to select the **TS** button in the language selection.
+2.  **Entity Autocomplete:** Start typing `ha.states['`. The editor will automatically list all entities currently existing in your Home Assistant instance.
+3.  **Service Type-Safety:** Use `ha.callService()`. TypeScript will validate the domain, the service name, and even the required fields (like `entity_id` or `brightness`).
+4.  **Typed Persistence:** Use interfaces to make your global store data robust:
+
+```typescript
+interface WeatherData {
+    temp: number;
+    condition: string;
+    is_raining: boolean;
+}
+
+// The <T> generic tells TypeScript what to expect in the store
+const weather = ha.persistent<WeatherData>("my_weather_cache", {
+    temp: 0,
+    condition: "unknown",
+    is_raining: false
+});
+
+ha.log(weather.temp); // TypeScript knows this is a number
+```
+
+### 💡 Pro Tip: Custom Libraries
+If you create a **Global Library** as a `.ts` file, you can use `export` to share types and functions. Use the `@include my_lib.ts` tag in your main script, and Monaco will provide IntelliSense for your library functions automatically.
 
 ---
 

@@ -11,21 +11,148 @@ class EntityManager {
      * @param {object} stateManager - The script state persistence manager.
      * @param {object} depManager - The dependency manager for NPM packages.
      * @param {object} systemService - The system monitoring service.
+     * @param {object} compilerManager - The TypeScript compiler manager.
      */
-    constructor(haConnection, workerManager, stateManager, depManager, systemService) {
+    constructor(haConnection, workerManager, stateManager, depManager, systemService, compilerManager) {
         this.haConnection = haConnection;
         this.workerManager = workerManager;
         this.stateManager = stateManager;
         this.depManager = depManager;
         this.systemService = systemService;
+        this.compilerManager = compilerManager;
+        this.typingTimer = null;
+
         this.haConnection.subscribeToEvents(this.handleEvent.bind(this));
         this.workerManager.on('script_start', (data) => this.handleScriptLifecycle(data, 'start'));
         this.workerManager.on('script_exit', (data) => this.handleScriptLifecycle(data, 'stop'));
         this.workerManager.on('request_device_cleanup', (name) => this.checkDeviceCleanup(name));
         this.systemService.on('system_stats_updated', (stats) => this.updateSystemStates(stats));
+        
+        // Listen for store changes to update TypeScript definitions reactively
+        if (this.workerManager.storeManager) {
+            this.workerManager.storeManager.on('changed', () => this.generateTypeDefinitions());
+        }
+
         this.startWatcher();
     }
 
+    /**
+     * Generates a dynamic TypeScript definition file for all HA entities.
+     * This enables IntelliSense for ha.states['entity_id'] in Monaco.
+     */
+    generateTypeDefinitions() {
+        if (this.typingTimer) clearTimeout(this.typingTimer);
+
+        this.typingTimer = setTimeout(async () => {
+            try {
+                const states = this.haConnection.states || {};
+                const services = this.haConnection.services || {};
+                const entityIds = Object.keys(states);
+                const storeData = this.workerManager.storeManager ? this.workerManager.storeManager.getAll() : {};
+                
+                let content = `/** Automatically generated entity definitions **/\n\n`;
+                content += `interface HAEntities {\n`;
+                
+                const attrMapping = {
+                    light: 'LightAttributes',
+                    media_player: 'MediaPlayerAttributes',
+                    climate: 'ClimateAttributes',
+                    sensor: 'SensorAttributes',
+                    binary_sensor: 'HAAttributes'
+                };
+
+                entityIds.forEach(id => {
+                    const stateObj = states[id];
+                    const friendlyName = stateObj.attributes?.friendly_name || '';
+                    const domain = id.split('.')[0];
+                    const attrType = attrMapping[domain] || 'HAAttributes';
+
+                    content += `  /** ${friendlyName} */\n`;
+                    content += `  "${id}": HAState<${attrType}>;\n`;
+                });
+                
+                content += `}\n\n`;
+
+                content += `interface ServiceMap {\n`;
+                for (const [domain, domainServices] of Object.entries(services)) {
+                    content += `  "${domain}": {\n`;
+                    for (const [service, details] of Object.entries(domainServices)) {
+                        const description = (details.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                        content += `    /** ${description} */\n`;
+                        content += `    "${service}": {\n`;
+                        if (details.fields) {
+                            for (const [field, fDetails] of Object.entries(details.fields)) {
+                                const fDesc = (fDetails.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                                content += `      /** ${fDesc} */\n`;
+                                content += `      "${field}"?: any;\n`;
+                            }
+                        }
+                        content += `      [key: string]: any;\n`;
+                        content += `    };\n`;
+                    }
+                    content += `  };\n`;
+                }
+                content += `}\n\n`;
+
+                // Generate GlobalStoreSchema based on actual store content
+                content += `interface GlobalStoreSchema {\n`;
+                for (const [key, entry] of Object.entries(storeData)) {
+                    if (Object.prototype.hasOwnProperty.call(storeData, key)) {
+                        const value = entry.value;
+                        const inferredType = this._inferStoreValueType(value);
+                        content += `  /**\n`;
+                        content += `   * Stored value for key "${key}"\n`;
+                        content += `   */\n`;
+                        content += `  "${key}": ${inferredType};\n`;
+                    }
+                }
+                content += `}\n\n`;
+
+                content += `/** Merges dynamic types into the global HA interface **/\n`;
+                content += `interface HA {\n`;
+                content += `  readonly states: HAEntities;\n`;
+                content += `}\n`;
+
+                const filePath = path.join(this.workerManager.storageDir, 'entities.d.ts');
+                fs.writeFileSync(filePath, content, 'utf8');
+                this.workerManager.emit('typings_generated');
+                this.workerManager.emit('log', { source: 'System', message: `Updated entities.d.ts with ${entityIds.length} entities.`, level: 'debug' });
+            } catch (e) {
+                console.error("Failed to generate entities.d.ts:", e);
+            }
+        }, 2000); // Debounce to avoid constant writes during state storms
+    }
+
+    /**
+     * Infers a basic TypeScript type from a JavaScript value.
+     * @private
+     */
+    _inferStoreValueType(value, depth = 0) {
+        if (depth > 3) return 'any'; // Prevent deep recursion or huge definitions
+        if (value === null) return 'null';
+        if (typeof value === 'string') return 'string';
+        if (typeof value === 'number') return 'number';
+        if (typeof value === 'boolean') return 'boolean';
+        if (Array.isArray(value)) {
+            if (value.length === 0) return 'any[]';
+            const subType = this._inferStoreValueType(value[0], depth + 1);
+            return `${subType}[]`;
+        }
+        if (typeof value === 'object') {
+            const keys = Object.keys(value);
+            if (keys.length === 0) return 'Record<string, any>';
+            
+            // Build a small interface representation for the object
+            let objDef = '{ ';
+            for (const key of keys.slice(0, 10)) { // Limit to first 10 keys for readability
+                objDef += `"${key}": ${this._inferStoreValueType(value[key], depth + 1)}; `;
+            }
+            if (keys.length > 10) objDef += '... ';
+            objDef += '}';
+            return objDef;
+        }
+        return 'any';
+    }
     /**
      * Attempts to resolve a name (e.g., "Living Room") to an ID (e.g., "living_room") using HA metadata.
      */
@@ -52,7 +179,8 @@ class EntityManager {
     async handleScriptLifecycle({ filename, meta }, action) {
         if (!meta || !meta.expose || !this.haConnection.isReady) return;
 
-        const scriptName = path.basename(filename, '.js');
+        const ext = path.extname(filename);
+        const scriptName = path.basename(filename, ext);
         const domain = meta.expose === 'button' ? 'button' : 'switch';
         const uniqueId = `jsa_${domain}_${scriptName}`.toLowerCase();
         const isRunning = (action === 'start');
@@ -186,6 +314,9 @@ class EntityManager {
         // Register system entities if integration is active
         if (hasIntegration) {
             await this.createSystemEntities();
+            
+            // Initial generation of type definitions for Monaco
+            this.generateTypeDefinitions();
         }
 
         for (const scriptPath of scripts) {
@@ -193,7 +324,8 @@ class EntityManager {
             if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
 
             const meta = ScriptHeaderParser.parse(scriptPath);
-            const scriptName = path.basename(scriptPath, '.js');
+            const ext = path.extname(scriptPath);
+            const scriptName = path.basename(scriptPath, ext);
             
             const protectedIds = [];
             // Nur wenn @expose gesetzt ist, erstellen wir eine Entität
@@ -269,7 +401,7 @@ class EntityManager {
                 }
 
                 // Register in central registry for lifecycle management
-                this.workerManager.registerEntity(scriptName + '.js', entityId, payload);
+                this.workerManager.registerEntity(path.basename(scriptPath), entityId, payload);
                 protectedIds.push(entityId);
             } else {
                 // Legacy Creation (Ephemeral)
@@ -292,7 +424,7 @@ class EntityManager {
             this.stateManager.set(entityId, initialState);
 
             // Mark as protected from Mark-and-Sweep
-            this.workerManager.setProtectedEntities(scriptName + '.js', protectedIds);
+            this.workerManager.setProtectedEntities(path.basename(scriptPath), protectedIds);
         }
     }
 
@@ -456,7 +588,7 @@ class EntityManager {
         const debounceTimers = new Map();
         
         const onWatch = (dir, eventType, filename) => {
-            if (filename && filename.endsWith('.js')) {
+            if (filename && (filename.endsWith('.js') || filename.endsWith('.ts'))) {
                 const fullPath = path.join(dir, filename);
                 if (debounceTimers.has(fullPath)) clearTimeout(debounceTimers.get(fullPath));
                 
@@ -482,22 +614,34 @@ class EntityManager {
     }
 
     async processSingleScript(scriptPath) {
-        const scriptName = path.basename(scriptPath, '.js');
+        const extension = path.extname(scriptPath);
+        const scriptName = path.basename(scriptPath, extension);
+        const fileName = path.basename(scriptPath);
 
         // --- DELETION HANDLING for deleted file ---
         if (!fs.existsSync(scriptPath)) {
-            const fileName = path.basename(scriptPath);
             this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Script file deleted: ${fileName}. Starting cleanup for ${scriptName}`, level: 'debug' });
             
             this.workerManager.stopScript(fileName, 'file deleted');
             await this.workerManager.removeScriptEntities(fileName);
             this.stateManager.unregisterScript(scriptPath);
+
+            if (extension === '.ts') {
+                this.compilerManager.cleanup(scriptPath);
+            }
+
+            // Update types after deletion
+            this.generateTypeDefinitions();
             return; 
         }
         
         try {
+            if (extension === '.ts') {
+                const success = await this.compilerManager.transpile(scriptPath);
+                if (!success) return; 
+            }
+
             const meta = ScriptHeaderParser.parse(scriptPath);
-            const fileName = path.basename(scriptPath);
 
             // --- Library Handling: Check dependents ---
             if (path.basename(path.dirname(scriptPath)) === 'libraries') {
@@ -592,6 +736,9 @@ class EntityManager {
             this.stateManager.registerEntity(entityId, scriptPath);
             this.stateManager.set(entityId, initialState);
             this.workerManager.setProtectedEntities(fileName, protectedIds);
+
+            // Update types after new script processing
+            this.generateTypeDefinitions();
 
         } catch (e) {
             console.error(`[EntityManager] Error processing ${scriptPath}:`, e);

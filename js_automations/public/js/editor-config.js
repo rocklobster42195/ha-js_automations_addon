@@ -10,8 +10,11 @@ window._libDisposables = []; // Speicher für Monaco Lib-Referenzen
 
 // --- MONACO CONFIG ---
 function registerCompletionProviders() {
-    // MDI Icons Provider
-    monaco.languages.registerCompletionItemProvider('javascript', {
+    const languages = ['javascript', 'typescript'];
+
+    languages.forEach(lang => {
+        // MDI Icons Provider
+        monaco.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: ['"', "'", ':', ' '],
         provideCompletionItems: function(model, position) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -34,8 +37,8 @@ function registerCompletionProviders() {
         }
     });
 
-    // HA Services Provider
-    monaco.languages.registerCompletionItemProvider('javascript', {
+        // HA Services Provider
+        monaco.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: ["'", '"'],
         provideCompletionItems: function(model, position) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -90,8 +93,8 @@ function registerCompletionProviders() {
         }
     });
 
-    // HA Entities Provider
-    monaco.languages.registerCompletionItemProvider('javascript', {
+        // HA Entities Provider
+        monaco.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: ["'", '"'],
         provideCompletionItems: function(model, position, context) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -166,8 +169,8 @@ function registerCompletionProviders() {
         }
     });
 
-    // HA Device Class Provider
-    monaco.languages.registerCompletionItemProvider('javascript', {
+        // HA Device Class Provider
+        monaco.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: ["'", '"'],
         provideCompletionItems: function(model, position) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -179,8 +182,8 @@ function registerCompletionProviders() {
         }
     });
 
-    // HA Store Keys Provider
-    monaco.languages.registerCompletionItemProvider('javascript', {
+        // HA Store Keys Provider
+        monaco.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: ["'", '"'],
         provideCompletionItems: function(model, position) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -202,104 +205,163 @@ function registerCompletionProviders() {
             return { suggestions: [] };
         }
     });
+
+        // HA Change Filter Provider (gt, lt, etc.)
+        monaco.languages.registerCompletionItemProvider(lang, {
+            triggerCharacters: ["'", '"', ',', ' '],
+            provideCompletionItems: function(model, position) {
+                const textUntilPosition = model.getValueInRange({
+                    startLineNumber: position.lineNumber, 
+                    startColumn: 1, 
+                    endLineNumber: position.lineNumber, 
+                    endColumn: position.column
+                });
+                
+                // Reagiert auf das zweite Argument in ha.on('entity', ' oder ha.waitFor('entity', '
+                if (textUntilPosition.match(/ha\.(on|waitFor)\(\s*['"][^'"]+['"]\s*,\s*['"]$/)) {
+                    const filters = [
+                        { label: 'eq', doc: 'Equal to (==)' },
+                        { label: 'ne', doc: 'Not equal to (!=)' },
+                        { label: 'gt', doc: 'Greater than (>)' },
+                        { label: 'ge', doc: 'Greater than or equal to (>=)' },
+                        { label: 'lt', doc: 'Less than (<)' },
+                        { label: 'le', doc: 'Less than or equal to (<=)' }
+                    ];
+                    return {
+                        suggestions: filters.map(f => ({
+                            label: f.label,
+                            kind: monaco.languages.CompletionItemKind.EnumMember,
+                            insertText: f.label,
+                            documentation: f.doc,
+                            detail: 'Change Filter'
+                        }))
+                    };
+                }
+
+                // Reagiert auf das dritte Argument (Threshold) nach einem mathematischen Filter
+                // Match: ha.on('sensor.temp', 'gt', 
+                const thresholdMatch = textUntilPosition.match(/ha\.(on|waitFor)\(\s*['"][^'"]+['"]\s*,\s*['"](gt|ge|lt|le|eq|ne)['"]\s*,\s*$/);
+                if (thresholdMatch) {
+                    const filter = thresholdMatch[2];
+                    const isNumeric = ['gt', 'ge', 'lt', 'le'].includes(filter);
+                    
+                    const suggestions = isNumeric ? [
+                        { label: '0', insertText: '0', detail: 'Numeric Threshold' },
+                        { label: '10', insertText: '10', detail: 'Numeric Threshold' },
+                        { label: '20', insertText: '20', detail: 'Numeric Threshold' },
+                        { label: '50', insertText: '50', detail: 'Numeric Threshold' }
+                    ] : [
+                        { label: "'on'", insertText: "'on'", detail: 'State' },
+                        { label: "'off'", insertText: "'off'", detail: 'State' }
+                    ];
+
+                    return {
+                        suggestions: suggestions.map(s => ({
+                            ...s,
+                            kind: monaco.languages.CompletionItemKind.Value
+                        }))
+                    };
+                }
+
+                return { suggestions: [] };
+            }
+        });
+
+        // HA @include Provider (Library names in header)
+        monaco.languages.registerCompletionItemProvider(lang, {
+            triggerCharacters: [' ', '@', ','],
+            provideCompletionItems: function(model, position) {
+                const textUntilPosition = model.getValueInRange({
+                    startLineNumber: position.lineNumber, 
+                    startColumn: 1, 
+                    endLineNumber: position.lineNumber, 
+                    endColumn: position.column
+                });
+                
+                // 1. Suggest the 'include' tag itself after '@'
+                if (textUntilPosition.endsWith('@')) {
+                    return {
+                        suggestions: [{
+                            label: 'include',
+                            kind: monaco.languages.CompletionItemKind.Keyword,
+                            insertText: 'include ',
+                            documentation: 'Include a global library from the libraries folder.'
+                        }]
+                    };
+                }
+
+                // 2. Suggest library files after '@include ' or after a comma in the list
+                if (textUntilPosition.match(/@include\s+[^,]*$/) || textUntilPosition.match(/@include\s+.*,\s*[^,]*$/)) {
+                    const libs = (typeof allScripts !== 'undefined') 
+                        ? allScripts.filter(s => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\')))
+                        : [];
+
+                    return {
+                        suggestions: libs.map(l => ({
+                            label: l.filename,
+                            kind: monaco.languages.CompletionItemKind.File,
+                            insertText: l.filename,
+                            detail: 'Library',
+                            documentation: l.description || l.filename
+                        }))
+                    };
+                }
+                return { suggestions: [] };
+            }
+        });
+    });
 }
 
 async function configureMonaco() {
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ target: monaco.languages.typescript.ScriptTarget.ESNext, allowNonTsExtensions: true, checkJs: true, allowJs: true });
-    
+    // Sync JS options with TS settings from app.js
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ 
+        target: monaco.languages.typescript.ScriptTarget.ES2020, 
+        allowNonTsExtensions: true, 
+        checkJs: true, 
+        allowJs: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        baseUrl: "file:///",
+        paths: { "*": ["file:///node_modules/@types/*"] }
+    });
+
     // Fix potential HTML entities (e.g. &lt; instead of <) that break TypeScript parsing
     const decodeEntities = (ts) => ts ? ts.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"') : '';
 
     try {
-        // 1. Load Static API Definitions from file
-        let apiDefinitions = '';
-        try {
-            // Fetch ha-api.d.ts from the backend API, like other .d.ts files
-            const apiDefUrl = BASE_PATH + 'api/scripts/ha-api.d.ts/content';
-            const resApi = await fetch(apiDefUrl);
-            if (resApi.ok) {
-                const data = await resApi.json();
-                apiDefinitions = decodeEntities(data.content || '');
-            }
-        } catch (e) { console.warn("Failed to load ha-api.d.ts", e); }
+        // Use the centralized typings bundle to populate local search arrays
+        const res = await fetch('api/scripts/typings');
+        if (!res.ok) return;
+        const typings = await res.json();
 
-        // 2. Load Services for IntelliSense
-        let serviceMapDef = 'type ServiceMap = Record<string, Record<string, any>>;\n';
-        try {
-            const resSvc = await apiFetch('api/ha/services');
-            if (resSvc.ok) {
-                const services = await resSvc.json();
-                const domains = Object.keys(services).sort();
-                
-                const lines = domains.map(d => {
-                    const domainServices = services[d];
-                    const serviceLines = Object.keys(domainServices).map(s => {
-                        const sData = domainServices[s];
-                        const fields = sData.fields || {};
-                        const fieldProps = Object.keys(fields).map(f => `${f}?: any;`);
-                        
-                        // Common fields & Index Signature (allow extra props)
-                        if (!fields.entity_id) fieldProps.unshift('entity_id?: string | string[];');
-                        fieldProps.push('[key: string]: any;');
+        const entitiesLib = typings.find(t => t.filename === 'entities.d.ts');
 
-                        return `'${s}': { ${fieldProps.join(' ')} };`;
-                    });
-                    return `'${d}': {\n${serviceLines.join('\n')}\n};`;
-                });
-                serviceMapDef = `interface ServiceMap {\n${lines.join('\n')}\n}`;
-            }
-        } catch (e) { console.warn("Failed to load services for types", e); }
-
-        // 3. Load Dynamic Entities from Server
-        const resEntities = await apiFetch('api/scripts/entities.d.ts/content');
-        const dataEntities = await resEntities.json();
-
-        // 4. Load Global Store Schema
-        const resStore = await apiFetch('api/scripts/store.d.ts/content');
-        const dataStore = await resStore.json();
-        
-        // Extract entities from dataEntities.content, or use an empty array if content is missing
-        const matches = dataEntities.content ? dataEntities.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g) : null;
-        if (matches) {
+        // Update allEntities for the Picker and custom Completion Providers
+        if (entitiesLib && entitiesLib.content) {
+            const matches = entitiesLib.content.match(/"([a-z0-9_]+\.[a-z0-9_\-]+)"/g);
+            if (matches) {
             allEntities = matches.map(m => m.replace(/"/g, '')).sort();
             console.log(`✅ Loaded ${allEntities.length} Entities.`);
-        } else {
-            allEntities = []; // Ensure it's an empty array if no entities are found
+            }
         }
 
-        // Extract store keys from dataStore.content
+        // Update allStoreKeys for completion
         allStoreKeys = [];
-        if (dataStore.content) {
-            // Regex sucht nach "key": type;
-            const storeRegex = /"([^"]+)"\s*:\s*([^;]+);/g;
-            let match;
-            while ((match = storeRegex.exec(dataStore.content)) !== null) {
-                allStoreKeys.push({
-                    key: match[1],
-                    type: match[2].trim()
-                });
+        const storeContent = entitiesLib ? entitiesLib.content : '';
+        if (storeContent) {
+            // Extrahiere Keys spezifisch aus dem GlobalStoreSchema Block in entities.d.ts
+            const schemaMatch = storeContent.match(/interface GlobalStoreSchema \{([\s\S]*?)\}/);
+            if (schemaMatch && schemaMatch[1]) {
+                const storeRegex = /"([^"]+)"\s*:\s*([^;]+);/g;
+                let match;
+                while ((match = storeRegex.exec(schemaMatch[1])) !== null) {
+                    allStoreKeys.push({ key: match[1], type: match[2].trim() });
+                }
             }
             allStoreKeys.sort((a, b) => a.key.localeCompare(b.key));
-            console.log(`✅ Loaded ${allStoreKeys.length} Store Keys with types.`);
         }
-
-        const storeRaw = decodeEntities(dataStore.content);
-        const entitiesRaw = decodeEntities(dataEntities.content);
-
-        // Prepare dynamic parts (remove export for internal merging, provide robust fallbacks)
-        const entitiesContent = entitiesRaw ? entitiesRaw.replace(/export /g, '') : 'type EntityID = string;';
-        const storeSchemaContent = storeRaw ? storeRaw.replace(/export /g, '') : 'interface GlobalStoreSchema {}';
-        
-        // Replace placeholders in static API with dynamic content
-        let libContent = apiDefinitions;
-        libContent = libContent.replace(/type EntityID = string;/, entitiesContent);
-        libContent = libContent.replace(/interface\s+GlobalStoreSchema\s+\/\*__JSA_STORE_SCHEMA__\*\/\s*\{\}/, storeSchemaContent);
-        libContent = libContent.replace(/type\s+ServiceMap\s+=\s+Record<string,\s+Record<string,\s+any>>;/, serviceMapDef);
-        
-        // Dispose old lib if exists to avoid "Duplicate identifier" errors
-        if (window._apiLib) window._apiLib.dispose();
-        window._apiLib = monaco.languages.typescript.javascriptDefaults.addExtraLib(libContent, 'file:///ha-api.d.ts');
-
     } catch (e) { console.error("Error configuring Monaco:", e); }
     
     await loadLibraryDefinitions(); // NEU: Globale Libraries laden

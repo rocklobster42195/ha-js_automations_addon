@@ -58,6 +58,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Register Keyboard Shortcuts (Ctrl+S / Cmd+S)
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
 
+            // Initialize TypeScript Typings for Monaco
+            initMonacoTypeScript();
+
             // --- SETTINGS INTEGRATION ---
             window.addEventListener('settings-changed', (e) => {
                 applyEditorSettings(e.detail);
@@ -120,6 +123,135 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial System Check (Integration Status)
     checkSystemStatus();
 });
+
+/**
+ * Bestimmt die Monaco-Sprach-ID basierend auf der Dateiendung.
+ * Wird verwendet, um den Editor-Modus für .ts-Dateien automatisch umzuschalten.
+ * @param {string} filename 
+ * @returns {string} 'typescript' oder 'javascript'
+ */
+function getLanguageByFilename(filename) {
+    if (!filename) return 'javascript';
+    const ext = filename.split('.').pop().toLowerCase();
+    return ext === 'ts' ? 'typescript' : 'javascript';
+}
+window.getLanguageByFilename = getLanguageByFilename;
+
+/**
+ * Generiert das HTML für ein Sprach-Badge (JS/TS).
+ * @param {string} filename 
+ * @returns {string} HTML String
+ */
+function getLanguageBadge(filename) {
+    if (!filename || filename.startsWith('System: ')) return '';
+    const lang = getLanguageByFilename(filename);
+    const label = lang === 'typescript' ? 'TS' : 'JS';
+    const cssClass = lang === 'typescript' ? 'lang-badge-ts' : 'lang-badge-js';
+    return `<span class="lang-badge ${cssClass}">${label}</span>`;
+}
+window.getLanguageBadge = getLanguageBadge;
+
+// Speicher für Compiler-Fehler pro Datei
+const compilerMarkers = new Map();
+
+/**
+ * Initializes TypeScript support in Monaco by loading the type definitions bundle from the API.
+ */
+async function initMonacoTypeScript() {
+    const compilerOptions = {
+        target: monaco.languages.typescript.ScriptTarget.ES2020,
+        module: monaco.languages.typescript.ModuleKind.CommonJS,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        allowNonTsExtensions: true,
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        baseUrl: "file:///",
+        paths: { "*": ["file:///node_modules/@types/*"] }
+    };
+
+    // Configure both TypeScript AND JavaScript defaults
+    monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        ...compilerOptions,
+        checkJs: true,
+        allowJs: true
+    });
+
+    try {
+        const res = await fetch('api/scripts/typings');
+        if (!res.ok) return;
+        
+        const typings = await res.json();
+        typings.forEach(lib => {
+            const uri = `file:///${lib.filename}`;
+            // Register for TS
+            monaco.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri);
+            // Also register for JS so ha.states etc. work there too
+            monaco.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri);
+        });
+    } catch (err) {
+        console.error("[Monaco] Failed to load typings:", err);
+    }
+
+    // Reactive update when typings change on server
+    if (window.socket) {
+        window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());
+    }
+
+    // Listener für Compiler-Signale (für präzise Marker im Editor)
+    if (window.socket) {
+        window.socket.off('compiler_signal').on('compiler_signal', (data) => {
+            if (data.type === 'TS_OK') {
+                clearCompilerMarkers(data.filename);
+            } else {
+                // Erwartet nun das Objekt-Format direkt vom Socket
+                handleCompilerMarker(data.filename, data.line, data.col, data.text, data.code, data.type);
+            }
+        });
+    }
+}
+
+/**
+ * Setzt oder aktualisiert Marker im Monaco Editor basierend auf Compiler-Feedback.
+ */
+function handleCompilerMarker(filename, line, col, message, code, type) {
+    const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
+    if (!model) return;
+
+    if (!compilerMarkers.has(filename)) {
+        compilerMarkers.set(filename, []);
+    }
+
+    const markers = compilerMarkers.get(filename);
+    markers.push({
+        startLineNumber: line,
+        startColumn: col,
+        endLineNumber: line,
+        endColumn: col + 10, // Rough estimate for marking
+        message: `${code}: ${message}`,
+        severity: type === 'TS_ERR' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+        source: 'TypeScript Compiler'
+    });
+
+    // Marker im Editor anwenden
+    monaco.editor.setModelMarkers(model, "compiler", markers);
+}
+
+/**
+ * Löscht alle Compiler-Marker für eine bestimmte Datei.
+ */
+function clearCompilerMarkers(filename) {
+    const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
+    compilerMarkers.delete(filename);
+    
+    if (model) {
+        monaco.editor.setModelMarkers(model, "compiler", []);
+    }
+}
 
 function injectSidebarFooter() {
     const sidebar = document.querySelector('.sidebar');

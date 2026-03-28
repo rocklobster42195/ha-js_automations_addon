@@ -46,6 +46,18 @@ function injectCreationWizard() {
 
         /* Icon Preview adjustment for wizard */
         .icon-preview { font-size: 1.4rem; color: var(--accent); margin-right: 5px; }
+
+        /* Language Badges & Cards */
+        .lang-selection-container { display: flex; gap: 8px; margin-top: 4px; }
+        .lang-card {
+            padding: 4px 12px; background: #222; border: 1px solid #444; border-radius: 4px;
+            font-weight: bold; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+            color: #888; min-width: 45px; text-align: center;
+        }
+        .lang-card:hover { border-color: #666; color: #ccc; }
+        .lang-card.active { color: #fff; }
+        .lang-card.active#lang-card-js { border-color: #f7df1e; color: #f7df1e; background: rgba(247, 223, 30, 0.1); }
+        .lang-card.active#lang-card-ts { border-color: #3178c6; color: #3178c6; background: rgba(49, 120, 198, 0.1); }
     </style>
     `;
     document.head.insertAdjacentHTML('beforeend', css);
@@ -78,11 +90,19 @@ function injectCreationWizard() {
                             <option value="library" data-i18n="wizard_option_library">Library (Wird von anderen importiert)</option>
                         </select>
                     </div>
-                    <div class="form-group" id="wizard-group-template">
+                    <div class="form-group hidden" id="wizard-group-template">
                         <label><span data-i18n="wizard_label_template">Template</span></label>
                         <select id="wizard-template">
                             ${Object.keys(SCRIPT_TEMPLATES).map(k => `<option value="${k}">${i18next.t(SCRIPT_TEMPLATES[k].labelKey)}</option>`).join('')}
                         </select>
+                    </div>
+                    <div class="form-group" id="wizard-group-language">
+                        <label><span data-i18n="wizard_label_language">Sprache</span></label>
+                        <div class="lang-selection-container">
+                            <div class="lang-card active" onclick="selectWizardLanguage('.js')" id="lang-card-js">JS</div>
+                            <div class="lang-card" onclick="selectWizardLanguage('.ts')" id="lang-card-ts">TS</div>
+                        </div>
+                        <input type="hidden" id="wizard-language" value=".js">
                     </div>
                 </div>
 
@@ -229,6 +249,11 @@ async function openCreationWizard(mode = 'create', data = null) {
     
     // Reset fields
     document.getElementById('wizard-name').value = '';
+
+    // Fix: Detect extension from existing data if editing or duplicating to preserve TS status
+    const initialExt = (data && data.filename && data.filename.endsWith('.ts')) ? '.ts' : '.js';
+    selectWizardLanguage(initialExt);
+
     document.getElementById('wizard-icon').value = '';
     updateWizardIconPreview('');
     document.getElementById('wizard-area').value = '';
@@ -250,12 +275,14 @@ async function openCreationWizard(mode = 'create', data = null) {
     // UI Anpassungen je nach Mode
     const tabs = document.querySelector('.wizard-tabs');
     const templateGroup = document.getElementById('wizard-group-template');
+    const languageGroup = document.getElementById('wizard-group-language');
     const title = modal.querySelector('h3');
     const btn = document.getElementById('btn-wizard-action');
 
     if (mode === 'create') {
         tabs.style.display = 'flex';
-        if (templateGroup) templateGroup.style.display = 'block';
+        if (templateGroup) templateGroup.style.display = 'none'; // Keep templates hidden
+        if (languageGroup) languageGroup.style.display = 'block';
         title.textContent = i18next.t('new_script_title');
         btn.textContent = i18next.t('button_create');
         switchWizardTab('new');
@@ -263,6 +290,7 @@ async function openCreationWizard(mode = 'create', data = null) {
         // Edit oder Duplicate
         tabs.style.display = 'none'; // Keine Tabs (Upload/Import macht hier keinen Sinn)
         if (templateGroup) templateGroup.style.display = 'none'; // Template Auswahl verstecken
+        if (languageGroup) languageGroup.style.display = 'none'; // Sprach Auswahl verstecken
         switchWizardTab('new'); // Erzwinge den Formular-Tab
 
         if (mode === 'edit') {
@@ -499,6 +527,17 @@ function handleWizardTypeChange() {
     updateWizardIconPreview(iconInput.value);
 }
 
+/**
+ * Updates the visual selection of language cards and sets the hidden input value.
+ */
+function selectWizardLanguage(ext) {
+    document.getElementById('wizard-language').value = ext;
+    document.querySelectorAll('.lang-card').forEach(c => c.classList.remove('active'));
+    const card = document.getElementById(`lang-card-${ext.substring(1)}`);
+    if (card) card.classList.add('active');
+    checkWizardScriptName();
+}
+
 function checkWizardScriptName() {
     const nameInput = document.getElementById('wizard-name');
     const errEl = document.getElementById('wizard-modal-error');
@@ -511,7 +550,8 @@ function checkWizardScriptName() {
         return;
     }
     const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    const filename = slug + '.js';
+    const ext = document.getElementById('wizard-language').value || '.js';
+    const filename = slug + ext;
 
     // Im Edit-Modus ist der eigene Dateiname erlaubt (keine Änderung)
     if (wizardMode === 'edit' && filename === wizardOriginalFilename) {
@@ -557,6 +597,7 @@ async function executeWizardAction() {
             const wizardType = document.getElementById('wizard-type').value;
             const icon = document.getElementById('wizard-icon').value.trim();
             const templateKey = document.getElementById('wizard-template').value;
+            const extension = document.getElementById('wizard-language').value;
             const area = document.getElementById('wizard-area').value.trim();
             const label = document.getElementById('wizard-label').value.trim();
             const loglevel = document.getElementById('wizard-loglevel').value;
@@ -585,7 +626,7 @@ async function executeWizardAction() {
             if (!name) throw new Error(i18next.t('error_wizard_name_required'));
             
             // Payload bauen
-            const payload = { name, type, expose, icon, area, label, loglevel, description, npmModules: wizardNpmModules.map(p => p.name), includes: wizardIncludes };
+            const payload = { name, type, expose, icon, area, label, loglevel, description, extension, npmModules: wizardNpmModules.map(p => p.name), includes: wizardIncludes };
 
             if (wizardMode === 'edit') {
                 // UPDATE
@@ -626,7 +667,7 @@ async function executeWizardAction() {
                 }
             } else {
                 // CREATE or DUPLICATE
-                payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES[templateKey] ? SCRIPT_TEMPLATES[templateKey].code : '');
+                payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '');
                 
                 const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Creation failed'); }
@@ -693,3 +734,4 @@ window.handleWizardTypeChange = handleWizardTypeChange;
 window.checkWizardScriptName = checkWizardScriptName;
 window.validateWizardState = validateWizardState;
 window.handleImportUrlInput = handleImportUrlInput;
+window.selectWizardLanguage = selectWizardLanguage;
