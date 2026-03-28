@@ -380,6 +380,18 @@ const ha = {
             ha.error(`Invalid service ID format: "${serviceId}". Expected "domain.service"`);
             return;
         }
+
+        // Synchroner Check gegen den lokalen Cache
+        const target = data.entity_id || data.media_player_entity_id;
+        if (target) {
+            const ids = Array.isArray(target) ? target : [target];
+            for (const id of ids) {
+                if (typeof id === 'string' && !states[id]) {
+                    ha.warn(`Service call "${serviceId}" targets unknown entity: "${id}". Call will likely fail.`);
+                }
+            }
+        }
+
         ha.callService(domain, service, data);
     },
     
@@ -406,6 +418,16 @@ const ha = {
             delete attributes.unit;
         }
 
+        // Optimistic Update: Lokal sofort setzen, damit der Code synchron weiterarbeiten kann
+        if (!states[entityId]) {
+            states[entityId] = { entity_id: entityId, state: String(state), attributes: attributes || {}, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
+        } else {
+            const current = states[entityId];
+            if (state !== undefined) current.state = String(state);
+            if (attributes) current.attributes = { ...current.attributes, ...attributes };
+            current.last_updated = new Date().toISOString();
+        }
+
         parentPort.postMessage({ type: 'update_state', entityId, state, attributes: attributes || {} });
     },
     
@@ -416,6 +438,17 @@ const ha = {
      * @param {object} config - Konfiguration (name, icon, type, unit_of_measurement, etc.)
      */
     register: (entityId, config = {}) => {
+        // Optimistic Update für registrierte Entitäten
+        if (!states[entityId]) {
+            states[entityId] = { 
+                entity_id: entityId, 
+                state: config.initial_state !== undefined ? String(config.initial_state) : 'unknown', 
+                attributes: { friendly_name: config.name || config.friendly_name, icon: config.icon, ...config.attributes },
+                last_changed: new Date().toISOString(),
+                last_updated: new Date().toISOString()
+            };
+        }
+
         // ALIAS: unit -> unit_of_measurement
         if (config.unit && !config.unit_of_measurement) {
             config = { ...config, unit_of_measurement: config.unit };
