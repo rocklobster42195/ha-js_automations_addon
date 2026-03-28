@@ -80,7 +80,14 @@ function registerCompletionProviders() {
                             const common = ['entity_id', 'media_player_entity_id', 'message', 'value', 'target', 'title'];
                             const priorityFields = common.filter(f => fieldNames.includes(f) && !requiredFields.includes(f));
                             
-                            const snippetFields = [...requiredFields, ...priorityFields];
+                            let snippetFields = [...requiredFields, ...priorityFields];
+
+                            // Smart Fallback: Wenn HA keine Metadaten liefert, nutzen wir Heuristiken für Standard-Domains
+                            if (snippetFields.length === 0) {
+                                if (['light', 'switch', 'input_boolean', 'automation', 'script', 'scene', 'fan', 'cover', 'lock'].includes(domain)) {
+                                    snippetFields = ['entity_id'];
+                                }
+                            }
                             
                             let insertText = id;
                             if (snippetFields.length > 0) {
