@@ -42,7 +42,70 @@ function registerCompletionProviders() {
         triggerCharacters: ["'", '"'],
         provideCompletionItems: function(model, position) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
-            // Match: ha.callService(' or ha.callService('dom - erlaubt Text nach dem Quote
+
+            // Prüfen, was hinter dem Cursor steht (Auto-Close-Schutz für Anführungszeichen und Klammern)
+            const lookahead = model.getValueInRange({
+                startLineNumber: position.lineNumber, 
+                startColumn: position.column, 
+                endLineNumber: position.lineNumber, 
+                endColumn: position.column + 2
+            });
+            
+            let charsToReplace = 0;
+            if (lookahead.startsWith("'") || lookahead.startsWith('"')) {
+                charsToReplace = 1;
+                // Wenn danach direkt die schließende Klammer folgt (Auto-Close Artefakt), diese ebenfalls überschreiben
+                if (lookahead.length > 1 && lookahead[1] === ')') charsToReplace = 2;
+            }
+
+            const rangeToReplace = new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column + charsToReplace);
+
+            // 1. HA.CALL (domain.service Format)
+            if (textUntilPosition.match(/ha\.call\(\s*['"](?:[^'"]*)$/)) {
+                const suggestions = [];
+                if (typeof haData !== 'undefined' && haData.services) {
+                    for (const domain in haData.services) {
+                        for (const service in haData.services[domain]) {
+                            const id = `${domain}.${service}`;
+                            const serviceObj = haData.services[domain][service];
+                            const desc = serviceObj.description || '';
+                            
+                            // Dynamische Snippet Logik basierend auf HA Service-Definitionen
+                            const fields = serviceObj.fields || {};
+                            const fieldNames = Object.keys(fields);
+
+                            // 1. Felder die in HA als 'required' markiert sind
+                            const requiredFields = fieldNames.filter(f => fields[f] && fields[f].required);
+                            // 2. Wichtige Standard-Felder (falls vorhanden und nicht schon in required)
+                            const common = ['entity_id', 'media_player_entity_id', 'message', 'value', 'target', 'title'];
+                            const priorityFields = common.filter(f => fieldNames.includes(f) && !requiredFields.includes(f));
+                            
+                            const snippetFields = [...requiredFields, ...priorityFields];
+                            
+                            let insertText = id;
+                            if (snippetFields.length > 0) {
+                                const props = snippetFields.map((f, i) => `${f}: '\${${i+1}:${f}}'`).join(', ');
+                                insertText = `${id}', { ${props} })`;
+                            } else if (fieldNames.length > 0) {
+                                insertText = `${id}', { \${1:} })`;
+                            }
+
+                            suggestions.push({
+                                label: id,
+                                kind: monaco.languages.CompletionItemKind.Method,
+                                insertText: insertText,
+                                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                range: rangeToReplace,
+                                documentation: { value: desc, isTrusted: true },
+                                detail: 'Service'
+                            });
+                        }
+                    }
+                }
+                return { suggestions: suggestions.sort((a,b) => a.label.localeCompare(b.label)) };
+            }
+
+            // 2. HA.CALLSERVICE (Domain Format)
             if (textUntilPosition.match(/ha\.callService\(\s*['"](?:[^'"]*)$/)) {
                 // Dynamische Domains oder Fallback (haData is global from app.js)
                 const domains = (typeof haData !== 'undefined' && haData.services && Object.keys(haData.services).length > 0) 
@@ -51,6 +114,7 @@ function registerCompletionProviders() {
                 return { suggestions: domains.map(d => ({ label: d, kind: monaco.languages.CompletionItemKind.Module, insertText: d })) };
             }
             
+            // 3. HA.CALLSERVICE (Service nach Domain)
             const serviceMatch = textUntilPosition.match(/ha\.callService\(\s*['"]([^'"]+)['"]\s*,\s*['"](?:[^'"]*)$/);
             if (serviceMatch) {
                 const domain = serviceMatch[1]; 
@@ -79,8 +143,9 @@ function registerCompletionProviders() {
                         const item = { 
                             label: s, 
                             kind: monaco.languages.CompletionItemKind.Function, 
-                            insertText: hasArgs ? s : `${s}', { entity_id: '\${1}' }`,
-                            insertTextRules: hasArgs ? monaco.languages.CompletionItemInsertTextRule.None : monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                            insertText: hasArgs ? s : `${s}', { entity_id: '\${1}' })`,
+                            insertTextRules: hasArgs ? monaco.languages.CompletionItemInsertTextRule.None : monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            range: hasArgs ? undefined : rangeToReplace
                         };
                         if (serviceData[s] && serviceData[s].description) {
                             item.documentation = { value: serviceData[s].description, isTrusted: true };
@@ -112,28 +177,44 @@ function registerCompletionProviders() {
                 };
             }
 
-            if (textUntilPosition.match(/entity_id["']?\s*:\s*['"]$/)) {
+            if (textUntilPosition.match(/(entity_id|media_player_entity_id)["']?\s*:\s*['"]$/)) {
+                const keyMatch = textUntilPosition.match(/(entity_id|media_player_entity_id)["']?\s*:\s*['"]$/);
+                const fieldName = keyMatch[1];
                 let domainFilter = null;
+
                 const startLine = Math.max(1, position.lineNumber - 50);
                 const range = {startLineNumber: startLine, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column};
                 const textContext = model.getValueInRange(range);
                 
-                const matches = [...textContext.matchAll(/ha\.callService\s*\(\s*['"]([^'"]+)['"]/g)];
-                if (matches.length > 0) {
-                    const lastMatch = matches[matches.length - 1];
+                // Suche nach dem letzten Service-Call im Kontext (ha.call oder ha.callService)
+                const callMatches = [...textContext.matchAll(/ha\.(call|callService)\s*\(\s*['"]([^'"]+)['"]/g)];
+                if (callMatches.length > 0) {
+                    const lastMatch = callMatches[callMatches.length - 1];
+                    const method = lastMatch[1];
+                    const servicePath = lastMatch[2];
+                    
                     const textAfterMatch = textContext.substring(lastMatch.index);
                     let openParens = 0;
                     for (const char of textAfterMatch) {
                         if (char === '(') openParens++;
                         if (char === ')') openParens--;
                     }
+                    
                     if (openParens > 0) {
-                        domainFilter = lastMatch[1];
+                        const serviceDomain = method === 'call' ? servicePath.split('.')[0] : servicePath;
+                        // Spezialfall: TTS und explizite Media-Player Felder
+                        if (fieldName === 'media_player_entity_id' || serviceDomain === 'tts') {
+                            domainFilter = 'media_player';
+                        } else {
+                            domainFilter = serviceDomain;
+                        }
                     }
                 }
 
                 let entities = allEntities;
-                if (domainFilter && domainFilter !== 'homeassistant') {
+                // Filter anwenden, außer bei generischen Domains
+                const ignoredDomains = ['homeassistant', 'notify'];
+                if (domainFilter && !ignoredDomains.includes(domainFilter)) {
                     const filtered = allEntities.filter(e => e.startsWith(domainFilter + '.'));
                     if (filtered.length > 0) entities = filtered;
                 }
@@ -335,6 +416,14 @@ async function configureMonaco() {
         const res = await fetch('api/scripts/typings');
         if (!res.ok) return;
         const typings = await res.json();
+
+        // WICHTIG: Alle geladenen Typen in Monaco registrieren
+        typings.forEach(lib => {
+            monaco.languages.typescript.javascriptDefaults.addExtraLib(
+                lib.content, 
+                `file:///${lib.filename}`
+            );
+        });
 
         const entitiesLib = typings.find(t => t.filename === 'entities.d.ts');
 

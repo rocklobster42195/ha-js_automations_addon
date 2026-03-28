@@ -104,7 +104,67 @@ class WorkerManager extends EventEmitter {
         }, 1000); // 1 Sekunde warten bevor gespeichert wird
     }
 
-    setConnector(connector) { this.haConnector = connector; }
+    setConnector(connector) { 
+        this.haConnector = connector; 
+        if (connector) {
+            // Automatisch Dienste synchronisieren, sobald die Verbindung steht
+            setTimeout(() => this.syncServiceDefinitions(), 5000);
+        }
+    }
+
+    /**
+     * Ruft alle verfügbaren Dienste von HA ab und generiert eine services.d.ts für IntelliSense.
+     */
+    async syncServiceDefinitions() {
+        if (!this.haConnector || !this.haConnector.isReady) return;
+        
+        try {
+            this.emit('log', { source: 'System', message: 'Synchronizing Home Assistant service definitions...', level: 'debug' });
+            const services = await this.haConnector.getServices() || {};
+            
+            let dts = "/** AUTO-GENERATED - DO NOT EDIT **/\n\ninterface ServiceMap {\n";
+            
+            for (const [domain, domainServices] of Object.entries(services)) {
+                dts += `  "${domain}": {\n`;
+                for (const [service, details] of Object.entries(domainServices)) {
+                    const cleanDesc = (details.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                    dts += `    /** ${cleanDesc} */\n`;
+                    dts += `    "${service}": {\n`;
+                    if (details.fields) {
+                        for (const [field, fDetails] of Object.entries(details.fields)) {
+                            const type = this._mapHaTypeToTs(fDetails);
+                            const fieldDesc = (fDetails.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                            const isOptional = fDetails.required ? '' : '?';
+                            dts += `      "${field}"${isOptional}: ${type}; // ${fieldDesc}\n`;
+                        }
+                    }
+                    dts += `    };\n`;
+                }
+                dts += `  };\n`;
+            }
+            dts += "}\n";
+
+            const targetPath = path.join(this.storageDir, 'services.d.ts');
+            fs.writeFileSync(targetPath, dts);
+            
+            this.emit('log', { source: 'System', message: `ServiceMap generated: ${Object.keys(services).length} domains mapped.`, level: 'info' });
+        } catch (e) {
+            this.emit('log', { source: 'System', message: `Failed to sync services: ${e.message}`, level: 'error' });
+        }
+    }
+
+    _mapHaTypeToTs(field) {
+        if (field.selector?.boolean !== undefined) return 'boolean';
+        if (field.selector?.number !== undefined) return 'number';
+        if (field.selector?.select !== undefined) {
+            const options = field.selector.select.options;
+            if (Array.isArray(options)) return options.map(o => `'${o.value || o}'`).join(' | ');
+            return 'string';
+        }
+        if (field.selector?.text !== undefined) return 'string';
+        return 'any';
+    }
+
     setStore(store) { this.storeManager = store; }
     setSettings(newSettings) {
         this.settings = { ...this.settings, ...newSettings };
@@ -115,6 +175,25 @@ class WorkerManager extends EventEmitter {
         this.distDir = path.join(dir, 'dist');
         this.loadRegistry();
         this.saveRegistry(); // Ensure file exists even if empty
+        this.ensureApiDefinitions();
+    }
+
+    /**
+     * Ensures that the ha-api.d.ts entry point exists in the storage directory
+     * so that the browser editor can resolve types correctly.
+     */
+    ensureApiDefinitions() {
+        if (!this.storageDir) return;
+        try {
+            const masterPath = path.join(__dirname, 'types', 'ha-api.d.ts');
+            const targetPath = path.join(this.storageDir, 'ha-api.d.ts');
+            
+            if (fs.existsSync(masterPath)) {
+                fs.copyFileSync(masterPath, targetPath);
+            }
+        } catch (e) {
+            this.emit('log', { source: 'System', message: `Failed to sync ha-api.d.ts: ${e.message}`, level: 'error' });
+        }
     }
     setScriptsDir(dir) { this.scriptsDir = dir; }
 
@@ -430,114 +509,99 @@ class WorkerManager extends EventEmitter {
         });
 
         worker.on('message', async (msg) => {
-            // 1. Logging
-            if (msg.type === 'log') {
-                this.emit('log', { source: name, message: msg.message, level: msg.level });
-            }
-            
-            // 2. Home Assistant Actions
-            if (msg.type === 'call_service' && this.haConnector) {
-                await this.haConnector.callService(msg.domain, msg.service, msg.data);
-            }
+            try {
+                // 1. Logging
+                if (msg.type === 'log') {
+                    this.emit('log', { source: name, message: msg.message, level: msg.level });
+                }
+                
+                // 2. Home Assistant Actions
+                if (msg.type === 'call_service' && this.haConnector) {
+                    await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                }
 
-            if (msg.type === 'update_state' && this.haConnector) {
-                // Hybrid-Logik: Wenn nativ bekannt, nutze Service, sonst Legacy HTTP
-                if (this.nativeEntities.has(msg.entityId)) {
-                    const entityPayload = this.nativeEntities.get(msg.entityId);
-                    const [domain] = msg.entityId.split('.');
-                    try {
-                        await this.haConnector.callService('js_automations', 'update_entity', {
-                            unique_id: entityPayload.unique_id,
-                            state: msg.state,
-                            attributes: msg.attributes
-                        });
-                    } catch (e) {
-                        // Fallback bei Fehler (z.B. Integration entladen)
-                        let errorMsg = `Native Update failed for ${msg.entityId}: ${e.message}`;
-                        if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
-                            errorMsg += " -> Check if 'js_automations' integration is installed.";
+                if (msg.type === 'update_state' && this.haConnector) {
+                    // Hybrid-Logik: Wenn nativ bekannt, nutze Service, sonst Legacy HTTP
+                    if (this.nativeEntities.has(msg.entityId)) {
+                        const entityPayload = this.nativeEntities.get(msg.entityId);
+                        try {
+                            await this.haConnector.callService('js_automations', 'update_entity', {
+                                unique_id: entityPayload.unique_id,
+                                state: msg.state,
+                                attributes: msg.attributes
+                            });
+                        } catch (e) {
+                            // Fallback bei Fehler (z.B. Integration entladen)
+                            let errorMsg = `Native Update failed for ${msg.entityId}: ${e.message}`;
+                            if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
+                                errorMsg += " -> Check if 'js_automations' integration is installed.";
+                            }
+                            this.emit('log', { source: 'System', message: errorMsg + " Falling back to legacy.", level: 'warn' });
+                            await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                         }
-                        this.emit('log', { source: 'System', message: errorMsg + " Falling back to legacy.", level: 'warn' });
-                        // Wir löschen es hier nicht sofort, damit ein Republish noch möglich ist, falls es nur ein temporärer Fehler war
+                    } else {
                         await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                     }
-                } else {
-                    await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                 }
-            }
-            
-            // 2b. Native Entity Creation (Integration)
-            if (msg.type === 'create_entity' && this.haConnector) {
-                const { entityId, config } = msg;
+                
+                // 2b. Native Entity Creation (Integration)
+                if (msg.type === 'create_entity' && this.haConnector) {
+                    const { entityId, config } = msg;
+                    this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
+                    const payload = await this._prepareEntityPayload(entityId, config, scriptMeta);
 
-                this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
-                const payload = await this._prepareEntityPayload(entityId, config, scriptMeta);
-
-                try {
-                    // Wir senden den Befehl und warten nicht auf eine Antwort, aber fangen Fehler ab.
                     await this.haConnector.callService('js_automations', 'create_entity', payload);
                     this.registerEntity(scriptMeta.filename, entityId, payload);
                     
-                    // Mark as active in the current run to prevent it from being swept
                     if (this.activeRunEntities.has(scriptMeta.filename)) {
                         this.activeRunEntities.get(scriptMeta.filename).add(entityId);
                     }
+                }
 
-                    this.emit('log', { source: 'System', message: `Successfully sent registration for ${entityId}`, level: 'debug' });
-                } catch (e) {
-                    // Dieser Fehler wird geworfen, wenn die Integration nicht da ist oder der Payload falsch ist.
-                    let errorMsg = `Failed to create native entity ${entityId}: ${e.message}`;
-                    if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
-                        errorMsg += " -> Check if 'js_automations' integration is installed and HA is restarted.";
+                // 3. Subscriptions (ha.on)
+                if (msg.type === 'subscribe') {
+                    this.subscriptions.get(scriptMeta.filename).push(msg.pattern);
+                }
+
+                // 4. Store Operations
+                if (msg.type === 'store_set' && this.storeManager) {
+                    const currentEntry = this.storeManager.data[msg.key];
+                    const currentValue = currentEntry ? currentEntry.value : undefined;
+
+                    if (currentValue !== msg.value) {
+                        this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
+                        this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value }, worker);
                     }
-                    this.emit('log', { source: 'System', message: errorMsg, level: 'error' });
                 }
-            }
-
-            // 3. Subscriptions (ha.on)
-            if (msg.type === 'subscribe') {
-                this.subscriptions.get(scriptMeta.filename).push(msg.pattern);
-            }
-
-            // 4. Store Operations
-            if (msg.type === 'store_set' && this.storeManager) {
-                // DEDUPLICATION: Nur senden, wenn sich der Wert wirklich geändert hat
-                const currentEntry = this.storeManager.data[msg.key];
-                const currentValue = currentEntry ? currentEntry.value : undefined;
-
-                if (currentValue !== msg.value) {
-                    this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
-                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value }, worker);
+                if (msg.type === 'store_delete' && this.storeManager) {
+                    if (this.storeManager.data[msg.key] !== undefined) {
+                        this.storeManager.delete(msg.key);
+                        this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined }, worker);
+                    }
                 }
-            }
-            if (msg.type === 'store_delete' && this.storeManager) {
-                if (this.storeManager.data[msg.key] !== undefined) {
-                    this.storeManager.delete(msg.key);
-                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined }, worker);
+
+                // 5. Stats Response
+                if (msg.type === 'stats') {
+                    this.stats.set(scriptMeta.filename, {
+                        ram_usage: Math.round(msg.heapUsed / 1024 / 1024 * 100) / 100, // MB
+                        rss: Math.round(msg.rss / 1024 / 1024 * 100) / 100
+                    });
                 }
-            }
 
-            // 5. Stats Response
-            if (msg.type === 'stats') {
-                this.stats.set(scriptMeta.filename, {
-                    ram_usage: Math.round(msg.heapUsed / 1024 / 1024 * 100) / 100, // MB
-                    rss: Math.round(msg.rss / 1024 / 1024 * 100) / 100
-                });
-            }
+                // 6. Lifecycle Control (ha.restart / ha.stop)
+                if (msg.type === 'script_lifecycle') {
+                    const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
+                    this.emit('log', { source: name, message: `Requesting ${msg.action}: ${reason}`, level: 'info' });
 
-            // 6. Lifecycle Control (ha.restart / ha.stop)
-            if (msg.type === 'script_lifecycle') {
-                const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
-                this.emit('log', { source: name, message: `Requesting ${msg.action}: ${reason}`, level: 'info' });
-
-                if (msg.action === 'stop') {
-                    this.stopScript(scriptMeta.filename, reason);
-                } else if (msg.action === 'restart') {
-                    this.stopScript(scriptMeta.filename, reason);
-                    // Kurze Verzögerung für Cleanup, dann Neustart
-                    // Wir nutzen fullPath aus dem Scope von startScript
-                    setTimeout(() => this.startScript(fullPath), 500);
+                    if (msg.action === 'stop') {
+                        this.stopScript(scriptMeta.filename, reason);
+                    } else if (msg.action === 'restart') {
+                        this.stopScript(scriptMeta.filename, reason);
+                        setTimeout(() => this.startScript(fullPath), 500);
+                    }
                 }
+            } catch (err) {
+                this.emit('log', { source: name, message: `Service call execution failed: ${err.message}`, level: 'error' });
             }
         });
 

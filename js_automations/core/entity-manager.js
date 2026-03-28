@@ -46,7 +46,6 @@ class EntityManager {
         this.typingTimer = setTimeout(async () => {
             try {
                 const states = this.haConnection.states || {};
-                const services = this.haConnection.services || {};
                 const entityIds = Object.keys(states);
                 const storeData = this.workerManager.storeManager ? this.workerManager.storeManager.getAll() : {};
                 
@@ -71,27 +70,6 @@ class EntityManager {
                     content += `  "${id}": HAState<${attrType}>;\n`;
                 });
                 
-                content += `}\n\n`;
-
-                content += `interface ServiceMap {\n`;
-                for (const [domain, domainServices] of Object.entries(services)) {
-                    content += `  "${domain}": {\n`;
-                    for (const [service, details] of Object.entries(domainServices)) {
-                        const description = (details.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
-                        content += `    /** ${description} */\n`;
-                        content += `    "${service}": {\n`;
-                        if (details.fields) {
-                            for (const [field, fDetails] of Object.entries(details.fields)) {
-                                const fDesc = (fDetails.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
-                                content += `      /** ${fDesc} */\n`;
-                                content += `      "${field}"?: any;\n`;
-                            }
-                        }
-                        content += `      [key: string]: any;\n`;
-                        content += `    };\n`;
-                    }
-                    content += `  };\n`;
-                }
                 content += `}\n\n`;
 
                 // Generate GlobalStoreSchema based on actual store content
