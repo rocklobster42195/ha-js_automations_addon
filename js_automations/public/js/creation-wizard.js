@@ -180,7 +180,7 @@ function injectCreationWizard() {
                 <div class="drop-zone" id="wizard-dropzone" onclick="document.getElementById('wizard-file-input').click()">
                     <i class="mdi mdi-cloud-upload" style="font-size: 48px;"></i>
                     <p data-i18n="wizard_dropzone_text">Datei hier ablegen oder klicken</p>
-                    <input type="file" id="wizard-file-input" accept=".js" style="display:none" onchange="handleFileSelect(this)">
+                    <input type="file" id="wizard-file-input" accept=".js,.ts" style="display:none" onchange="handleFileSelect(this)">
                     <div id="wizard-file-name" class="file-info"></div>
                 </div>
             </div>
@@ -389,7 +389,7 @@ function handleFileSelect(input) {
         // Auto-fill name input
         const nameInput = document.getElementById('wizard-upload-name');
         if (nameInput && !nameInput.value) {
-            nameInput.value = input.files[0].name.replace(/\.js$/i, '');
+            nameInput.value = input.files[0].name.replace(/\.(js|ts)$/i, '');
         }
     }
     validateWizardState();
@@ -400,9 +400,14 @@ function handleImportUrlInput() {
     const nameInput = document.getElementById('wizard-import-name');
     if (url && !nameInput.value) {
         try {
-            const basename = url.split('/').pop().split('?')[0];
-            nameInput.value = basename.replace(/\.js$/i, '');
-        } catch(e){}
+            // Improved extraction: handles Gist raw URLs better
+            const parts = url.split('/');
+            const lastPart = parts.pop() || parts.pop(); // Handle trailing slashes
+            const basename = lastPart.split('?')[0];
+            if (basename && basename !== 'raw') {
+                nameInput.value = basename.replace(/\.(js|ts)$/i, '');
+            }
+        } catch (e) { }
     }
     validateWizardState(); // Trigger validation
 }
