@@ -138,6 +138,30 @@ function getLanguageByFilename(filename) {
 window.getLanguageByFilename = getLanguageByFilename;
 
 /**
+ * Heuristic to detect if code is TypeScript based on common keywords/syntax.
+ * @param {string} content 
+ * @returns {string} 'typescript' or 'javascript'
+ */
+function detectLanguageFromContent(content) {
+    if (!content) return 'javascript';
+    const tsPatterns = [
+        /\binterface\s+\w+/,                // interface Name
+        /\btype\s+\w+\s*=/,                 // type Name =
+        /\benum\s+\w+/,                     // enum Name
+        /\bnamespace\s+\w+/,                // namespace Name
+        /:\s*(string|number|boolean|any|void)\b/, // : string
+        /\bas\s+(string|number|boolean|any|object)\b/, // value as string
+        /\w+<\w+>/,                         // Array<string> or Generics
+        /\b(private|public|protected)\s+\w+/, // Class modifiers
+        /\?\./                              // Optional chaining (though also in modern JS)
+    ];
+
+    const isTypeScript = tsPatterns.some(pattern => pattern.test(content));
+    return isTypeScript ? 'typescript' : 'javascript';
+}
+window.detectLanguageFromContent = detectLanguageFromContent;
+
+/**
  * Generiert das HTML für ein Sprach-Badge (JS/TS).
  * @param {string} filename 
  * @returns {string} HTML String
