@@ -22,6 +22,7 @@
 
 *   **Native TypeScript Support:** Write robust automations with full type-safety. Scripts are automatically transpiled in the background.
 *   **Pro-Grade IntelliSense:** The IDE provides deep autocomplete for all your Home Assistant entities, services (including field descriptions), and even your custom global store keys.
+*   **Fluent API:** Interact with entities using a natural syntax: `ha.entity('light.kitchen').state` or `ha.entity('light.kitchen').turn_on()`.
 *   **Thread Isolation:** Each script runs in its own Worker Thread. Crashes are contained and won't affect HA.
 *   **Hybrid Architecture:** A built-in custom component bridge allows creating **true native entities** in Home Assistant that survive reboots and are fully editable.
 *   **Unified Creation Wizard:** Easily create new scripts from templates, upload files, or import code from GitHub/Gist.
@@ -32,6 +33,8 @@
 *   **Script Control:** Expose any script as a `switch` or `button` entity via the `@expose` tag for easy dashboard integration.
 *   **Persistent Store:** Share variables between scripts or survive reboots with the synchronous `ha.store`.
 *   **Magic Variables (`ha.persistent`):** Work with persistent data like normal objects. Changes to top-level and **nested properties** are automatically saved.
+*   **Smart Batching:** Use `.throttle(ms)` on selectors to prevent overwhelming RF gateways (like Homematic or Zigbee) by spacing out commands.
+*   **Awaitable Actions:** All service calls return promises. Use `await` to ensure commands are received before moving to the next step.
 *   **Store Explorer:** Visual interface to view, edit, and delete global variables in `ha.store` (supports **Secrets**).
 *   **Global Libraries:** Create reusable code modules and include them in any script using the `@include` tag.
 *   **Automatic NPM:** Packages defined in the header are automatically installed in a persistent hidden directory.
@@ -299,7 +302,7 @@ ha.on('sensor.bathroom_humidity', (e) => {
     
     if (hum > 65) {
         ha.log("Humidity high! Starting fan.");
-        ha.callService('switch', 'turn_on', { entity_id: 'switch.bathroom_fan' });
+        ha.entity('switch.bathroom_fan').turn_on();
         
         // Cancel any pending stop timer
         if (stopTimer) clearTimeout(stopTimer);
@@ -309,7 +312,7 @@ ha.on('sensor.bathroom_humidity', (e) => {
         if (stopTimer) clearTimeout(stopTimer);
         
         stopTimer = setTimeout(() => {
-            ha.callService('switch', 'turn_off', { entity_id: 'switch.bathroom_fan' });
+            ha.entity('switch.bathroom_fan').turn_off();
             ha.log("Fan stopped.");
         }, 300000);
     }
@@ -365,7 +368,7 @@ async function checkTrash() {
             }
         }
 
-        ha.updateState('sensor.jsa_trash_tomorrow', trashType);
+        ha.update('sensor.jsa_trash_tomorrow', trashType);
 
     } catch (e) {
         ha.error("Calendar check failed: " + e.message);
@@ -392,21 +395,20 @@ Instead of writing 50 separate automations, this script scans your entire home f
 async function scanBatteries() {
     ha.log("Starting battery scan...");
     
-    // Select all battery sensors, filter for low levels, and directly map them to their friendly names.
-    const lowDeviceNames = ha.select('sensor.*_battery')
+    // Select all battery sensors and filter for low levels
+    const lowBatteries = ha.select('sensor.*_battery')
         .where(s => {
             const val = parseFloat(s.state);
             return val < 15 && s.state !== 'unavailable' && s.state !== 'unknown';
-        })
-        .map(s => s.attributes.friendly_name || s.entity_id); // Uses the chained .map() function
+        });
 
-    if (lowDeviceNames.length > 0) {
-        const names = lowDeviceNames.join(', ');
+    if (lowBatteries.count > 0) {
+        const names = lowBatteries.map(s => s.attributes.friendly_name || s.entity_id).join(', ');
         ha.warn(`Low battery levels detected: ${names}`);
         
-        ha.callService('notify', 'persistent_notification', {
-            title: 'Low Battery Alert',
-            message: `The following devices need new batteries: ${names}`
+        ha.call('notify.persistent_notification', {
+            title: 'Battery Alert',
+            message: `The following devices need attention: ${names}`
         });
     } else {
         ha.log("All batteries are within the healthy range.");
@@ -486,7 +488,7 @@ if (activeLightNames.length > 0) {
     ha.log(`The following lights are currently on: ${list}`);
     
     // You can now use this list in a notification.
-    ha.callService('notify', 'persistent_notification', {
+    ha.call('notify.persistent_notification', {
         title: 'Active Lights',
         message: list
     });
@@ -516,20 +518,24 @@ This example opens a garage door, waits for it to be fully open, and only then t
 
 // The main logic must be in an 'async' function to use 'await'.
 async function openGarageSequence() {
-    const GARAGE_DOOR = 'cover.garage_door';
-    const GARAGE_LIGHT = 'light.garage_light';
+    const door = ha.entity('cover.garage_door');
+    const light = ha.entity('light.garage_light');
 
     ha.log('Starting garage sequence...');
-    ha.callService('cover', 'open_cover', { entity_id: GARAGE_DOOR });
+    
+    // Open the door and wait for HA confirmation
+    await door.open_cover();
 
     try {
         // Pause the script here and wait for the door's state to become 'open'.
-        // If it doesn't happen within 30 seconds, it will throw an error.
-        await ha.waitFor(GARAGE_DOOR, 'eq', 'open', { timeout: 30000 });
+        await ha.waitFor(door.entity_id, 'eq', 'open', { timeout: 30000 });
 
-        // This code only runs if ha.waitFor() was successful.
-        ha.log('Garage door is fully open. Turning on the light.');
-        ha.callService('light', 'turn_on', { entity_id: GARAGE_LIGHT });
+        ha.log('Door open. Setting ambiance...');
+        
+        // Chain actions: Turn on light, wait 2s, then dim it
+        await light.turn_on({ brightness: 255 })
+                   .then(l => l.wait(2000))
+                   .then(l => l.turn_on({ brightness: 100 }));
 
     } catch (e) {
         // This code runs if the 30-second timeout was reached.
@@ -568,7 +574,7 @@ async function movieTime() {
     }
 
     ha.log("Movie time is ready! Dimming lights.");
-    ha.callService('scene', 'turn_on', { entity_id: 'scene.movie_dim' });
+    ha.entity('scene.movie_dim').turn_on();
 }
 
 movieTime();

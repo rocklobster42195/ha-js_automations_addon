@@ -171,9 +171,9 @@ function registerCompletionProviders() {
         provideCompletionItems: function(model, position, context) {
             const textUntilPosition = model.getValueInRange({startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
             
-            if (textUntilPosition.match(/ha\.(update|on|onStateChange|getState|getAttr|getStateValue)\(\s*['"]$/) || 
+            if (textUntilPosition.match(/ha\.(entity|update|on|waitFor|select|onStateChange|getState|getAttr|getStateValue|getGroupMembers)\(\s*['"]$/) || 
                 textUntilPosition.match(/ha\.states\[\s*['"]$/) ||
-                textUntilPosition.match(/ha\.on\(\s*\[[^\]]*['"]$/)) {
+                textUntilPosition.match(/ha\.(on|waitFor|select)\(\s*\[[^\]]*['"]$/)) {
                 return {
                     suggestions: allEntities.map(e => ({
                         label: e,

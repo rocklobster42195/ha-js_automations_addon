@@ -41,11 +41,46 @@ type ServiceData<T extends string> = T extends `${infer D}.${infer S}`
         : Record<string, any>
     : Record<string, any>;
 
+/** Helper to map a domain to its available services as methods */
+type EntityServices<T extends string> = T extends `${infer Domain}.${string}`
+    ? Domain extends keyof ServiceMap 
+        ? { [S in keyof ServiceMap[Domain] & string]: (data?: ServiceMap[Domain][S]) => Promise<EntityServices<T>> } & EntityMethods<T>
+        : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>
+    : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>;
+
+/** Helper to extract only literal keys (excluding index signatures) for better IntelliSense */
+type KnownKeys<T> = keyof { [K in keyof T as string extends K ? never : number extends K ? never : K]: any };
+
+/** Helper to extract attribute keys for a specific entity ID with autocomplete fallback */
+type AttributeKey<T extends string> = T extends keyof HAEntities 
+    ? (HAEntities[T] extends HAState<infer A> ? (KnownKeys<A> | (string & {})) : (KnownKeys<HAAttributes> | (string & {})))
+    : (KnownKeys<HAAttributes> | (string & {}));
+
+interface EntityMethods<T extends string> {
+    /** Pauses the execution chain for a specific duration. */
+    wait(ms: number): Promise<this>;
+    /** Gets a specific attribute value for this entity. */
+    getAttribute<K extends AttributeKey<T>>(name: K): T extends keyof HAEntities 
+        ? (HAEntities[T] extends HAState<infer A> ? (K extends keyof A ? A[K] : any) : any) 
+        : any;
+    /** The current state value of the entity. */
+    readonly state: string | undefined;
+    /** The attributes of the entity, automatically typed if the entity ID is known. */
+    readonly attributes: T extends keyof HAEntities ? (HAEntities[T] extends HAState<infer A> ? A : HAAttributes) : HAAttributes;
+}
+
+/** Helper to map a domain to its available services as batch methods */
+type SelectorServices<T extends string> = T extends `${infer Domain}.${string}`
+    ? Domain extends keyof ServiceMap 
+        ? { [S in keyof ServiceMap[Domain] & string]: (data?: ServiceMap[Domain][S]) => Promise<EntitySelector & SelectorServices<T>> } & { throttle(ms: number): EntitySelector & SelectorServices<T>; wait(ms: number): Promise<EntitySelector & SelectorServices<T>> }
+        : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> }
+    : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> };
+
 /** Type that provides autocomplete for known keys in GlobalStoreSchema while allowing any string. */
 type StoreKey = keyof GlobalStoreSchema | (string & { _?: never });
 
 /** Type alias for known Home Assistant entity IDs with fallback to any string */
-type EntityID = keyof HAEntities | (string & {});
+type EntityID = keyof HAEntities | (string & { _?: never });
 
 /**
  * Represents a Home Assistant entity state.
@@ -182,6 +217,12 @@ interface HA {
 
     // --- Home Assistant Services & Entities ---
     /** 
+     * Returns a fluent API for a specific entity with domain-specific services.
+     * @param entityId The entity ID (e.g., 'light.living_room').
+     */
+    entity<K extends EntityID>(entityId: K): K extends keyof HAEntities ? EntityServices<K> : EntityServices<string>;
+
+    /** 
      * @deprecated Use ha.call() instead for a cleaner 'domain.service' syntax.
      * Calls a Home Assistant service. 
      */
@@ -238,9 +279,9 @@ interface HA {
     /** A live cache of all Home Assistant entity states. */
     readonly states: HAEntities;
     /** Gets the current state object for a given entity ID. */
-    getState(entityId: EntityID): HAState | undefined;
+    getState<K extends EntityID>(entityId: K): K extends keyof HAEntities ? HAEntities[K] : HAState | undefined;
     /** Gets a specific attribute value for an entity. */
-    getAttr(entityId: EntityID, attribute: string): any;
+    getAttr<K extends EntityID>(entityId: K, attribute: AttributeKey<K>): any;
     /** Gets the state value of an entity, converting 'on'/'off' to boolean and numbers to number. */
     getStateValue(entityId: EntityID): string | number | boolean | undefined;
     /** Gets the members of a group entity. */
@@ -257,7 +298,7 @@ interface HA {
      * Selects one or more entities based on a pattern for bulk actions.
      * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
      */
-    select(pattern: EntityID | EntityID[] | RegExp | string): EntitySelector;
+    select<P extends string>(pattern: P | EntityID[] | RegExp): EntitySelector & SelectorServices<P>;
 
     /**
      * Registers a callback to be executed when an entity's state changes.
@@ -381,11 +422,11 @@ declare class EntitySelector {
     /** Executes a function for each entity in the selection. */
     each(callback: (entity: HAState) => void): EntitySelector;
     /** Calls a service for all entities in the selection. */
-    call(service: string, data?: Record<string, any>): EntitySelector;
-    /** Shortcut to turn all selected entities ON. */
-    turnOn(data?: Record<string, any>): EntitySelector;
-    /** Shortcut to turn all selected entities OFF. */
-    turnOff(data?: Record<string, any>): EntitySelector;
+    call(service: string, data?: Record<string, any>): Promise<this>;
+    /** Sets a delay in milliseconds between each entity call in a batch action. */
+    throttle(ms: number): this;
+    /** Waits for the specified amount of time. Useful for chaining actions. */
+    wait(ms: number): Promise<this>;
     /** Expands groups to their members. */
     expand(): EntitySelector;
     /** Returns the raw array of state objects. */
