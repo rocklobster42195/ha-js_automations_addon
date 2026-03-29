@@ -3,7 +3,15 @@
  * Handles backend communication and global data loading.
  */
 
-var BASE_PATH = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+// Robuste Berechnung des Ingress-Pfads: Alles bis zum letzten Slash nehmen
+var BASE_PATH = window.location.pathname;
+if (BASE_PATH.endsWith('.html')) {
+    BASE_PATH = BASE_PATH.substring(0, BASE_PATH.lastIndexOf('/') + 1);
+} else if (!BASE_PATH.endsWith('/')) {
+    BASE_PATH += '/';
+}
+console.log("I18N: Base Path detected as:", BASE_PATH);
+
 var haData = { areas: [], labels: [], services: {}, language: null };
 var mdiIcons = [];
 

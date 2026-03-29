@@ -66,6 +66,11 @@ async function loadSettingsData() {
         renderAllSettings();
         initScrollSpy();
 
+        // Statische Elemente im Settings-Wrapper übersetzen (z.B. Header in der Sidebar)
+        if (window.updateUIWithTranslations) {
+            window.updateUIWithTranslations(document.getElementById('settings-wrapper'));
+        }
+
         // Check for deep linking
         if (pendingScrollTarget) {
             const target = pendingScrollTarget;
@@ -113,6 +118,7 @@ function renderSettingsCategories() {
         
         // Label (i18n)
         const label = document.createElement('span');
+        label.setAttribute('data-i18n', cat.label);
         label.innerText = i18next.t(cat.label, { defaultValue: cat.label });
 
         btn.appendChild(icon);
@@ -220,6 +226,7 @@ function renderAllSettings() {
         icon.className = `mdi ${category.icon.replace('mdi:', 'mdi-')}`;
         title.appendChild(icon);
         const titleText = document.createElement('span');
+        titleText.setAttribute('data-i18n', category.label);
         titleText.innerText = i18next.t(category.label);
         title.appendChild(titleText);
         section.appendChild(title);
@@ -257,6 +264,7 @@ function renderSettingsItems(category, section) {
 
         // Label
         const label = document.createElement('label');
+        label.setAttribute('data-i18n', item.label);
         label.innerText = i18next.t(item.label);
         label.style.display = 'block';
         label.style.marginBottom = '5px';
@@ -267,6 +275,7 @@ function renderSettingsItems(category, section) {
         // Description (optional)
         if (item.description) {
             const desc = document.createElement('div');
+            desc.setAttribute('data-i18n', item.description);
             desc.innerText = i18next.t(item.description);
             desc.style.fontSize = '0.8rem';
             desc.style.color = '#888';
@@ -516,7 +525,11 @@ function renderIntegrationUI(container, status, showRestartHint = false) {
         if (status.active) {
             desc = i18next.t('settings.system.integration_active') + ` (v${status.version_running})`;
         } else if (status.is_running) {
-            desc = `Version Mismatch: HA führt v${status.version_running} aus, lokaler Quellcode ist v${status.version_available}.`;
+            desc = i18next.t('settings.system.integration_version_mismatch', { 
+                running: status.version_running, 
+                available: status.version_available,
+                defaultValue: `Version Mismatch: HA is running v${status.version_running}, local source is v${status.version_available}.`
+            });
         } else {
             desc = i18next.t('settings.system.integration_dev_mode_desc');
         }

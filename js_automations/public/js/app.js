@@ -345,31 +345,31 @@ function updateSystemNotifications() {
             intIcon.className = 'mdi mdi-circle-outline integration-icon';
             intIcon.style.color = 'var(--danger)';
             intIcon.style.opacity = '1';
-            if (intItem) intItem.title = 'HA Integration: Disconnected (Socket)';
+            if (intItem) intItem.title = i18next.t('status.integration_disconnected_socket', { defaultValue: 'HA Integration: Disconnected (Socket)' });
         } else if (!status && !isRunning) {
             // Checking status...
             intIcon.className = 'mdi mdi-circle-outline integration-icon';
             intIcon.style.color = '#999';
             intIcon.style.opacity = '0.3';
-            if (intItem) intItem.title = 'HA Integration: Checking...';
+            if (intItem) intItem.title = i18next.t('status.integration_checking', { defaultValue: 'HA Integration: Checking...' });
         } else if (isRunning) {
             // Fully active and running
             intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
             intIcon.style.color = '#fff';
             intIcon.style.opacity = '1';
-            if (intItem) intItem.title = 'HA Integration: Active';
+            if (intItem) intItem.title = i18next.t('status.integration_active', { defaultValue: 'HA Integration: Active' });
         } else if (isDev && !isRunning) {
             // Dev Mode but not running yet
             intIcon.className = 'mdi mdi-circle-outline integration-icon';
             intIcon.style.color = 'var(--warn)';
             intIcon.style.opacity = '1';
-            if (intItem) intItem.title = 'HA Integration: Developer Mode (Bridge disconnected)';
+            if (intItem) intItem.title = i18next.t('status.integration_dev_mode', { defaultValue: 'HA Integration: Developer Mode' });
         } else if (status.installed) {
             // Files present but bridge not active (Legacy or Restart required)
             intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
             intIcon.style.color = 'var(--warn)';
             intIcon.style.opacity = '1';
-            if (intItem) intItem.title = 'HA Integration: Files present, not running (Legacy/Restart needed)';
+            if (intItem) intItem.title = i18next.t('status.integration_legacy_restart', { defaultValue: 'HA Integration: Restart required' });
         } else {
             // Missing or not installed
             intIcon.className = 'mdi mdi-circle-outline integration-icon';
