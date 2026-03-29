@@ -11,12 +11,12 @@
 module.exports = [
     {
         id: 'general',
-        label: 'settings.categories.general',
+        label: 'settings.sections.general',
         icon: 'mdi:tune',
         items: [
             { 
                 key: 'ui_language', 
-                label: 'settings.general.language', 
+                label: 'settings.general.ui_language', 
                 type: 'select', 
                 options: [
                     { value: 'auto', label: 'settings.general.language_auto' }, 
@@ -44,7 +44,7 @@ module.exports = [
     },
     {
         id: 'editor',
-        label: 'settings.categories.editor',
+        label: 'settings.sections.editor',
         icon: 'mdi:code-braces',
         items: [
             { 
@@ -83,7 +83,7 @@ module.exports = [
     },
     {
         id: 'statusbar',
-        label: 'settings.categories.statusbar',
+        label: 'settings.sections.statusbar',
         icon: 'mdi:dock-bottom',
         items: [
             {
@@ -190,7 +190,7 @@ module.exports = [
     },
     {
         id: 'system',
-        label: 'settings.categories.system',
+        label: 'settings.sections.system',
         icon: 'mdi:server',
         items: [
             { 
@@ -217,7 +217,7 @@ module.exports = [
     },
     {
         id: 'danger',
-        label: 'settings.categories.danger',
+        label: 'settings.sections.danger',
         icon: 'mdi:alert',
         items: [
             { 

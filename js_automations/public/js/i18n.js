@@ -39,20 +39,31 @@ async function initI18next() {
     }
 
     // Fallback: Browser-Sprache
-    if (!lang) lang = navigator.language.split('-')[0];
+    if (!lang) lang = navigator.language || 'en';
+    
+    // Debugging für Addon-Kontext
+    console.log(`I18N: Target language is ${lang}, loading from ${BASE_PATH}locales/`);
+
+    // Sprachcode normalisieren (immer auf 2 Zeichen kürzen, da unsere Ordnerstruktur so ist)
+    const finalLang = lang.split('-')[0];
 
     await i18next
         .use(i18nextHttpBackend)
         .init({
-            lng: lang,
+            lng: finalLang,
             fallbackLng: 'en',
+            load: 'languageOnly', // Verhindert Versuche de-DE zu laden, wenn nur de existiert
             debug: false,
             ns: ['translation'],
             defaultNS: 'translation',
             backend: {
-                loadPath: 'locales/{{lng}}/translation.json'
+                loadPath: BASE_PATH + 'locales/{{lng}}/translation.json'
             }
         });
+
+    // Globaler Shortcut für einfache Nutzung in anderen Skripten (z.B. Wizard)
+    window.t = i18next.t.bind(i18next);
+
     updateUIWithTranslations();
 
     // Falls wir nach einem Reload (z.B. Sprachwechsel) die Settings wieder öffnen sollen
@@ -67,16 +78,34 @@ async function initI18next() {
     }
 }
 
-function updateUIWithTranslations() {
-    document.title = i18next.t('app_title');
-    document.querySelectorAll('[data-i18n]').forEach(el => {
+/**
+ * Aktualisiert die UI-Elemente mit Übersetzungen.
+ * Kann für das gesamte Dokument oder ein spezifisches Element (z.B. den Wizard) aufgerufen werden.
+ */
+function updateUIWithTranslations(root = document) {
+    if (root === document) {
+        document.title = i18next.t('app_title');
+    }
+
+    const elements = root.querySelectorAll('[data-i18n]');
+    elements.forEach(el => {
         const key = el.getAttribute('data-i18n');
+        if (!key) return;
+
+        const translation = i18next.t(key);
+
         if (el.hasAttribute('data-i18n-placeholder')) {
-            el.placeholder = i18next.t(key);
-        } else if (el.hasAttribute('data-i18n-title')) {
-            el.title = i18next.t(key);
-        } else {
-            el.innerHTML = i18next.t(key);
+            el.placeholder = translation;
+        } 
+        if (el.hasAttribute('data-i18n-title')) {
+            el.title = translation;
+        }
+        
+        // Inhalt nur übersetzen, wenn es kein reines Input-Element ist (da dort innerHTML keinen Sinn ergibt)
+        // oder wenn explizit kein Attribut-Ziel definiert wurde.
+        const isInput = ['INPUT', 'TEXTAREA'].includes(el.tagName);
+        if (!isInput && !el.hasAttribute('data-i18n-placeholder') && !el.hasAttribute('data-i18n-title')) {
+            el.innerHTML = translation;
         }
     });
 }

@@ -93,7 +93,7 @@ function injectCreationWizard() {
                     <div class="form-group hidden" id="wizard-group-template">
                         <label><span data-i18n="wizard_label_template">Template</span></label>
                         <select id="wizard-template">
-                            ${Object.keys(SCRIPT_TEMPLATES).map(k => `<option value="${k}">${i18next.t(SCRIPT_TEMPLATES[k].labelKey)}</option>`).join('')}
+                            ${Object.keys(SCRIPT_TEMPLATES).map(k => `<option value="${k}" data-i18n="${SCRIPT_TEMPLATES[k].labelKey}">${i18next.t(SCRIPT_TEMPLATES[k].labelKey)}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group" id="wizard-group-language">
@@ -238,7 +238,7 @@ function injectCreationWizard() {
 async function openCreationWizard(mode = 'create', data = null) {
     injectCreationWizard();
     // The modal is now in the DOM, translate its contents
-    if (window.updateUIWithTranslations) window.updateUIWithTranslations();
+    if (window.updateUIWithTranslations) window.updateUIWithTranslations(document.getElementById('creation-wizard-modal'));
 
     const modal = document.getElementById('creation-wizard-modal');
     modal.classList.remove('hidden');
@@ -640,7 +640,7 @@ async function executeWizardAction() {
                     headers: { 'Content-Type': 'application/json' }, 
                     body: JSON.stringify(payload) 
                 });
-                if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Update failed'); }
+                if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_update_failed', { defaultValue: 'Update failed' })); }
                 const data = await res.json();
                 newFilename = data.filename;
 
@@ -675,7 +675,7 @@ async function executeWizardAction() {
                 payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '');
                 
                 const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Creation failed'); }
+                if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_create_failed', { defaultValue: 'Creation failed' })); }
                 const data = await res.json();
                 newFilename = data.filename;
             }
@@ -698,7 +698,7 @@ async function executeWizardAction() {
             const name = document.getElementById('wizard-import-name').value.trim();
             if (!url) throw new Error(i18next.t('error_wizard_url_required'));
             const res = await apiFetch('api/scripts/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, type, name }) });
-            if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Import failed'); }
+            if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_import_failed', { defaultValue: 'Import failed' })); }
             const data = await res.json();
             newFilename = data.filename;
         }
