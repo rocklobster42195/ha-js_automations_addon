@@ -23,7 +23,8 @@ class WorkerManager extends EventEmitter {
             restart_protection_count: 5,
             restart_protection_time: 60000,
             node_memory: 256,
-            ui_language: 'auto'
+            ui_language: 'auto',
+            default_throttle: 0
         };
         this.subscriptions = new Map(); // filename -> patterns[]
         this.storageDir = ''; 
@@ -108,7 +109,7 @@ class WorkerManager extends EventEmitter {
         this.haConnector = connector; 
         if (connector) {
             // Automatisch Dienste synchronisieren, sobald die Verbindung steht
-            setTimeout(() => this.syncServiceDefinitions(), 5000);
+            setTimeout(() => this.syncServiceDefinitions(), 3000);
         }
     }
 
@@ -499,7 +500,8 @@ class WorkerManager extends EventEmitter {
                 initialStore: initialStoreValues,
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info',
-                language: language
+                language: language,
+                defaultThrottle: this.settings.default_throttle || 0
             },
             env: { 
                 ...process.env, 
@@ -517,7 +519,12 @@ class WorkerManager extends EventEmitter {
                 
                 // 2. Home Assistant Actions
                 if (msg.type === 'call_service' && this.haConnector) {
-                    await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                    try {
+                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                        if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
+                    } catch (err) {
+                        if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
+                    }
                 }
 
                 if (msg.type === 'update_state' && this.haConnector) {

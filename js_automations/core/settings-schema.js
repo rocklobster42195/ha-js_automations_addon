@@ -201,6 +201,16 @@ module.exports = [
                 default: 'info' 
             },
             { 
+                key: 'default_throttle', 
+                label: 'settings.system.default_throttle', 
+                description: 'settings.system.default_throttle_desc', 
+                type: 'number', 
+                min: 0, 
+                max: 5000, 
+                default: 0,
+                unit: 'ms'
+            },
+            { 
                 key: 'ha_integration_status', 
                 label: 'Home Assistant Integration', 
                 type: 'integration-manager' 

@@ -89,7 +89,7 @@ async function openGarage() {
     // This script might be triggered by a button press
     if (ha.states['cover.garage_door'].state === 'closed') {
         ha.log('Opening garage door...');
-        ha.callService('cover', 'open_cover', { entity_id: 'cover.garage_door' });
+        ha.entity('cover.garage_door').open_cover();
 
         try {
             // Wait for the door to be fully open, with a 30-second timeout
@@ -108,8 +108,8 @@ Waits until a custom condition function returns `true`. This is ideal for comple
 ```javascript
 async function startMovieMode() {
     ha.log('Starting movie mode...');
-    ha.callService('light', 'turn_off', { entity_id: 'group.living_room_lights' });
-    ha.callService('media_player', 'turn_on', { entity_id: 'media_player.tv' });
+    ha.entity('group.living_room_lights').turn_off();
+    ha.entity('media_player.tv').turn_on();
 
     // Wait until all lights are off AND the TV is on
     await ha.waitUntil(() => {
@@ -190,26 +190,17 @@ ha.callService('notify', 'mobile_app_phone', {
 ### 8. Entity Selectors (`ha.select`)
 Perform bulk actions on groups of entities. `ha.select()` returns a chainable selector object that allows you to filter, transform, and act on multiple entities at once.
 
-**Chainable Methods:**
-*   `.where(callback)`: Filters the selection based on a condition.
-*   `.map(callback)`: Transforms the selection into a new array of values.
-*   `.each(callback)`: Executes a function for each entity.
-*   `.turnOn()`, `.turnOff()`: Calls the respective service on all selected entities.
-*   `.expand()`: Expands any groups in the selection into their individual members.
-*   `.toArray()`: Returns the final selection as a raw array of state objects.
-
-**Example 1: Data Transformation with `.map()`**
-Find all sensors with low battery and create a list of their names.
+**Example 1: Monitoring with `.toArray()`**
+Find all sensors with low battery and log their names.
 
 ```javascript
-// Find all sensors with a battery level below 15%
-const lowBatteryNames = ha.select('sensor.*_battery_level')
+const lowBatteries = ha.select('sensor.*_battery_level')
   .where(s => parseFloat(s.state) < 15)
-  .map(s => s.attributes.friendly_name || s.entity_id); // Transform into an array of names
+  .toArray();
 
-if (lowBatteryNames.length > 0) {
-    ha.warn(`Low battery: ${lowBatteryNames.join(', ')}`);
-}
+if (lowBatteries.length > 0) {
+    const names = lowBatteries.map(s => s.attributes.friendly_name || s.entity_id);
+    ha.warn(`Low battery: ${names.join(', ')}`);
 ```
 
 **Example 2: Bulk Actions**
@@ -218,16 +209,19 @@ Turn off all lights in a specific area.
 ```javascript
 ha.select('light.*')
   .where(light => light.attributes.area === 'Living Room')
-  .turnOff();
+  .turn_off();
 ```
 
 **Example 3: Working with Groups**
 Expand a group to its members and control them individually.
 
 ```javascript
-ha.select('group.all_fans')
-  .expand() // Resolves the group to its individual fan entities
-  .turnOff();
+await ha.select('light.*')
+  .where(l => l.attributes.area === 'Living Room')
+  .throttle(500) // 500ms pause between each light command
+  .turn_off()
+  .wait(1000);   // Wait 1s after the last command
+ha.log("All lights turned off sequentially.");
 ```
 
 ### 9. Persistent Store (`ha.store`)

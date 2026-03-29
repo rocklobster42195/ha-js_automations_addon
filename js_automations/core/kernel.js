@@ -160,6 +160,9 @@ class Kernel extends EventEmitter {
         if (settings.general?.ui_language) {
             workerSettings.ui_language = settings.general.ui_language;
         }
+        if (settings.system?.default_throttle !== undefined) {
+            workerSettings.default_throttle = settings.system.default_throttle;
+        }
         if (Object.keys(workerSettings).length > 0) {
             this.workerManager.setSettings(workerSettings);
         }

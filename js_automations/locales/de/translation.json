@@ -161,6 +161,8 @@
     "system": {
       "title": "System-Einstellungen",
       "log_level": "Log-Level",
+      "default_throttle": "Standard-Throttle (ms)",
+      "default_throttle_desc": "Verzögerung zwischen einzelnen Entitäten bei ha.select() Aufrufen.",
       "restart_required_hint": "Bitte starte Home Assistant neu (YAML-Reload reicht nicht aus).",
       "backup": "System-Backup",
       "backup_btn": "Backup herunterladen",

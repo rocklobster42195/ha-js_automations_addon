@@ -156,6 +156,9 @@ const stopCallbacks = [];
 const errorCallbacks = [];
 let isListening = false;
 
+const pendingServiceCalls = new Map();
+let serviceCallCounter = 0;
+
 /**
  * EntitySelector Class for bulk actions
  */
@@ -163,6 +166,17 @@ class EntitySelector {
     constructor(entities, parentHa) {
         this.list = entities; // Array of HA State objects
         this.ha = parentHa;
+        this._throttleMs = workerData.defaultThrottle || 0;
+
+        // Return a Proxy to allow calling any service name as a method
+        return new Proxy(this, {
+            get: (target, prop) => {
+                if (prop in target) return target[prop];
+                
+                // Treat unknown properties as service calls (snake_case)
+                return (data = {}) => target.call(prop, data);
+            }
+        });
     }
 
     /** Returns the number of entities in the current selection */
@@ -180,19 +194,31 @@ class EntitySelector {
     }
 
     /** Calls a service for all entities in the selection */
-    call(service, data = {}) {
-        this.list.forEach(entity => {
-            const domain = entity.entity_id.split('.')[0];
-            this.ha.callService(domain, service, { ...data, entity_id: entity.entity_id });
-        });
+    async call(service, data = {}) {
+        for (let i = 0; i < this.list.length; i++) {
+            const entity = this.list[i];
+            // Nutzt die awaitable Logik von ha.entity()
+            await this.ha.entity(entity.entity_id)[service](data);
+            
+            // Pause einlegen, falls throttle gesetzt ist und es nicht das letzte Element war
+            if (this._throttleMs > 0 && i < this.list.length - 1) {
+                await new Promise(res => setTimeout(res, this._throttleMs));
+            }
+        }
         return this;
     }
 
-    /** Shortcut to turn all selected entities ON */
-    turnOn(data = {}) { return this.call('turn_on', data); }
+    /** Sets a delay between individual entity calls in a batch */
+    throttle(ms) {
+        this._throttleMs = ms;
+        return this;
+    }
 
-    /** Shortcut to turn all selected entities OFF */
-    turnOff(data = {}) { return this.call('turn_off', data); }
+    /** Wait for X ms and return this for chaining */
+    async wait(ms) {
+        await new Promise(res => setTimeout(res, ms));
+        return this;
+    }
 
     /** Expands groups to their members */
     expand() {
@@ -238,6 +264,17 @@ function ensureMessageListener() {
     isListening = true;
 
     parentPort.on('message', async (msg) => {
+        // Handle response from service calls (for ha.entity() / awaitable calls)
+        if (msg.type === 'service_response') {
+            const promise = pendingServiceCalls.get(msg.callId);
+            if (promise) {
+                if (msg.error) promise.reject(new Error(msg.error));
+                else promise.resolve(msg.result);
+                pendingServiceCalls.delete(msg.callId);
+            }
+            return;
+        }
+
         // Real-time state cache sync
         if (msg.type === 'state_update') {
             if (msg.state) {
@@ -395,6 +432,55 @@ const ha = {
         ha.callService(domain, service, data);
     },
     
+    /**
+     * Fluent API for interacting with a single entity.
+     */
+    entity: (entityId) => {
+        const domain = entityId.split('.')[0];
+        
+        // Sicherstellen, dass der Worker auf die Antwort (service_response) wartet
+        ensureMessageListener();
+
+        const api = {
+            wait: (ms) => new Promise(res => setTimeout(() => res(apiProxy), ms)),
+            getAttribute: (name) => states[entityId]?.attributes?.[name],
+            get state() { return states[entityId]?.state; },
+            get attributes() { return states[entityId]?.attributes || {}; }
+        };
+
+        const apiProxy = new Proxy(api, {
+            get: (target, service) => {
+                if (service in target) return target[service];
+
+                return (data = {}) => {
+                    const callId = ++serviceCallCounter;
+                    return new Promise((resolve, reject) => {
+                        pendingServiceCalls.set(callId, { 
+                            resolve: () => resolve(apiProxy), 
+                            reject 
+                        });
+                        parentPort.postMessage({ 
+                            type: 'call_service', 
+                            domain, 
+                            service, 
+                            data: { ...data, entity_id: entityId },
+                            callId 
+                        });
+                        
+                        // Safety timeout
+                        setTimeout(() => {
+                            if (pendingServiceCalls.has(callId)) {
+                                pendingServiceCalls.delete(callId);
+                                reject(new Error(`Service call ${domain}.${service} for ${entityId} timed out.`));
+                            }
+                        }, 10000);
+                    });
+                };
+            }
+        });
+        return apiProxy;
+    },
+
     update: (entityId, arg2, arg3) => {
         let state = arg2;
         let attributes = arg3;

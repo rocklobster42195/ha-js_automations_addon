@@ -44,6 +44,8 @@ class EntityManager {
         if (this.typingTimer) clearTimeout(this.typingTimer);
 
         this.typingTimer = setTimeout(async () => {
+            if (!this.haConnection.isReady) return;
+            
             try {
                 const states = this.haConnection.states || {};
                 const entityIds = Object.keys(states);
@@ -75,6 +77,7 @@ class EntityManager {
                 // Generate GlobalStoreSchema based on actual store content
                 content += `interface GlobalStoreSchema {\n`;
                 for (const [key, entry] of Object.entries(storeData)) {
+                    // Ensure we only process valid keys
                     if (Object.prototype.hasOwnProperty.call(storeData, key)) {
                         const value = entry.value;
                         const inferredType = this._inferStoreValueType(value);
@@ -85,11 +88,6 @@ class EntityManager {
                     }
                 }
                 content += `}\n\n`;
-
-                content += `/** Merges dynamic types into the global HA interface **/\n`;
-                content += `interface HA {\n`;
-                content += `  readonly states: HAEntities;\n`;
-                content += `}\n`;
 
                 const filePath = path.join(this.workerManager.storageDir, 'entities.d.ts');
                 fs.writeFileSync(filePath, content, 'utf8');

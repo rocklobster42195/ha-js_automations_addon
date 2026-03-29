@@ -122,9 +122,18 @@
       "system": "System",
       "danger": "Danger Zone"
     },
+    "sections": {
+      "general": "General",
+      "system": "System",
+      "editor": "Editor",
+      "statusbar": "Status Bar",
+      "danger": "Danger Zone"
+    },
     "general": {
       "language": "Language",
       "language_auto": "Auto (Home Assistant)",
+      "ui_language": "Interface Language",
+      "ui_language_desc": "Adjust the UI language (requires reload).",
       "expert_mode": "Expert Mode",
       "expert_mode_desc": "Shows advanced options and technical details (e.g., file paths, raw views).",
       "confirm_delete": "Confirm deletion",
@@ -150,7 +159,10 @@
       "hide_sparkline_on_dense_desc": "Automatically hides mini charts when all 3 slots are active. This prevents the status bar from looking cluttered or text being truncated."
     },
     "system": {
+      "title": "System Settings",
       "log_level": "Log Level",
+      "default_throttle": "Default Throttle (ms)",
+      "default_throttle_desc": "Delay between individual entities in ha.select() calls.",
       "restart_required_hint": "Please restart Home Assistant (YAML quick reload is not sufficient).",
       "backup": "System Backup",
       "backup_btn": "Download Backup",

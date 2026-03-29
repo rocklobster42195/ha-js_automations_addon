@@ -46,13 +46,13 @@ function sendFinishNotifications() {
     ha.debug(`Gewählter Text für Benachrichtigung: "${randomMessage}"`);
 
     // Push-Benachrichtigung aufs Handy
-    ha.callService('notify', 'mobile_app_pixel_7a', { 
+    ha.call('notify.mobile_app_pixel_7a', { 
         message: 'Die Waschmaschine ist fertig.' 
     });
     
     // Ausgabe auf Sonos
     // WICHTIG: 'cache: false' bleibt drin, damit der Speicher nicht mit dutzenden Audio-Dateien vollläuft.
-    ha.callService('tts', 'cloud_say', { 
+    ha.call('tts.cloud_say', { 
         entity_id: 'media_player.sonos_kuche', 
         message: randomMessage, 
         cache: false 
@@ -63,10 +63,10 @@ function sendFinishNotifications() {
 function updateProgress() {
     const wmData = ha.store.get(WM_DATA);
     const finishAt = wmData?.wm_finish_timestamp;
-    const isPlugOn = ha.states[SWITCH]?.state === 'on';
+    const isPlugOn = ha.getStateValue(SWITCH) === true;
 
     if (!isPlugOn) {
-        ha.updateState(SENSOR, 'aus', { icon: 'mdi:washing-machine-off' });
+        ha.update(SENSOR, 'aus', { icon: 'mdi:washing-machine-off' });
         if (finishAt) ha.store.delete(WM_DATA);
         return;
     }
