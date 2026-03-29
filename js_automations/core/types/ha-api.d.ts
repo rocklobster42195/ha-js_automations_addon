@@ -42,9 +42,9 @@ type ServiceData<T extends string> = T extends `${infer D}.${infer S}`
     : Record<string, any>;
 
 /** Helper to map a domain to its available services as methods */
-type EntityServices<T extends string> = T extends `${infer Domain}.${string}`
+type EntityServices<T extends string> = T extends `${infer Domain}.${infer Rest}`
     ? Domain extends keyof ServiceMap 
-        ? { [S in keyof ServiceMap[Domain] & string]: (data?: ServiceMap[Domain][S]) => Promise<EntityServices<T>> } & EntityMethods<T>
+        ? { [S in keyof ServiceMap[Domain] & string]: (data?: Partial<ServiceMap[Domain][S]>) => Promise<EntityServices<T>> } & EntityMethods<T>
         : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>
     : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>;
 
@@ -58,7 +58,7 @@ type AttributeKey<T extends string> = T extends keyof HAEntities
 
 interface EntityMethods<T extends string> {
     /** Pauses the execution chain for a specific duration. */
-    wait(ms: number): Promise<this>;
+    wait(ms: number): Promise<EntityServices<T>>;
     /** Gets a specific attribute value for this entity. */
     getAttribute<K extends AttributeKey<T>>(name: K): T extends keyof HAEntities 
         ? (HAEntities[T] extends HAState<infer A> ? (K extends keyof A ? A[K] : any) : any) 
@@ -70,9 +70,9 @@ interface EntityMethods<T extends string> {
 }
 
 /** Helper to map a domain to its available services as batch methods */
-type SelectorServices<T extends string> = T extends `${infer Domain}.${string}`
+type SelectorServices<T extends string> = T extends `${infer Domain}.${infer Rest}`
     ? Domain extends keyof ServiceMap 
-        ? { [S in keyof ServiceMap[Domain] & string]: (data?: ServiceMap[Domain][S]) => Promise<EntitySelector & SelectorServices<T>> } & { throttle(ms: number): EntitySelector & SelectorServices<T>; wait(ms: number): Promise<EntitySelector & SelectorServices<T>> }
+        ? { [S in keyof ServiceMap[Domain] & string]: (data?: Partial<ServiceMap[Domain][S]>) => Promise<EntitySelector & SelectorServices<T>> } & { throttle(ms: number): EntitySelector & SelectorServices<T>; wait(ms: number): Promise<EntitySelector & SelectorServices<T>> }
         : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> }
     : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> };
 
@@ -220,7 +220,7 @@ interface HA {
      * Returns a fluent API for a specific entity with domain-specific services.
      * @param entityId The entity ID (e.g., 'light.living_room').
      */
-    entity<K extends EntityID>(entityId: K): K extends keyof HAEntities ? EntityServices<K> : EntityServices<string>;
+    entity<K extends EntityID>(entityId: K): EntityServices<K & string>;
 
     /** 
      * @deprecated Use ha.call() instead for a cleaner 'domain.service' syntax.

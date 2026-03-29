@@ -171,7 +171,8 @@ class EntitySelector {
         // Return a Proxy to allow calling any service name as a method
         return new Proxy(this, {
             get: (target, prop) => {
-                if (prop in target) return target[prop];
+                // Interne JS-Eigenschaften und 'then' (für Promises) nicht als Service behandeln
+                if (prop in target || typeof prop !== 'string' || prop === 'then') return target[prop];
                 
                 // Treat unknown properties as service calls (snake_case)
                 return (data = {}) => target.call(prop, data);
@@ -262,6 +263,10 @@ function matches(entityId, pattern) {
 function ensureMessageListener() {
     if (isListening) return;
     isListening = true;
+
+    // Sicherstellen, dass der Listener den Worker nicht am Beenden hindert,
+    // solange keine aktiven Trigger (ha.on, schedule) registriert sind.
+    parentPort.unref();
 
     parentPort.on('message', async (msg) => {
         // Handle response from service calls (for ha.entity() / awaitable calls)
@@ -450,14 +455,22 @@ const ha = {
 
         const apiProxy = new Proxy(api, {
             get: (target, service) => {
-                if (service in target) return target[service];
+                // Interne JS-Eigenschaften und 'then' (für Promises) nicht als Service behandeln
+                if (service in target || typeof service !== 'string' || service === 'then') return target[service];
 
                 return (data = {}) => {
                     const callId = ++serviceCallCounter;
+                    parentPort.ref(); // Verhindert Exit während der Call läuft
                     return new Promise((resolve, reject) => {
                         pendingServiceCalls.set(callId, { 
-                            resolve: () => resolve(apiProxy), 
-                            reject 
+                            resolve: () => {
+                                parentPort.unref();
+                                resolve(apiProxy);
+                            }, 
+                            reject: (err) => {
+                                parentPort.unref();
+                                reject(err);
+                            }
                         });
                         parentPort.postMessage({ 
                             type: 'call_service', 
@@ -469,9 +482,11 @@ const ha = {
                         
                         // Safety timeout
                         setTimeout(() => {
-                            if (pendingServiceCalls.has(callId)) {
+                            const pending = pendingServiceCalls.get(callId);
+                            if (pending) {
                                 pendingServiceCalls.delete(callId);
-                                reject(new Error(`Service call ${domain}.${service} for ${entityId} timed out.`));
+                                // Nutzt den Wrapper, der auch parentPort.unref() aufruft
+                                pending.reject(new Error(`Service call ${domain}.${service} for ${entityId} timed out.`));
                             }
                         }, 10000);
                     });
