@@ -613,6 +613,11 @@ async function loadLibraryDefinitions() {
 function loadEditorSettings() {
     if (typeof editor === 'undefined' || !editor) return;
     
+    // Aktiviert das automatische Hinzufügen von Klammern bei Funktionsaufrufen
+    editor.updateOptions({
+        suggest: { completeFunctionCalls: true }
+    });
+
     // Restore Word Wrap
     const savedWrap = localStorage.getItem('js_editor_wordwrap');
     if (savedWrap) {

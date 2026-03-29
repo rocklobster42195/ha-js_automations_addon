@@ -3,11 +3,11 @@
     "step": {
       "user": {
         "title": "JS Automation Integration",
-        "description": "This integration acts as a bridge for the JS Automations Add-on. There is no configuration needed. Click Submit to install."
+        "description": "Do you want to enable the bridge for native entities?"
       }
     },
     "abort": {
-      "single_instance_allowed": "Only a single instance of the JS Automation Integration is allowed."
+      "single_instance_allowed": "The integration is already installed."
     }
   },
   "create_entry": {

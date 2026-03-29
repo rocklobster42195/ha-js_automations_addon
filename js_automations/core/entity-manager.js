@@ -156,13 +156,14 @@ class EntityManager {
         if (!meta || !meta.expose || !this.haConnection.isReady) return;
 
         const ext = path.extname(filename);
-        const scriptName = path.basename(filename, ext);
+        const scriptNameRaw = path.basename(filename, ext);
+        const slug = scriptNameRaw.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         const domain = meta.expose === 'button' ? 'button' : 'switch';
-        const uniqueId = `jsa_${domain}_${scriptName}`.toLowerCase();
+        const uniqueId = `jsa_${domain}_${slug}`;
         const isRunning = (action === 'start');
 
         // Update internal state manager
-        const entityId = `${domain}.jsa_${scriptName}`.toLowerCase();
+        const entityId = `${domain}.jsa_${slug}`;
         this.stateManager.set(entityId, isRunning ? 'on' : 'off');
 
         // Update Home Assistant
@@ -170,23 +171,24 @@ class EntityManager {
             const hasIntegration = await this.haConnection.checkIntegrationAvailable();
             if (hasIntegration) {
                 const payload = { 
-                    unique_id: uniqueId, 
-                    state: isRunning ? 'on' : 'off'
+                    unique_id: uniqueId,
+                    entity_id: entityId 
                 };
                 
-                // Icon adjustments based on state
+                // Nur Switche haben einen echten State (on/off)
                 if (domain === 'switch') {
+                    payload.state = isRunning ? 'on' : 'off';
                     payload.icon = isRunning ? 'mdi:stop' : (meta.icon || 'mdi:play');
                 }
 
                 await this.haConnection.callService('js_automations', 'update_entity', payload);
             } else {
-                // Fallback for legacy mode
+                // Fallback für Legacy Mode
                 const legacyIcon = domain === 'switch' ? (isRunning ? 'mdi:stop' : 'mdi:play') : meta.icon;
                 await this.haConnection.updateState(entityId, isRunning ? 'on' : 'off', { icon: legacyIcon });
             }
         } catch (e) {
-            console.error(`[EntityManager] Failed to update lifecycle state for ${scriptName}:`, e.message);
+            console.error(`[EntityManager] Failed to update lifecycle state for ${scriptNameRaw} (${entityId}):`, e.message);
         }
     }
 
@@ -301,7 +303,8 @@ class EntityManager {
 
             const meta = ScriptHeaderParser.parse(scriptPath);
             const ext = path.extname(scriptPath);
-            const scriptName = path.basename(scriptPath, ext);
+            const scriptNameRaw = path.basename(scriptPath, ext);
+            const slug = scriptNameRaw.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
             
             const protectedIds = [];
             // Nur wenn @expose gesetzt ist, erstellen wir eine Entität
@@ -311,7 +314,7 @@ class EntityManager {
             const isRunning = this.workerManager.workers.has(scriptPath);
 
             const domain = meta.expose === 'button' ? 'button' : 'switch';
-            const entityId = `${domain}.jsa_${scriptName}`.toLowerCase();
+            const entityId = `${domain}.jsa_${slug}`;
             
             let entityIcon = meta.icon;
             if (domain === 'button') entityIcon = 'mdi:play';
@@ -321,7 +324,7 @@ class EntityManager {
 
             if (hasIntegration) {
                 // Native Creation (Persistent & Unique ID)
-                const uniqueId = `jsa_${domain}_${scriptName}`.toLowerCase();
+                const uniqueId = `jsa_${domain}_${slug}`;
 
                 // IDs auflösen
                 const areaId = this.resolveId(meta.area, areas, 'area_id');
@@ -332,12 +335,12 @@ class EntityManager {
                     const rawLabels = Array.isArray(meta.label) ? meta.label : String(meta.label).split(',');
                     resolvedLabels = rawLabels.map(l => {
                         const id = this.resolveId(l, labels, 'label_id');
-                        if (!id) this.workerManager.emit('log', { source: 'System', message: `⚠️ Could not resolve Label '${l.trim()}' for ${scriptName}`, level: 'warn' });
+                        if (!id) this.workerManager.emit('log', { source: 'System', message: `⚠️ Could not resolve Label '${l.trim()}' for ${scriptNameRaw}`, level: 'warn' });
                         return id;
                     }).filter(id => id);
                 }
 
-                if (meta.area && !areaId) this.workerManager.emit('log', { source: 'System', message: `⚠️ Could not resolve Area '${meta.area}' for ${scriptName}`, level: 'warn' });
+                if (meta.area && !areaId) this.workerManager.emit('log', { source: 'System', message: `⚠️ Could not resolve Area '${meta.area}' for ${scriptNameRaw}`, level: 'warn' });
                 
                 const payload = {
                     entity_id: entityId,
@@ -347,14 +350,14 @@ class EntityManager {
                     area_id: areaId,
                     labels: resolvedLabels,
                     device_info: {
-                        identifiers: [['js_automations', `jsa_script_${scriptName}`]],
-                        name: meta.name || scriptName,
+                        identifiers: [['js_automations', `jsa_script_${slug}`]],
+                        name: meta.name || scriptNameRaw,
                         manufacturer: "JS Automations",
                         model: "Script",
                     },
                     attributes: {
                         source: 'JS Automations Addon',
-                        script: scriptName
+                        script: slug
                     }
                 };
 
@@ -591,7 +594,8 @@ class EntityManager {
 
     async processSingleScript(scriptPath) {
         const extension = path.extname(scriptPath);
-        const scriptName = path.basename(scriptPath, extension);
+        const scriptNameRaw = path.basename(scriptPath, extension);
+        const slug = scriptNameRaw.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         const fileName = path.basename(scriptPath);
 
         // --- DELETION HANDLING for deleted file ---
@@ -641,26 +645,27 @@ class EntityManager {
             try {
                 const otherDomain = meta.expose === 'button' ? 'switch' : 'button';
                 const idsToRemove = [
-                    `jsa_${otherDomain}_${scriptName}`,
-                    `js_automations_${otherDomain}_${scriptName}`
+                    `jsa_${otherDomain}_${slug}`,
+                    `js_automations_${otherDomain}_${slug}`,
+                    `js_automations_${domain}_${slug}` // Cleanup legacy ID for current domain
                 ];
                 
                 // If no expose at all, remove both
                 if (!meta.expose) {
-                    idsToRemove.push(`jsa_switch_${scriptName}`, `jsa_button_${scriptName}`);
+                    idsToRemove.push(`jsa_switch_${slug}`, `jsa_button_${slug}`);
                 }
 
                 for (const uid of idsToRemove) {
                     await this.haConnection.callService('js_automations', 'remove_entity', { unique_id: uid });
                 }
             } catch (e) {
-                console.warn(`[EntityManager] Issue during pre-emptive entity cleanup for ${scriptName}. This might be okay.`, e);
+                console.warn(`[EntityManager] Issue during pre-emptive entity cleanup for ${scriptNameRaw}. This might be okay.`, e);
             }
 
             // --- EXIT if no @expose is defined ---
             if (!meta.expose || !['switch', 'button'].includes(meta.expose)) {
                 this.workerManager.setProtectedEntities(fileName, []); // No protected entities
-                await this.checkDeviceCleanup(scriptName); // Check if the device should be removed
+                await this.checkDeviceCleanup(slug); // Check if the device should be removed
                 return;
             }
 
@@ -669,8 +674,8 @@ class EntityManager {
             const { areas, labels } = await this.haConnection.getHAMetadata();
 
             const domain = meta.expose;
-            const entityId = `${domain}.jsa_${scriptName}`.toLowerCase();
-            const uniqueId = `jsa_${domain}_${scriptName}`.toLowerCase();
+            const entityId = `${domain}.jsa_${slug}`;
+            const uniqueId = `jsa_${domain}_${slug}`;
             const initialState = (domain === 'switch' && isRunning) ? 'on' : 'off';
             let entityIcon = meta.icon;
             if (domain === 'button') entityIcon = 'mdi:play';
@@ -684,12 +689,12 @@ class EntityManager {
                 area_id: this.resolveId(meta.area, areas, 'area_id'),
                 labels: [],
                 device_info: {
-                    identifiers: [['js_automations', `jsa_script_${scriptName}`]],
-                    name: meta.name || scriptName,
+                    identifiers: [['js_automations', `jsa_script_${slug}`]],
+                    name: meta.name || scriptNameRaw,
                     manufacturer: "JS Automations",
                     model: "Script",
                 },
-                attributes: { source: 'JS Automations Addon', script: scriptName }
+                attributes: { source: 'JS Automations Addon', script: slug }
             };
 
             if (meta.label) {

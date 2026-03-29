@@ -124,6 +124,16 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         }
 
         // 3. NPM @types (axios, lodash, etc.)
+        // 3. Dynamic Service Definitions
+        const servicesPath = path.join(STORAGE_DIR, 'services.d.ts');
+        if (fs.existsSync(servicesPath)) {
+            typings.push({
+                filename: 'services.d.ts',
+                content: fs.readFileSync(servicesPath, 'utf8')
+            });
+        }
+
+        // 4. NPM @types (axios, lodash, etc.)
         const typesDir = path.join(STORAGE_DIR, 'node_modules/@types');
         if (fs.existsSync(typesDir)) {
             const scanTypes = (dir, base = '') => {
