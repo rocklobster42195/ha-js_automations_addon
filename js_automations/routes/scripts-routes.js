@@ -22,22 +22,29 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
     router.get('/', (req, res) => {
         const results = [];
 
-        // 1. Automations
-        if (fs.existsSync(SCRIPTS_DIR)) {
-            const files = fs.readdirSync(SCRIPTS_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
-            results.push(...files.map(f => {
-                const m = ScriptHeaderParser.parse(path.join(SCRIPTS_DIR, f));
-                if (!m.name) m.name = f; // Fallback: Dateiname als Name, falls @name fehlt
-                m.status = workerManager.workers.has(f) ? 'running' : (workerManager.lastExitState.get(f) === 'error' ? 'error' : 'stopped');
+        // Use centralized getScripts for consistency (handles TS/JS filtering)
+        const scripts = workerManager.getScripts();
+        scripts.forEach(fullPath => {
+            const filename = path.basename(fullPath);
+            const isLibrary = path.basename(path.dirname(fullPath)) === 'libraries';
+            
+            const m = ScriptHeaderParser.parse(fullPath);
+            if (!m.name) m.name = filename;
+            
+            if (isLibrary) {
+                m.status = 'stopped';
+                m.running = false;
+            } else {
+                m.status = workerManager.workers.has(filename) ? 'running' : (workerManager.lastExitState.get(filename) === 'error' ? 'error' : 'stopped');
                 m.running = m.status === 'running';
-                if (m.running && typeof workerManager.getScriptStats === 'function') {
-                    const stats = workerManager.getScriptStats(f);
+                if (m.running) {
+                    const stats = workerManager.getScriptStats(filename);
                     if (stats) m.ram_usage = stats.ram_usage;
-                    if (workerManager.startTimes.has(f)) m.last_started = workerManager.startTimes.get(f);
+                    if (workerManager.startTimes.has(filename)) m.last_started = workerManager.startTimes.get(filename);
                 }
-                return m;
-            }));
-        }
+            }
+            results.push(m);
+        });
 
         // 2. Libraries
         if (fs.existsSync(LIBRARIES_DIR)) {
@@ -123,7 +130,6 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             });
         }
 
-        // 3. NPM @types (axios, lodash, etc.)
         // 3. Dynamic Service Definitions
         const servicesPath = path.join(STORAGE_DIR, 'services.d.ts');
         if (fs.existsSync(servicesPath)) {

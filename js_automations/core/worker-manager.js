@@ -248,13 +248,23 @@ class WorkerManager extends EventEmitter {
         const results = [];
         
         // 1. Automations (Root)
-        const files = fs.readdirSync(this.scriptsDir).filter(f => f.endsWith('.js'));
-        results.push(...files.map(f => path.join(this.scriptsDir, f)));
+        const files = fs.readdirSync(this.scriptsDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
+        
+        // Prioritize TS over JS for same-named files to avoid duplicates
+        const tsBasenames = new Set(files.filter(f => f.endsWith('.ts')).map(f => path.basename(f, '.ts')));
+        const filteredFiles = files.filter(f => {
+            if (f.endsWith('.js')) {
+                return !tsBasenames.has(path.basename(f, '.js'));
+            }
+            return true;
+        });
+
+        results.push(...filteredFiles.map(f => path.join(this.scriptsDir, f)));
 
         // 2. Libraries (Subfolder)
         const libDir = path.join(this.scriptsDir, 'libraries');
         if (fs.existsSync(libDir)) {
-            const libs = fs.readdirSync(libDir).filter(f => f.endsWith('.js'));
+            const libs = fs.readdirSync(libDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
             results.push(...libs.map(f => path.join(libDir, f)));
         }
         return results;
@@ -544,10 +554,16 @@ class WorkerManager extends EventEmitter {
                                 errorMsg += " -> Check if 'js_automations' integration is installed.";
                             }
                             this.emit('log', { source: 'System', message: errorMsg + " Falling back to legacy.", level: 'warn' });
-                            await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                            try {
+                                await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                            } catch (err) { /* ignore */ }
                         }
                     } else {
-                        await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                        try {
+                            await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
+                        } catch (err) {
+                            this.emit('log', { source: 'System', message: `Legacy update failed for ${msg.entityId}: ${err.message}`, level: 'error' });
+                        }
                     }
                 }
                 
@@ -556,12 +572,16 @@ class WorkerManager extends EventEmitter {
                     const { entityId, config } = msg;
                     this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
                     const payload = await this._prepareEntityPayload(entityId, config, scriptMeta);
-
-                    await this.haConnector.callService('js_automations', 'create_entity', payload);
-                    this.registerEntity(scriptMeta.filename, entityId, payload);
                     
-                    if (this.activeRunEntities.has(scriptMeta.filename)) {
-                        this.activeRunEntities.get(scriptMeta.filename).add(entityId);
+                    try {
+                        await this.haConnector.callService('js_automations', 'create_entity', payload);
+                        this.registerEntity(scriptMeta.filename, entityId, payload);
+                        
+                        if (this.activeRunEntities.has(scriptMeta.filename)) {
+                            this.activeRunEntities.get(scriptMeta.filename).add(entityId);
+                        }
+                    } catch (e) {
+                        this.emit('log', { source: 'System', message: `Dynamic registration failed for ${entityId}: ${e.message}`, level: 'error' });
                     }
                 }
 
@@ -715,7 +735,7 @@ class WorkerManager extends EventEmitter {
             delete payload.device_info;
         } else if (!payload.device_info) {
             // Default: 'script'
-            const scriptName = path.basename(scriptMeta.filename, '.js');
+            const scriptName = path.basename(scriptMeta.filename, path.extname(scriptMeta.filename));
             payload.device_info = {
                 identifiers: [['js_automations', `jsa_script_${scriptName}`]],
                 name: scriptMeta.name || scriptName,

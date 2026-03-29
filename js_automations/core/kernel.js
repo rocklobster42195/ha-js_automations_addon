@@ -8,6 +8,11 @@ const ScriptHeaderParser = require('./script-header-parser');
 // Ensure base directories exist before any manager is initialized
 config.ensureDirectories();
 
+// Global error handling to prevent the addon from crashing on unhandled HA rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Manager Imports
 const HAConnector = require('./ha-connection');
 const DependencyManager =require('./dependency-manager');
@@ -309,10 +314,14 @@ class Kernel extends EventEmitter {
 
         this.logManager.add('debug', 'System', '[Kernel] Running hourly entity and device cleanup check...');
         
-        // 1. Get all script names (without extension) from disk
-        const scripts = this.workerManager.getScripts().map(p => path.basename(p, path.extname(p)));
+        // 1. Get all script names (without extension) from disk and slugify them
+        // This ensures they match the slugified identifiers used for Home Assistant entities.
+        const scripts = this.workerManager.getScripts().map(p => {
+            const name = path.basename(p, path.extname(p));
+            return name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        });
         
-        // 2. Clean up exposed entities and orphans
+        // 2. Clean up exposed entities and orphans using the slugified names
         if (this.entityManager) {
             await this.entityManager.cleanupOrphanedEntities(scripts);
         }
