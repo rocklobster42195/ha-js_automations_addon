@@ -9,19 +9,36 @@ var overlayTimeout = null;
 // Cache for the last known integration status to prevent UI flickering/reset
 window._lastIntegrationStatus = undefined;
 
-// Global function to update HA Integration Status UI
+/**
+ * Global function to update HA Integration Status UI.
+ */
 window.updateIntegrationStatusUI = function() {
-    // Legacy wrapper to maintain compatibility with other scripts
+    // Legacy wrapper to maintain compatibility with other scripts.
     if (typeof window.updateSystemNotifications === 'function') {
         window.updateSystemNotifications();
     }
 };
 
+/**
+ * Injects the sidebar footer if it doesn't exist.
+ * This fixes the ReferenceError: injectSidebarFooter is not defined.
+ */
+window.injectSidebarFooter = function() {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar || document.getElementById('sidebar-footer')) return;
+    
+    const footer = document.createElement('div');
+    footer.id = 'sidebar-footer';
+    footer.className = 'sidebar-footer';
+    sidebar.appendChild(footer);
+    console.debug('UI: Sidebar footer injected.');
+};
+
 function initSocket() {
-    // BASE_PATH is global from api.js
+    // BASE_PATH is global from api.js.
     window.socket = io({ path: BASE_PATH.replace(/\/$/, "") + "/socket.io" });
     
-    // Helper: UI Update für Herz & Overlay zentral steuern
+    // Helper: Central control for Heartbeat UI and Connection Overlay.
     const updateConnectionUI = (isConnected) => {
         const hb = document.getElementById('heartbeat-icon');
         const overlay = document.getElementById('connection-lost-overlay');
@@ -29,12 +46,12 @@ function initSocket() {
         // 1. Heartbeat Icon
         if (hb) {
             const hbParent = hb.parentElement;
-            if (hbParent) hbParent.title = `HA API: ${isConnected ? 'Connected' : 'Disconnected'}`; // Tooltip aktualisieren
+            if (hbParent) hbParent.title = isConnected ? i18next.t('statusbar.ha_connected') : i18next.t('statusbar.ha_disconnected');
             hb.className = `mdi ${isConnected ? 'mdi-circle-slice-8' : 'mdi-circle-outline'} heartbeat-icon`;
             hb.style.color = isConnected ? '#fff' : 'var(--danger)';
             hb.style.opacity = '1';
             hb.dataset.status = isConnected ? 'connected' : 'disconnected';
-            // Rotation nur bei Connected zurücksetzen (falls es mal gespinnt hat)
+            // Reset rotation on connection success.
             if (isConnected) hb.style.transform = '';
         }
 
@@ -62,8 +79,9 @@ function initSocket() {
     const handleConnectionEstablished = () => {
         updateConnectionUI(true);
         if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
-        // Don't reset UI to gray here, rely on existing status from fetch
-        requestIntegrationStatus(); // Explizit den Status anfordern
+        
+        // Request latest status explicitly to avoid race conditions.
+        requestIntegrationStatus(); 
         if (typeof loadScripts === 'function') loadScripts();
     };
 
@@ -80,10 +98,15 @@ function initSocket() {
     window.socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');
         if (hb) {
-            // Falls wir Daten empfangen, die UI aber "getrennt" anzeigt, war es ein stiller Reconnect.
+            // If we receive data but UI shows disconnected, handle as silent reconnect.
             if (hb.dataset.status === 'disconnected') {
                 handleConnectionEstablished();
             }
+        }
+
+        // Update status bar slots if the function is available.
+        if (typeof window.updateStatusBarUI === 'function') {
+            window.updateStatusBarUI(data);
         }
 
         if (data.script_stats && typeof updateScriptStats === 'function') {
@@ -102,15 +125,20 @@ function initSocket() {
 
         window.updateIntegrationStatusUI(true, available);
 
-        // Global notification update (updates banner and settings categories)
+        // Immediately update status bar slots if stats are included in the status.
+        if (data.stats && typeof window.updateStatusBarUI === 'function') {
+            window.updateStatusBarUI(data.stats);
+        }
+
+        // Global notification update (updates banner and settings categories).
         if (typeof window.updateSystemNotifications === 'function') {
             window.updateSystemNotifications();
         }
     });
 
     /**
-     * Fordert den aktuellen Integrationsstatus vom Backend an.
-     * Wird nach dem Socket-Connect aufgerufen, um Race Conditions zu vermeiden.
+     * Requests current integration status from backend.
+     * Called after socket connection to ensure UI synchronization.
      */
     function requestIntegrationStatus() {
         if (!window.socket || !window.socket.connected) return;
@@ -129,8 +157,8 @@ function initSocket() {
         });
     }
 
-    // Mobile Wake-Up Handler
-    // Prüft beim Aufwecken des Handys sofort den Status
+    // Mobile Wake-Up Handler.
+    // Checks connection status immediately when the app becomes visible again.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             console.log('📱 App active: Checking connection...');
@@ -149,8 +177,8 @@ window.manualReload = function() {
 };
 
 /**
- * Ruft alle HA States über den WebSocket ab.
- * Wartet auf Verbindung, falls noch nicht verbunden.
+ * Fetches all HA States via WebSocket.
+ * Waits for connection if not already established.
  */
 window.getHAStates = function() {
     return new Promise((resolve, reject) => {
@@ -166,7 +194,7 @@ window.getHAStates = function() {
         if (window.socket.connected) request();
         else window.socket.once('connect', request);
         
-        // Timeout nach 10s (falls Server nicht antwortet)
+        // Timeout after 10s.
         setTimeout(() => reject(new Error("Socket timeout (get_ha_states)")), 10000);
     });
 };

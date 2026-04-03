@@ -15,9 +15,10 @@ class WorkerManager extends EventEmitter {
         this.stopReasons = new Map();
         this.lastExitState = new Map();
         this.stats = new Map();
-        this.restartTracker = new Map(); // Trackt Startzeiten für Loop-Protection
+        this.restartTracker = new Map(); // Tracks start times for loop protection
         this.startTimes = new Map();
         this.haConnector = null;
+        this.mqttManager = null;
         this.storeManager = null;
         this.settings = {
             restart_protection_count: 5,
@@ -31,14 +32,14 @@ class WorkerManager extends EventEmitter {
         this.scriptsDir = '';
         this.distDir = '';
         this.systemLanguage = 'en';
-        this.nativeEntities = new Map(); // Trackt Entitäten: entityId -> Payload (Config)
-        this.activeRunEntities = new Map(); // Track entities registered during the current script run (Mark-and-Sweep)
-        this.protectedEntities = new Map(); // Track entities from headers (@expose) to protect them from sweep: filename -> Set<entityId>
-        this.scriptEntityMap = new Map(); // RAM-Cache: filename -> Set<entityId>
+        this.nativeEntities = new Map(); // entityId -> Payload (Config)
+        this.activeRunEntities = new Map(); // filename -> Set<entityId> (Mark-and-Sweep for current run)
+        this.protectedEntities = new Map(); // filename -> Set<entityId> (from @expose headers)
+        this.scriptEntityMap = new Map(); // filename -> Set<entityId> (RAM Cache)
         this.registryPath = '';
-        this.saveRegistryTimer = null; // Timer für Debounce
+        this.saveRegistryTimer = null;
 
-        // RAM Polling: Alle 5 Sekunden Stats von allen Workern anfordern
+        // Request RAM usage statistics from all workers every 5 seconds.
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
     }
 
@@ -47,7 +48,7 @@ class WorkerManager extends EventEmitter {
      */
     loadRegistry() {
         this.registryPath = path.join(this.storageDir, 'entity_registry.json');
-        this.emit('log', { source: 'System', message: `[WorkerManager] Loading entity registry from ${this.registryPath}`, level: 'debug' });
+        this.emit('log', { source: 'System', message: 'Loading entity registry...', level: 'debug' });
         if (fs.existsSync(this.registryPath)) {
             try {
                 const data = JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
@@ -67,13 +68,12 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Führt den physischen Speichervorgang durch.
+     * Performs the physical save operation of the registry.
      * @private
      */
     _performSaveRegistry() {
         if (!this.registryPath) return;
         try {
-            this.emit('log', { source: 'System', message: `[WorkerManager] Saving entity registry to: ${this.registryPath}`, level: 'debug' });
             const data = {};
             for (const [file, entityIds] of this.scriptEntityMap.entries()) {
                 data[file] = {};
@@ -96,31 +96,35 @@ class WorkerManager extends EventEmitter {
     saveRegistry() {
         if (!this.registryPath) return;
 
-        // Debounce: Bestehenden Timer abbrechen und neu starten
+        // Debounce: Cancel existing timer and restart to protect disk
         if (this.saveRegistryTimer) clearTimeout(this.saveRegistryTimer);
 
         this.saveRegistryTimer = setTimeout(() => {
             this._performSaveRegistry();
             this.saveRegistryTimer = null;
-        }, 1000); // 1 Sekunde warten bevor gespeichert wird
+        }, 1000); // Wait 1 second before saving
     }
 
     setConnector(connector) { 
         this.haConnector = connector; 
         if (connector) {
-            // Automatisch Dienste synchronisieren, sobald die Verbindung steht
+            // Automatically sync services once connected
             setTimeout(() => this.syncServiceDefinitions(), 3000);
         }
     }
 
+    setMqttManager(manager) {
+        this.mqttManager = manager;
+    }
+
     /**
-     * Ruft alle verfügbaren Dienste von HA ab und generiert eine services.d.ts für IntelliSense.
+     * Fetches all available services from HA and generates a services.d.ts for IntelliSense.
      */
     async syncServiceDefinitions() {
         if (!this.haConnector || !this.haConnector.isReady) return;
         
         try {
-            this.emit('log', { source: 'System', message: 'Synchronizing Home Assistant service definitions...', level: 'debug' });
+            this.emit('log', { source: 'System', message: 'Syncing HA services...', level: 'debug' });
             const services = await this.haConnector.getServices() || {};
             
             let dts = "/** AUTO-GENERATED - DO NOT EDIT **/\n\ninterface ServiceMap {\n";
@@ -148,7 +152,7 @@ class WorkerManager extends EventEmitter {
             const targetPath = path.join(this.storageDir, 'services.d.ts');
             fs.writeFileSync(targetPath, dts);
             
-            this.emit('log', { source: 'System', message: `ServiceMap generated: ${Object.keys(services).length} domains mapped.`, level: 'info' });
+            this.emit('log', { source: 'System', message: `ServiceMap generated: ${Object.keys(services).length} domains mapped.`, level: 'debug' });
         } catch (e) {
             this.emit('log', { source: 'System', message: `Failed to sync services: ${e.message}`, level: 'error' });
         }
@@ -228,11 +232,15 @@ class WorkerManager extends EventEmitter {
      */
     async unregisterEntity(filename, entityId) {
         const payload = this.nativeEntities.get(entityId);
-        if (payload && payload.unique_id && this.haConnector) {
-            try {
-                this.emit('log', { source: 'System', message: `[WorkerManager] Removing entity ${entityId} from HA`, level: 'debug' });
-                await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
-            } catch (e) { /* Ignore if already gone */ }
+        if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+            this.emit('log', { source: 'System', message: `[WorkerManager] Removing entity ${entityId} via MQTT`, level: 'debug' });
+            
+            // Remove from HA by sending an empty payload to the discovery topic
+            const domain = entityId.split('.')[0];
+            const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
+            this.mqttManager.publish(configTopic, '', { retain: true });
+            
+            this.mqttManager.publishEntityState(payload, null, null);
         }
         this.nativeEntities.delete(entityId);
         if (this.scriptEntityMap.has(filename)) {
@@ -275,11 +283,11 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Sendet alle registrierten nativen Entitäten erneut an HA.
-     * @param {boolean} onlyIfMissing - Wenn true, werden existierende Entitäten übersprungen (Integritäts-Check).
+     * Re-publishes all registered native entities to MQTT.
+     * @param {boolean} onlyIfMissing - If true, existing entities are skipped (integrity check).
      */
     async republishNativeEntities(onlyIfMissing = false) {
-        if (!this.haConnector || this.nativeEntities.size === 0) return;
+        if (!this.mqttManager || !this.mqttManager.isConnected || this.nativeEntities.size === 0) return;
         
         let count = 0;
         const total = this.nativeEntities.size;
@@ -289,37 +297,24 @@ class WorkerManager extends EventEmitter {
         }
         
         for (const [entityId, payload] of this.nativeEntities) {
-            try {
-                // Check current state in HA cache
-                const currentState = this.haConnector.states[entityId];
-                const isAlive = currentState && currentState.state !== 'unavailable' && currentState.state !== 'unknown';
+            const domain = entityId.split('.')[0];
+            const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
 
-                // Scenario 1: Integrity Check (Hourly) - Skip if healthy
-                if (onlyIfMissing && isAlive) {
-                    continue;
-                }
-
-                // Scenario 2: Smart Republish (Reconnect)
-                // Preserve dynamic state (icon, attributes) instead of resetting to initial config.
-                let finalPayload = { ...payload };
-                
-                if (isAlive && !onlyIfMissing) {
-                    finalPayload.state = currentState.state;
-                    if (currentState.attributes) {
-                        if (currentState.attributes.icon) finalPayload.icon = currentState.attributes.icon;
-                        const exclude = ['friendly_name', 'icon', 'access_token', 'entity_picture', 'supported_features', 'restored'];
-                        finalPayload.attributes = { ...finalPayload.attributes }; 
-                        for (const [k, v] of Object.entries(currentState.attributes)) {
-                            if (!exclude.includes(k)) finalPayload.attributes[k] = v;
-                        }
-                    }
-                }
-
-                await this.haConnector.callService('js_automations', 'create_entity', finalPayload);
-                count++;
-            } catch (e) {
-                this.emit('log', { source: 'System', message: `Failed to republish ${entityId}: ${e.message}`, level: 'warn' });
+            // Integrity check for MQTT relies on checking local status, but since we use retained 
+            // messages, we usually just republish everything on reconnect.
+            if (onlyIfMissing) {
+                // For MQTT, we could check if HA is online before skipping, but republishing is safer.
             }
+
+            this.mqttManager.publish(configTopic, payload, { retain: true });
+            
+            // Also publish the last known state if available
+            const stateObj = this.haConnector?.states[entityId];
+            const currentStateValue = stateObj?.state;
+            const currentAttributes = stateObj?.attributes;
+            this.mqttManager.publishEntityState(payload, currentStateValue, currentAttributes);
+            
+            count++;
         }
         
         if (count > 0) {
@@ -356,10 +351,11 @@ class WorkerManager extends EventEmitter {
             
             for (const entityId of entities) {
                 const payload = this.nativeEntities.get(entityId);
-                if (payload && payload.unique_id && this.haConnector) {
-                    try {
-                        await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
-                    } catch (e) { /* Ignore errors during cleanup */ }
+                if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+                    const domain = entityId.split('.')[0];
+                    const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
+                    this.mqttManager.publish(configTopic, null, { retain: true });
+                    this.mqttManager.publishEntityState(payload, null, null);
                 }
                 this.nativeEntities.delete(entityId);
             }
@@ -399,10 +395,10 @@ class WorkerManager extends EventEmitter {
                 this.emit('log', { source: 'System', message: `[WorkerManager] Entity ${entityId} is no longer requested by ${filename}. Removing from Home Assistant.`, level: 'debug' });
                 
                 const payload = this.nativeEntities.get(entityId);
-                if (payload && payload.unique_id && this.haConnector) {
-                    try {
-                        await this.haConnector.callService('js_automations', 'remove_entity', { unique_id: payload.unique_id });
-                    } catch (e) { /* Ignore errors if entity already gone */ }
+                if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+                    const domain = entityId.split('.')[0];
+                    const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
+                    this.mqttManager.publish(configTopic, '', { retain: true });
                 }
                 this.nativeEntities.delete(entityId);
                 knownEntities.delete(entityId);
@@ -448,13 +444,13 @@ class WorkerManager extends EventEmitter {
         // --- SAFEGUARD: Excessive Restart Protection ---
         const now = Date.now();
         const restarts = this.restartTracker.get(scriptId) || [];
-        // Nur Starts der letzten 60 Sekunden behalten
+        // Only keep starts from the last 60 seconds
         const recentRestarts = restarts.filter(t => now - t < this.settings.restart_protection_time);
         
         if (recentRestarts.length >= this.settings.restart_protection_count) {
             this.emit('log', { source: 'System', message: `🛑 Script '${name}' stopped due to excessive restart rate (>${this.settings.restart_protection_count} restarts in ${this.settings.restart_protection_time / 1000}s).`, level: 'error' });
             this.lastExitState.set(scriptId, 'error');
-            return; // Start abbrechen
+            return; // Abort start
         }
         recentRestarts.push(now);
         this.restartTracker.set(scriptId, recentRestarts);
@@ -524,7 +520,7 @@ class WorkerManager extends EventEmitter {
             try {
                 // 1. Logging
                 if (msg.type === 'log') {
-                    this.emit('log', { source: name, message: msg.message, level: msg.level });
+                    this.emit('log', { source: name, message: msg.message, level: msg.level || 'info' });
                 }
                 
                 // 2. Home Assistant Actions
@@ -537,51 +533,26 @@ class WorkerManager extends EventEmitter {
                     }
                 }
 
-                if (msg.type === 'update_state' && this.haConnector) {
-                    // Hybrid-Logik: Wenn nativ bekannt, nutze Service, sonst Legacy HTTP
-                    if (this.nativeEntities.has(msg.entityId)) {
-                        const entityPayload = this.nativeEntities.get(msg.entityId);
-                        try {
-                            await this.haConnector.callService('js_automations', 'update_entity', {
-                                unique_id: entityPayload.unique_id,
-                                state: msg.state,
-                                attributes: msg.attributes
-                            });
-                        } catch (e) {
-                            // Fallback bei Fehler (z.B. Integration entladen)
-                            let errorMsg = `Native Update failed for ${msg.entityId}: ${e.message}`;
-                            if (e.message && (e.message.includes('not found') || e.message.includes('Unable to find service'))) {
-                                errorMsg += " -> Check if 'js_automations' integration is installed.";
-                            }
-                            this.emit('log', { source: 'System', message: errorMsg + " Falling back to legacy.", level: 'warn' });
-                            try {
-                                await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
-                            } catch (err) { /* ignore */ }
-                        }
-                    } else {
-                        try {
-                            await this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
-                        } catch (err) {
-                            this.emit('log', { source: 'System', message: `Legacy update failed for ${msg.entityId}: ${err.message}`, level: 'error' });
-                        }
+                if (msg.type === 'update_state') {
+                    // Relay update event to EntityManager for MQTT handling
+                    this.emit('update_entity_state', { entityId: msg.entityId, state: msg.state, attributes: msg.attributes });
+
+                    // CLEANUP RELIC: REST Fallback for legacy entities.
+                    // This is only used for entities created by the old custom integration bridge.
+                    // Note: This logic can be removed once all existing entities have been 
+                    // migrated/purged to the MQTT registry.
+                    if (!this.nativeEntities.has(msg.entityId) && this.haConnector?.isReady) {
+                        this.haConnector.updateState(msg.entityId, msg.state, msg.attributes);
                     }
                 }
                 
-                // 2b. Native Entity Creation (Integration)
-                if (msg.type === 'create_entity' && this.haConnector) {
-                    const { entityId, config } = msg;
-                    this.emit('log', { source: 'System', message: `Creating native entity: ${entityId}`, level: 'debug' });
-                    const payload = await this._prepareEntityPayload(entityId, config, scriptMeta);
-                    
-                    try {
-                        await this.haConnector.callService('js_automations', 'create_entity', payload);
-                        this.registerEntity(scriptMeta.filename, entityId, payload);
-                        
-                        if (this.activeRunEntities.has(scriptMeta.filename)) {
-                            this.activeRunEntities.get(scriptMeta.filename).add(entityId);
-                        }
-                    } catch (e) {
-                        this.emit('log', { source: 'System', message: `Dynamic registration failed for ${entityId}: ${e.message}`, level: 'error' });
+                if (msg.type === 'create_entity') {
+                    this.emit('log', { source: 'System', message: `[WorkerManager] Received ha.register for '${msg.entityId}' from ${name}`, level: 'debug' });
+                    // Delegate to EntityManager via event
+                    this.emit('create_entity', { filename: scriptMeta.filename, entityId: msg.entityId, config: msg.config });
+
+                    if (this.activeRunEntities.has(scriptMeta.filename)) {
+                        this.activeRunEntities.get(scriptMeta.filename).add(msg.entityId);
                     }
                 }
 
@@ -658,93 +629,10 @@ class WorkerManager extends EventEmitter {
         this.startTimes.set(scriptMeta.filename, Date.now());
         this.emit('script_start', { filename: scriptMeta.filename, meta: scriptMeta });
 
-        // RAM-Messung beschleunigen: Nach 1s direkt anfragen (statt auf 5s Interval warten)
+        // Accelerate RAM measurement: Request directly after 1s (instead of waiting for 5s interval)
         setTimeout(() => {
             if (this.workers.has(scriptMeta.filename)) worker.postMessage({ type: 'get_stats' });
         }, 1000);
-    }
-
-    /**
-     * Internal helper to prepare the payload for HA create_entity service.
-     * @private
-     */
-    async _prepareEntityPayload(entityId, config, scriptMeta) {
-        const { areas, labels } = await this.haConnector.getHAMetadata();
-        
-        const resolveId = (input, list, idField) => {
-            if (!input || typeof input !== 'string') return undefined;
-            const cleanInput = input.trim();
-            if (!cleanInput || !list) return undefined;
-            const lowerInput = cleanInput.toLowerCase();
-            const directMatch = list.find(item => item[idField] === cleanInput);
-            if (directMatch) return directMatch[idField];
-            const nameMatch = list.find(item => item.name && item.name.toLowerCase() === lowerInput);
-            return nameMatch ? nameMatch[idField] : undefined;
-        };
-
-        let resolvedAreaId = config.area_id;
-        if (!resolvedAreaId && config.area) {
-            resolvedAreaId = resolveId(config.area, areas, 'area_id');
-        }
-
-        let resolvedLabels = [];
-        if (config.labels && Array.isArray(config.labels)) {
-            resolvedLabels = config.labels.map(l => resolveId(l, labels, 'label_id')).filter(id => id);
-        }
-
-        const payload = {
-            entity_id: entityId.replace('js_automations_', 'jsa_'),
-            unique_id: config.unique_id || entityId,
-            name: config.name || config.friendly_name || entityId,
-            icon: config.icon,
-            attributes: { ...(config.attributes || {}) }
-        };
-        
-        if (config.initial_state !== undefined) {
-            payload.state = config.initial_state;
-        }
-        
-        const haStandardKeys = ['unit_of_measurement', 'device_class', 'state_class', 'entity_picture', 'device_info'];
-        const internalKeys = ['entity_id', 'unique_id', 'name', 'friendly_name', 'icon', 'state', 'initial_state', 'area_id', 'area', 'labels', 'device', 'attributes', 'type'];
-
-        // Move known HA root keys to payload
-        haStandardKeys.forEach(key => {
-            if (config[key]) payload[key] = config[key];
-        });
-
-        // Move all other "unknown" keys (like options, min, max, step, mode) to attributes
-        // so the python platforms can access them.
-        Object.keys(config).forEach(key => {
-            if (!haStandardKeys.includes(key) && !internalKeys.includes(key)) {
-                payload.attributes[key] = config[key];
-            }
-        });
-
-        if (resolvedAreaId) payload.area_id = resolvedAreaId;
-        if (resolvedLabels.length > 0) payload.labels = resolvedLabels;
-
-        // Smart Device Linking
-        if (config.device === 'system') {
-            payload.device_info = {
-                identifiers: [['js_automations', 'jsa_system_device']],
-                name: "JS Automations",
-                manufacturer: "JS Automations",
-                model: "System",
-            };
-        } else if (config.device === 'none') {
-            delete payload.device_info;
-        } else if (!payload.device_info) {
-            // Default: 'script'
-            const scriptName = path.basename(scriptMeta.filename, path.extname(scriptMeta.filename));
-            payload.device_info = {
-                identifiers: [['js_automations', `jsa_script_${scriptName}`]],
-                name: scriptMeta.name || scriptName,
-                manufacturer: "JS Automations",
-                model: "Script",
-            };
-        }
-
-        return payload;
     }
 
     /**
@@ -803,7 +691,7 @@ class WorkerManager extends EventEmitter {
             this.stopReasons.set(filename, reason);
             this.stats.delete(filename);
             this.startTimes.delete(filename);
-            // this.restartTracker.delete(filename); // Der Reset des Zählers wird nun im 'script_exit'-Event in server.js gehandhabt.
+            // restartTracker reset is handled in the 'script_exit' event in server.js
             // 1. Try graceful shutdown
             worker.postMessage({ type: 'stop_request' });
             // 2. Force terminate after 2 seconds if still alive
@@ -816,17 +704,17 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
-     * Fährt den Manager herunter, speichert ausstehende Daten und stoppt Worker.
+     * Shuts down the manager, saves pending data, and stops all workers.
      */
     shutdown() {
-        // 1. Force Save Registry wenn Timer läuft
+        // 1. Force Save Registry if timer is running
         if (this.saveRegistryTimer) {
             clearTimeout(this.saveRegistryTimer);
             this.emit('log', { source: 'System', message: `[WorkerManager] Force saving registry on shutdown...`, level: 'debug' });
             this._performSaveRegistry();
         }
         
-        // 2. Alle Worker stoppen
+        // 2. Stop all workers
         for (const filename of this.workers.keys()) {
             this.stopScript(filename, 'system shutdown');
         }

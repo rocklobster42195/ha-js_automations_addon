@@ -1,11 +1,11 @@
 /**
  * Settings Schema Definition
  * 
- * Dieses Schema definiert die Struktur der Benutzereinstellungen.
- * Es wird genutzt für:
- * 1. Frontend: Generierung der UI (Schema-Driven UI)
- * 2. Backend: Validierung der Eingabewerte
- * 3. Defaults: Initialisierung der settings.json
+ * This schema defines the structure of user settings.
+ * It is used for:
+ * 1. Frontend: UI generation (Schema-Driven UI)
+ * 2. Backend: Validation of input values
+ * 3. Defaults: Initialization of settings.json
  */
 
 module.exports = [
@@ -77,7 +77,7 @@ module.exports = [
                 label: 'settings.editor.show_toolbar', 
                 type: 'boolean', 
                 default: true,
-                active: false // Vorübergehend deaktiviert
+                active: false // Temporarily disabled.
             }
         ]
     },
@@ -99,9 +99,9 @@ module.exports = [
                 label: 'settings.statusbar.slot1', 
                 type: 'select', 
                 options: [
-                    { value: 'none', label: 'Leer' }, 
-                    { value: 'cpu', label: 'CPU Usage' }, 
-                    { value: 'ram', label: 'RAM Usage' }, 
+                    { value: 'none', label: 'settings.statusbar.none' }, 
+                    { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
+                    { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
                     { value: 'custom', label: 'Custom Entity' }
                 ], 
                 default: 'cpu' 
@@ -128,9 +128,9 @@ module.exports = [
                 label: 'settings.statusbar.slot2', 
                 type: 'select', 
                 options: [
-                    { value: 'none', label: 'Leer' }, 
-                    { value: 'cpu', label: 'CPU Usage' }, 
-                    { value: 'ram', label: 'RAM Usage' }, 
+                    { value: 'none', label: 'settings.statusbar.none' }, 
+                    { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
+                    { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
                     { value: 'custom', label: 'Custom Entity' }
                 ], 
                 default: 'ram' 
@@ -157,9 +157,9 @@ module.exports = [
                 label: 'settings.statusbar.slot3', 
                 type: 'select', 
                 options: [
-                    { value: 'none', label: 'Leer' }, 
-                    { value: 'cpu', label: 'CPU Usage' }, 
-                    { value: 'ram', label: 'RAM Usage' }, 
+                    { value: 'none', label: 'settings.statusbar.none' }, 
+                    { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
+                    { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
                     { value: 'custom', label: 'Custom Entity' }
                 ], 
                 default: 'none' 
@@ -189,6 +189,48 @@ module.exports = [
         ]
     },
     {
+        id: 'mqtt',
+        label: 'settings.categories.mqtt',
+        icon: 'mdi:lan-connect',
+        items: [
+            {
+                key: 'enabled',
+                label: 'settings.mqtt.enabled',
+                type: 'boolean',
+                default: false
+            },
+            {
+                key: 'host',
+                label: 'settings.mqtt.host',
+                type: 'text',
+                default: 'core-mosquitto',
+                condition: { key: 'enabled', value: true }
+            },
+            {
+                key: 'port',
+                label: 'settings.mqtt.port',
+                type: 'number',
+                default: 1883,
+                condition: { key: 'enabled', value: true }
+            },
+            {
+                key: 'username',
+                label: 'settings.mqtt.username',
+                type: 'text',
+                default: '',
+                condition: { key: 'enabled', value: true }
+            },
+            {
+                key: 'password',
+                label: 'settings.mqtt.password',
+                type: 'text',
+                mode: 'password',
+                default: '',
+                condition: { key: 'enabled', value: true }
+            },
+        ]
+    },
+    {
         id: 'system',
         label: 'settings.sections.system',
         icon: 'mdi:server',
@@ -209,11 +251,6 @@ module.exports = [
                 max: 5000, 
                 default: 0,
                 unit: 'ms'
-            },
-            { 
-                key: 'ha_integration_status', 
-                label: 'Home Assistant Integration', 
-                type: 'integration-manager' 
             },
             { 
                 key: 'backup', 

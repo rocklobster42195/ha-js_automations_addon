@@ -52,11 +52,11 @@ Module.prototype.require = function(requestPath) {
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
-// 🛡️ GLOBALER CRASH HANDLER
-// Fängt Fehler ab, die das Skript sonst kommentarlos beenden würden.
+// 🛡️ GLOBAL CRASH HANDLER
+// Catches errors that would otherwise terminate the script silently.
 process.on('uncaughtException', (err) => {
-    // Known Issue: node-unifi wirft manchmal Fehler aus internen Timeouts,
-    // wenn die Verbindung noch aufgebaut wird. Wir ignorieren diese, damit das Skript weiterläuft.
+    // Known Issue: node-unifi sometimes throws errors from internal timeouts 
+    // while the connection is still being established. We ignore these so the script continues running.
     if (err.message && err.message.includes('WebSocket is not open')) {
         if (parentPort) {
             parentPort.postMessage({
@@ -66,7 +66,7 @@ process.on('uncaughtException', (err) => {
                 message: `⚠️ Background Error Suppressed: ${err.message}`
             });
 
-            // Notify the script itself if a handler is registered
+            // Inform the script if an error handler is registered
             if (errorCallbacks.length > 0) {
                 const errorData = { 
                     message: err.message, 
@@ -88,9 +88,9 @@ process.on('uncaughtException', (err) => {
                 });
             }
         }
-        return; // Prozess NICHT beenden!
-    }
-
+        return; // Do NOT terminate the process!
+    };
+    
     if (parentPort) {
         parentPort.postMessage({
             type: 'log',
@@ -101,7 +101,7 @@ process.on('uncaughtException', (err) => {
     } else {
         console.error("🔥 CRASH:", err);
     }
-    // Kurze Pause, damit die Nachricht sicher über den Bus geht, dann beenden
+    // Short pause to ensure message delivery before exit
     setTimeout(() => process.exit(1), 100);
 });
 
@@ -109,8 +109,8 @@ process.on('unhandledRejection', (reason) => {
     if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: workerData.name || 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
 });
 
-// 🛡️ GLOBALER SIGNAL HANDLER
-// Fängt SIGTERM (Stop-Signal) ab und beendet mit Code 0 statt 143.
+// 🛡️ GLOBAL SIGNAL HANDLER
+// Catches SIGTERM (stop signal) and exits with code 0 instead of 143.
 process.on('SIGTERM', () => {
     process.exit(0);
 });
@@ -141,8 +141,8 @@ const sendLog = (level, msg) => {
 // This ensures the worker's state cache is truly isolated.
 const states = JSON.parse(JSON.stringify(workerData.initialStates || {}));
 
-// Store initialisieren: Sicherstellen, dass wir nur die 'value' Felder im lokalen Cache haben,
-// falls die Datenstruktur Metadaten enthält (Refactoring Support).
+// Initialize Store: Ensure only the 'value' fields are kept in the local cache
+// in case the data structure contains metadata (Refactoring Support).
 const rawStore = workerData.initialStore || {};
 const storeValues = {};
 for (const k in rawStore) {
@@ -171,7 +171,7 @@ class EntitySelector {
         // Return a Proxy to allow calling any service name as a method
         return new Proxy(this, {
             get: (target, prop) => {
-                // Interne JS-Eigenschaften und 'then' (für Promises) nicht als Service behandeln
+                // Do not treat internal JS properties or 'then' (for Promises) as services
                 if (prop in target || typeof prop !== 'string' || prop === 'then') return target[prop];
                 
                 // Treat unknown properties as service calls (snake_case)
@@ -198,10 +198,10 @@ class EntitySelector {
     async call(service, data = {}) {
         for (let i = 0; i < this.list.length; i++) {
             const entity = this.list[i];
-            // Nutzt die awaitable Logik von ha.entity()
+            // Uses the awaitable logic from ha.entity()
             await this.ha.entity(entity.entity_id)[service](data);
             
-            // Pause einlegen, falls throttle gesetzt ist und es nicht das letzte Element war
+            // Insert a delay if throttle is set and it's not the last element
             if (this._throttleMs > 0 && i < this.list.length - 1) {
                 await new Promise(res => setTimeout(res, this._throttleMs));
             }
@@ -264,8 +264,8 @@ function ensureMessageListener() {
     if (isListening) return;
     isListening = true;
 
-    // Sicherstellen, dass der Listener den Worker nicht am Beenden hindert,
-    // solange keine aktiven Trigger (ha.on, schedule) registriert sind.
+    // Ensure the listener doesn't prevent the worker from exiting 
+    // as long as no active triggers (ha.on, schedule) are registered.
     parentPort.unref();
 
     parentPort.on('message', async (msg) => {
@@ -413,7 +413,7 @@ const ha = {
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
 
     /**
-     * Globale Hilfsfunktion für Home Assistant Service-Calls.
+     * Global helper function for Home Assistant service calls.
      * Format: ha.call('domain.service', { data })
      */
     call: (serviceId, data = {}) => {
@@ -423,7 +423,7 @@ const ha = {
             return;
         }
 
-        // Synchroner Check gegen den lokalen Cache
+        // Synchronous check against the local cache
         const target = data.entity_id || data.media_player_entity_id;
         if (target) {
             const ids = Array.isArray(target) ? target : [target];
@@ -443,7 +443,7 @@ const ha = {
     entity: (entityId) => {
         const domain = entityId.split('.')[0];
         
-        // Sicherstellen, dass der Worker auf die Antwort (service_response) wartet
+        // Ensure the worker waits for the response (service_response)
         ensureMessageListener();
 
         const api = {
@@ -455,12 +455,12 @@ const ha = {
 
         const apiProxy = new Proxy(api, {
             get: (target, service) => {
-                // Interne JS-Eigenschaften und 'then' (für Promises) nicht als Service behandeln
+                // Do not treat internal JS properties or 'then' (for Promises) as services
                 if (service in target || typeof service !== 'string' || service === 'then') return target[service];
 
                 return (data = {}) => {
                     const callId = ++serviceCallCounter;
-                    parentPort.ref(); // Verhindert Exit während der Call läuft
+                    parentPort.ref(); // Prevent exit while the call is in progress
                     return new Promise((resolve, reject) => {
                         pendingServiceCalls.set(callId, { 
                             resolve: () => {
@@ -485,7 +485,7 @@ const ha = {
                             const pending = pendingServiceCalls.get(callId);
                             if (pending) {
                                 pendingServiceCalls.delete(callId);
-                                // Nutzt den Wrapper, der auch parentPort.unref() aufruft
+                                // Use the wrapper which also calls parentPort.unref()
                                 pending.reject(new Error(`Service call ${domain}.${service} for ${entityId} timed out.`));
                             }
                         }, 10000);
@@ -500,14 +500,14 @@ const ha = {
         let state = arg2;
         let attributes = arg3;
 
-        // Overload: ha.update(id, { attributes }) -> Keep current state
+        // Overload: ha.update(id, { attributes }) -> Keep current state and merge attributes
         if (attributes === undefined && typeof arg2 === 'object' && arg2 !== null && !Array.isArray(arg2)) {
             const current = states[entityId];
             state = current ? current.state : undefined;
-            attributes = arg2;
+            attributes = { ...arg2 }; // Clone to avoid mutation of user object
         }
 
-        // ALIAS: name -> friendly_name (für Konsistenz mit ha.register)
+        // ALIAS: name -> friendly_name (for consistency with ha.register)
         if (attributes && attributes.name && !attributes.friendly_name) {
             attributes = { ...attributes, friendly_name: attributes.name };
             delete attributes.name;
@@ -519,7 +519,7 @@ const ha = {
             delete attributes.unit;
         }
 
-        // Optimistic Update: Lokal sofort setzen, damit der Code synchron weiterarbeiten kann
+        // Optimistic Update: Set locally immediately so the code can continue working synchronously
         if (!states[entityId]) {
             states[entityId] = { entity_id: entityId, state: String(state), attributes: attributes || {}, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
         } else {
@@ -529,17 +529,18 @@ const ha = {
             current.last_updated = new Date().toISOString();
         }
 
-        parentPort.postMessage({ type: 'update_state', entityId, state, attributes: attributes || {} });
+        // Send the full merged attribute set to ensure MQTT attributes are not partially cleared.
+        parentPort.postMessage({ type: 'update_state', entityId, state: states[entityId].state, attributes: states[entityId].attributes });
     },
     
     /**
-     * Registriert eine native Home Assistant Entität (via Integration).
-     * Erstellt sie neu oder aktualisiert die Konfiguration, falls vorhanden.
-     * @param {string} entityId - Die gewünschte Entity ID (z.B. 'sensor.mein_wert')
-     * @param {object} config - Konfiguration (name, icon, type, unit_of_measurement, etc.)
+     * Registers a native Home Assistant entity (via MQTT).
+     * Creates it or updates the configuration if it already exists.
+     * @param {string} entityId - The desired Entity ID (e.g. 'sensor.my_value')
+     * @param {object} config - Configuration (name, icon, type, unit_of_measurement, etc.)
      */
     register: (entityId, config = {}) => {
-        // Optimistic Update für registrierte Entitäten
+        // Optimistic Update for registered entities
         if (!states[entityId]) {
             states[entityId] = { 
                 entity_id: entityId, 
@@ -555,7 +556,7 @@ const ha = {
             config = { ...config, unit_of_measurement: config.unit };
             delete config.unit;
         }
-        // Wir senden den Intent an den Hauptprozess, der entscheidet (Integration vs. Legacy)
+        // Send the intent to the main process, which handles the registration via MQTT.
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },
     
@@ -578,7 +579,7 @@ const ha = {
     },
     
     /**
-     * Liest einen Wert aus dem Skript-Header.
+     * Reads a value from the script header.
      */
     getHeader: (key, defaultValue) => {
         if (!key) return defaultValue;
@@ -732,7 +733,7 @@ const ha = {
             storeValues[key] = value;
             parentPort.postMessage({ type: 'store_set', key, value, isSecret });
         },
-        get: (key) => storeValues[key], // Jetzt sicher, da oben gefiltert
+        get: (key) => storeValues[key], // Safe now as it's filtered above
         delete: (key) => {
             delete storeValues[key];
             parentPort.postMessage({ type: 'store_delete', key });
@@ -785,6 +786,17 @@ function createDeepProxy(target, onSave) {
 }
 
 ha.persistent = (key, defaultValue = {}) => {
+    // Primitives cannot be proxied — return a ref-like { value } wrapper instead.
+    if (typeof defaultValue !== 'object' || defaultValue === null) {
+        if (ha.store.get(key) === undefined || ha.store.get(key) === null) {
+            ha.store.set(key, defaultValue);
+        }
+        return {
+            get value() { return ha.store.get(key) ?? defaultValue; },
+            set value(v) { ha.store.set(key, v); }
+        };
+    }
+
     let target = ha.store.get(key);
     if (target === undefined || target === null || typeof target !== 'object' || Array.isArray(target) !== Array.isArray(defaultValue)) {
         target = defaultValue;
@@ -818,10 +830,10 @@ global.sleep = (ms) => new Promise(res => setTimeout(res, ms));
 function loadLibraries() {
     const scriptPath = workerData.path;
     try {
-        // 1. Skript-Inhalt lesen, um Header zu parsen
+        // 1. Read script content to parse headers
         const content = fs.readFileSync(scriptPath, 'utf8');
         
-        // 2. Alle @include Tags finden (unterstützt mehrere Zeilen und Komma-Trennung)
+        // 2. Find all @include tags (supports multiple lines and comma-separation)
         // Matches: @include lib1.js, lib2.js
         const includeMatches = content.matchAll(/@include\s+(.+)/g);
         const librariesToLoad = new Set();
@@ -833,9 +845,9 @@ function loadLibraries() {
             });
         }
 
-        // 3. Libraries laden und ausführen
+        // 3. Load and execute libraries
         if (librariesToLoad.size > 0) {
-            // Wir gehen davon aus, dass der 'libraries' Ordner im selben Verzeichnis liegt
+            // We assume the 'libraries' folder is in the same directory
             const libDir = path.join(path.dirname(scriptPath), 'libraries');
             
             librariesToLoad.forEach(libName => {
@@ -851,7 +863,7 @@ function loadLibraries() {
                 
                 if (fs.existsSync(libPath)) {
                     const libCode = fs.readFileSync(libPath, 'utf8');
-                    // Führt den Code im globalen Kontext dieses Workers aus
+                    // Execute the code in the global context of this worker
                     vm.runInThisContext(libCode, { filename: libPath });
                 } else {
                     ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
@@ -865,7 +877,7 @@ function loadLibraries() {
 
 // --- 6. EXECUTION ---
 try {
-    loadLibraries(); // Zuerst Libraries laden
+    loadLibraries(); // Load libraries first
     const scriptPath = require.resolve(workerData.path);
     delete require.cache[scriptPath]; // Avoid stale code
     require(scriptPath);

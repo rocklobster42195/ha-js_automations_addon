@@ -1,25 +1,25 @@
 /**
- * Status Bar Logic
+ * JS AUTOMATIONS - Status Bar Logic
  * Handles the rendering of the footer slots based on settings.
  */
 
 const statusBar = {
-    // Cache für Entity-IDs pro Slot, um Updates effizient zu filtern
+    // Cache for entity IDs per slot to filter updates efficiently
     slotEntities: {
         slot1: null,
         slot2: null,
-        slot3: null
+        slot3: null,
     },
 
-    // Cache für aktuelle Werte (für zeitbasiertes Rendering)
+    // Cache for current values (for time-based rendering)
     currentValues: {
         slot1: null,
         slot2: null,
         slot3: null
-    },
-    
-    // History für Sparklines (10 Datenpunkte)
+    },    
+    // History for sparklines (10 data points)
     history: {
+        // The actual history data for each slot
         slot1: new Array(10).fill(null),
         slot2: new Array(10).fill(null),
         slot3: new Array(10).fill(null)
@@ -29,23 +29,27 @@ const statusBar = {
 
     init() {
         this.injectStyles();
-
-        // Globalen Cache initialisieren (falls settings.js noch nicht lief)
         window.cachedEntities = window.cachedEntities || [];
 
-        // Listener für Settings-Änderungen
+        injectSidebarFooter();
+
+        // Listener for settings changes
         window.addEventListener('settings-changed', (e) => {
             this.render(e.detail);
         });
 
-        // Listener für System Stats (CPU/RAM)
+        // Handle MQTT status updates
+        socket.on('mqtt_status_changed', (status) => {
+            this.updateMqttIndicator(status);
+        });
+
+        // Listener for system stats
         socket.on('system_stats', (data) => {
             this.updateSystemStats(data);
         });
 
-        // Listener für HA Entity Updates
+        // Listener for HA entity updates
         socket.on('ha_state_changed', (data) => {
-            // Cache live aktualisieren
             if (window.cachedEntities) {
                 const idx = window.cachedEntities.findIndex(e => e.entity_id === data.entity_id);
                 if (data.new_state) {
@@ -58,7 +62,7 @@ const statusBar = {
             this.updateEntityState(data);
         });
 
-        // Initial Render falls Settings schon da sind
+        // Perform initial render if settings are available
         if (window.currentSettings) {
             this.render(window.currentSettings);
         }
@@ -68,32 +72,79 @@ const statusBar = {
         if (document.getElementById('statusbar-styles')) return;
         const style = document.createElement('style');
         style.id = 'statusbar-styles';
-        // Konzept 1: Wenn 3 Slots aktiv sind (.has-three-slots), Breite auf 33% reduzieren und Canvas ausblenden
         style.innerHTML = `
+            #status-bar { 
+                background: #111; 
+                border-top: 1px solid #333; 
+                color: #ccc;
+            }
             .status-slots.has-three-slots .sb-item { min-width: 0; font-size: 0.8rem; }
             .status-slots.has-three-slots.hide-sparklines canvas { display: none !important; }
             .sb-item .val { white-space: nowrap; }
+            
+            /* Ensure the sidebar footer injected via socket-client doesn't create layout gaps */
+            .sidebar-footer:empty { display: none; }
+
+            /* Style for Orange Dots in sidebar (Repair/Warning state). */
+            .script-item.needs-mqtt .script-status-dot { 
+                background-color: #ffb86c !important; 
+                box-shadow: 0 0 5px #ffb86c !important; 
+            }
         `;
         document.head.appendChild(style);
     },
 
-    render(settings) {
-        // Fallback: Wenn keine Settings da sind, zeige CPU/RAM als Default
-        const conf = (settings && settings.statusbar) ? settings.statusbar : { slot1: 'cpu', slot2: 'ram', slot3: 'none' };
+    /**
+     * Updates the MQTT connection indicator using the sidebar icons.
+     * @param {object} status - { connected: boolean, error?: string }
+     */
+    updateMqttIndicator(status) {
+        const icon = document.getElementById('integration-status-icon');
+        const item = document.getElementById('integration-status-item');
+        if (!icon || !item) return;
 
-        // Sichtbarkeit der gesamten Statusleiste steuern
+        // Reset opacity
+        icon.style.opacity = '1';
+        
+        if (!window.currentSettings?.mqtt?.enabled) {
+            icon.className = 'mdi mdi-circle-outline integration-icon';
+            icon.style.color = '#555';
+            icon.style.opacity = '0.3';
+            item.title = i18next.t('settings.system.mqtt_disabled');
+            return;
+        }
+
+        if (status.connected) {
+            icon.className = 'mdi mdi-circle-slice-8 integration-icon';
+            icon.style.color = '#fff';
+            item.title = i18next.t('statusbar.mqtt_connected');
+        } else {
+            icon.className = 'mdi mdi-circle-outline integration-icon';
+            icon.style.color = 'var(--danger)';
+            const err = status.error ? i18next.t('settings.system.mqtt_error', { error: status.error }) : i18next.t('settings.system.mqtt_disconnected');
+            item.title = err;
+        }
+    },
+
+    render(settings) {
+        // Default configuration if settings are missing or incomplete.
+        const conf = (settings && settings.statusbar) ? settings.statusbar : { 
+            slot1: 'cpu', 
+            slot2: 'ram', 
+            slot3: 'none',
+            show_statusbar: true 
+        };
+
         const statusBarEl = document.getElementById('status-bar');
         if (statusBarEl) {
             statusBarEl.style.display = conf.show_statusbar === false ? 'none' : 'flex';
         }
 
-        // Layout-Anpassung für 3 Slots (Konzept 1)
         const slotsContainer = document.querySelector('.status-slots');
         if (slotsContainer) {
             const activeSlots = [conf.slot1, conf.slot2, conf.slot3].filter(s => s && s !== 'none').length;
             if (activeSlots >= 3) {
                 slotsContainer.classList.add('has-three-slots');
-                // Prüfen, ob Sparklines bei Platzmangel ausgeblendet werden sollen (Default: true)
                 if (conf.hide_sparkline_on_dense !== false) {
                     slotsContainer.classList.add('hide-sparklines');
                 } else {
@@ -114,7 +165,7 @@ const statusBar = {
         const el = document.getElementById(`sb-${slotId}`);
         if (!el) return;
 
-        // Reset
+        // Reset slot state.
         el.className = 'sb-item';
         this.slotEntities[slotId] = null;
         this.currentValues[slotId] = null;
@@ -129,9 +180,11 @@ const statusBar = {
         if (type === 'cpu') {
             el.innerHTML = `<i class="mdi mdi-chip"></i> <span class="val">---&nbsp;%</span> ${canvasHtml}`;
             el.dataset.type = 'cpu';
+            el.title = i18next.t('settings.statusbar.cpu_usage');
         } else if (type === 'ram') {
             el.innerHTML = `<i class="mdi mdi-memory"></i> <span class="val">---&nbsp;MB</span> ${canvasHtml}`;
             el.dataset.type = 'ram';
+            el.title = i18next.t('settings.statusbar.ram_usage');
         } else if (type === 'custom') {
             const cleanEntity = customEntity ? customEntity.trim().toLowerCase() : '';
             this.slotEntities[slotId] = cleanEntity;
@@ -143,13 +196,13 @@ const statusBar = {
     },
 
     updateSystemStats(data) {
-        // data = { cpu, app_ram, ... }
+        // data contains { cpu, app_ram, ... }.
         
         ['slot1', 'slot2', 'slot3'].forEach(slotId => {
             const el = document.getElementById(`sb-${slotId}`);
             if (!el || el.classList.contains('sb-hidden')) return;
             
-            // History Array holen
+            // Get history array for the slot.
             const hist = this.history[slotId];
 
             if (el.dataset.type === 'cpu') {
@@ -157,14 +210,14 @@ const statusBar = {
                 if (hist.length > 10) hist.shift();
 
                 const valEl = el.querySelector('.val');
-                // Pad to 3 chars to prevent jumping (e.g. "  5", " 12")
+                // Pad to 3 chars to prevent jumping.
                 valEl.innerText = `${Math.round(data.cpu).toString().padStart(3, '\u00A0')}\u00A0%`;
                 if (data.cpu >= 90) valEl.style.color = '#ff5555';
                 else if (data.cpu >= 70) valEl.style.color = '#ffb86c';
                 else valEl.style.color = '';
                 
-                // Tooltip wiederherstellen
-                el.title = `CPU Usage: ${data.cpu}%`;
+                // Restore tooltip.
+                el.title = `${i18next.t('settings.statusbar.cpu_usage')}: ${data.cpu}%`;
                 
                 this.drawSparkline(el.querySelector('canvas'), hist, { max: 100, thresholds: [50, 70, 90] });
             } else if (el.dataset.type === 'ram') {
@@ -172,26 +225,26 @@ const statusBar = {
                 if (hist.length > 10) hist.shift();
 
                 const valEl = el.querySelector('.val');
-                // Pad to 4 chars to prevent jumping
+                // Pad value to prevent UI jumping.
                 valEl.innerText = `${Math.round(data.app_ram).toString().padStart(4, '\u00A0')}\u00A0MB`;
-                // Warnung ab 400MB (bei 512MB Limit)
+                // Warning at 400MB (assuming 512MB default limit).
                 if (data.app_ram >= 400) valEl.style.color = '#ffb86c';
                 else valEl.style.color = '';
                 
-                // Tooltip wiederherstellen
+                // Restore tooltip with detailed memory info.
                 const sysUsed = data.ram_used > 1024 ? (data.ram_used / 1024).toFixed(1) + ' GB' : data.ram_used + ' MB';
                 const sysTotal = data.ram_total > 1024 ? (data.ram_total / 1024).toFixed(1) + ' GB' : data.ram_total + ' MB';
                 el.title = `Node Heap: ${data.app_heap} MB (Scripts)\nNode RSS: ${data.app_ram} MB (Total)\nSystem: ${sysUsed} / ${sysTotal}`;
                 
                 this.drawSparkline(el.querySelector('canvas'), hist, { max: 512, thresholds: [256, 400, 480] });
             } else if (el.dataset.type === 'custom') {
-                // Zeitbasiertes Update: Nutze den letzten bekannten Wert
+                // Periodic update: use the last known cached value
                 const val = this.currentValues[slotId];
                 if (val !== null) {
                     hist.push(val);
                     if (hist.length > 10) hist.shift();
-                    // Zeichnen (Auto-Scaling passiert in drawSparkline)
-                    this.drawSparkline(el.querySelector('canvas'), hist, { color: '#666' });
+                    // Draw chart (auto-scaling applied in drawSparkline).
+                    this.drawSparkline(el.querySelector('canvas'), hist, { color: '#888' });
                 }
             }
         });
@@ -215,17 +268,17 @@ const statusBar = {
 
                     el.querySelector('.val').innerText = `${val}${unit}`;
 
-                    // Wert nur cachen, nicht zeichnen (passiert im Takt von updateSystemStats)
+                    // Cache the value; drawing happens on the system stats interval.
                     const numVal = parseFloat(val);
                     this.currentValues[slotId] = !isNaN(numVal) ? numVal : null;
 
-                    // Icon aktualisieren
-                    let iconName = 'bookmark'; // Default Fallback
+                    // Update icon.
+                    let iconName = 'bookmark'; // Default fallback.
                     if (data.new_state) {
                         if (data.new_state.attributes.icon) {
                             iconName = data.new_state.attributes.icon.replace('mdi:', '');
                         } else {
-                            // Domain-based Fallback
+                            // Domain-based Fallback.
                             const domain = data.entity_id.split('.')[0];
                             const state = data.new_state.state;
 
@@ -264,7 +317,7 @@ const statusBar = {
                     const iconEl = el.querySelector('i');
                     if (iconEl) iconEl.className = `mdi mdi-${iconName}`;
 
-                    // Tooltip Update: Friendly Name + (Entity ID)
+                    // Update tooltip with friendly name and entity ID.
                     if (data.new_state) {
                         const friendly = data.new_state.attributes.friendly_name || data.entity_id;
                         el.title = `${friendly}\n(${data.entity_id})`;
@@ -281,15 +334,15 @@ const statusBar = {
         const h = canvas.height;
         ctx.clearRect(0, 0, w, h);
         
-        // Filter null values for calculation
+        // Filter null values for calculation.
         const validData = data.filter(v => v !== null && !isNaN(v));
         if (validData.length === 0) return;
 
-        // Auto-Scaling Logic
+        // Auto-Scaling Logic.
         let min = options.min !== undefined ? options.min : Math.min(...validData);
         let max = options.max !== undefined ? options.max : Math.max(...validData);
         
-        // Prevent flat line division by zero
+        // Prevent flat line division by zero.
         if (max === min) { max += 1; min -= 1; }
         const range = max - min;
 
@@ -297,7 +350,7 @@ const statusBar = {
         data.forEach((v, i) => {
             if (v === null || isNaN(v)) return;
 
-            let color = options.color || '#666'; // Default Grau
+            let color = options.color || '#666'; // Default Gray.
             if (options.thresholds) {
                 if (v >= options.thresholds[2]) color = '#ff5555';      // Rot
                 else if (v >= options.thresholds[1]) color = '#ffb86c'; // Orange
@@ -305,9 +358,9 @@ const statusBar = {
             }
             
             ctx.fillStyle = color;
-            // Normalize to 0..1 based on range
+            // Normalize to 0..1 based on range.
             const normalized = (v - min) / range;
-            const barH = Math.max(2, normalized * h); // Mindestens 2px hoch
+            const barH = Math.max(2, normalized * h); // Minimum 2px height.
             ctx.fillRect(i * barW, h - barH, barW, barH);
         });
     },
@@ -317,7 +370,7 @@ const statusBar = {
         const cleanId = entityId.trim().toLowerCase();
         console.log(`Statusbar: Requesting initial state for '${cleanId}'...`);
         
-        // Deduplication: Falls schon ein Request läuft, anhängen
+        // Deduplication: If a request is already running, wait for it.
         if (this.fetchPromise) {
             try {
                 const data = await this.fetchPromise;
@@ -335,12 +388,12 @@ const statusBar = {
 
         try {
             if (typeof apiFetch !== 'function') {
-                // Retry once after 500ms if apiFetch is missing (race condition)
+                // Retry once after 500ms if apiFetch is missing (race condition).
                 setTimeout(() => this.fetchInitialState(entityId), 500);
                 return;
             }
 
-            // Request starten (mit Retry)
+            // Start request with retries.
             this.fetchPromise = (async () => {
                 let lastErr;
                 for (let i = 0; i < 3; i++) {
@@ -365,7 +418,7 @@ const statusBar = {
 
             const all = await this.fetchPromise;
             
-            // Nach erfolgreichem Laden: Prüfen für DIESEN Aufruf
+            // After successful load: check for this specific call.
             const state = all.find(s => s.entity_id === cleanId);
             if (state) {
                 this.updateEntityState({ entity_id: cleanId, new_state: state });
@@ -395,5 +448,5 @@ const statusBar = {
     }
 };
 
-// Export für app.js
+// Export for app.js.
 window.statusBar = statusBar;

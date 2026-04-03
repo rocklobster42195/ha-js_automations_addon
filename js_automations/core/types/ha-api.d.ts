@@ -36,7 +36,7 @@ type ServiceData<T extends string> = T extends `${infer D}.${infer S}`
                 [K in keyof ServiceMap[D][S]]: K extends 'entity_id' 
                     ? EntityID | EntityID[] 
                     : ServiceMap[D][S][K] 
-              }
+              } & { entity_id?: EntityID | EntityID[] }
             : Record<string, any>
         : Record<string, any>
     : Record<string, any>;
@@ -397,6 +397,17 @@ interface HA {
     };
 
     /**
+     * Creates a persistent ref wrapper for a primitive value stored in `ha.store`.
+     * Access and modify the value via `.value` — changes are automatically saved.
+     * @example
+     * const counter = ha.persistent('counter', 0);
+     * counter.value++;
+     * const enabled = ha.persistent('enabled', false);
+     * enabled.value = true;
+     */
+    persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: T };
+
+    /**
      * Creates a deep proxy for an object stored in `ha.store`,
      * automatically saving changes back to the store when properties are modified.
      * Ideal for managing complex configuration objects persistently.
@@ -405,7 +416,7 @@ interface HA {
      * @returns A Proxy object that automatically persists changes.
      */
     persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
-    persistent<T = any>(key: string & { _?: never }, defaultValue?: T): T;
+    persistent<T extends object = Record<string, any>>(key: string, defaultValue?: T): T;
 }
 
 /**

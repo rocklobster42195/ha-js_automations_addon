@@ -9,8 +9,7 @@ async function initI18next() {
     let lang = urlParams.get('lng');
     let opts = {};
 
-    // Config vom Backend laden (Sprache & Expertenmodus)
-    // apiFetch ist global verfügbar (definiert in app.js oder api.js)
+    // Load configuration from backend (Language & Expert Mode).
     try {
         const res = await apiFetch('api/settings');
         if (res.ok) {
@@ -27,7 +26,7 @@ async function initI18next() {
 
     if (!lang && opts.ui_language && opts.ui_language !== 'auto') lang = opts.ui_language;
 
-    // Wenn 'auto' gewählt ist, versuchen wir die HA Sprache zu laden
+    // If 'auto' is selected, attempt to load the Home Assistant system language.
     if (!lang && opts.ui_language === 'auto') {
         try {
             const res = await apiFetch('api/ha/metadata');
@@ -38,13 +37,13 @@ async function initI18next() {
         } catch (e) { console.debug("Could not load HA language", e); }
     }
 
-    // Fallback: Browser-Sprache
+    // Fallback: Browser language.
     if (!lang) lang = navigator.language || 'en';
     
-    // Debugging für Addon-Kontext
+    // Debugging for Add-on context.
     console.log(`I18N: Target language is ${lang}, loading from ${BASE_PATH}locales/`);
 
-    // Sprachcode normalisieren (immer auf 2 Zeichen kürzen, da unsere Ordnerstruktur so ist)
+    // Normalize language code (shorten to 2 characters to match folder structure).
     const finalLang = lang.split('-')[0];
 
     await i18next
@@ -52,7 +51,7 @@ async function initI18next() {
         .init({
             lng: finalLang,
             fallbackLng: 'en',
-            load: 'languageOnly', // Verhindert Versuche de-DE zu laden, wenn nur de existiert
+            load: 'languageOnly', // Prevents attempts to load de-DE if only de exists.
             debug: false,
             ns: ['translation'],
             defaultNS: 'translation',
@@ -61,16 +60,16 @@ async function initI18next() {
             }
         });
 
-    // Globaler Shortcut für einfache Nutzung in anderen Skripten (z.B. Wizard)
+    // Global shortcut for easy use in other scripts (e.g., Wizard).
     window.t = i18next.t.bind(i18next);
 
     updateUIWithTranslations();
 
-    // Falls wir nach einem Reload (z.B. Sprachwechsel) die Settings wieder öffnen sollen
+    // Re-open settings tab after a reload (e.g., after language change) if requested.
     if (urlParams.get('open') === 'settings') {
         setTimeout(() => {
             if (typeof window.openSettingsTab === 'function') window.openSettingsTab();
-            // Parameter aus der URL entfernen, ohne die Seite neu zu laden
+            // Remove parameter from URL without reloading the page.
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.delete('open');
             window.history.replaceState({}, document.title, newUrl.toString());
@@ -79,8 +78,8 @@ async function initI18next() {
 }
 
 /**
- * Aktualisiert die UI-Elemente mit Übersetzungen.
- * Kann für das gesamte Dokument oder ein spezifisches Element (z.B. den Wizard) aufgerufen werden.
+ * Updates UI elements with translations.
+ * Can be called for the entire document or a specific element (e.g., the Wizard).
  */
 function updateUIWithTranslations(root = document) {
     if (root === document) {
@@ -101,8 +100,7 @@ function updateUIWithTranslations(root = document) {
             el.title = translation;
         }
         
-        // Inhalt nur übersetzen, wenn es kein reines Input-Element ist (da dort innerHTML keinen Sinn ergibt)
-        // oder wenn explizit kein Attribut-Ziel definiert wurde.
+        // Translate content only if it's not a pure input element or if no attribute target is defined.
         const isInput = ['INPUT', 'TEXTAREA'].includes(el.tagName);
         if (!isInput && !el.hasAttribute('data-i18n-placeholder') && !el.hasAttribute('data-i18n-title')) {
             el.innerHTML = translation;

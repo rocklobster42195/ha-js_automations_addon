@@ -27,7 +27,6 @@
                 </div>
                 <div class="header-actions">
                     <button onclick="openCreationWizard()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
-                    <!-- <button onclick="loadScripts()" data-i18n="refresh_list_title" data-i18n-title title="Refresh List"><i class="mdi mdi-refresh"></i></button> -->
                     <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" data-i18n="global_store_explorer_title" data-i18n-title title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
                     <button id="btn-settings" onclick="openSettingsTab()" data-i18n="settings_button_title" data-i18n-title title="Settings"><i class="mdi mdi-cog"></i></button>
                     <button id="btn-reference" onclick="openReferenceTab()" title="Command Reference" class="hidden"><i class="mdi mdi-help-circle-outline"></i></button>
@@ -43,6 +42,22 @@
 
             <div id="script-list" class="script-list">
                 <!-- Scripts will be injected here -->
+            </div>
+
+            <div id="status-bar" class="sidebar-footer">
+                <div class="status-left">
+                    <div class="stat-item" title="Backend Heartbeat">
+                        <i id="heartbeat-icon" class="mdi mdi-circle-outline heartbeat-icon"></i>
+                    </div>
+                    <div id="integration-status-item" class="stat-item" title="MQTT Status" onclick="openSettingsTab('mqtt')" style="cursor:pointer">
+                        <i id="integration-status-icon" class="mdi mdi-circle-outline integration-icon"></i>
+                    </div>
+                </div>
+                <div class="status-slots">
+                    <div id="sb-slot1" class="sb-item"></div>
+                    <div id="sb-slot2" class="sb-item"></div>
+                    <div id="sb-slot3" class="sb-item"></div>
+                </div>
             </div>
         </aside>
 

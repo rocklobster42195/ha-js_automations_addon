@@ -3,7 +3,7 @@
  * Handles backend communication and global data loading.
  */
 
-// Robuste Berechnung des Ingress-Pfads: Alles bis zum letzten Slash nehmen
+// Robust calculation of the Ingress path: take everything up to the last slash.
 var BASE_PATH = window.location.pathname;
 if (BASE_PATH.endsWith('.html')) {
     BASE_PATH = BASE_PATH.substring(0, BASE_PATH.lastIndexOf('/') + 1);

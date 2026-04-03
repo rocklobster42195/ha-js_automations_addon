@@ -3,7 +3,7 @@
  */
 
 let settingsSchema = null;
-window.currentSettings = null; // Make global
+window.currentSettings = null; 
 const SETTINGS_TAB_ID = 'System: Settings';
 let activeCategory = null;
 let settingsEntityTarget = null;
@@ -12,17 +12,17 @@ let isProgrammaticScroll = false;
 let pendingScrollTarget = null;
 
 /**
- * Öffnet den Settings-Tab und lädt die Daten.
+ * Opens the settings tab and loads data.
  */
 async function openSettingsTab(targetId = null) {
     console.log("Opening Settings Tab...");
     pendingScrollTarget = targetId;
     
-    // Haupt-Container sichtbar machen (falls noch keine Tabs offen waren)
+    // Make main container visible if no tabs were open
     const section = document.getElementById('editor-section');
     if (section) section.classList.remove('hidden');
 
-    // Prüfen, ob Tab schon existiert
+    // Check if tab already exists
     const existing = openTabs.find(t => t.filename === SETTINGS_TAB_ID);
     if (!existing) {
         openTabs.push({
@@ -37,14 +37,14 @@ async function openSettingsTab(targetId = null) {
     if (window.renderTabs) window.renderTabs();
     if (window.switchToTab) window.switchToTab(SETTINGS_TAB_ID);
 
-    // Falls bereits geladen, sofort scrollen
+    // If already loaded, scroll immediately
     if (settingsSchema && targetId) {
         setTimeout(() => scrollToSection(targetId), 100);
     }
 }
 
 /**
- * Lädt Schema und Werte von der API.
+ * Loads schema and values from the API.
  */
 async function loadSettingsData() {
     try {
@@ -66,7 +66,7 @@ async function loadSettingsData() {
         renderAllSettings();
         initScrollSpy();
 
-        // Statische Elemente im Settings-Wrapper übersetzen (z.B. Header in der Sidebar)
+        // Translate static elements in the settings wrapper.
         if (window.updateUIWithTranslations) {
             window.updateUIWithTranslations(document.getElementById('settings-wrapper'));
         }
@@ -77,17 +77,17 @@ async function loadSettingsData() {
             pendingScrollTarget = null;
             setTimeout(() => scrollToSection(target), 200);
         } else if (settingsSchema && settingsSchema.length > 0) {
-            // Standardmäßig die erste Kategorie markieren
+            // Highlight the first category by default
             setActiveCategoryUI(settingsSchema[0].id);
         }
     } catch (error) {
         console.error("Failed to load settings:", error);
-        // Fallback / Error UI anzeigen
+        // Display fallback or error UI.
     }
 }
 
 /**
- * Rendert die linke Seitenleiste (Kategorien).
+ * Renders the left sidebar (categories).
  */
 function renderSettingsCategories() {
     const container = document.getElementById('settings-categories');
@@ -102,12 +102,7 @@ function renderSettingsCategories() {
 
         // Notification Dot Logic
         if (cat.id === 'system') {
-            // Priority 1: Restart needed (purple dot)
-            if (window.currentIntegrationStatus && window.currentIntegrationStatus.needs_restart && !window.currentIntegrationStatus.dev_mode) {
-                btn.classList.add('badge-info'); // Lila
-            }
-            // Priority 2: Addon update available (orange dot) - same as header
-            else if (window.newVersionInfo && window.newVersionInfo.update_available) {
+            if (window.newVersionInfo && window.newVersionInfo.update_available) {
                 btn.classList.add('badge-warning'); // Orange
             }
         }
@@ -171,7 +166,7 @@ function scrollToSection(id) {
 }
 
 /**
- * Initialisiert ScrollSpy mit IntersectionObserver.
+ * Initializes ScrollSpy with IntersectionObserver.
  */
 function initScrollSpy() {
     const content = document.getElementById('settings-content');
@@ -203,13 +198,13 @@ function initScrollSpy() {
 }
 
 /**
- * Rendert alle Kategorien untereinander.
+ * Renders all categories sequentially.
  */
 function renderAllSettings() {
     const container = document.getElementById('settings-content');
     container.innerHTML = '';
 
-    // Shared Datalist für Autocomplete einfügen
+    // Insert shared datalist for autocomplete.
     const dl = document.createElement('datalist');
     dl.id = 'settings-entities-datalist';
     container.appendChild(dl);
@@ -220,7 +215,7 @@ function renderAllSettings() {
         section.className = 'settings-section';
         if (category.id === 'danger') section.classList.add('settings-category-danger');
 
-        // Titel der Kategorie
+        // Category Title
         const title = document.createElement('h3');
         const icon = document.createElement('i');
         icon.className = `mdi ${category.icon.replace('mdi:', 'mdi-')}`;
@@ -237,16 +232,16 @@ function renderAllSettings() {
 }
 
 /**
- * Rendert die Items einer Kategorie in ein Ziel-Element.
+ * Renders the items of a category into a target element.
  */
 function renderSettingsItems(category, section) {
     const catId = category.id;
     category.items.forEach(item => {
-        // Wenn das Item als versteckt markiert ist, nicht rendern
+        // Skip if item is marked as hidden
         if (item.hidden) return;
-        // Condition Check (Soll das Feld angezeigt werden?)
+        // Condition check (should field be displayed?)
         if (item.condition) {
-            // Safety Check: Falls Kategorie noch nicht in Settings existiert
+            // Safety check: category exists in settings
             if (!window.currentSettings[catId]) window.currentSettings[catId] = {};
             
             const dependentVal = window.currentSettings[catId][item.condition.key];
@@ -255,7 +250,7 @@ function renderSettingsItems(category, section) {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'settings-item-wrapper';
-        // Einrückung für abhängige Felder (Custom Entity, Sparkline)
+        // Indentation for dependent fields
         if (item.indent || (item.condition && (item.condition.key === 'slot1' || item.condition.key === 'slot2'))) {
             wrapper.style.marginLeft = '20px';
             wrapper.style.paddingLeft = '10px';
@@ -272,7 +267,7 @@ function renderSettingsItems(category, section) {
         label.style.fontSize = '0.9rem';
         wrapper.appendChild(label);
 
-        // Description (optional)
+        // Description
         if (item.description) {
             const desc = document.createElement('div');
             desc.setAttribute('data-i18n', item.description);
@@ -283,10 +278,10 @@ function renderSettingsItems(category, section) {
             wrapper.appendChild(desc);
         }
 
-        // Input Element generieren
+        // Generate input element
         let input;
         
-        // Safety Check für Value Access
+        // Value Access
         const catSettings = window.currentSettings[catId] || {};
         const value = catSettings[item.key] !== undefined ? catSettings[item.key] : item.default;
 
@@ -307,7 +302,7 @@ function renderSettingsItems(category, section) {
             
             item.options.forEach(opt => {
                 const option = document.createElement('option');
-                // Support für einfache Strings oder Objekte {value, label}
+                // Support for strings or {value, label} objects
                 const optVal = typeof opt === 'object' ? opt.value : opt;
                 const optLabel = typeof opt === 'object' ? opt.label : opt;
                 
@@ -322,13 +317,14 @@ function renderSettingsItems(category, section) {
             input = document.createElement('input');
             input.type = 'number';
             input.value = value;
-            if (item.min) input.min = item.min;
-            if (item.max) input.max = item.max;
+            if (item.min !== undefined) input.min = item.min;
+            if (item.max !== undefined) input.max = item.max;
             input.style.padding = '5px';
             input.style.backgroundColor = '#333';
             input.style.color = '#fff';
             input.style.border = '1px solid #555';
             input.style.fontSize = '0.9rem';
+            input.style.width = '100px';
             input.onchange = (e) => saveSetting(catId, item.key, parseFloat(e.target.value));
         }
         else if (item.type === 'entity-picker') {
@@ -337,7 +333,7 @@ function renderSettingsItems(category, section) {
             textInput.value = value;
             textInput.id = `input-${catId}-${item.key}`;
             
-            // Kürzeres Eingabefeld & Autocomplete
+            // Autocomplete field
             textInput.style.width = '200px';
             textInput.style.padding = '5px';
             textInput.style.backgroundColor = '#333';
@@ -361,23 +357,33 @@ function renderSettingsItems(category, section) {
             input.style.fontSize = '0.9rem';
             input.onclick = () => {
                 if (item.actionUrl) window.location.href = item.actionUrl;
-                // Weitere Actions können hier implementiert werden
             };
         }
-        else if (item.type === 'integration-manager') {
-            input = document.createElement('div');
-            input.id = 'settings-installer-anchor'; // Sprungpunkt für Installer
-            const innerWrapper = document.createElement('div');
-            innerWrapper.id = 'integration-manager-wrapper';
-            input.appendChild(innerWrapper);
+        else if (item.type === 'mqtt-test') {
+            input = document.createElement('button');
+            input.innerText = i18next.t(item.label);
+            input.className = 'btn-primary';
+            input.style.width = 'fit-content';
             input.style.marginTop = '5px';
-            checkIntegrationStatus(innerWrapper);
+            input.style.fontSize = '0.9rem';
+            input.onclick = () => testMqttConnection(input);
+        }
+        else if (item.type === 'mqtt-autodetect') {
+            input = document.createElement('button');
+            input.innerText = i18next.t(item.label);
+            input.className = 'btn-text';
+            input.style.width = 'fit-content';
+            input.style.marginTop = '5px';
+            input.style.fontSize = '0.85rem';
+            input.style.color = 'var(--accent)';
+            input.onclick = () => discoverMqttSettings(input);
         }
         else {
             input = document.createElement('input');
-            input.type = 'text';
+            input.type = item.mode === 'password' ? 'password' : 'text';
             input.value = value;
             input.style.width = '100%';
+            input.style.maxWidth = '400px';
             input.style.padding = '5px';
             input.style.backgroundColor = '#333';
             input.style.color = '#fff';
@@ -389,17 +395,17 @@ function renderSettingsItems(category, section) {
         wrapper.appendChild(input);
         section.appendChild(wrapper);
 
-        // Wenn das Item als inaktiv markiert ist, das Input-Feld deaktivieren und visuell anpassen
+        // Adjust visual state for inactive items
         if (item.active === false) {
             input.disabled = true;
             wrapper.style.opacity = '0.6';
-            wrapper.style.pointerEvents = 'none'; // Verhindert Interaktion mit Label/Beschreibung
+            wrapper.style.pointerEvents = 'none'; 
         }
     });
 }
 
 /**
- * Speichert eine einzelne Einstellung und aktualisiert den State.
+ * Saves a single setting and updates the state.
  */
 async function saveSetting(catId, key, value) {
     // Optimistic UI Update
@@ -407,10 +413,10 @@ async function saveSetting(catId, key, value) {
     window.currentSettings[catId][key] = value;
     window.dispatchEvent(new CustomEvent('settings-changed', { detail: window.currentSettings }));
 
-    // Wenn sich ein Feld ändert, das andere beeinflusst, das UI aktualisieren
+    // Refresh UI if dependent fields change
     renderAllSettings();
 
-    // API Call
+    // API call
     const payload = { [catId]: { [key]: value } };
     
     try {
@@ -419,11 +425,10 @@ async function saveSetting(catId, key, value) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        // Optional: Toast Notification "Gespeichert"
 
-        // Reload bei Sprachänderung erzwingen
+        // Force reload on language change
         if (catId === 'general' && key === 'ui_language') {
-            // Wir hängen einen Parameter an, damit wir nach dem Reload wissen, dass wir die Settings öffnen sollen
+            // Add param to reopen settings after reload
             const url = new URL(window.location.href);
             url.searchParams.set('open', 'settings');
             window.location.href = url.toString();
@@ -435,16 +440,16 @@ async function saveSetting(catId, key, value) {
 }
 
 /**
- * Lädt Entitäten für die Autocomplete-Liste (Lazy Load).
+ * Loads entities for the autocomplete list.
  */
 async function loadEntitiesForAutocomplete() {
     const dl = document.getElementById('settings-entities-datalist');
     if (!dl) return;
 
-    // Wenn Datalist schon befüllt ist, abbrechen
+    // Skip if already populated
     if (dl.options.length > 0) return;
 
-    // 1. Versuch: Globale IntelliSense-Daten nutzen (schnell & verfügbar)
+    // Try Global IntelliSense data first
     if (typeof allEntities !== 'undefined' && Array.isArray(allEntities) && allEntities.length > 0) {
         dl.innerHTML = '';
         allEntities.forEach(entityId => {
@@ -455,7 +460,7 @@ async function loadEntitiesForAutocomplete() {
         return;
     }
 
-    // 2. Versuch: Socket laden (Fallback)
+    // Socket fallback
     if (window.cachedEntities.length === 0) {
         try {
             if (typeof window.getHAStates === 'function') {
@@ -466,7 +471,7 @@ async function loadEntitiesForAutocomplete() {
         }
     }
 
-    // Datalist befüllen
+    // Populate datalist
     dl.innerHTML = '';
     window.cachedEntities.forEach(e => {
         const opt = document.createElement('option');
@@ -477,128 +482,76 @@ async function loadEntitiesForAutocomplete() {
 }
 
 /**
- * Triggert den HA Neustart.
+ * Tests the MQTT connection using current UI settings.
  */
-async function restartHA() {
-    if (!confirm(i18next.t('settings.system.confirm_restart_ha'))) return;
+async function testMqttConnection(btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="mdi mdi-loading mdi-spin"></i> Testing...`;
     
     try {
-        await apiFetch('api/system/restart-ha', { method: 'POST' });
-        // UI Feedback: Connection loss overlay will handle the rest via socket events
+        const mqttSettings = window.currentSettings.mqtt;
+        const res = await apiFetch('api/mqtt/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mqttSettings)
+        });
+        
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText || `Status ${res.status}`);
+        }
+
+        const result = await res.json();
+        if (result.success) {
+            alert(i18next.t('settings.system.mqtt_test_success'));
+        } else {
+            alert(i18next.t('settings.system.mqtt_test_error', { error: result.error }));
+        }
     } catch (e) {
-        alert(i18next.t('settings.system.integration_error_alert', { error: e.message }));
+        console.error("MQTT Test failed:", e);
+        alert(i18next.t('settings.system.mqtt_test_error', { error: e.message }));
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
     }
 }
 
 /**
- * Prüft den Status der HA Integration und rendert die UI.
+ * Attempts to auto-discover MQTT settings from HA.
  */
-async function checkIntegrationStatus(container, showRestartHint = false) {
-    container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#aaa;"><i class="mdi mdi-loading mdi-spin"></i> ${i18next.t('settings.system.integration_checking')}</div>`;
-    try {
-        const res = await apiFetch('api/system/integration');
-        if (res.ok) {
-            const status = await res.json();
-            
-            // Update Global State & UI Dots
-            window.currentIntegrationStatus = status;
-            if (window.updateSystemNotifications) window.updateSystemNotifications();
-
-            renderIntegrationUI(container, status, showRestartHint);
-        } else {
-            container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#f44336;">${i18next.t('settings.system.integration_check_failed')}</div>`;
-        }
-    } catch (e) {
-        container.innerHTML = `<div style="width:fit-content; padding:10px; font-size:0.9rem; background:#252526; border-radius:6px; border:1px solid #383838; color:#f44336;">${i18next.t('settings.system.integration_error', { error: e.message })}</div>`;
-    }
-}
-
-function renderIntegrationUI(container, status, showRestartHint = false) {
-    let icon, color, title, desc, btnHtml = '';
-
-    if (status.dev_mode) {
-        // Developer Mode: Manual management
-        icon = status.active ? 'mdi-check-circle' : 'mdi-developer-board';
-        color = status.active ? 'var(--success)' : 'var(--warn)';
-        title = i18next.t('settings.system.integration_dev_mode');
-        
-        if (status.active) {
-            desc = i18next.t('settings.system.integration_active') + ` (v${status.version_running})`;
-        } else if (status.is_running) {
-            desc = i18next.t('settings.system.integration_version_mismatch', { 
-                running: status.version_running, 
-                available: status.version_available,
-                defaultValue: `Version Mismatch: HA is running v${status.version_running}, local source is v${status.version_available}.`
-            });
-        } else {
-            desc = i18next.t('settings.system.integration_dev_mode_desc');
-        }
-        btnHtml = ''; 
-
-    } else if (status.needs_restart) {
-        // State 2: Files copied or mismatch -> Restart needed
-        icon = 'mdi-restart-alert';
-        color = '#b05dff'; // Lila/Purple signaling restart
-        title = i18next.t('settings.system.post_install_title');
-        desc = i18next.t('settings.system.post_install_desc');
-        btnHtml = `<button class="btn-primary" onclick="restartHA()" style="background-color: #6200ea;">${i18next.t('settings.system.restart_ha_btn')}</button>`;
-    
-    } else if (!status.installed || status.needs_update) {
-        // State 1: Component missing OR Update available
-        const isUpdate = status.installed && status.needs_update;
-        icon = isUpdate ? 'mdi-information' : 'mdi-alert-circle';
-        color = isUpdate ? 'var(--accent)' : 'var(--warn)';
-        title = i18next.t(isUpdate ? 'settings.system.integration_update_available' : 'settings.system.integration_missing');
-        desc = isUpdate 
-            ? i18next.t('settings.system.integration_update_desc', { installed: status.version_installed, available: status.version_available })
-            : i18next.t('settings.system.integration_missing_desc');
-        
-        btnHtml = `<button class="btn-primary" onclick="installIntegration(this)" style="${!isUpdate ? 'background:var(--warn) !important; color:#000 !important;' : ''}">
-            ${isUpdate ? i18next.t('settings.system.integration_update_btn', { version: status.version_available }) : i18next.t('settings.system.integration_install_btn')}
-        </button>`;
-    
-    } else {
-        // Final state: installed, configured, and up-to-date.
-        icon = 'mdi-check-circle';
-        color = 'var(--success)';
-        title = i18next.t('settings.system.integration_active');
-        desc = i18next.t('settings.system.integration_installed_version', { version: status.version_installed });
-    }
-
-    container.innerHTML = `
-        <div style="width:fit-content; max-width: 600px; background:#1e1e1e; border:1px solid #383838; border-radius:6px; padding:10px; display:flex; align-items:center; gap:15px;">
-            <i class="mdi ${icon}" style="font-size:1.8rem; color:${color}; margin-left: 5px;"></i>
-            <div style="flex:1;">
-                <div style="font-weight:bold; font-size:0.95rem; margin-bottom:2px; color:#fff; display: flex; align-items: center; gap: 8px;">
-                    ${title}
-                    <i class="mdi mdi-refresh" style="cursor:pointer; font-size: 0.9rem; opacity: 0.5;" onclick="checkIntegrationStatus(document.getElementById('integration-manager-wrapper'))" title="${i18next.t('refresh_list_title')}"></i>
-                </div>
-                <div style="color:#aaa; font-size:0.85rem;">${desc}</div>
-            </div>
-            <div style="margin-right: 5px;">${btnHtml}</div>
-        </div>
-    `;
-}
-
-async function installIntegration(btn) {
+async function discoverMqttSettings(btn) {
     const originalText = btn.innerText;
     btn.disabled = true;
-    btn.innerHTML = `<i class="mdi mdi-loading mdi-spin"></i> ${i18next.t('settings.system.integration_installing')}`;
+    btn.innerHTML = `<i class="mdi mdi-loading mdi-spin"></i> Detecting...`;
     
     try {
-        const res = await apiFetch('api/system/integration/install', { method: 'POST' });
-        if (res.ok) {
+        const res = await apiFetch('api/mqtt/discover');
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText || `Status ${res.status}`);
+        }
+
+        const result = await res.json();
+        
+        if (result && result.host) {
+            // Update local settings and UI
+            if (!window.currentSettings.mqtt) window.currentSettings.mqtt = {};
             
-            const wrapper = document.getElementById('integration-manager-wrapper');
-            if (wrapper) checkIntegrationStatus(wrapper, true);
+            window.currentSettings.mqtt.host = result.host;
+            window.currentSettings.mqtt.port = result.port;
+            if (result.username) window.currentSettings.mqtt.username = result.username;
+            
+            // Re-render to show new values in inputs
+            renderAllSettings();
+            alert(i18next.t('settings.system.mqtt_autodetect_success'));
         } else {
-            const err = await res.json();
-            alert(i18next.t('settings.system.integration_error_alert', { error: (err.error || "Unknown error") }));
-            btn.disabled = false;
-            btn.innerText = originalText;
+            alert(i18next.t('settings.system.mqtt_autodetect_not_found'));
         }
     } catch (e) {
-        alert(i18next.t('settings.system.integration_error_alert', { error: e.message }));
+        console.error("MQTT Discovery failed:", e);
+        alert("Discovery failed: " + e.message);
+    } finally {
         btn.disabled = false;
         btn.innerText = originalText;
     }
@@ -610,3 +563,4 @@ window.loadSettingsData = loadSettingsData;
 window.restartHA = restartHA;
 window.installIntegration = installIntegration;
 window.renderSettingsCategories = renderSettingsCategories;
+window.testMqttConnection = testMqttConnection;

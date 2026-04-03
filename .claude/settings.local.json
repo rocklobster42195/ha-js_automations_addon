@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('./js_automations/core/script-watcher.js'\\)\")",
+      "Bash(node -e \"require\\('./js_automations/core/entity-manager.js'\\)\")"
+    ]
+  }
+}

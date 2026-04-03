@@ -48,9 +48,9 @@ io.on('connection', (socket) => {
     });
     socket.on('get_integration_status', async (callback) => {
         try {
-            const status = await kernel.getCombinedIntegrationStatus();
-            // Adapt for the frontend which expects an 'available' property
-            callback({ available: status.is_running });
+            const status = await kernel.getSystemStatus();
+            // Adapt for the frontend expectations
+            callback({ ...status, available: status.active });
         } catch (e) {
             callback({ error: e.message });
         }
@@ -62,9 +62,9 @@ io.on('connection', (socket) => {
 
 // --- API ROUTERS ---
 // The kernel holds all manager instances, so we pass them to the routes.
-const { workerManager, depManager, stateManager, storeManager, haConnector, logManager, integrationManager, systemService } = kernel;
+const { workerManager, depManager, stateManager, storeManager, haConnector, logManager, systemService } = kernel;
 
-const scriptsRouter = require('./routes/scripts-routes')(workerManager, depManager, stateManager, io, config.SCRIPTS_DIR, config.STORAGE_DIR, config.LIBRARIES_DIR);
+const scriptsRouter = require('./routes/scripts-routes')(workerManager, depManager, stateManager, io, config.SCRIPTS_DIR, config.STORAGE_DIR, config.LIBRARIES_DIR, kernel.mqttManager);
 
 // We create a proxy for the StoreManager to broadcast changes to workers from the UI.
 const storeManagerUiWrapper = new Proxy(storeManager, {
@@ -94,7 +94,7 @@ const storeManagerUiWrapper = new Proxy(storeManager, {
 });
 
 const storeRouter = require('./routes/store-route')(storeManagerUiWrapper);
-const systemRouter = require('./routes/system-route')(haConnector, logManager, () => kernel.systemOptions, integrationManager, config.SCRIPTS_DIR, systemService, kernel.getCombinedIntegrationStatus.bind(kernel));
+const systemRouter = require('./routes/system-route')(haConnector, logManager, () => kernel.systemOptions, config.SCRIPTS_DIR, systemService, kernel.getSystemStatus.bind(kernel), kernel.mqttManager);
 const settingsRouter = require('./routes/settings-route');
 const haRouter = require('./routes/ha-routes')(haConnector);
 
@@ -103,10 +103,10 @@ app.use('/api/store', storeRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/ha', haRouter);
 
-// System Restart Route (Directly here to access integrationManager easily)
+// System Restart Route
 app.post('/api/system/restart-ha', async (req, res) => {
     try {
-        await integrationManager.restartHomeAssistant();
+        await haConnector.callService('homeassistant', 'restart', {});
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });

@@ -1,7 +1,7 @@
 /**
  * JS AUTOMATIONS - Log Manager
  * Handles persistent logging with memory buffering and periodic flushing.
- * Implements the "Backend: Persistenz & Speicherschutz" concept.
+ * Implements memory protection and persistence logic.
  */
 const fs = require('fs');
 const path = require('path');

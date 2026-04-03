@@ -3,7 +3,7 @@ const https = require('https');
 const archiver = require('archiver');
 const packageJson = require('../../package.json');
 
-module.exports = (connector, logManager, getSystemOptions, integrationManager, SCRIPTS_DIR, systemService, getCombinedStatus) => {
+module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemService, getCombinedStatus, mqttManager) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
@@ -38,7 +38,37 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
         res.json({ ok: true });
     });
 
-    // Integration Manager Routes
+    // MQTT Test Connection.
+    router.post('/mqtt/test', async (req, res) => {
+        try {
+            const config = req.body; // Expects { host, port, username, password }
+            const result = await mqttManager.constructor.testConnection(config); // Use static method
+            res.json(result);
+        } catch (error) {
+            logManager.add('error', 'System', `MQTT Test Connection API Error: ${error.message}`);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // MQTT Discover Settings.
+    router.get('/mqtt/discover', async (req, res) => {
+        try {
+            const settings = await mqttManager.discoverSettings();
+            if (settings) {
+                res.json({ success: true, ...settings });
+            } else {
+                res.json({ success: false, error: 'No MQTT configuration found in Home Assistant.' });
+            }
+        } catch (error) {
+            logManager.add('error', 'System', `MQTT Discover Settings API Error: ${error.message}`);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    /**
+     * Returns the combined system status (HA Connection + MQTT Broker).
+     * Used by the frontend for initial status display and periodic polling.
+     */
     router.get('/system/integration', async (req, res) => {
         try {
             const status = await getCombinedStatus();
@@ -48,17 +78,7 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
         }
     });
 
-    router.post('/system/integration/install', async (req, res) => {
-        try {
-            await integrationManager.install();
-            const status = await getCombinedStatus();
-            res.json(status);
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
-    });
-
-    // Backup Route (ZIP Download)
+    // Backup Route (ZIP Download).
     router.get('/system/backup', (req, res) => {
         const archive = archiver('zip', { zlib: { level: 9 } });
         
@@ -77,7 +97,7 @@ module.exports = (connector, logManager, getSystemOptions, integrationManager, S
         
         archive.pipe(res);
         
-        // Skript-Ordner rekursiv hinzufügen, aber node_modules und git ignorieren
+        // Add scripts folder recursively, but ignore node_modules and git.
         archive.glob('**/*', {
             cwd: SCRIPTS_DIR,
             ignore: ['**/node_modules/**', '**/.git/**']

@@ -84,9 +84,9 @@ function injectCreationWizard() {
                     <div class="form-group">
                         <label><span data-i18n="script_type">Typ</span> <span class="field-hint">(@expose)</span> <i class="mdi mdi-information-outline" style="font-size:0.9em; opacity:0.7;" data-i18n="wizard_type_tooltip" data-i18n-title title="Info"></i></label>
                         <select id="wizard-type" onchange="handleWizardTypeChange()">
+                            <option value="hidden" data-i18n="wizard_option_hidden" selected>Hintergrund (Unsichtbar)</option>
                             <option value="switch" data-i18n="wizard_option_switch">Schalter (Dauerläufer)</option>
                             <option value="button" data-i18n="wizard_option_button">Button (Aktion)</option>
-                            <option value="hidden" data-i18n="wizard_option_hidden">Hintergrund (Unsichtbar)</option>
                             <option value="library" data-i18n="wizard_option_library">Library (Wird von anderen importiert)</option>
                         </select>
                     </div>
