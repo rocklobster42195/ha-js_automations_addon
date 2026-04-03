@@ -12,21 +12,21 @@ class SettingsManager extends EventEmitter {
         this.saveTimer = null;
         this.init();
 
-        // Graceful Shutdown: Sicherstellen, dass ausstehende Änderungen gespeichert werden
+        // Graceful Shutdown: Ensure pending changes are saved
         process.on('SIGTERM', () => this.save());
         process.on('SIGINT', () => this.save());
     }
 
     /**
-     * Initialisiert den Manager, lädt existierende Settings oder erstellt Defaults.
+     * Initializes the manager, loads existing settings or creates defaults.
      */
     init() {
-        // Sicherstellen, dass das Verzeichnis existiert
+        // Ensure the directory exists
         if (!fs.existsSync(config.STORAGE_DIR)) {
             try {
                 fs.mkdirSync(config.STORAGE_DIR, { recursive: true });
             } catch (e) {
-                console.error('SettingsManager: Konnte Storage-Ordner nicht erstellen:', e);
+                console.error('SettingsManager: Could not create storage folder:', e);
             }
         }
 
@@ -37,65 +37,64 @@ class SettingsManager extends EventEmitter {
                 const fileContent = fs.readFileSync(SETTINGS_FILE, 'utf8');
                 const userSettings = JSON.parse(fileContent);
                 
-                // Merge: Defaults als Basis, User-Settings überschreiben diese
-                // Das stellt sicher, dass neue Schema-Felder auch in den Settings landen
+                // Merge: Defaults as basis, user settings overwrite them
+                // This ensures that new schema fields also end up in the settings
                 this.settings = this._deepMerge(defaults, userSettings);
 
-                // Bereinigung: Entferne Keys, die nicht mehr im Schema sind
+                // Cleanup: Remove keys that are no longer in the schema
                 this._validateAndCleanup();
                 
-                // Wir speichern einmal zurück, um sicherzustellen, dass die Datei 
-                // alle aktuellen Keys (auch neue aus dem Schema) enthält.
+                // Save back once to ensure the file contains all current keys (including new ones from the schema).
                 this.save(); 
             } catch (error) {
-                console.error('SettingsManager: Fehler beim Lesen der settings.json. Nutze Defaults.', error);
+                console.error('SettingsManager: Error reading settings.json. Using defaults.', error);
                 this.settings = defaults;
             }
         } else {
-            console.log('SettingsManager: Keine settings.json gefunden. Erstelle neu aus Schema.');
+            console.log('SettingsManager: No settings.json found. Creating new from schema.');
             this.settings = defaults;
             this.save();
         }
     }
 
     /**
-     * Gibt die aktuellen Einstellungen zurück.
+     * Returns the current settings.
      */
     getSettings() {
         return this.settings;
     }
 
     /**
-     * Gibt das Schema für das Frontend zurück.
+     * Returns the schema for the frontend.
      */
     getSchema() {
         return schema;
     }
 
     /**
-     * Aktualisiert die Einstellungen (partiell) und speichert sie.
-     * @param {Object} updates - Das Objekt mit den Änderungen
+     * Updates the settings (partially) and saves them.
+     * @param {Object} updates - The object containing the changes.
      */
     updateSettings(updates) {
         this.settings = this._deepMerge(this.settings, updates);
-        this._validateAndCleanup(); // Auch bei Updates sicherstellen, dass nichts Falsches reinkommt
+        this._validateAndCleanup(); // Ensure no invalid keys are introduced during updates
         this.triggerSave();
         this.emit('settings_updated', this.settings);
         return this.settings;
     }
 
     /**
-     * Startet den Timer für das Speichern (Debounce).
-     * Verhindert zu häufige Schreibzugriffe auf die SD-Karte (Raspi-Schutz).
+     * Starts the save timer (debounce).
+     * Prevents frequent write access to the SD card (Raspberry Pi protection).
      */
     triggerSave() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
-        // Speichert erst nach 2 Sekunden Ruhe
+        // Saves after 2 seconds of inactivity
         this.saveTimer = setTimeout(() => this.save(), 2000);
     }
 
     /**
-     * Speichert den aktuellen Zustand in die Datei.
+     * Saves the current state to the file.
      */
     save() {
         if (this.saveTimer) {
@@ -109,12 +108,12 @@ class SettingsManager extends EventEmitter {
             }
             fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
         } catch (error) {
-            console.error('SettingsManager: Fehler beim Speichern:', error);
+            console.error('SettingsManager: Save error:', error);
         }
     }
 
     /**
-     * Extrahiert die Default-Werte aus dem Schema.
+     * Extracts default values from the schema.
      */
     _getDefaultsFromSchema() {
         const defaults = {};
@@ -128,24 +127,24 @@ class SettingsManager extends EventEmitter {
     }
 
     /**
-     * Entfernt alle Einstellungen aus this.settings, die nicht im Schema definiert sind.
-     * Verhindert, dass "Leichen" oder Tippfehler in der JSON verbleiben.
+     * Removes all settings that are not defined in the schema.
+     * Prevents "orphans" or typos from remaining in the JSON.
      */
     _validateAndCleanup() {
         const validKeys = {};
-        // 1. Map aller erlaubten Keys pro Kategorie erstellen
+        // 1. Create a map of all allowed keys per category
         schema.forEach(cat => {
             validKeys[cat.id] = new Set(cat.items.map(i => i.key));
         });
 
-        // 2. Settings prüfen
+        // 2. Check settings
         for (const catId in this.settings) {
-            // Wenn Kategorie nicht im Schema -> Löschen
+            // Delete if category is not in the schema
             if (!validKeys[catId]) {
                 delete this.settings[catId];
                 continue;
             }
-            // Wenn Key in Kategorie nicht im Schema -> Löschen
+            // Delete if key in category is not in the schema
             for (const key in this.settings[catId]) {
                 if (!validKeys[catId].has(key)) {
                     delete this.settings[catId][key];
@@ -155,7 +154,7 @@ class SettingsManager extends EventEmitter {
     }
 
     /**
-     * Hilfsfunktion für Deep Merge von Objekten.
+     * Helper function for deep merging of objects.
      */
     _deepMerge(target, source) {
         const output = Object.assign({}, target);

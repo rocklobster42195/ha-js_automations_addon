@@ -23,7 +23,7 @@ class HAConnector {
         this.msgId = 1;
         this.isReady = false;
         this.eventListeners = [];
-        this.states = {}; 
+        this.states = {}; // Local cache for all entity states
     }
 
     connect() {
@@ -78,7 +78,7 @@ class HAConnector {
     }
 
     /**
-     * Ruft die komplette Entity-Registry von Home Assistant ab.
+     * Fetches the complete entity registry from Home Assistant.
      */
     async getEntityRegistry() {
         if (!this.isReady) return [];
@@ -98,7 +98,7 @@ class HAConnector {
     }
 
     /**
-     * Ruft die komplette Device-Registry von Home Assistant ab.
+     * Fetches the complete device registry from Home Assistant.
      */
     async getDeviceRegistry() {
         if (!this.isReady) return [];
@@ -114,6 +114,48 @@ class HAConnector {
             };
             this.ws.on('message', handler);
             setTimeout(() => { this.ws.removeListener('message', handler); resolve([]); }, 5000);
+        });
+    }
+
+    /**
+     * Fetches all configuration entries from Home Assistant.
+     * Useful to detect MQTT broker settings.
+     */
+    async getConfigEntries() {
+        if (!this.isReady) return [];
+        const id = this.msgId++;
+        this.send({ id, type: 'config/config_entries/list' });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                const msg = JSON.parse(data);
+                if (msg.id === id) {
+                    this.ws.removeListener('message', handler);
+                    resolve(msg.result || []);
+                }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve([]); }, 5000);
+        });
+    }
+
+    /**
+     * Removes an entity from the Home Assistant entity registry.
+     * @param {string} entityId - The entity ID to remove (e.g., 'switch.my_script').
+     */
+    async removeEntity(entityId) {
+        if (!this.isReady) return;
+        const id = this.msgId++;
+        this.send({ id, type: 'config/entity_registry/remove', entity_id: entityId });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                const msg = JSON.parse(data);
+                if (msg.id === id) {
+                    this.ws.removeListener('message', handler);
+                    resolve(msg.success);
+                }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve(false); }, 5000);
         });
     }
 
@@ -162,6 +204,11 @@ class HAConnector {
                 if (c === 3) { this.ws.removeListener('message', h); res(out); }
             };
             this.ws.on('message', h);
+            
+            // Safety timeout to prevent hanging if one of the 3 requests fails
+            setTimeout(() => {
+                if (c < 3) { this.ws.removeListener('message', h); res(out); }
+            }, 5000);
         });
     }
 
@@ -192,7 +239,7 @@ class HAConnector {
     }
 
     /**
-     * Ruft die Home Assistant Konfiguration ab (inkl. Sprache).
+     * Fetches the Home Assistant configuration (including language).
      */
     async getHAConfig() {
         if (!this.isReady) return {};
@@ -214,7 +261,7 @@ class HAConnector {
     }
 
     /**
-     * Ruft alle verfügbaren Services von Home Assistant ab.
+     * Fetches all available services from Home Assistant.
      */
     async getServices() {
         if (!this.isReady) return {};
@@ -234,7 +281,7 @@ class HAConnector {
     }
 
     /**
-     * Prüft, ob die Integration (Custom Component) geladen ist.
+     * Checks if the integration (custom component) is loaded.
      * @returns {Promise<{available: boolean, version?: string}>}
      */
     async checkIntegrationAvailable() {

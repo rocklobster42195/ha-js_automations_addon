@@ -20,7 +20,13 @@ class Bridge {
     connect() {
         const { logManager } = this.kernel;
 
-
+        // --- Socket Lifecycle ---
+        // Sync current system status whenever a client connects (e.g. after a restart or reload)
+        this.io.on('connection', async (socket) => {
+            const status = await this.kernel.getSystemStatus();
+            socket.emit('integration_status', status);
+        });
+        
 
         // --- Log Events ---
         // Forwards any log added by managers to the frontend.

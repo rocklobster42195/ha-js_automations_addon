@@ -3,13 +3,13 @@ const path = require('path');
 const config = require('./config');
 
 /**
- * Generiert automatisch TypeScript Definitionen basierend auf dem aktuellen
- * Inhalt des Global Stores.
+ * Automatically generates TypeScript definitions based on the 
+ * current content of the Global Store.
  */
 class StoreTypeGenerator {
     /**
-     * Erzeugt die store.d.ts Datei.
-     * @param {Object} storeData - Der komplette Inhalt der store.json
+     * Generates the store.d.ts file.
+     * @param {Object} storeData - The complete content of store.json
      */
     static generate(storeData) {
         const lines = [
@@ -22,11 +22,11 @@ class StoreTypeGenerator {
         ];
 
         for (const [key, item] of Object.entries(storeData)) {
-            // Wir extrahieren den echten Wert (da wir Metadaten wie 'owner' mit speichern)
+            // Extract the actual value (since we store metadata like 'owner' as well)
             const value = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
             const tsType = this._mapJsonToTs(value);
             
-            // Key-Value Paar zum Interface hinzufügen
+            // Add key-value pair to the interface
             lines.push(`    "${key}": ${tsType};`);
         }
 

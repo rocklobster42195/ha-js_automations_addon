@@ -5,7 +5,7 @@
 
 var editor = null; // Global instance for editor-config.js
 
-// Capture console methods immediately to allow restoring/filtering
+// Capture console methods immediately to allow restoring/filtering.
 const originalConsole = {
     log: console.log,
     debug: console.debug,
@@ -16,13 +16,13 @@ const originalConsole = {
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Initialize Internationalization
+    // 1. Initialize Internationalization.
     await initI18next();
     
-    // 2. Initialize WebSocket Connection
+    // 2. Initialize WebSocket Connection.
     initSocket();
 
-    // 3. Initialize Monaco Editor (AMD Loader)
+    // 3. Initialize Monaco Editor (AMD Loader).
     if (typeof require !== 'undefined') {
         const monacoLang = i18next.language.startsWith('de') ? 'de' : '';
         require.config({ 
@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         require(['vs/editor/editor.main'], () => {
-            // Create Editor Instance
+            // Create Editor Instance.
             editor = monaco.editor.create(document.getElementById('monaco-container'), {
                 model: null, // No model initially, will be set when a tab is opened
                 language: 'javascript',
@@ -42,11 +42,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 suggest: { showWords: false }
             });
 
-            // Restore Word Wrap Setting
+            // Restore Word Wrap Setting.
             const savedWordWrap = localStorage.getItem('js_editor_wordwrap') || 'off';
             editor.updateOptions({ wordWrap: savedWordWrap });
             
-            // Update UI Button for Word Wrap
+            // Update UI Button for Word Wrap.
             const wrapButton = document.getElementById('btn-word-wrap');
             if (wrapButton) {
                 const icon = wrapButton.querySelector('i');
@@ -55,10 +55,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
-            // Register Keyboard Shortcuts (Ctrl+S / Cmd+S)
+            // Register Keyboard Shortcuts (Ctrl+S / Cmd+S).
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
 
-            // Initialize TypeScript Typings for Monaco
+            // Initialize TypeScript Typings for Monaco.
             initMonacoTypeScript();
 
             // --- SETTINGS INTEGRATION ---
@@ -67,15 +67,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 applySystemSettings(e.detail);
             });
             if (window.currentSettings) {
-                // Einstellungen mit einer kleinen Verzögerung anwenden, um sicherzustellen, dass Monaco vollständig bereit ist.
-                // Dies verhindert potenzielle Race Conditions während der Editor-Initialisierung.
+                // Apply settings with a short delay to ensure Monaco is fully ready.
                 setTimeout(() => {
                     applyEditorSettings(window.currentSettings);
                     applySystemSettings(window.currentSettings);
                 }, 100);
             }
 
-            // Add Context Menu Action: Insert Entity
+            // Add Context Menu Action: Insert Entity.
             editor.addAction({
                 id: 'insert-entity',
                 label: i18next.t('modal_insert_entity_title', { defaultValue: 'Insert Entity' }),
@@ -99,36 +98,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             ];
             snippetActions.forEach(s => editor.addAction({ id: s.id, label: i18next.t(s.label), contextMenuGroupId: s.group, contextMenuOrder: s.order, run: () => window.insertCodeSnippet(s.type) }));
 
-            // Initialize Editor Configuration & Layout
+            // Initialize Editor Configuration & Layout.
             configureMonaco();
             loadScripts();
             initResizer();
         });
     }
 
-    // 4. Load Global Data
+    // 4. Load Global Data.
     loadHAMetadata();
     loadMDIIcons();
     loadHAServices();
     initLogs();
 
-    // Settings laden (nach i18n init)
+    // Load settings (after i18n init).
     if (window.loadSettingsData) window.loadSettingsData();
     
-    injectSidebarFooter();
-
-    // Statusbar starten (nachdem Footer existiert und Socket bereit ist)
+    // Start statusbar (after footer exists and socket is ready).
     if (window.statusBar) window.statusBar.init();
 
-    // Initial System Check (Integration Status)
+    // Initial System Check (Integration Status).
     checkSystemStatus();
 });
 
 /**
- * Bestimmt die Monaco-Sprach-ID basierend auf der Dateiendung.
- * Wird verwendet, um den Editor-Modus für .ts-Dateien automatisch umzuschalten.
+ * Determines the Monaco language ID based on the file extension.
  * @param {string} filename 
- * @returns {string} 'typescript' oder 'javascript'
+ * @returns {string} 'typescript' or 'javascript'
  */
 function getLanguageByFilename(filename) {
     if (!filename) return 'javascript';
@@ -162,9 +158,9 @@ function detectLanguageFromContent(content) {
 window.detectLanguageFromContent = detectLanguageFromContent;
 
 /**
- * Generiert das HTML für ein Sprach-Badge (JS/TS).
+ * Generates the HTML for a language badge (JS/TS).
  * @param {string} filename 
- * @returns {string} HTML String
+ * @returns {string} HTML string
  */
 function getLanguageBadge(filename) {
     if (!filename || filename.startsWith('System: ')) return '';
@@ -175,7 +171,7 @@ function getLanguageBadge(filename) {
 }
 window.getLanguageBadge = getLanguageBadge;
 
-// Speicher für Compiler-Fehler pro Datei
+// Storage for compiler errors per file
 const compilerMarkers = new Map();
 
 /**
@@ -226,13 +222,13 @@ async function initMonacoTypeScript() {
         window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());
     }
 
-    // Listener für Compiler-Signale (für präzise Marker im Editor)
+    // Listener for compiler signals (for precise markers in the editor)
     if (window.socket) {
         window.socket.off('compiler_signal').on('compiler_signal', (data) => {
             if (data.type === 'TS_OK') {
                 clearCompilerMarkers(data.filename);
             } else {
-                // Erwartet nun das Objekt-Format direkt vom Socket
+                // Expects object format directly from socket
                 handleCompilerMarker(data.filename, data.line, data.col, data.text, data.code, data.type);
             }
         });
@@ -240,7 +236,7 @@ async function initMonacoTypeScript() {
 }
 
 /**
- * Setzt oder aktualisiert Marker im Monaco Editor basierend auf Compiler-Feedback.
+ * Sets or updates markers in the Monaco editor based on compiler feedback.
  */
 function handleCompilerMarker(filename, line, col, message, code, type) {
     const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
@@ -261,12 +257,12 @@ function handleCompilerMarker(filename, line, col, message, code, type) {
         source: 'TypeScript Compiler'
     });
 
-    // Marker im Editor anwenden
+    // Apply markers to editor
     monaco.editor.setModelMarkers(model, "compiler", markers);
 }
 
 /**
- * Löscht alle Compiler-Marker für eine bestimmte Datei.
+ * Deletes all compiler markers for a specific file.
  */
 function clearCompilerMarkers(filename) {
     const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
@@ -275,31 +271,6 @@ function clearCompilerMarkers(filename) {
     if (model) {
         monaco.editor.setModelMarkers(model, "compiler", []);
     }
-}
-
-function injectSidebarFooter() {
-    const sidebar = document.querySelector('.sidebar');
-    if (!sidebar) return;
-    
-    const footer = document.createElement('div');
-    footer.className = 'sidebar-footer'; // Bestehende Klasse für Styling beibehalten
-    footer.id = 'status-bar'; // ID für globale Steuerung (z.B. Ein-/Ausblenden) hinzufügen
-    footer.innerHTML = `
-        <div class="system-indicators" style="display:flex; gap:10px; align-items:center;">
-            <div class="stat-item" title="Backend Heartbeat">
-                <i id="heartbeat-icon" class="mdi mdi-circle-outline heartbeat-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
-            </div>
-            <div id="integration-status-item" class="stat-item" title="HA Integration Status">
-                <i id="integration-status-icon" class="mdi mdi-circle-outline integration-icon" style="transition: all 0.2s ease-in-out; opacity: 0.3;"></i>
-            </div>
-        </div>
-        <div class="status-slots">
-            <div id="sb-slot1" class="sb-item sb-hidden"></div>
-            <div id="sb-slot2" class="sb-item sb-hidden"></div>
-            <div id="sb-slot3" class="sb-item sb-hidden"></div>
-        </div>
-    `;
-    sidebar.appendChild(footer);
 }
 
 async function checkSystemStatus() {
@@ -322,60 +293,19 @@ async function checkSystemStatus() {
 
 function updateSystemNotifications() {
     const status = window.currentIntegrationStatus;
-    const isSocketConnected = window.socket && window.socket.connected;
+    const isSocketConnected = !!(window.socket && window.socket.connected);
 
-    // Update Icon State
-    const intIcon = document.getElementById('integration-status-icon');
-    const intItem = document.getElementById('integration-status-item');
-    if (intIcon) {
-        // Check if socket is actually connected
-        const isSocketConnected = window.socket && window.socket.connected;
-
-        // The bridge is "running" if:
-        // 1. The status object says so (fetch/socket)
-        // 2. OR we have cached entities (proof that data is flowing)
-        const hasEntities = window.cachedEntities && window.cachedEntities.length > 0;
-        const isRunning = !!(status && (status.is_running || status.available || status.is_connected)) || 
-                          !!(window._lastIntegrationStatus && (window._lastIntegrationStatus.is_connected || window._lastIntegrationStatus.is_running)) ||
-                          hasEntities;
-
-        const isDev = !!(status && status.dev_mode);
-
-        if (!isSocketConnected) {
+    // Update MQTT Status via the Statusbar helper (repurposing the integration icon)
+    if (window.statusBar && status && status.mqtt) {
+        window.statusBar.updateMqttIndicator(status.mqtt);
+    } else if (!isSocketConnected) {
+        const intIcon = document.getElementById('integration-status-icon');
+        const intItem = document.getElementById('integration-status-item');
+        if (intIcon) {
             intIcon.className = 'mdi mdi-circle-outline integration-icon';
             intIcon.style.color = 'var(--danger)';
             intIcon.style.opacity = '1';
-            if (intItem) intItem.title = i18next.t('status.integration_disconnected_socket', { defaultValue: 'HA Integration: Disconnected (Socket)' });
-        } else if (!status && !isRunning) {
-            // Checking status...
-            intIcon.className = 'mdi mdi-circle-outline integration-icon';
-            intIcon.style.color = '#999';
-            intIcon.style.opacity = '0.3';
-            if (intItem) intItem.title = i18next.t('status.integration_checking', { defaultValue: 'HA Integration: Checking...' });
-        } else if (isRunning) {
-            // Fully active and running
-            intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
-            intIcon.style.color = '#fff';
-            intIcon.style.opacity = '1';
-            if (intItem) intItem.title = i18next.t('status.integration_active', { defaultValue: 'HA Integration: Active' });
-        } else if (isDev && !isRunning) {
-            // Dev Mode but not running yet
-            intIcon.className = 'mdi mdi-circle-outline integration-icon';
-            intIcon.style.color = 'var(--warn)';
-            intIcon.style.opacity = '1';
-            if (intItem) intItem.title = i18next.t('status.integration_dev_mode', { defaultValue: 'HA Integration: Developer Mode' });
-        } else if (status.installed) {
-            // Files present but bridge not active (Legacy or Restart required)
-            intIcon.className = 'mdi mdi-circle-slice-8 integration-icon';
-            intIcon.style.color = 'var(--warn)';
-            intIcon.style.opacity = '1';
-            if (intItem) intItem.title = i18next.t('status.integration_legacy_restart', { defaultValue: 'HA Integration: Restart required' });
-        } else {
-            // Missing or not installed
-            intIcon.className = 'mdi mdi-circle-outline integration-icon';
-            intIcon.style.color = '';
-            intIcon.style.opacity = '0.3';
-            if (intItem) intItem.title = 'HA Integration: Not installed';
+            if (intItem) intItem.title = 'Connection lost (Socket)';
         }
     }
 
@@ -401,17 +331,10 @@ function updateSystemNotifications() {
     // This is independent of the socket connection state.
     const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
     if (settingsBtn) {
-        // Reset state first
         settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
 
-        // Fix: Nur anzeigen, wenn Backend mit HA verbunden ist, um Fehlalarme beim Start zu vermeiden.
-        if (!status.dev_mode && status.is_connected) {
-            // Priority: Restart (Lila) > Update/Install (Orange)
-            if (status.needs_restart) {
-                settingsBtn.classList.add('badge-info');
-            } else if (!status.installed || status.needs_update) {
-                settingsBtn.classList.add('badge-warning');
-            }
+        if (window.newVersionInfo && window.newVersionInfo.update_available) {
+            settingsBtn.classList.add('badge-warning');
         }
     }
     

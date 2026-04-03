@@ -6,7 +6,7 @@ class ScriptHeaderParser {
         let content = '';
         try {
             content = fs.readFileSync(filePath, 'utf8');
-            // Standard BOM Entfernung
+            // Standard BOM removal
             content = content.replace(/^\uFEFF/, '');
         } catch (e) { return {}; }
 
@@ -24,11 +24,11 @@ class ScriptHeaderParser {
             expose: null
         };
 
-        // Wir suchen einfach den ersten JSDoc Block am Anfang der Datei
+        // Look for the first JSDoc block at the beginning of the file
         const jsDocMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
         
         if (jsDocMatch) {
-            // Block gefunden -> Parsen
+            // Block found -> Parsing tags
             const lines = jsDocMatch[1].split('\n');
             lines.forEach(line => {
                 const match = line.match(/@(\w+)(?:\s+(.*))?/);
@@ -37,12 +37,12 @@ class ScriptHeaderParser {
                 }
             });
         } else {
-            // Fallback: Alte // @tags Zeilenweise suchen (nur lesen, nicht schreiben)
+            // Fallback: Search for old // @tags line by line (read-only)
             const lines = content.split('\n');
             for (const line of lines) {
                 const match = line.match(/^\s*\/\/\s*@(\w+)(?:\s+(.*))?/);
                 if (match) this._applyMeta(metadata, match[1], match[2]);
-                else if (line.trim() && !line.startsWith('//')) break; // Stop bei Code
+                else if (line.trim() && !line.startsWith('//')) break; // Stop at executable code
             }
         }
 
@@ -74,15 +74,15 @@ class ScriptHeaderParser {
         } catch (e) {
             return;
         }
-        content = content.replace(/^\uFEFF/, ''); // BOM weg
+        content = content.replace(/^\uFEFF/, ''); // Remove BOM
 
-        // 1. Alten Header entfernen
-        // Wir entfernen zuerst den JSDoc Block...
+        // 1. Remove old headers
+        // First remove JSDoc block...
         content = content.replace(/^\s*\/\*\*[\s\S]*?\*\/\s*/, '');
-        // ...und dann alle alten "// @tag" Blöcke am Anfang der Datei.
+        // ...then all legacy "// @tag" blocks at the start of the file.
         content = content.replace(/^(\s*\/\/\s*@.*\r?\n)+/, '');
 
-        // Neuen Header generieren
+        // Generate new header block
         const lines = ['/**'];
         if (meta.name) lines.push(` * @name ${meta.name}`);
         if (meta.icon) lines.push(` * @icon ${meta.icon}`);
@@ -103,7 +103,7 @@ class ScriptHeaderParser {
 
         lines.push(' */');
         
-        // 3. Schreiben
+        // 3. Writing back to file
         const newContent = lines.join('\n') + '\n' + content.trimStart();
         try {
             fs.writeFileSync(filePath, newContent, 'utf8');

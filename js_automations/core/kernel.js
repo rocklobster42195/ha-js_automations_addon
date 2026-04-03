@@ -19,9 +19,9 @@ const DependencyManager =require('./dependency-manager');
 const StateManager = require('./state-manager');
 const StoreManager = require('./store-manager');
 const LogManager = require('./log-manager');
-const IntegrationManager = require('./integration-manager');
 const SettingsManager = require('./settings-manager'); // Static-like module
 const workerManager = require('./worker-manager'); // Singleton module
+const MqttManager = require('./mqtt-manager');
 const EntityManager = require('./entity-manager');
 const CompilerManager = require('./compiler-manager');
 const Bridge = require('./bridge');
@@ -36,9 +36,7 @@ class Kernel extends EventEmitter {
         super();
         // Core properties
         this.io = null;
-        this.hasIntegration = false;
         this.systemOptions = { expert_mode: true }; // Default options
-        this.integrationCheckInterval = null; // For periodic checking
 
         // Manager instances
         this.logManager = null;
@@ -47,46 +45,35 @@ class Kernel extends EventEmitter {
         this.depManager = null;
         this.stateManager = null;
         this.storeManager = null;
-        this.integrationManager = null;
         this.workerManager = null;
         this.entityManager = null;
+        this.mqttManager = null;
         this.compilerManager = null;
         this.bridge = null;
         this.systemService = null;
+        this.lastStats = null; // Cache for the latest system metrics
     }
 
     /**
-     * Gathers status from both the IntegrationManager (file-based) and HAConnector (runtime).
-     * @returns {Promise<object>} A combined status object.
+     * Gathers the current system status regarding HA and MQTT connectivity.
+     * @returns {Promise<object>} A system status object.
      */
-    async getCombinedIntegrationStatus() {
-        // 1. Fetch the HA configuration to get the list of loaded components
-        // 2. Check if the integration's services are functional and get its version
-        const [haConfig, runtimeInfo] = await Promise.all([
-            this.haConnector.getHAConfig(),
-            this.haConnector.checkIntegrationAvailable()
-        ]);
-
-        const loadedComponents = haConfig.components || [];
-        const installedStatus = await this.integrationManager.getStatus(loadedComponents, runtimeInfo.version);
-        
-        // This remains the single source of truth for the kernel's internal logic.
-        this.hasIntegration = runtimeInfo.available;
+    async getSystemStatus() {
         const isConnected = this.haConnector.isReady;
-
-        // Fix: Status-Flags bereinigen, wenn keine Verbindung besteht.
-        // Verhindert False-Positives (Oranger/Lila Punkt) beim Start/Reload, 
-        // da loadedComponents leer sein könnte und somit fälschlich "needs_restart" auslöst.
-        if (!isConnected) {
-            installedStatus.needs_update = false;
-            installedStatus.needs_restart = false;
-        }
+        const mqttSettings = this.settingsManager.getSettings()?.mqtt || {};
+        const mqttStatus = {
+            connected: this.mqttManager ? this.mqttManager.isConnected : false,
+            enabled: mqttSettings.enabled || false
+        };
 
         return {
-            ...installedStatus, // contains { installed, needs_update, version_installed, version_available }
-            is_running: runtimeInfo.available,
+            // These flags are kept for UI compatibility
+            installed: true,
+            active: isConnected && mqttStatus.connected,
             is_connected: isConnected,
-            display_version: runtimeInfo.version || (installedStatus.installed ? installedStatus.version_installed : null)
+            display_version: config.VERSION,
+            mqtt: mqttStatus,
+            stats: this.lastStats // Include stats for immediate status bar population
         };
     }
 
@@ -96,7 +83,7 @@ class Kernel extends EventEmitter {
      */
     boot(io) {
         this.io = io;
-        const { SCRIPTS_DIR, STORAGE_DIR, HA_CONFIG_DIR, DIST_DIR } = config;
+        const { SCRIPTS_DIR, STORAGE_DIR, DIST_DIR } = config;
 
         // Instantiate managers
         try {
@@ -106,14 +93,15 @@ class Kernel extends EventEmitter {
             this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
             this.stateManager = new StateManager(STORAGE_DIR);
             this.storeManager = new StoreManager(STORAGE_DIR);
-            this.integrationManager = new IntegrationManager(HA_CONFIG_DIR);
             this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
+            this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
             this.workerManager = workerManager;
 
-            // FIX: Initialize WorkerManager paths immediately so other managers (like EntityManager) can use them
+            // Initialize WorkerManager paths immediately so other managers can use them.
             this.workerManager.setStorageDir(STORAGE_DIR);
             this.workerManager.setScriptsDir(SCRIPTS_DIR);
             this.workerManager.setStore(this.storeManager);
+            this.workerManager.setMqttManager(this.mqttManager);
 
             // Create SystemService before EntityManager so we can pass it
             this.systemService = new SystemService(config, this.workerManager);
@@ -124,6 +112,7 @@ class Kernel extends EventEmitter {
                 this.stateManager, 
                 this.depManager,
                 this.systemService,
+                this.mqttManager,
                 this.compilerManager
             );
         } catch (err) {
@@ -131,10 +120,10 @@ class Kernel extends EventEmitter {
             process.exit(1); // Exit with error code so the supervisor can restart the container
         }
 
-        // The bridge connects the kernel to the outside world (sockets)
+        // The bridge connects the kernel to the outside world (Socket.io)
         this.bridge = new Bridge(this);
 
-        console.log('✅ Kernel booted successfully. All managers instantiated.');
+        this.logManager.add('debug', 'System', 'Kernel boot completed. All managers initialized.');
         
         // Initial log level
         const currentSettings = this.settingsManager.getSettings();
@@ -200,6 +189,16 @@ class Kernel extends EventEmitter {
         this.compilerManager.on('compiler_signal', (data) => {
             if (this.io) this.io.emit('compiler_signal', data);
         });
+
+        // Forward MQTT status to UI
+        this.mqttManager.on('status_change', async (status) => {
+            if (this.io) {
+                this.io.emit('mqtt_status_changed', status);
+                // UX: Push full system status update so banners and indicators can react immediately
+                const fullStatus = await this.getSystemStatus();
+                this.emit('integration_status_changed', fullStatus);
+            }
+        });
     }
 
     /**
@@ -239,13 +238,14 @@ class Kernel extends EventEmitter {
             };
             scanForTs(SCRIPTS_DIR);
             for (const tsFile of tsFiles) { await this.compilerManager.transpile(tsFile); }
-            if (tsFiles.length > 0) this.logManager.add('info', 'System', `Initial compilation pass completed. Checked ${tsFiles.length} files.`);
+            if (tsFiles.length > 0) this.logManager.add('debug', 'System', `Initial compilation pass completed. Checked ${tsFiles.length} files.`);
 
             if (this.systemService.isSafeMode) {
                 this.logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');
             }
 
             await this.haConnector.connect();
+            await this.mqttManager.connect();
 
             // Update System Language from HA Config
             const haConfig = await this.haConnector.getHAConfig();
@@ -253,16 +253,7 @@ class Kernel extends EventEmitter {
                 this.workerManager.setSystemLanguage(haConfig.language);
             }
 
-            // Initial check for the integration
-            const status = await this.getCombinedIntegrationStatus();
-            if (status.is_running) {
-                this.logManager.add('info', 'System', '✅ Native Integration (js_automations) detected on startup.');
-            } else if (status.installed) {
-                this.logManager.add('warn', 'System', '⚠️ Native Integration is installed but not running. Will check periodically.');
-                this._checkForIntegrationPeriodically();
-            } else {
-                 this.logManager.add('warn', 'System', '⚠️ Native Integration is not installed. Please install it from the settings.');
-            }
+            const status = await this.getSystemStatus();
             this.emit('integration_status_changed', status);
 
             this.workerManager.setConnector(this.haConnector);
@@ -270,7 +261,7 @@ class Kernel extends EventEmitter {
             const currentSettings = this.settingsManager.getSettings();
             this._updateWorkerManagerSettings(currentSettings);
 
-            await this.entityManager.createExposedEntities(this.hasIntegration);
+            await this.entityManager.createExposedEntities();
             
             this._setupSystemEventListeners();
 
@@ -295,7 +286,7 @@ class Kernel extends EventEmitter {
 
             // Start periodic cleanup (every hour)
             setInterval(() => this.performGlobalCleanup(), 3600000);
-
+            this.logManager.add('debug', 'System', 'Kernel background maintenance loops started.');
         } catch (err) {
             console.error(err);
             this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
@@ -307,8 +298,8 @@ class Kernel extends EventEmitter {
      * and removes orphaned entries. Triggered hourly.
      */
     async performGlobalCleanup() {
-        if (!this.hasIntegration) {
-            this.logManager.add('debug', 'System', '[Kernel] Skipping cleanup: Native integration not running.');
+        if (!this.haConnector.isReady || !this.mqttManager.isConnected) {
+            this.logManager.add('debug', 'System', '[Kernel] Skipping cleanup: HA or MQTT not connected.');
             return;
         }
 
@@ -334,47 +325,6 @@ class Kernel extends EventEmitter {
     }
 
     /**
-     * Periodically checks for the HA integration if it wasn't found.
-     * @private
-     */
-    _checkForIntegrationPeriodically() {
-        // Prevent multiple intervals from running
-        if (this.integrationCheckInterval) {
-            return;
-        }
-
-        this.logManager.add('info', 'System', 'Starting periodic check for native integration every 30 seconds...');
-        
-        this.integrationCheckInterval = setInterval(async () => {
-            // Stop if it has been found in the meantime
-            if (this.hasIntegration) {
-                clearInterval(this.integrationCheckInterval);
-                this.integrationCheckInterval = null;
-                return;
-            }
-
-            const status = await this.getCombinedIntegrationStatus();
-            if (status.is_running) {
-                clearInterval(this.integrationCheckInterval);
-                this.integrationCheckInterval = null;
-                
-                this.logManager.add('info', 'System', '✅ Native Integration is now available.');
-                this.emit('integration_status_changed', status);
-                
-                // Trigger entity recreation/update now that we have the integration.
-                // This is crucial to "upgrade" entities from legacy to native mode.
-                await this.entityManager.createExposedEntities(this.hasIntegration);
-                await this.workerManager.republishNativeEntities();
-
-                // Now that the integration is running, perform the cleanup that was skipped at startup.
-                await this.performGlobalCleanup();
-            }
-            // If not available, the interval continues silently.
-        }, 30000);
-    }
-
-
-    /**
      * Sets up event listeners for core system events (HA, workers).
      * @private
      */
@@ -387,6 +337,10 @@ class Kernel extends EventEmitter {
                 // Forward to UI for Status Bar
                 this.emit('ha_state_changed', { entity_id, new_state });
             }
+        });
+
+        this.systemService.on('system_stats_updated', (stats) => {
+            this.lastStats = stats;
         });
 
         // Worker lifecycle events
@@ -415,7 +369,10 @@ class Kernel extends EventEmitter {
                 this.stateManager.saveScriptStopped(d.filename);
             }
         }
-        this.logManager.add(d.type || 'info', 'System', `${path.basename(d.filename)} ${d.reason}`);
+        
+        // UX: Log normal exits as DEBUG to keep the System log clean.
+        const level = d.type === 'success' ? 'debug' : (d.type || 'info');
+        this.logManager.add(level, 'System', `${path.basename(d.filename)} ${d.reason}`);
         this.emit('status_update');
     }
 
@@ -441,18 +398,11 @@ class Kernel extends EventEmitter {
                     this.workerManager.setSystemLanguage(haConfig.language);
                 }
 
-                // Re-Check Integration & Re-Register Entities
-                const status = await this.getCombinedIntegrationStatus();
+                // Notify UI
+                const status = await this.getSystemStatus();
                 this.emit('integration_status_changed', status);
 
-                if (status.is_running) {
-                    this.logManager.add('info', 'System', '✅ Native Integration re-confirmed after reconnection.');
-                } else {
-                    this.logManager.add('warn', 'System', '⚠️ Native Integration still not found after reconnection. Starting periodic check.');
-                    this._checkForIntegrationPeriodically(); // Ensure the checker is running
-                }
-
-                await this.entityManager.createExposedEntities(this.hasIntegration, true);
+                await this.entityManager.createExposedEntities(true);
                 await this.workerManager.republishNativeEntities(false);
             } catch (e) {
                 console.error("❌ Reconnection failed:", e.message);
@@ -466,9 +416,6 @@ class Kernel extends EventEmitter {
      */
     shutdown() {
         console.log('🛑 Kernel shutting down...');
-        if (this.integrationCheckInterval) {
-            clearInterval(this.integrationCheckInterval);
-        }
         if (this.workerManager) this.workerManager.shutdown();
         if (this.haConnector) this.haConnector.disconnect();
         this.emit('shutdown');

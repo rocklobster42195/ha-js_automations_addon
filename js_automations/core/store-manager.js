@@ -44,8 +44,8 @@ class StoreManager extends EventEmitter {
     get(key) {
         if (this.data[key]) {
             this.data[key].accessed = new Date().toISOString();
-            // Wir speichern nicht bei jedem Lesezugriff sofort (Performance), 
-            // sondern lassen es im RAM. save() passiert beim nächsten Setzen.
+            // We don't save immediately on read for performance reasons.
+            // Data stays in RAM and save() is triggered on the next write operation.
             return this.data[key].value;
         }
         return null;
@@ -70,7 +70,7 @@ class StoreManager extends EventEmitter {
         this.save();
     }
 
-    /** Löscht alle Variablen, die von einem bestimmten Skript erstellt wurden */
+    /** Deletes all variables created by a specific script. */
     pruneByOwner(scriptName) {
         let count = 0;
         for (let key in this.data) {

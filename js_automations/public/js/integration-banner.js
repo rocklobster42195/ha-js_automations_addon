@@ -55,19 +55,16 @@
         let description = '';
         let buttonText = '';
 
-        if (type === 'install') {
-            title = t('settings.system.integration_missing', 'Integration missing');
-            description = t('settings.system.integration_missing_desc', 'The custom component is required for native entities.');
-            buttonText = t('settings.system.integration_install_btn', 'Install Integration');
-            icon.className = 'mdi mdi-package-variant';
-        } else if (type === 'update') {
-            title = t('settings.system.integration_update_available', 'Update available');
-            description = t('settings.system.integration_update_desc', 'Installed: v{{installed}} / Available: v{{available}}', {
-                installed: data.version_installed,
-                available: data.version_available
-            });
-            buttonText = t('settings.system.integration_update_btn', 'Update to v{{version}}', { version: data.version_available });
-            icon.className = 'mdi mdi-arrow-up-bold-circle-outline';
+        if (type === 'mqtt_disabled') {
+            title = t('settings.system.mqtt_banner_disabled_title', 'MQTT disabled');
+            description = t('settings.system.mqtt_banner_disabled_desc', 'Enable MQTT to expose scripts to Home Assistant.');
+            buttonText = t('settings.system.mqtt_configure_btn', 'Configure MQTT');
+            icon.className = 'mdi mdi-transmission-tower-off';
+        } else if (type === 'mqtt_error') {
+            title = t('settings.system.mqtt_banner_disconnected_title', 'MQTT Disconnected');
+            description = t('settings.system.mqtt_banner_disconnected_desc', 'Connection to broker lost.');
+            buttonText = t('settings.system.mqtt_configure_btn', 'Configure MQTT');
+            icon.className = 'mdi mdi-alert-circle-outline';
         }
 
         msg.innerHTML = `
@@ -99,7 +96,8 @@
         btn.onclick = (e) => {
             e.stopPropagation(); // prevent banner click
             if (typeof openSettingsTab === 'function') {
-                openSettingsTab('installer');
+                const target = type.startsWith('mqtt') ? 'mqtt' : 'installer';
+                openSettingsTab(target);
             }
         };
         
@@ -134,7 +132,7 @@
 
         banner.onclick = () => {
              if (typeof openSettingsTab === 'function') {
-                openSettingsTab('installer');
+                openSettingsTab('mqtt');
             }
         };
 
@@ -174,18 +172,23 @@
             return;
         }
 
-        // Hide banner in Dev-Mode or if a restart is already pending
-        const isRestartPending = sessionStorage.getItem('jsa_integration_restart_pending') === 'true';
-        if (status.dev_mode || isRestartPending) {
-            hideBanner();
-            return;
+        const mqttStatus = status.mqtt || { enabled: false, connected: false };
+        
+        let type = null;
+        
+        // Priority 1: MQTT Error (Enabled but not connected)
+        if (mqttStatus.enabled && !mqttStatus.connected) {
+            type = 'mqtt_error';
+        } 
+        // Priority 2: MQTT Disabled (Only warn if scripts actually use @expose)
+        else if (!mqttStatus.enabled) {
+            const hasExposedScripts = Array.isArray(window.allScripts) && window.allScripts.some(s => s.expose);
+            if (hasExposedScripts) {
+                type = 'mqtt_disabled';
+            }
         }
 
-        // Condition to show banner: not installed OR needs update
-        const needsBanner = !status.installed || status.needs_update;
-
-        if (needsBanner) {
-            const type = !status.installed ? 'install' : 'update';
+        if (type) {
             showBanner(type, status);
         } else {
             hideBanner();

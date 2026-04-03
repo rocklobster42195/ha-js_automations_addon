@@ -74,33 +74,35 @@ body.expert-mode .nav-logo { color: #2e7d32; } /* Expert Mode: Dark Green */
 }
 .version-tag:empty { display: none; }
 
-/* --- SIDEBAR FOOTER (Expert Mode) --- */
-.sidebar-footer {
-    padding: 4px 10px;
-    background: #0e0e0e;
+/* --- SIDEBAR FOOTER / STATUS BAR --- */
+.sidebar-footer, #status-bar {
+    padding: 0 8px;
+    background: #282a36; /* Reverted to working Dracula background */
     border-top: 1px solid var(--border);
     font-family: monospace;
     font-size: 0.85rem;
     color: #999;
-    display: none;
+    display: flex;
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
-    min-height: 30px;
+    min-height: 24px;
 }
-body.expert-mode .sidebar-footer { display: flex; }
 
 .status-slots {
     display: flex;
     gap: 10px;
     margin-left: auto;
     align-items: center;
+    justify-content: flex-end;
+    flex: 1;
+    min-width: 0;
 }
 
 /* --- STATUS BAR SLOTS --- */
 #status-bar {
-    height: 22px; 
-    background: #282a36; 
+    height: 30px; 
+    background: #0e0e0e; 
     color: #fff; 
     display: flex; 
     align-items: center; 
@@ -113,6 +115,13 @@ body.expert-mode .sidebar-footer { display: flex; }
     justify-content: space-between; 
     border-top: 1px solid #333;
     flex-shrink: 0;
+}
+
+.status-left {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
 }
 
 .sb-item {

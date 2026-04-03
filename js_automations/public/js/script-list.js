@@ -49,12 +49,12 @@ function clearSearch() {
 }
 
 /**
- * UI RENDERING: Groups scripts by Label and remembers collapse state.
+ * UI RENDERING: Groups scripts by Label and persists collapse state.
  */
 function renderScripts(scripts, updateGlobal = true) {
     if (updateGlobal) allScripts = scripts;
 
-    // Toolbar des aktiven Tabs aktualisieren (falls Statusänderung)
+    // Update toolbar of the active tab if status has changed.
     if (typeof activeTabFilename !== 'undefined' && activeTabFilename && activeTabFilename !== 'System: Store') {
         const tab = typeof openTabs !== 'undefined' ? openTabs.find(t => t.filename === activeTabFilename) : null;
         if (tab && typeof updateToolbarUI === 'function') {
@@ -62,7 +62,7 @@ function renderScripts(scripts, updateGlobal = true) {
         }
     }
 
-    // Tabs aktualisieren (für Status-Farben)
+    // Refresh tabs for status colors.
     if (typeof renderTabs === 'function') renderTabs();
 
     const list = document.getElementById('script-list');
@@ -78,7 +78,7 @@ function renderScripts(scripts, updateGlobal = true) {
         return;
     }
 
-    // 1. Gruppieren nach Label
+    // 1. Group by Label.
     const groups = {};
     const groupDisplayNames = {};
     const NO_GROUP = '___none___';
@@ -97,7 +97,7 @@ function renderScripts(scripts, updateGlobal = true) {
             groups[normalizedKey] = [];
             groupDisplayNames[normalizedKey] = groupKey;
         } else {
-            // Falls der bisherige Anzeigename nur Kleinbuchstaben enthält, der neue aber nicht -> Update auf "schönere" Schreibweise
+            // Update to a "prettier" display name if available.
             if (groupDisplayNames[normalizedKey] === normalizedKey && groupKey !== normalizedKey) {
                 groupDisplayNames[normalizedKey] = groupKey;
             }
@@ -105,25 +105,25 @@ function renderScripts(scripts, updateGlobal = true) {
         groups[normalizedKey].push(script);
     });
 
-    // 2. Gruppen sortieren (Alphabetisch, "Nicht zugeordnet" ganz unten)
+    // 2. Sort groups (alphabetically, with special groups at the bottom).
     const sortedKeys = Object.keys(groups).sort((a, b) => {
-        if (a === LIB_GROUP) return 1; // Libraries immer ganz unten
+        if (a === LIB_GROUP) return 1; // Libraries always at the bottom.
         if (b === LIB_GROUP) return -1;
         if (a === NO_GROUP) return 1;
         if (b === NO_GROUP) return -1;
         return a.localeCompare(b);
     });
 
-    // 3. Rendern der Sektionen
+    // 3. Render sections.
     sortedKeys.forEach(key => {
         const groupScripts = groups[key];
         const groupDiv = document.createElement('div');
         groupDiv.className = 'script-group';
 
-        // Einklapp-Zustand prüfen, bei Suche immer ausklappen
+        // Check collapse state; always expand if search is active.
         const isCollapsed = isSearchActive ? false : collapsedSections.some(s => s.toLowerCase() === key.toLowerCase());
 
-        // --- HEADER ERSTELLEN ---
+        // --- CREATE HEADER ---
         let headerName = key === NO_GROUP ? i18next.t('group_none') : (groupDisplayNames[key] || key);
         let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
         let iconStyle = '';
@@ -154,12 +154,12 @@ function renderScripts(scripts, updateGlobal = true) {
 
         groupDiv.appendChild(header);
 
-        // --- CONTAINER FÜR DIE ZEILEN ---
+        // --- CONTAINER FOR ROWS ---
         const contentDiv = document.createElement('div');
         contentDiv.className = 'group-content';
         contentDiv.style.display = isCollapsed ? 'none' : 'block';
 
-        // Event-Listener zum Einklappen & Speichern
+        // Event listener for collapsing and persistence.
         header.onclick = () => {
             if (isSearchActive) return;
             const nowHidden = contentDiv.style.display !== 'none';
@@ -175,7 +175,7 @@ function renderScripts(scripts, updateGlobal = true) {
             localStorage.setItem('js_collapsed_sections', JSON.stringify(collapsedSections));
         };
 
-        // Skripte innerhalb der Gruppe sortieren
+        // Sort scripts within the group.
         groupScripts.sort((a, b) => {
             const score = (s) => (s.status === 'error' ? 2 : (s.running ? 1 : 0));
             const scoreDiff = score(b) - score(a);
@@ -183,13 +183,17 @@ function renderScripts(scripts, updateGlobal = true) {
             return a.name.localeCompare(b.name);
         });
 
-        // --- ZEILEN RENDERN ---
+        // --- RENDER ROWS ---
         groupScripts.forEach(s => {
             const row = document.createElement('div');
             row.className = 'script-row';
             
+            // Check for MQTT configuration warning
+            const mqttStatus = window.currentIntegrationStatus?.mqtt;
+            const needsMqtt = s.expose && (!mqttStatus || !mqttStatus.connected);
+            if (needsMqtt) row.classList.add('needs-mqtt');
+
             row.title = buildScriptTooltip(s);
-            
             row.onclick = () => openOrSwitchToTab(s.filename, s.icon);
 
             let icon = s.icon ? s.icon.split(':').pop() : 'script-text';
@@ -200,7 +204,7 @@ function renderScripts(scripts, updateGlobal = true) {
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
             const badge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
-            // Libraries sind passiv -> Keine Controls
+            // Libraries are passive; hide most controls.
             const isLib = key === LIB_GROUP;
             const controlsHtml = isLib ? 
                 `<span style="font-size:0.75rem; color:#666; font-style:italic; margin-right:10px;">${i18next.t('status_passive_library')}</span>
@@ -239,7 +243,7 @@ function buildScriptTooltip(s) {
     if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
     if (s.last_started) lines.push(`Started: ${new Date(s.last_started).toLocaleString()}`);
     
-    if (s.description) lines.push(`\n${s.description}`);
+    if (s.description) lines.push(`\nDescription: ${s.description}`);
     return lines.join('\n');
 }
 
@@ -247,7 +251,7 @@ function updateScriptStats(statsMap) {
     if (!allScripts) return;
     let changed = false;
     
-    // Daten im lokalen Array aktualisieren
+    // Update data in local array.
     for (const [filename, data] of Object.entries(statsMap)) {
         const script = allScripts.find(s => s.filename === filename);
         if (script) {
@@ -256,7 +260,7 @@ function updateScriptStats(statsMap) {
         }
     }
     
-    // Nur DOM-Attribute aktualisieren (kein Re-Render)
+    // Only update DOM attributes (no full re-render).
     if (changed && document.body.classList.contains('expert-mode')) {
         const rows = document.querySelectorAll('.script-row');
         rows.forEach(row => {
@@ -281,7 +285,7 @@ function updateIconPreview(id, s) {
 }
 
 async function createNewScript() {
-    // Redirect to Wizard
+    // Redirect to Wizard.
     if (window.openCreationWizard) window.openCreationWizard('create');
 }
 
@@ -297,12 +301,12 @@ async function duplicateScript(filename) {
     if (!script) return;
 
     let code = '';
-    // Content laden
+    // Fetch script content.
     try {
         const res = await apiFetch(`api/scripts/${filename}/content`);
         if (res.ok) {
             const data = await res.json();
-            // Header entfernen (alles bis zum ersten */)
+            // Strip header (everything up to first */).
             code = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
         }
     } catch (e) {
@@ -316,10 +320,10 @@ async function duplicateScript(filename) {
 async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }
 async function restartScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'restart' }) }); }
 async function deleteScript(f) {
-    // Check dependencies (Libraries)
+    // Check dependencies (Libraries).
     const dependents = allScripts.filter(s => {
         if (!s.includes || !Array.isArray(s.includes)) return false;
-        // Check exact match or without .js extension (users might write @include lib or @include lib.js)
+        // Check exact match or without extension.
         return s.includes.some(inc => inc === f || inc === f.replace(/\.(js|ts)$/, ''));
     });
 
@@ -337,7 +341,7 @@ async function deleteScript(f) {
     }
 
     await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });
-    // openTabs is global from tab-manager.js
+    // openTabs is global from tab-manager.js.
     if (typeof openTabs !== 'undefined') {
         const t = openTabs.find(t => t.filename === f);
         if (t) t.isDirty = false;
@@ -345,7 +349,7 @@ async function deleteScript(f) {
     }
     loadScripts();
     
-    // NEU: IntelliSense aktualisieren (falls Library gelöscht wurde)
+    // Update IntelliSense if a library was deleted.
     if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
 }
 

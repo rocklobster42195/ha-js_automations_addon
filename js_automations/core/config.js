@@ -57,6 +57,6 @@ module.exports = {
     PORT: process.env.PORT || 3000,
     VERSION: packageJson.version,
     ensureDirectories,
-    // Centralized path for HA configuration, used by IntegrationManager
+    // Centralized path for HA configuration
     HA_CONFIG_DIR: IS_ADDON ? (fs.existsSync('/homeassistant') ? '/homeassistant' : '/config') : path.resolve(__dirname, '../../ha_config_mock'),
 };
