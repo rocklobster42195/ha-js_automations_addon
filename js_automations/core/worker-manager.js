@@ -36,6 +36,7 @@ class WorkerManager extends EventEmitter {
         this.activeRunEntities = new Map(); // filename -> Set<entityId> (Mark-and-Sweep for current run)
         this.protectedEntities = new Map(); // filename -> Set<entityId> (from @expose headers)
         this.scriptEntityMap = new Map(); // filename -> Set<entityId> (RAM Cache)
+        this.entityIdAliases = new Map(); // haEntityId -> userEntityId (for device: true entities)
         this.registryPath = '';
         this.saveRegistryTimer = null;
         this.pendingAsks = new Map(); // correlationId -> worker (for ha.ask())
@@ -209,6 +210,7 @@ class WorkerManager extends EventEmitter {
         this.loadRegistry();
         this.saveRegistry(); // Ensure file exists even if empty
         this.ensureApiDefinitions();
+        this.ensureTsConfig();
     }
 
     /**
@@ -226,6 +228,56 @@ class WorkerManager extends EventEmitter {
             }
         } catch (e) {
             this.emit('log', { source: 'System', message: `Failed to sync ha-api.d.ts: ${e.message}`, level: 'error' });
+        }
+    }
+
+    /**
+     * Ensures that a modern tsconfig.json exists in the storage directory
+     * to avoid deprecation warnings regarding legacy module resolution.
+     */
+    ensureTsConfig() {
+        if (!this.storageDir) return;
+        const targetPath = path.join(this.storageDir, 'tsconfig.json');
+        
+        if (fs.existsSync(targetPath)) {
+            try {
+                const config = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+                const resolution = config.compilerOptions?.moduleResolution?.toLowerCase();
+                
+                // Automatically upgrade deprecated "node" or "node10" settings
+                if (resolution === 'node' || resolution === 'node10') {
+                    config.compilerOptions.moduleResolution = 'Node16';
+                    config.compilerOptions.module = 'Node16';
+                    fs.writeFileSync(targetPath, JSON.stringify(config, null, 2));
+                    this.emit('log', { source: 'System', message: 'Upgraded deprecated moduleResolution in tsconfig.json to Node16.', level: 'info' });
+                }
+            } catch (e) {
+                // Silently skip if the file is invalid; the user might be editing it
+            }
+            return;
+        }
+
+        const defaultConfig = {
+            compilerOptions: {
+                target: "ESNext",
+                module: "Node16",
+                moduleResolution: "Node16",
+                allowJs: true,
+                outDir: "dist",
+                strict: false,
+                esModuleInterop: true,
+                skipLibCheck: true,
+                forceConsistentCasingInFileNames: true,
+                sourceMap: true
+            },
+            include: ["**/*.ts", "ha-api.d.ts"],
+            exclude: ["node_modules", "dist"]
+        };
+
+        try {
+            fs.writeFileSync(targetPath, JSON.stringify(defaultConfig, null, 2));
+        } catch (e) {
+            this.emit('log', { source: 'System', message: `Failed to create tsconfig.json: ${e.message}`, level: 'error' });
         }
     }
     setScriptsDir(dir) { this.scriptsDir = dir; }
@@ -265,12 +317,10 @@ class WorkerManager extends EventEmitter {
 
             const domain = entityId.split('.')[0];
             const derivedObjectId = entityId.split('.').slice(1).join('.');
-            // Clear discovery topics
-            this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
-            if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
-                this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
-            }
-            // Clear retained state/attributes topic (empty string = truly deletes the retained message)
+            // One exact topic: object_id for ha.register, unique_id for @expose, derivedObjectId as fallback
+            const topicId = payload?.object_id || payload?.unique_id || derivedObjectId;
+            this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${topicId}/config`, '', { retain: true });
+            // Clear retained state/attributes topic
             const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
             this.mqttManager.publish(stateTopic, '', { retain: true });
         }
@@ -387,11 +437,9 @@ class WorkerManager extends EventEmitter {
                 if (this.mqttManager && this.mqttManager.isConnected) {
                     const domain = entityId.split('.')[0];
                     const derivedObjectId = entityId.split('.').slice(1).join('.');
-                    // Clear discovery topics
-                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
-                    if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
-                        this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
-                    }
+                    // One exact topic: object_id for ha.register, unique_id for @expose, derivedObjectId as fallback
+                    const topicId = payload?.object_id || payload?.unique_id || derivedObjectId;
+                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${topicId}/config`, '', { retain: true });
                     // Clear retained state/attributes topic
                     const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
                     this.mqttManager.publish(stateTopic, '', { retain: true });
@@ -414,9 +462,9 @@ class WorkerManager extends EventEmitter {
      * @param {string} filename The script filename.
      * @private
      */
-    async _sweepOrphanedDynamicEntities(filename) {
-        // If the script was stopped or restarted in the meantime, we skip the sweep for this specific run
-        if (!this.workers.has(filename)) return;
+    async _sweepOrphanedDynamicEntities(filename, { skipWorkerCheck = false } = {}) {
+        // Skip if the script is no longer running — unless this sweep was triggered by the exit itself.
+        if (!skipWorkerCheck && !this.workers.has(filename)) return;
 
         const knownEntities = this.scriptEntityMap.get(filename);
         const currentRunEntities = this.activeRunEntities.get(filename);
@@ -437,11 +485,9 @@ class WorkerManager extends EventEmitter {
                 if (this.mqttManager && this.mqttManager.isConnected) {
                     const domain = entityId.split('.')[0];
                     const derivedObjectId = entityId.split('.').slice(1).join('.');
-                    // Clear discovery topics
-                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
-                    if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
-                        this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
-                    }
+                    // One exact topic: object_id for ha.register, unique_id for @expose, derivedObjectId as fallback
+                    const topicId = payload?.object_id || payload?.unique_id || derivedObjectId;
+                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${topicId}/config`, '', { retain: true });
                     // Clear retained state/attributes topic
                     const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
                     this.mqttManager.publish(stateTopic, '', { retain: true });
@@ -551,7 +597,17 @@ class WorkerManager extends EventEmitter {
             workerData: {
                 ...scriptMeta,
                 path: executionPath,
-                initialStates: this.haConnector ? this.haConnector.states : {},
+                initialStates: (() => {
+                    const raw = this.haConnector ? this.haConnector.states : {};
+                    // Add alias entries so ha.getState(userEntityId) works from the first line
+                    const states = { ...raw };
+                    for (const [haId, userId] of this.entityIdAliases.entries()) {
+                        if (states[haId] && !states[userId]) {
+                            states[userId] = { ...states[haId], entity_id: userId };
+                        }
+                    }
+                    return states;
+                })(),
                 initialStore: initialStoreValues,
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info',
@@ -682,6 +738,12 @@ class WorkerManager extends EventEmitter {
                 this.stopReasons.delete(scriptMeta.filename);
                 
                 this.emit('script_exit', { filename: scriptMeta.filename, reason, type, meta: scriptMeta });
+
+                // If the script exited on its own (not a restart), run the sweep immediately.
+                // For restarts, the 10s sweep scheduled by startScript handles cleanup.
+                if (reason !== 'restarting') {
+                    this._sweepOrphanedDynamicEntities(scriptMeta.filename, { skipWorkerCheck: true });
+                }
             }
         });
 
@@ -706,20 +768,36 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
+     * Registers a mapping between HA's generated entity_id and the user's entity_id.
+     * Needed when device: true causes HA to prefix the entity_id with the device name.
+     */
+    setEntityIdAlias(haEntityId, userEntityId) {
+        if (haEntityId && userEntityId && haEntityId !== userEntityId) {
+            this.entityIdAliases.set(haEntityId, userEntityId);
+            this.emit('log', { source: 'System', message: `[WorkerManager] Entity alias registered: ${haEntityId} → ${userEntityId}`, level: 'debug' });
+        }
+    }
+
+    /**
      * Routes state changes from HA to interested workers.
+     * If HA generated a different entity_id (device prefix), dispatches under the user's entity_id.
      */
     dispatchStateChange(entityId, newState, oldState) {
+        // Resolve alias: if HA uses a device-prefixed entity_id, translate to user's entity_id
+        const userEntityId = this.entityIdAliases.get(entityId) || entityId;
+
         for (const [filename, patterns] of this.subscriptions) {
             const worker = this.workers.get(filename);
             if (!worker) continue;
 
-            const isMatched = patterns.some(p => this.matches(entityId, p));
+            // Match and fire callbacks using the user's entity_id so ha.on('sensor.foo') works
+            const isMatched = patterns.some(p => this.matches(userEntityId, p));
             if (isMatched) {
-                worker.postMessage({ type: 'ha_event', entity_id: entityId, state: newState, old_state: oldState });
+                worker.postMessage({ type: 'ha_event', entity_id: userEntityId, state: newState, old_state: oldState });
             }
-            
-            // Always sync the local cache of every worker
-            worker.postMessage({ type: 'state_update', entity_id: entityId, state: newState });
+
+            // Sync cache under user's entity_id (so ha.getState, ha.states work correctly)
+            worker.postMessage({ type: 'state_update', entity_id: userEntityId, state: newState });
         }
     }
 

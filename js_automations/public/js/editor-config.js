@@ -404,6 +404,8 @@ async function configureMonaco() {
     // Sync JS options with TS settings from app.js
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ 
         target: monaco.languages.typescript.ScriptTarget.ES2020, 
+        module: monaco.languages.typescript.ModuleKind.Node16,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Node16,
         allowNonTsExtensions: true, 
         checkJs: true, 
         allowJs: true,

@@ -173,8 +173,8 @@ const compilerMarkers = new Map();
 async function initMonacoTypeScript() {
     const compilerOptions = {
         target: monaco.languages.typescript.ScriptTarget.ES2020,
-        module: monaco.languages.typescript.ModuleKind.CommonJS,
-        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        module: monaco.languages.typescript.ModuleKind.Node16,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Node16,
         allowNonTsExtensions: true,
         noEmit: true,
         strict: true,
