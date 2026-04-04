@@ -132,7 +132,8 @@
       "system": "System",
       "editor": "Editor",
       "statusbar": "Statusleiste",
-      "danger": "Gefahrenzone"
+      "danger": "Gefahrenzone",
+      "mqtt": "MQTT Broker"
     },
     "general": {
       "language": "Sprache",
@@ -142,17 +143,22 @@
       "expert_mode": "Expertenmodus",
       "expert_mode_desc": "Zeigt fortgeschrittene Optionen und technische Details.",
       "confirm_delete": "Löschen bestätigen",
-      "confirm_delete_desc": "Zeigt einen Bestätigungsdialog vor dem Löschen von Skripten."
+      "confirm_delete_desc": "Zeigt einen Bestätigungsdialog vor dem Löschen von Skripten.",
+      "language_option_de": "Deutsch",
+      "language_option_en": "English"
     },
     "editor": {
       "show_toolbar": "Toolbar anzeigen",
       "font_size": "Schriftgröße",
       "word_wrap": "Zeilenumbruch",
       "word_wrap_desc": "Der Zeilenumbruch kann auch über die Toolbar gesteuert werden.",
-      "minimap": "Minimap anzeigen"
+      "minimap": "Minimap anzeigen",
+      "word_wrap_on": "An",
+      "word_wrap_off": "Aus"
     },
     "statusbar": {
       "show_statusbar": "Statusleiste anzeigen",
+      "show_statusbar_desc": "Zeigt die Statusleiste am unteren Rand der Anwendung an.",
       "none": "Leer",
       "cpu_usage": "CPU Auslastung",
       "ram_usage": "RAM Auslastung",
@@ -170,7 +176,13 @@
       "host": "Broker Host",
       "port": "Port",
       "username": "Benutzername",
-      "password": "Passwort"
+      "password": "Passwort",
+      "mqtt_test_btn": "Verbindung testen",
+      "mqtt_test_success": "Verbindung erfolgreich!",
+      "mqtt_test_error": "Verbindung fehlgeschlagen: {{error}}",
+      "mqtt_autodetect_btn": "Einstellungen aus HA übernehmen",
+      "mqtt_autodetect_success": "MQTT-Einstellungen erfolgreich aus Home Assistant übernommen.",
+      "mqtt_autodetect_not_found": "Keine MQTT-Konfiguration in Home Assistant gefunden."
     },
     "system": {
       "title": "System-Einstellungen",
@@ -182,10 +194,8 @@
       "mqtt_disconnected": "Verbindung zum MQTT Broker unterbrochen",
       "mqtt_disabled": "MQTT ist in den Einstellungen deaktiviert",
       "mqtt_error": "MQTT Fehler: {{error}}",
-      "mqtt_test_btn": "Verbindung testen",
       "mqtt_test_success": "Verbindung erfolgreich!",
       "mqtt_test_error": "Verbindung fehlgeschlagen: {{error}}",
-      "mqtt_autodetect_btn": "Einstellungen aus HA übernehmen",
       "mqtt_autodetect_success": "MQTT-Einstellungen erfolgreich aus Home Assistant übernommen.",
       "mqtt_autodetect_not_found": "Keine MQTT-Konfiguration in Home Assistant gefunden.",
       "mqtt_warning_expose": "Skript verwendet @expose, aber MQTT ist nicht aktiv.",

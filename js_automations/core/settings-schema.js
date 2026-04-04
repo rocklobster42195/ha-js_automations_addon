@@ -17,11 +17,12 @@ module.exports = [
             { 
                 key: 'ui_language', 
                 label: 'settings.general.ui_language', 
+                description: 'settings.general.ui_language_desc',
                 type: 'select', 
                 options: [
-                    { value: 'auto', label: 'settings.general.language_auto' }, 
-                    { value: 'de', label: 'Deutsch' }, 
-                    { value: 'en', label: 'English' }
+                    { value: 'auto', label: 'settings.general.language_auto' },
+                    { value: 'de', label: 'settings.general.language_option_de' },
+                    { value: 'en', label: 'settings.general.language_option_en' }
                 ], 
                 default: 'auto' 
             },
@@ -60,8 +61,8 @@ module.exports = [
                 label: 'settings.editor.word_wrap', 
                 type: 'select', 
                 options: [
-                    { value: 'on', label: 'An' }, 
-                    { value: 'off', label: 'Aus' }
+                    { value: 'on', label: 'settings.editor.word_wrap_on' },
+                    { value: 'off', label: 'settings.editor.word_wrap_off' }
                 ], 
                 default: 'on',
                 hidden:true    
@@ -102,7 +103,7 @@ module.exports = [
                     { value: 'none', label: 'settings.statusbar.none' }, 
                     { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
                     { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
-                    { value: 'custom', label: 'Custom Entity' }
+                    { value: 'custom', label: 'settings.statusbar.custom_entity' }
                 ], 
                 default: 'cpu' 
             },
@@ -131,7 +132,7 @@ module.exports = [
                     { value: 'none', label: 'settings.statusbar.none' }, 
                     { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
                     { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
-                    { value: 'custom', label: 'Custom Entity' }
+                    { value: 'custom', label: 'settings.statusbar.custom_entity' }
                 ], 
                 default: 'ram' 
             },
@@ -160,7 +161,7 @@ module.exports = [
                     { value: 'none', label: 'settings.statusbar.none' }, 
                     { value: 'cpu', label: 'settings.statusbar.cpu_usage' }, 
                     { value: 'ram', label: 'settings.statusbar.ram_usage' }, 
-                    { value: 'custom', label: 'Custom Entity' }
+                    { value: 'custom', label: 'settings.statusbar.custom_entity' }
                 ], 
                 default: 'none' 
             },
@@ -190,7 +191,7 @@ module.exports = [
     },
     {
         id: 'mqtt',
-        label: 'settings.categories.mqtt',
+        label: 'settings.sections.mqtt',
         icon: 'mdi:lan-connect',
         items: [
             {
@@ -228,6 +229,18 @@ module.exports = [
                 default: '',
                 condition: { key: 'enabled', value: true }
             },
+            {
+                key: 'test',
+                label: 'settings.mqtt.mqtt_test_btn',
+                type: 'mqtt-test',
+                condition: { key: 'enabled', value: true }
+            },
+            {
+                key: 'autodetect',
+                label: 'settings.mqtt.mqtt_autodetect_btn',
+                type: 'mqtt-autodetect',
+                condition: { key: 'enabled', value: true }
+            },
         ]
     },
     {
@@ -238,8 +251,13 @@ module.exports = [
             { 
                 key: 'log_level', 
                 label: 'settings.system.log_level', 
-                type: 'select', 
-                options: ['debug','info', 'warn', 'error'], 
+                type: 'select',
+                options: [
+                    { value: 'debug', label: 'log_level_debug' },
+                    { value: 'info', label: 'log_level_info' },
+                    { value: 'warn', label: 'log_level_warn' },
+                    { value: 'error', label: 'log_level_error' }
+                ],
                 default: 'info' 
             },
             { 

@@ -131,7 +131,8 @@
       "system": "System",
       "editor": "Editor",
       "statusbar": "Status Bar",
-      "danger": "Danger Zone"
+      "danger": "Danger Zone",
+      "mqtt": "MQTT Broker"
     },
     "general": {
       "language": "Language",
@@ -141,21 +142,25 @@
       "expert_mode": "Expert Mode",
       "expert_mode_desc": "Shows advanced options and technical details (e.g., file paths, raw views).",
       "confirm_delete": "Confirm deletion",
-      "confirm_delete_desc": "Shows a confirmation dialog before deleting scripts."
+      "confirm_delete_desc": "Shows a confirmation dialog before deleting scripts.",
+      "language_option_de": "Deutsch",
+      "language_option_en": "English"
     },
     "editor": {
       "show_toolbar": "Show Toolbar",
       "font_size": "Font Size",
       "word_wrap": "Word Wrap",
       "word_wrap_desc": "Word wrap can also be controlled via the button in the toolbar.",
-      "minimap": "Show Minimap"
+      "minimap": "Show Minimap",
+      "word_wrap_on": "On",
+      "word_wrap_off": "Off"
     },
     "statusbar": {
       "show_statusbar": "Show Status Bar",
       "show_statusbar_desc": "Displays the status bar at the bottom of the application.",
       "slot1": "Slot 1 (Left)",
-      "slot2": "Slot 2 (Right)",
-      "slot3": "Slot 3",
+      "slot2": "Slot 2 (Center)",
+      "slot3": "Slot 3 (Right)",
       "custom_entity": "Custom Entity",
       "show_sparkline": "Show Sparkline",
       "show_sparkline_desc": "Displays a small historical graph for this value.",
@@ -167,7 +172,13 @@
       "host": "Broker Host",
       "port": "Port",
       "username": "Username",
-      "password": "Password"
+      "password": "Password",
+      "mqtt_test_btn": "Test Connection",
+      "mqtt_test_success": "Connection successful!",
+      "mqtt_test_error": "Connection failed: {{error}}",
+      "mqtt_autodetect_btn": "Auto-detect from HA",
+      "mqtt_autodetect_success": "MQTT settings successfully imported from Home Assistant.",
+      "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant."
     },
     "system": {
       "title": "System Settings",
@@ -180,10 +191,8 @@
       "mqtt_disconnected": "Connection to MQTT broker lost",
       "mqtt_disabled": "MQTT is disabled in settings",
       "mqtt_error": "MQTT Error: {{error}}",
-      "mqtt_test_btn": "Test Connection",
       "mqtt_test_success": "Connection successful!",
       "mqtt_test_error": "Connection failed: {{error}}",
-      "mqtt_autodetect_btn": "Auto-detect from HA",
       "mqtt_autodetect_success": "MQTT settings successfully imported from Home Assistant.",
       "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant.",
       "mqtt_warning_expose": "Script uses @expose, but MQTT is not active.",

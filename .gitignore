@@ -34,3 +34,5 @@ Thumbs.db
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
 scripts
+
+.claude

@@ -139,6 +139,28 @@ class HAConnector {
     }
 
     /**
+     * Updates entity registry properties (area_id, labels, etc.) via WebSocket.
+     * @param {string} entityId - The entity ID to update.
+     * @param {object} updates - Fields to update (e.g., { area_id, labels }).
+     */
+    async updateEntityRegistry(entityId, updates) {
+        if (!this.isReady) return false;
+        const id = this.msgId++;
+        this.send({ id, type: 'config/entity_registry/update', entity_id: entityId, ...updates });
+        return new Promise((resolve) => {
+            const handler = (data) => {
+                const msg = JSON.parse(data);
+                if (msg.id === id) {
+                    this.ws.removeListener('message', handler);
+                    resolve(msg.success !== false);
+                }
+            };
+            this.ws.on('message', handler);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve(false); }, 5000);
+        });
+    }
+
+    /**
      * Removes an entity from the Home Assistant entity registry.
      * @param {string} entityId - The entity ID to remove (e.g., 'switch.my_script').
      */

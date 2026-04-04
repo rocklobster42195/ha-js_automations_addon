@@ -385,10 +385,14 @@ interface HA {
         initial_state?: string | number | boolean;
         /** Initial attributes (merged with the state on first publish). */
         attributes?: Record<string, any>;
-        /** Area name to assign the entity's device to (e.g. `'Living Room'`). */
+        /** Direct area ID to assign this entity to (e.g. `'living_room'`). Takes precedence over `area`. */
+        area_id?: string;
+        /** Area name to assign this entity to (e.g. `'Living Room'`). Resolved to area ID automatically. */
         area?: string;
         /** Alias for `area`. */
         suggested_area?: string;
+        /** Label names or IDs to assign to this entity (e.g. `['System', 'Critical']`). */
+        labels?: string[];
         /**
          * Options list for `select` entities.
          * @example ['auto', 'manual', 'off']
