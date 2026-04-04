@@ -484,27 +484,7 @@ function updateIconDecorations(model) {
     model._iconDecos = model.deltaDecorations(model._iconDecos || [], decorations);
 }
 
-function insertCodeSnippet(type) {
-    // editor is global from app.js
-    if (typeof editor === 'undefined' || !editor) return;
-    const contribution = editor.getContribution('snippetController2');
-    let template = '';
-    
-    if (type === 'log') template = 'ha.log("${1:Message}");';
-    else if (type === 'service') template = "ha.callService('${1:domain}', '${2:service}', { entity_id: '${3}' });";
-    else if (type === 'listener') template = "ha.on('${1:entity_id}', (e) => {\n\t${2:// code}\n});";
-    else if (type === 'listener_array') template = "ha.on(['${1:entity_1}', '${2:entity_2}'], (e) => {\n\t${3:// code}\n});";
-    else if (type === 'state') template = "ha.states['${1:entity_id}']";
-    else if (type === 'register') template = "ha.register('sensor.${1:my_sensor}', {\n\tname: '${2:My Sensor}',\n\ticon: '${3:mdi:eye}',\n\tarea: '${4:Area}',\n\tlabels: ['${5:Label}'],\n\t// device: 'script' // optional: 'script' (default), 'system' or 'none'\n});";
-    else if (type === 'update_state') template = "ha.update('${1:sensor.my_sensor}', '${2:state_value}', {\n\tfriendly_name: '${3:Name}',\n\tunit: '${4:EUR}',\n\ticon: '${5:mdi:robot}'\n});";
-    else if (type === 'select') template = "ha.select('${1:light.*}').turnOff();";
-    else if (type === 'on_stop') template = "ha.onStop(() => {\n\t${1:// cleanup code}\n});";
-    else if (type === 'store_set') template = "ha.store.set('${1:key}', ${2:value});";
-    else if (type === 'store_get') template = "const ${1:val} = ha.store.get('${2:key}');";
-    else if (type === 'store_del') template = "ha.store.delete('${1:key}');";
-    
-    if (template) { editor.focus(); contribution.insert(template); }
-}
+// insertCodeSnippet is defined in editor-snippets.js (single source of truth)
 
 function toggleWordWrap() {
     if (typeof editor === 'undefined' || !editor) return;

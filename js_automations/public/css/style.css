@@ -384,6 +384,46 @@ input#search-input:focus { border-color: var(--accent) !important; }
     margin: 0 8px;
 }
 
+/* Snippet toolbar container — uses display:contents so its children
+   participate directly in the parent flexbox layout. */
+#toolbar-snippets {
+    display: contents;
+}
+
+/* Floating variant picker for ha.register snippets */
+.snippet-variant-picker {
+    position: fixed;
+    z-index: 9999;
+    background: #1e1e1e;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    font-size: .8rem;
+}
+.snippet-variant-picker__label {
+    color: var(--text-sec);
+    white-space: nowrap;
+    margin-right: 4px;
+}
+.snippet-variant-picker__btn {
+    background: #2d2d2d;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: .8rem;
+}
+.snippet-variant-picker__btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 /* RESIZER */
 #resizer {
     flex-shrink: 0;

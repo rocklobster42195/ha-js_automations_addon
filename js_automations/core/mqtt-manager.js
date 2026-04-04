@@ -171,6 +171,12 @@ class MqttManager extends EventEmitter {
                 // Publish Birth Message
                 this.publish(this.statusTopic, 'online', { retain: true });
 
+                // Subscribe to all inbound JSA topics (command topics for switch/button/select/number/text entities)
+                this.client.subscribe('jsa/#', (err) => {
+                    if (err) this.logManager.add('error', 'System', `[MQTT] Failed to subscribe to jsa/#: ${err.message}`);
+                    else this.logManager.add('debug', 'System', '[MQTT] Subscribed to jsa/#');
+                });
+
                 // Start the health monitoring watchdog
                 this._startHealthCheck();
 

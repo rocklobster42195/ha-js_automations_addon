@@ -187,6 +187,94 @@ ha.callService('notify', 'mobile_app_phone', {
 });
 ```
 
+### 7.1. Sending Notifications (`ha.notify`)
+
+A convenient shortcut for sending notifications via Home Assistant's `notify` domain. Defaults to `notify.notify`, which broadcasts to all configured notifiers (e.g., all registered mobile apps).
+
+```javascript
+// Simple message — sent to all notifiers via notify.notify
+ha.notify("The washing machine is done!");
+
+// With title
+ha.notify("Motion detected!", { title: "Security Alert" });
+
+// Target a specific notifier (both forms work)
+ha.notify("Dinner is ready!", {
+    title: "Kitchen",
+    target: "notify.mobile_app_my_phone"
+    // or: target: "mobile_app_my_phone"
+});
+
+// Persistent notification (visible in HA Web UI/Browser sidebar)
+ha.notify("Backup completed successfully", {
+    title: "System",
+    persistent: true
+});
+
+// With extra data (e.g. actionable notification on mobile)
+ha.notify("Garage door left open. Close it?", {
+    title: "Garage",
+    target: "mobile_app_my_phone",
+    data: {
+        actions: [
+            { action: "CLOSE_GARAGE", title: "Close now" },
+            { action: "IGNORE",        title: "Ignore"    }
+        ]
+    }
+});
+```
+
+> **Tip:** Combine `ha.notify()` with `ha.localize()` to send multilingual notifications to every household member automatically.
+
+### 7.2. Actionable Notifications (`ha.ask`)
+
+`ha.ask()` sends a notification with buttons and **waits for the user to tap one**. It returns a `Promise<string | null>` — the chosen action string, or `defaultAction` (`null` by default) when the timeout expires.
+
+Use this in an `async` function with `await`.
+
+```javascript
+async function checkGarage() {
+    const isOpen = ha.getStateValue('cover.garage_door') === 'open';
+    if (!isOpen) return;
+
+    const answer = await ha.ask("The garage door is still open. What should I do?", {
+        title: "Garage Alert",
+        timeout: 60000,        // 60 s to answer (default)
+        defaultAction: "SNOOZE", // what to do when nobody answers in time
+        actions: [
+            { action: "CLOSE",  title: "Close now"          },
+            { action: "SNOOZE", title: "Remind in 30 min"   },
+            { action: "IGNORE", title: "Ignore for tonight" },
+        ]
+    });
+
+    if (answer === "CLOSE") {
+        ha.entity('cover.garage_door').close_cover();
+        ha.log("Garage door closed by user.");
+    } else if (answer === "SNOOZE" || answer === null) {
+        // defaultAction === "SNOOZE", so a timeout lands here too
+        ha.log("Snoozed — will remind again in 30 minutes.");
+        setTimeout(checkGarage, 30 * 60 * 1000);
+    } else {
+        ha.log("User chose to ignore the garage door.");
+    }
+}
+```
+
+**How it works under the hood:**
+
+1. `ha.ask()` sends an actionable notification via `ha.notify()`.
+2. It waits (without blocking) for the user to tap a button on their phone.
+3. The first person to tap wins — multiple devices can receive the notification, but only the first response counts.
+4. If no one responds within `timeout` ms, the Promise resolves with `defaultAction` (default `null`).
+
+**Tips:**
+
+- **Snooze / re-notify pattern:** Set `defaultAction: "SNOOZE"` and call the same function again from a `setTimeout` for an automatic reminder loop.
+- **Target a specific device:** Use `target: "mobile_app_my_phone"` so only one person gets the question.
+- **Multiple concurrent asks:** Safe — each call has an internal unique ID so responses are never mixed up.
+- **Keep actions short:** iOS limits notification button titles to ~20 characters.
+
 ### 8. Entity Selectors (`ha.select`)
 Perform bulk actions on groups of entities. `ha.select()` returns a chainable selector object that allows you to filter, transform, and act on multiple entities at once.
 
@@ -267,7 +355,18 @@ shoppingList.push('eggs');
 const settings = ha.persistent('my_app_settings', { notifications: { enabled: true } });
 settings.notifications.enabled = false; // This change is also saved automatically.
 ```
-**Note:** This is best used for objects and arrays. For simple primitive values (like a single boolean or number), `ha.store.set()` is slightly more efficient.
+**Primitive values** are also supported. When the default value is a `string`, `number`, or `boolean`, `ha.persistent` returns a `{ value }` wrapper instead of a proxy:
+
+```javascript
+// Primitive counter — use the .value property to read/write
+const counter = ha.persistent('my_counter', 0);
+counter.value++;          // Incremented and automatically saved
+ha.log(counter.value);    // 1 (even after a restart)
+
+// TypeScript: inferred as { value: number }
+const flag = ha.persistent('feature_flag', false);
+flag.value = true;
+```
 
 
 ### 11. Global Error Handling (`ha.onError`)

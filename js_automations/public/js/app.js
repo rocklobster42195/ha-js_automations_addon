@@ -84,19 +84,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 run: () => { if (window.openEntityPicker) window.openEntityPicker(); }
             });
 
-            // --- SNIPPETS CONTEXT MENU ---
-            const snippetActions = [
-                { id: 'snip-log', type: 'log', label: 'snippet_log', group: '90_snippets_general', order: 1 },
-                { id: 'snip-service', type: 'service', label: 'snippet_service', group: '90_snippets_general', order: 2 },
-                { id: 'snip-listener', type: 'listener', label: 'snippet_listener', group: '90_snippets_general', order: 3 },
-                { id: 'snip-register', type: 'register', label: 'snippet_register', group: '91_snippets_state', order: 0 },
-                { id: 'snip-state', type: 'state', label: 'snippet_state', group: '91_snippets_state', order: 1 },
-                { id: 'snip-update', type: 'update_state', label: 'snippet_update_state', group: '91_snippets_state', order: 2 },
-                { id: 'snip-store-set', type: 'store_set', label: 'snippet_store_set', group: '92_snippets_store', order: 1 },
-                { id: 'snip-store-get', type: 'store_get', label: 'snippet_store_get', group: '92_snippets_store', order: 2 },
-                { id: 'snip-store-del', type: 'store_del', label: 'snippet_store_del', group: '92_snippets_store', order: 3 }
-            ];
-            snippetActions.forEach(s => editor.addAction({ id: s.id, label: i18next.t(s.label), contextMenuGroupId: s.group, contextMenuOrder: s.order, run: () => window.insertCodeSnippet(s.type) }));
+            // --- SNIPPETS: context menu + keybindings from central registry ---
+            registerSnippetContextMenu(editor);
+            registerSnippetKeybindings(editor);
+
+            // --- SNIPPETS: build toolbar buttons from registry ---
+            buildSnippetToolbar(document.getElementById('toolbar-snippets'));
 
             // Initialize Editor Configuration & Layout.
             configureMonaco();

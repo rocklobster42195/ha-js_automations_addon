@@ -244,6 +244,82 @@ interface HA {
     ): void;
 
     /**
+     * Sends an actionable notification and waits for the user's response.
+     * Returns a Promise that resolves with the chosen action string,
+     * or with `defaultAction` (default: `null`) if the timeout expires.
+     *
+     * Requires the HA companion app installed on at least one device.
+     * 
+     * **Note:** This does not work in the web browser as it relies on mobile app events.
+     *
+     * @example
+     * const answer = await ha.ask("Garage door left open. Close it?", {
+     *   title: "Garage",
+     *   target: "notify.mobile_app_my_phone",
+     *   defaultAction: "SNOOZE",
+     *   actions: [
+     *     { action: "CLOSE",  title: "Close now" },
+     *     { action: "SNOOZE", title: "Remind in 30 min" },
+     *     { action: "IGNORE", title: "Ignore" },
+     *   ]
+     * });
+     * if (answer === "CLOSE") ha.entity('cover.garage').close_cover();
+     * if (answer === "SNOOZE" || answer === null) setTimeout(checkGarage, 30 * 60 * 1000);
+     */
+    ask(message: string, options?: {
+        /** Notification title shown in the push notification header. */
+        title?: string;
+        /**
+         * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
+         * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
+         */
+        target?: string;
+        /** Timeout in milliseconds before the promise resolves with `defaultAction`. Default: 60000 (1 min). */
+        timeout?: number;
+        /** Value resolved when the timeout expires. Default: `null`. */
+        defaultAction?: string | null;
+        /** Action buttons shown in the notification. Each `action` string is returned when tapped. */
+        actions?: Array<{ action: string; title: string }>;
+    }): Promise<string | null>;
+
+    /**
+     * Sends a notification via Home Assistant's notify service.
+     * Defaults to `notify.notify` (broadcasts to all configured notifiers).
+     *
+     * **Note:** Advanced data features (images, actions) are only supported by mobile companion apps.
+     *
+     * @example
+     * ha.notify("Motion detected!", { title: "Security", target: "notify.mobile_app_my_phone" });
+     *
+     * @example
+     * // With extra platform-specific data (e.g. image on Android/iOS):
+     * ha.notify("Someone at the door", {
+     *   title: "Doorbell",
+     *   data: { image: "/local/snapshot.jpg", channel: "Doorbell" }
+     * });
+     */
+    notify(message: string, options?: {
+        /** Notification title shown in the push notification header. */
+        title?: string;
+        /**
+         * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
+         * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
+         */
+        target?: string;
+        /**
+         * If true, sends the notification to Home Assistant's internal persistent notification system.
+         * These appear in the web browser's sidebar.
+         * When active, the 'target' option is ignored.
+         */
+        persistent?: boolean;
+        /**
+         * Platform-specific extra data passed under the `data` key of the notify service call.
+         * Examples: `{ image: '/local/cam.jpg' }`, `{ channel: 'Alarm' }`, `{ tag: 'motion' }`.
+         */
+        data?: Record<string, any>;
+    }): void;
+
+    /**
      * Updates the state and/or attributes of an existing Home Assistant entity.
      * If the entity was registered via `ha.register`, it will use the native integration.
      * Otherwise, it falls back to the legacy HTTP API.
@@ -269,12 +345,88 @@ interface HA {
     updateState(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
 
     /**
-     * Registers a native Home Assistant entity via the JS Automations integration.
-     * This creates a persistent entity in Home Assistant's registry.
-     * @param entityId The desired entity ID (e.g., 'sensor.my_value').
-     * @param config Configuration for the entity (name, icon, unit_of_measurement, device_class, etc.).
+     * Registers a native Home Assistant entity via MQTT Discovery.
+     * Creates a persistent entity in Home Assistant's registry.
+     * Calling `ha.register()` again with the same `entityId` updates the configuration.
+     *
+     * @example
+     * ha.register('sensor.outside_temp', {
+     *   name: 'Outside Temperature',
+     *   icon: 'mdi:thermometer',
+     *   unit: '°C',
+     *   device_class: 'temperature',
+     *   state_class: 'measurement',
+     *   initial_state: 0,
+     * });
+     *
+     * @example
+     * ha.register('switch.sprinkler', { name: 'Sprinkler', icon: 'mdi:sprinkler' });
+     * ha.register('select.mode', { name: 'Mode', options: ['auto', 'manual', 'off'] });
+     *
+     * @param entityId The desired entity ID (e.g., `'sensor.my_value'`). The domain determines the entity type.
+     * @param config Configuration for the entity.
      */
-    register(entityId: string, config?: Record<string, any>): void;
+    register(entityId: string, config?: {
+        /** Display name shown in HA (defaults to a prettified version of the entity ID). */
+        name?: string;
+        /** Alias for `name`. */
+        friendly_name?: string;
+        /** MDI icon (e.g. `'mdi:thermometer'`). Can be changed at runtime via `ha.update()`. */
+        icon?: string;
+        /** Unit of measurement (e.g. `'°C'`, `'%'`, `'W'`). Alias: `unit`. */
+        unit_of_measurement?: string;
+        /** Alias for `unit_of_measurement`. */
+        unit?: string;
+        /** HA device class (e.g. `'temperature'`, `'humidity'`, `'power'`). */
+        device_class?: string;
+        /** HA state class for long-term statistics: `'measurement'`, `'total'`, `'total_increasing'`. */
+        state_class?: 'measurement' | 'total' | 'total_increasing';
+        /** Initial state value set when the entity is first created. */
+        initial_state?: string | number | boolean;
+        /** Initial attributes (merged with the state on first publish). */
+        attributes?: Record<string, any>;
+        /** Area name to assign the entity's device to (e.g. `'Living Room'`). */
+        area?: string;
+        /** Alias for `area`. */
+        suggested_area?: string;
+        /**
+         * Options list for `select` entities.
+         * @example ['auto', 'manual', 'off']
+         */
+        options?: string[];
+        /**
+         * Groups this entity under a device in Home Assistant.
+         * - `true`: use the script's name and slug as the device (e.g. all entities from `my_script.js` → device "My Script")
+         * - `object`: provide a custom device configuration
+         *
+         * **Note:** When a device block is present, HA generates the entity_id as
+         * `{device_name_slug}_{entity_name_slug}`, ignoring `object_id`.
+         * Omit `device` (default) to ensure the entity_id matches exactly what you pass to `ha.register()`.
+         *
+         * @example
+         * // Group all entities from this script under one device card:
+         * ha.register('sensor.outside_temp', { name: 'Outside Temperature', device: true });
+         *
+         * @example
+         * // Custom device metadata:
+         * ha.register('sensor.outside_temp', {
+         *   name: 'Outside Temperature',
+         *   device: { name: 'Weather Station', identifiers: ['my_weather_station'], model: 'v2' }
+         * });
+         */
+        device?: true | {
+            /** Device identifiers (defaults to `['jsa_script_<scriptSlug>']`). */
+            identifiers?: string[];
+            /** Device display name (defaults to the script's display name). */
+            name?: string;
+            /** Device manufacturer string (defaults to `'JS Automations'`). */
+            manufacturer?: string;
+            /** Device model string (defaults to `'Script'`). */
+            model?: string;
+        };
+        /** Allow any additional HA discovery config fields. */
+        [key: string]: any;
+    }): void;
 
     /** A live cache of all Home Assistant entity states. */
     readonly states: HAEntities;
