@@ -78,25 +78,8 @@
                             <button id="btn-script-duplicate" onclick="duplicateActiveScript()" data-i18n="script_action_duplicate_title" data-i18n-title title="Duplizieren"><i class="mdi mdi-content-duplicate"></i></button>
                             <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
                             <div class="toolbar-separator"></div>
-                            <!-- Snippet Buttons -->
-                            <button onclick="insertCodeSnippet('log')" data-i18n="snippet_log" data-i18n-title title="Log Output"><i class="mdi mdi-console"></i></button>
-                            <button onclick="insertCodeSnippet('service')" data-i18n="snippet_service" data-i18n-title title="Call Service"><i class="mdi mdi-flash"></i></button>
-                            <button onclick="insertCodeSnippet('listener')" data-i18n="snippet_listener" data-i18n-title title="Event Listener"><i class="mdi mdi-ear-hearing"></i></button>
-                            <button onclick="insertCodeSnippet('listener_array')" data-i18n="snippet_listener_array" data-i18n-title title="Event Listener (Array/Liste)"><i class="mdi mdi-playlist-plus"></i></button>
-                            <button onclick="insertCodeSnippet('on_stop')" data-i18n="snippet_on_stop" data-i18n-title title="On Script Stop (Cleanup)"><i class="mdi mdi-stop-circle-outline"></i></button>
-                            
-                            <div class="toolbar-separator"></div>
-                            
-                            <button onclick="insertCodeSnippet('register')" data-i18n="snippet_register" data-i18n-title title="Register Entity"><i class="mdi mdi-shape-square-plus"></i></button>
-                            <button onclick="insertCodeSnippet('update_state')" data-i18n="snippet_update_state" data-i18n-title title="Update/Create State"><i class="mdi mdi-import"></i></button>
-                            <button onclick="insertCodeSnippet('state')" data-i18n="snippet_state" data-i18n-title title="Get State"><i class="mdi mdi-export"></i></button>
-                            <button onclick="insertCodeSnippet('select')" data-i18n="snippet_select" data-i18n-title title="Select Multiple (Bulk Action)"><i class="mdi mdi-checkbox-multiple-marked"></i></button>
-                            
-                            <div class="toolbar-separator"></div>
-                            
-                            <button onclick="insertCodeSnippet('store_set')" data-i18n="snippet_store_set" data-i18n-title title="Store: Wert speichern"><i class="mdi mdi-database-import"></i></button>
-                            <button onclick="insertCodeSnippet('store_get')" data-i18n="snippet_store_get" data-i18n-title title="Store: Wert lesen"><i class="mdi mdi-database-export"></i></button>
-                            <button onclick="insertCodeSnippet('store_del')" data-i18n="snippet_store_del" data-i18n-title title="Store: Wert löschen"><i class="mdi mdi-database-remove"></i></button>
+                            <!-- Snippet buttons injected by editor-snippets.js → buildSnippetToolbar() -->
+                            <div id="toolbar-snippets"></div>
                         </div>
                         <div class="toolbar-right">
                             <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
@@ -223,6 +206,7 @@
 
     <script src="js/api.js"></script>
     <script src="js/editor-config.js"></script>
+    <script src="js/editor-snippets.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/tab-manager.js"></script>
     <script src="js/script-list.js"></script>

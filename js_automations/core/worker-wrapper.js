@@ -157,6 +157,8 @@ const errorCallbacks = [];
 let isListening = false;
 
 const pendingServiceCalls = new Map();
+const pendingAsks = new Map(); // correlationId -> { resolve, timer }
+const ASK_SEP = '__jsa_ask__';
 let serviceCallCounter = 0;
 
 /**
@@ -276,6 +278,17 @@ function ensureMessageListener() {
                 if (msg.error) promise.reject(new Error(msg.error));
                 else promise.resolve(msg.result);
                 pendingServiceCalls.delete(msg.callId);
+            }
+            return;
+        }
+
+        // Handle ha.ask() responses from the main process
+        if (msg.type === 'ask_response') {
+            const pending = pendingAsks.get(msg.correlationId);
+            if (pending) {
+                clearTimeout(pending.timer);
+                pendingAsks.delete(msg.correlationId);
+                pending.resolve(msg.action);
             }
             return;
         }
@@ -436,7 +449,83 @@ const ha = {
 
         ha.callService(domain, service, data);
     },
-    
+
+    /**
+     * Sends a notification via Home Assistant's notify service.
+     * @param {string} message - The notification message.
+     * @param {object} [options] - Optional options.
+     * @param {string} [options.title] - Notification title.
+     * @param {string} [options.target] - Target service (e.g. 'notify.mobile_app_phone'). Defaults to 'notify.notify'.
+     * @param {object} [options.data] - Additional service data (e.g. action buttons, image).
+     */
+    notify: (message, options = {}) => {
+        const { title, target, data, persistent } = options;
+        
+        let service;
+        if (persistent) {
+            // Route to Home Assistant's persistent notification system (visible in browser)
+            service = 'persistent_notification';
+        } else {
+            service = target
+                ? (target.startsWith('notify.') ? target.slice(7) : target)
+                : 'notify';
+        }
+
+        // HA notify service expects platform-specific fields (actions, tag, image, …)
+        // nested under a 'data' key, not spread at the top level.
+        const serviceData = { message, title };
+        if (data) serviceData.data = data;
+        ha.callService('notify', service, serviceData);
+    },
+
+    /**
+     * Sends an actionable notification and waits for the user's response.
+     * Returns a Promise that resolves with the chosen action string,
+     * or with `defaultAction` (default: null) if the timeout expires.
+     *
+     * @param {string} message - The notification message body.
+     * @param {object} options
+     * @param {string} [options.title] - Notification title.
+     * @param {string} [options.target] - Notify service target. Defaults to 'notify.notify'.
+     * @param {number} [options.timeout=60000] - ms to wait before resolving with defaultAction.
+     * @param {string|null} [options.defaultAction=null] - Value to resolve with on timeout.
+     * @param {Array<{action: string, title: string}>} [options.actions=[]] - Action buttons.
+     */
+    ask: (message, options = {}) => {
+        const { title, target, timeout = 60000, defaultAction = null, actions = [] } = options;
+
+        const correlationId = `jsa_ask_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        // Tag each action with the correlation ID so concurrent calls don't interfere
+        const taggedActions = actions.map(a => ({
+            ...a,
+            action: `${a.action}${ASK_SEP}${correlationId}`
+        }));
+
+        ha.notify(message, {
+            title,
+            target,
+            data: { actions: taggedActions, tag: correlationId }
+        });
+
+        ensureMessageListener();
+        parentPort.ref(); // Prevent the worker from exiting while waiting for the response
+        parentPort.postMessage({ type: 'register_ask', correlationId });
+
+        return new Promise(resolve => {
+            const timer = setTimeout(() => {
+                pendingAsks.delete(correlationId);
+                parentPort.unref();
+                resolve(defaultAction);
+            }, timeout);
+
+            pendingAsks.set(correlationId, {
+                resolve: (action) => { parentPort.unref(); resolve(action); },
+                timer
+            });
+        });
+    },
+
     /**
      * Fluent API for interacting with a single entity.
      */

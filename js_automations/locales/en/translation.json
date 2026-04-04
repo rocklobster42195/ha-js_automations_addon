@@ -52,6 +52,8 @@
   "snippet_listener": "HA: Event Listener",
   "snippet_listener_array": "HA: Event Listener (List)",
   "snippet_on_stop": "On Stop (Cleanup)",
+  "snippet_notify": "Send notification ha.notify()",
+  "snippet_ask": "Actionable Notification ha.ask()",
   "snippet_state": "Read State ha.getState()",
   "snippet_update_state": "Update Entity ha.update()",
   "snippet_register": "Register Entity ha.register()",

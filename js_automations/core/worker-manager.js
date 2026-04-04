@@ -38,9 +38,37 @@ class WorkerManager extends EventEmitter {
         this.scriptEntityMap = new Map(); // filename -> Set<entityId> (RAM Cache)
         this.registryPath = '';
         this.saveRegistryTimer = null;
+        this.pendingAsks = new Map(); // correlationId -> worker (for ha.ask())
+        this._notificationListenerActive = false;
 
         // Request RAM usage statistics from all workers every 5 seconds.
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
+    }
+
+    /**
+     * Subscribes to HA mobile_app_notification_action events (lazy, once).
+     * Called automatically on the first ha.ask() from any worker.
+     * @private
+     */
+    _ensureNotificationListener() {
+        if (this._notificationListenerActive || !this.haConnector) return;
+        this._notificationListenerActive = true;
+
+        this.haConnector.subscribeToEvents((event) => {
+            if (event.event_type !== 'mobile_app_notification_action') return;
+            const action = event.data?.action;
+            if (!action || !action.includes('__jsa_ask__')) return;
+
+            const sepIdx = action.lastIndexOf('__jsa_ask__');
+            const correlationId = action.slice(sepIdx + '__jsa_ask__'.length);
+            const originalAction = action.slice(0, sepIdx);
+
+            const worker = this.pendingAsks.get(correlationId);
+            if (!worker) return;
+
+            this.pendingAsks.delete(correlationId);
+            worker.postMessage({ type: 'ask_response', correlationId, action: originalAction });
+        });
     }
 
     /**
@@ -232,15 +260,19 @@ class WorkerManager extends EventEmitter {
      */
     async unregisterEntity(filename, entityId) {
         const payload = this.nativeEntities.get(entityId);
-        if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+        if (this.mqttManager && this.mqttManager.isConnected) {
             this.emit('log', { source: 'System', message: `[WorkerManager] Removing entity ${entityId} via MQTT`, level: 'debug' });
-            
-            // Remove from HA by sending an empty payload to the discovery topic
+
             const domain = entityId.split('.')[0];
-            const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
-            this.mqttManager.publish(configTopic, '', { retain: true });
-            
-            this.mqttManager.publishEntityState(payload, null, null);
+            const derivedObjectId = entityId.split('.').slice(1).join('.');
+            // Clear discovery topics
+            this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
+            if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
+                this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
+            }
+            // Clear retained state/attributes topic (empty string = truly deletes the retained message)
+            const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
+            this.mqttManager.publish(stateTopic, '', { retain: true });
         }
         this.nativeEntities.delete(entityId);
         if (this.scriptEntityMap.has(filename)) {
@@ -298,7 +330,8 @@ class WorkerManager extends EventEmitter {
         
         for (const [entityId, payload] of this.nativeEntities) {
             const domain = entityId.split('.')[0];
-            const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
+            const topicId = payload.object_id || payload.unique_id;
+            const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${topicId}/config`;
 
             // Integrity check for MQTT relies on checking local status, but since we use retained 
             // messages, we usually just republish everything on reconnect.
@@ -351,11 +384,17 @@ class WorkerManager extends EventEmitter {
             
             for (const entityId of entities) {
                 const payload = this.nativeEntities.get(entityId);
-                if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+                if (this.mqttManager && this.mqttManager.isConnected) {
                     const domain = entityId.split('.')[0];
-                    const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
-                    this.mqttManager.publish(configTopic, null, { retain: true });
-                    this.mqttManager.publishEntityState(payload, null, null);
+                    const derivedObjectId = entityId.split('.').slice(1).join('.');
+                    // Clear discovery topics
+                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
+                    if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
+                        this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
+                    }
+                    // Clear retained state/attributes topic
+                    const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
+                    this.mqttManager.publish(stateTopic, '', { retain: true });
                 }
                 this.nativeEntities.delete(entityId);
             }
@@ -393,15 +432,25 @@ class WorkerManager extends EventEmitter {
 
             if (!currentRunEntities.has(entityId)) {
                 this.emit('log', { source: 'System', message: `[WorkerManager] Entity ${entityId} is no longer requested by ${filename}. Removing from Home Assistant.`, level: 'debug' });
-                
+
                 const payload = this.nativeEntities.get(entityId);
-                if (payload && payload.unique_id && this.mqttManager && this.mqttManager.isConnected) {
+                if (this.mqttManager && this.mqttManager.isConnected) {
                     const domain = entityId.split('.')[0];
-                    const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`;
-                    this.mqttManager.publish(configTopic, '', { retain: true });
+                    const derivedObjectId = entityId.split('.').slice(1).join('.');
+                    // Clear discovery topics
+                    this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${derivedObjectId}/config`, '', { retain: true });
+                    if (payload?.unique_id && payload.unique_id !== derivedObjectId) {
+                        this.mqttManager.publish(`${this.mqttManager.discoveryPrefix}/${domain}/${payload.unique_id}/config`, '', { retain: true });
+                    }
+                    // Clear retained state/attributes topic
+                    const stateTopic = payload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
+                    this.mqttManager.publish(stateTopic, '', { retain: true });
                 }
                 this.nativeEntities.delete(entityId);
                 knownEntities.delete(entityId);
+
+                // Notify EntityManager to also remove from HA's WebSocket registry
+                this.emit('sweep_entity_removed', entityId);
             }
         }
 
@@ -578,7 +627,13 @@ class WorkerManager extends EventEmitter {
                     }
                 }
 
-                // 5. Stats Response
+                // 5. ha.ask() — register a pending notification action listener
+                if (msg.type === 'register_ask') {
+                    this.pendingAsks.set(msg.correlationId, worker);
+                    this._ensureNotificationListener();
+                }
+
+                // 6. Stats Response
                 if (msg.type === 'stats') {
                     this.stats.set(scriptMeta.filename, {
                         ram_usage: Math.round(msg.heapUsed / 1024 / 1024 * 100) / 100, // MB
@@ -614,6 +669,11 @@ class WorkerManager extends EventEmitter {
                 this.subscriptions.delete(scriptMeta.filename);
                 this.stats.delete(scriptMeta.filename);
                 this.startTimes.delete(scriptMeta.filename);
+
+                // Clean up any ha.ask() promises that will never resolve
+                for (const [correlationId, askWorker] of this.pendingAsks.entries()) {
+                    if (askWorker === worker) this.pendingAsks.delete(correlationId);
+                }
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(scriptMeta.filename)) ? 'error' : 'success';

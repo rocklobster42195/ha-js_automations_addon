@@ -48,6 +48,13 @@ class EntityManager {
         this.workerManager.on('create_entity', (data) => this.handleDynamicEntity(data));
         this.workerManager.on('update_entity_state', (data) => this.handleEntityStateUpdate(data));
         this.workerManager.on('request_device_cleanup', (name) => this.checkDeviceCleanup(name));
+        this.workerManager.on('sweep_entity_removed', (entityId) => {
+            if (this.haConnection.isReady) {
+                this.haConnection.removeEntity(entityId).catch(err => {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not remove swept entity ${entityId} from HA registry: ${err.message}`, level: 'warn' });
+                });
+            }
+        });
         this.systemService.on('system_stats_updated', (stats) => this.updateSystemStates(stats));
 
         if (this.workerManager.storeManager) {
@@ -98,7 +105,6 @@ class EntityManager {
         const domain = meta.expose === 'button' ? 'button' : 'switch';
         const scriptFile = path.basename(filename);
         const entityId = `${domain}.jsa_${slug}`;
-        const uniqueId = `jsa_${domain}_${slug}`;
         const isRunning = (action === 'start');
 
         this.stateManager.set(entityId, isRunning ? 'on' : 'off');
@@ -146,12 +152,13 @@ class EntityManager {
         // Generate a readable default name from the ID
         const defaultFriendlyName = objectId.replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-        // Unique ID: jsa_<scriptSlug>_<objectId> — ensures uniqueness per script
-        // and keeps the discovery topic independent of the domain.
+        // Unique ID: jsa_<scriptSlug>_<objectId> — globally unique in HA's entity registry.
         const uniqueId = `jsa_${scriptSlug}_${objectId}`;
 
-        // Use uniqueId in the discovery topic.
-        const discoveryTopic = `homeassistant/${domain}/${uniqueId}/config`;
+        // Use objectId (not uniqueId) as the discovery topic component.
+        // HA derives the entity_id from the topic component, so this ensures
+        // the resulting entity_id is exactly what the user specified (e.g. sensor.mqtt_test_4).
+        const discoveryTopic = `homeassistant/${domain}/${objectId}/config`;
 
         const fallbackIcon = config.icon || 'mdi:eye';
         const payload = {
@@ -164,22 +171,28 @@ class EntityManager {
             json_attributes_template: "{{ value_json.attributes | tojson }}",
             icon: fallbackIcon,
             force_update: true,
-            has_entity_name: false,
             availability_topic: 'jsa/status',
             unit_of_measurement: config.unit_of_measurement,
             device_class: config.device_class,
             state_class: config.state_class,
             options: config.options,
-            device: {
-                identifiers: [`jsa_script_${scriptSlug}`],
-                name: displayName,
-                manufacturer: "JS Automations",
-                model: "Script",
-            },
-            // Cache the current icon so handleEntityStateUpdate can detect changes
-            // and re-publish the discovery payload when the icon changes.
-            _currentIcon: fallbackIcon,
         };
+
+        // Attach the entity to the script's device only if the user opts in via `device: true`
+        // in ha.register(). By default, entities are standalone so that HA uses `object_id`
+        // directly for entity_id generation — without device context, HA reliably sets
+        // entity_id = domain.object_id (exactly what the user specified).
+        // With a device block present, HA tends to generate entity_id from
+        // {device_name_slug}_{entity_name_slug}, ignoring object_id.
+        if (config.device === true || (typeof config.device === 'object' && config.device !== null)) {
+            const deviceConfig = typeof config.device === 'object' ? config.device : {};
+            payload.device = {
+                identifiers: deviceConfig.identifiers || [`jsa_script_${scriptSlug}`],
+                name: deviceConfig.name || displayName,
+                manufacturer: deviceConfig.manufacturer || "JS Automations",
+                model: deviceConfig.model || "Script",
+            };
+        }
 
         // Add command topic for interactive entities
         if (['switch', 'button', 'number', 'select', 'text'].includes(domain)) {
@@ -200,7 +213,35 @@ class EntityManager {
             this._warnIconConflict(entityId, config.device_class);
         }
 
+        // Before publishing: detect and remove any stale HA entity that has our unique_id
+        // but the wrong entity_id (created by an older code version or a different topic format).
+        // Only runs for entities we haven't registered before (not in local cache).
+        // This prevents HA from silently updating the stale entity instead of creating the correct one.
+        if (!this.workerManager.nativeEntities.has(entityId) && this.haConnection.isReady) {
+            try {
+                const entityReg = await this.haConnection.getEntityRegistry();
+                const stale = entityReg.find(e => e.unique_id === uniqueId && e.entity_id !== entityId);
+                if (stale) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Removing stale entity ${stale.entity_id} (unique_id collision — should be ${entityId})`, level: 'debug' });
+                    await this.haConnection.removeEntity(stale.entity_id);
+                    // Clear retained MQTT config at the stale entity's likely topic paths
+                    const staleObjId = stale.entity_id.split('.').slice(1).join('.');
+                    this.mqttManager.publish(`homeassistant/${domain}/${staleObjId}/config`, '', { retain: true });
+                    if (stale.unique_id && stale.unique_id !== staleObjId) {
+                        this.mqttManager.publish(`homeassistant/${domain}/${stale.unique_id}/config`, '', { retain: true });
+                    }
+                }
+            } catch (err) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not check HA registry for stale entity (${entityId}): ${err.message}`, level: 'warn' });
+            }
+        }
+
         this.mqttManager.publish(discoveryTopic, payload, { retain: true });
+
+        // Also clear the old unique_id-as-topic path in case a stale retained message lingers there.
+        if (uniqueId !== objectId) {
+            this.mqttManager.publish(`homeassistant/${domain}/${uniqueId}/config`, '', { retain: true });
+        }
 
         const initialState = config.initial_state !== undefined ? config.initial_state : 'unknown';
         this.mqttManager.publishEntityState(payload, initialState, {
@@ -212,14 +253,6 @@ class EntityManager {
         this.workerManager.registerEntity(filename, entityId, payload);
         // Ensure full path is used for state tracking consistency
         this.stateManager.registerEntity(entityId, scriptPath);
-
-        // Add to protected entities for this script to prevent mark-and-sweep cleanup
-        const scriptEntities = this.workerManager.scriptEntityMap.get(filename);
-        if (scriptEntities && !scriptEntities.has(entityId)) {
-            const ids = Array.from(scriptEntities);
-            ids.push(entityId);
-            this.workerManager.setProtectedEntities(filename, ids);
-        }
     }
 
     /**
@@ -239,20 +272,23 @@ class EntityManager {
             // If a new icon is provided, re-publish the discovery payload with the updated icon.
             // icon_template is deprecated in HA 2024+, so we update the static icon field directly.
             const newIcon = attributes?.icon || attributes?.entity_icon;
-            if (newIcon && newIcon !== config._currentIcon) {
-                config._currentIcon = newIcon;
+            if (newIcon && newIcon !== config.icon) {
                 config.icon = newIcon;
 
                 const domain = entityId.split('.')[0];
-                const uniqueId = config.unique_id;
-                const discoveryTopic = `homeassistant/${domain}/${uniqueId}/config`;
+                const topicId = config.object_id || config.unique_id;
+                const discoveryTopic = `homeassistant/${domain}/${topicId}/config`;
                 this.mqttManager.publish(discoveryTopic, config, { retain: true });
+
+                // Persist the updated icon to disk so republishNativeEntities uses the
+                // correct icon after a restart instead of the original ha.register() value.
+                this.workerManager.saveRegistry();
 
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Re-publishing discovery for ${entityId} with new icon: ${newIcon}`, level: 'debug' });
             }
 
             const enrichedAttributes = {
-                ...(config._currentIcon ? { icon: config._currentIcon } : {}),
+                ...(config.icon ? { icon: config.icon } : {}),
                 ...attributes,
             };
 
@@ -574,13 +610,25 @@ class EntityManager {
             }
 
             if (!scriptName) {
-                const parts = entity.unique_id.split('_');
-                if (parts[0] === 'jsa') {
-                    scriptName = parts.slice(2).join('_');
-                } else if (parts.length > 3 && parts[0] === 'js' && parts[1] === 'automations') {
-                    scriptName = parts.slice(3).join('_');
+                // Fallback: look up the owning script from our local registry.
+                // This correctly handles both old and new unique_id formats without fragile string parsing.
+                for (const [file, entityIds] of this.workerManager.scriptEntityMap.entries()) {
+                    if (file === 'system') continue;
+                    if (entityIds.has(entity.entity_id)) {
+                        scriptName = path.basename(file, path.extname(file)).toLowerCase();
+                        break;
+                    }
                 }
-                else if (parts.length > 2 && parts[0] === 'js' && parts[1] === 'automations') {
+            }
+
+            if (!scriptName) {
+                // Last resort: parse legacy unique_id formats
+                // Old format (pre-fix): jsa_<domain>_<scriptSlug>_<objectId> — unreliable, skip
+                // Legacy format: js_automations_<domain>_<scriptSlug>
+                const parts = entity.unique_id.split('_');
+                if (parts.length > 3 && parts[0] === 'js' && parts[1] === 'automations') {
+                    scriptName = parts.slice(3).join('_');
+                } else if (parts.length > 2 && parts[0] === 'js' && parts[1] === 'automations') {
                     scriptName = parts.slice(2).join('_');
                     this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Using legacy unique_id format fallback for ${entity.entity_id} -> ${scriptName}`, level: 'debug' });
                 }
@@ -591,6 +639,23 @@ class EntityManager {
                 continue;
             }
 
+            // STALE ENTITY_ID CHECK: For non-relic entities belonging to active scripts,
+            // detect the case where HA has the entity registered under the wrong entity_id
+            // (e.g. created by an older code version before the object_id fix).
+            // We find any local registry entry whose unique_id matches — if the entity_id
+            // differs from what HA has, remove the stale HA entry so it gets recreated correctly.
+            if (!isRelic && lowerActiveScripts.includes(scriptName.toLowerCase())) {
+                const localEntry = Array.from(this.workerManager.nativeEntities.entries())
+                    .find(([, payload]) => payload?.unique_id === entity.unique_id);
+                if (localEntry && localEntry[0] !== entity.entity_id) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Stale entity_id in HA: ${entity.entity_id} → should be ${localEntry[0]}. Removing stale entry.`, level: 'debug' });
+                    await this.haConnection.removeEntity(entity.entity_id);
+                    const staleDomain = entity.entity_id.split('.')[0];
+                    this.mqttManager.publish(`homeassistant/${staleDomain}/${entity.unique_id}/config`, '', { retain: true });
+                }
+                continue; // Active-script entities are managed elsewhere; never orphan-remove them
+            }
+
             if (isRelic || !lowerActiveScripts.includes(scriptName.toLowerCase())) {
                 const action = isRelic ? 'Removing integration relic' : 'Removing orphaned MQTT entity from HA registry';
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ${action}: ${entity.entity_id}`, level: 'debug' });
@@ -599,9 +664,20 @@ class EntityManager {
                 // that persist after MQTT topics are cleared.
                 await this.haConnection.removeEntity(entity.entity_id);
 
-                // Also try to clear the MQTT topic just in case it was recreated
+                // Clear MQTT discovery topics. Derive object_id directly from the entity_id
+                // (e.g. sensor.mqtt_test_35 → mqtt_test_35) — no localPayload lookup needed.
+                // For ha.register entities the discovery topic is object_id-based; for @expose
+                // switch/button entities it is unique_id-based. We clear both to cover all cases.
                 const domain = entity.entity_id.split('.')[0];
-                this.mqttManager.publish(`homeassistant/${domain}/${entity.unique_id}/config`, '', { retain: true });
+                const derivedObjectId = entity.entity_id.split('.').slice(1).join('.');
+                // Primary: object_id-based topic (correct for ha.register entities)
+                this.mqttManager.publish(`homeassistant/${domain}/${derivedObjectId}/config`, '', { retain: true });
+                // Secondary: unique_id-based topic (correct for @expose switch/button, also cleans stale)
+                if (entity.unique_id && entity.unique_id !== derivedObjectId) {
+                    this.mqttManager.publish(`homeassistant/${domain}/${entity.unique_id}/config`, '', { retain: true });
+                }
+                // Clear retained state/attributes topic
+                this.mqttManager.publish(`jsa/${domain}/${derivedObjectId}/data`, '', { retain: true });
 
                 // Find the actual filename (js or ts) from the manager's map
                 const fileName = Array.from(this.workerManager.scriptEntityMap.keys()).find(k => {
