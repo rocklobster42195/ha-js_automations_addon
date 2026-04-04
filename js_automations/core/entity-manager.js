@@ -238,11 +238,6 @@ class EntityManager {
 
         this.mqttManager.publish(discoveryTopic, payload, { retain: true });
 
-        // Also clear the old unique_id-as-topic path in case a stale retained message lingers there.
-        if (uniqueId !== objectId) {
-            this.mqttManager.publish(`homeassistant/${domain}/${uniqueId}/config`, '', { retain: true });
-        }
-
         const initialState = config.initial_state !== undefined ? config.initial_state : 'unknown';
         this.mqttManager.publishEntityState(payload, initialState, {
             icon: fallbackIcon,
@@ -253,6 +248,21 @@ class EntityManager {
         this.workerManager.registerEntity(filename, entityId, payload);
         // Ensure full path is used for state tracking consistency
         this.stateManager.registerEntity(entityId, scriptPath);
+
+        // For device: true entities HA generates a different entity_id (device-prefixed).
+        // Check HA's registry after a short delay and register the alias so that
+        // ha.getState(), ha.on() etc. work with the user's entity_id immediately.
+        if (payload.device && this.haConnection.isReady) {
+            setTimeout(async () => {
+                try {
+                    const entityReg = await this.haConnection.getEntityRegistry();
+                    const haEntry = entityReg.find(e => e.unique_id === uniqueId);
+                    if (haEntry && haEntry.entity_id !== entityId) {
+                        this.workerManager.setEntityIdAlias(haEntry.entity_id, entityId);
+                    }
+                } catch (_) {}
+            }, 2000);
+        }
     }
 
     /**
@@ -513,6 +523,18 @@ class EntityManager {
         const entityReg = await this.haConnection.getEntityRegistry();
         const deviceReg = await this.haConnection.getDeviceRegistry();
 
+        // Build entity_id alias map for device: true entities.
+        // When HA generates a device-prefixed entity_id (e.g. sensor.my_device_my_sensor),
+        // map it back to the user's entity_id (e.g. sensor.my_sensor) so that
+        // ha.getState(), ha.on(), ha.states etc. work with the user's id.
+        for (const [userEntityId, payload] of this.workerManager.nativeEntities.entries()) {
+            if (!payload?.unique_id) continue;
+            const haEntry = entityReg.find(e => e.unique_id === payload.unique_id);
+            if (haEntry && haEntry.entity_id !== userEntityId) {
+                this.workerManager.setEntityIdAlias(haEntry.entity_id, userEntityId);
+            }
+        }
+
         // CLEANUP RELIC: Specifically target stubborn legacy entities or prefixed ghost variations.
         // This part targets entities from the old custom integration (platform === 'js_automations').
         const stubbornEntities = entityReg.filter(e =>
@@ -667,17 +689,18 @@ class EntityManager {
                 // Clear MQTT discovery topics. Derive object_id directly from the entity_id
                 // (e.g. sensor.mqtt_test_35 → mqtt_test_35) — no localPayload lookup needed.
                 // For ha.register entities the discovery topic is object_id-based; for @expose
-                // switch/button entities it is unique_id-based. We clear both to cover all cases.
+                // Determine the exact discovery topic that was used for this entity:
+                //   ha.register → object_id (e.g. "mqtt_test_40")
+                //   @expose switch/button → unique_id (e.g. "jsa_switch_my_script")
+                // The local payload is the authoritative source; fall back to derivedObjectId.
                 const domain = entity.entity_id.split('.')[0];
                 const derivedObjectId = entity.entity_id.split('.').slice(1).join('.');
-                // Primary: object_id-based topic (correct for ha.register entities)
-                this.mqttManager.publish(`homeassistant/${domain}/${derivedObjectId}/config`, '', { retain: true });
-                // Secondary: unique_id-based topic (correct for @expose switch/button, also cleans stale)
-                if (entity.unique_id && entity.unique_id !== derivedObjectId) {
-                    this.mqttManager.publish(`homeassistant/${domain}/${entity.unique_id}/config`, '', { retain: true });
-                }
+                const localPayload = this.workerManager.nativeEntities.get(entity.entity_id);
+                const topicId = localPayload?.object_id || localPayload?.unique_id || entity.unique_id || derivedObjectId;
+                this.mqttManager.publish(`homeassistant/${domain}/${topicId}/config`, '', { retain: true });
                 // Clear retained state/attributes topic
-                this.mqttManager.publish(`jsa/${domain}/${derivedObjectId}/data`, '', { retain: true });
+                const stateTopic = localPayload?.state_topic || `jsa/${domain}/${derivedObjectId}/data`;
+                this.mqttManager.publish(stateTopic, '', { retain: true });
 
                 // Find the actual filename (js or ts) from the manager's map
                 const fileName = Array.from(this.workerManager.scriptEntityMap.keys()).find(k => {

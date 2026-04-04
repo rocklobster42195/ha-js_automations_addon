@@ -17,8 +17,8 @@ class CompilerManager extends EventEmitter {
         
         this.options = {
             target: ts.ScriptTarget.ES2020,
-            module: ts.ModuleKind.CommonJS,
-            moduleResolution: ts.ModuleResolutionKind.NodeJs,
+            module: ts.ModuleKind.Node16,
+            moduleResolution: ts.ModuleResolutionKind.Node16,
             outDir: this.distDir,
             strict: true,
             esModuleInterop: true,
