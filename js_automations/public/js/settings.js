@@ -557,8 +557,13 @@ async function discoverMqttSettings(btn) {
     }
 }
 
+function closeSettingsTab() {
+    if (typeof closeTab === 'function') closeTab(SETTINGS_TAB_ID);
+}
+
 // Auto-load settings on startup
 window.openSettingsTab = openSettingsTab;
+window.closeSettingsTab = closeSettingsTab;
 window.loadSettingsData = loadSettingsData;
 window.restartHA = restartHA;
 window.installIntegration = installIntegration;

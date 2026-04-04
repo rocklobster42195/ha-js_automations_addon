@@ -163,6 +163,9 @@ class EntityManager {
         const fallbackIcon = config.icon || 'mdi:eye';
         const payload = {
             name: config.name || config.friendly_name || defaultFriendlyName,
+            // default_entity_id: HA 2025.10+ replacement for the deprecated object_id field.
+            // Takes the full entity_id (domain.object_id). object_id is kept for HA < 2025.10.
+            default_entity_id: entityId,
             object_id: objectId,
             unique_id: uniqueId,
             state_topic: `jsa/${domain}/${objectId}/data`,
@@ -179,11 +182,11 @@ class EntityManager {
         };
 
         // Attach the entity to the script's device only if the user opts in via `device: true`
-        // in ha.register(). By default, entities are standalone so that HA uses `object_id`
+        // in ha.register(). By default, entities are standalone so that HA uses `default_entity_id`
         // directly for entity_id generation — without device context, HA reliably sets
-        // entity_id = domain.object_id (exactly what the user specified).
+        // entity_id = default_entity_id (exactly what the user specified).
         // With a device block present, HA tends to generate entity_id from
-        // {device_name_slug}_{entity_name_slug}, ignoring object_id.
+        // {device_name_slug}_{entity_name_slug}, ignoring default_entity_id.
         if (config.device === true || (typeof config.device === 'object' && config.device !== null)) {
             const deviceConfig = typeof config.device === 'object' ? config.device : {};
             payload.device = {
@@ -199,8 +202,9 @@ class EntityManager {
             payload.command_topic = `jsa/${domain}/${objectId}/set`;
         }
 
-        // Resolve Area if provided in config
-        if (config.area || config.suggested_area) {
+        // For device entities: set suggested_area as a discovery-time hint.
+        // Standalone entities get their area set post-registration via WebSocket API.
+        if (payload.device && (config.area || config.suggested_area)) {
             const { areas } = await this.haConnection.getHAMetadata();
             const areaName = config.area || config.suggested_area;
             const areaId = this.resolveId(areaName, areas, 'area_id');
@@ -213,27 +217,68 @@ class EntityManager {
             this._warnIconConflict(entityId, config.device_class);
         }
 
-        // Before publishing: detect and remove any stale HA entity that has our unique_id
-        // but the wrong entity_id (created by an older code version or a different topic format).
-        // Only runs for entities we haven't registered before (not in local cache).
-        // This prevents HA from silently updating the stale entity instead of creating the correct one.
-        if (!this.workerManager.nativeEntities.has(entityId) && this.haConnection.isReady) {
+        // Before publishing: remove any stale HA entity that would prevent HA from creating
+        // the correct entity_id. Two cases:
+        // 1. Same unique_id, wrong entity_id (code version change, topic format change)
+        // 2. Name-slug entity_id — HA creates this when object_id is missing in old payload.
+        //    HA won't rename an existing entity even if object_id is added later.
+        //
+        // Critical: when a stale entity is found, we MUST also clear our own discovery topic
+        // BEFORE republishing. HA's MQTT integration keeps an internal topic→entity mapping;
+        // removing only the registry entry is not enough — HA will still update the old entity
+        // when it sees a new config on the same topic. Publishing empty first forces HA to
+        // dissolve the mapping, so the follow-up config creates a fresh entity correctly.
+        let needsTopicClear = false;
+        if (this.haConnection.isReady) {
             try {
                 const entityReg = await this.haConnection.getEntityRegistry();
-                const stale = entityReg.find(e => e.unique_id === uniqueId && e.entity_id !== entityId);
-                if (stale) {
-                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Removing stale entity ${stale.entity_id} (unique_id collision — should be ${entityId})`, level: 'debug' });
+
+                const removeStale = async (stale) => {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Removing stale entity ${stale.entity_id} (should be ${entityId})`, level: 'debug' });
                     await this.haConnection.removeEntity(stale.entity_id);
-                    // Clear retained MQTT config at the stale entity's likely topic paths
                     const staleObjId = stale.entity_id.split('.').slice(1).join('.');
                     this.mqttManager.publish(`homeassistant/${domain}/${staleObjId}/config`, '', { retain: true });
                     if (stale.unique_id && stale.unique_id !== staleObjId) {
                         this.mqttManager.publish(`homeassistant/${domain}/${stale.unique_id}/config`, '', { retain: true });
                     }
+                    needsTopicClear = true;
+                };
+
+                // Case 1: same unique_id, wrong entity_id
+                const staleById = entityReg.find(e => e.unique_id === uniqueId && e.entity_id !== entityId);
+                if (staleById) await removeStale(staleById);
+
+                // Case 2: HA derived entity_id from name slug (no object_id in old payload).
+                // HA slugifies: lowercase, non-[a-z0-9] → '_', collapse multiple underscores.
+                const nameSlug = (payload.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+                const nameEntityId = `${domain}.${nameSlug}`;
+                if (nameEntityId !== entityId) {
+                    const staleByName = entityReg.find(e =>
+                        e.entity_id === nameEntityId &&
+                        e.unique_id?.startsWith('jsa_') &&
+                        e !== staleById
+                    );
+                    if (staleByName) await removeStale(staleByName);
                 }
             } catch (err) {
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not check HA registry for stale entity (${entityId}): ${err.message}`, level: 'warn' });
             }
+        }
+
+        // Clear our discovery topic before publishing the real config when:
+        // (a) a stale entity was found and removed (needsTopicClear), OR
+        // (b) the entity is brand-new (not yet tracked in nativeEntities).
+        //
+        // Case (b) handles old retained broker messages: if a previous addon version
+        // published this topic WITHOUT object_id, HA already processed that retained
+        // message at startup and created the wrong entity_id (name-slug based). Our
+        // new payload would arrive too late and just update the wrong entity.
+        // Publishing empty first forces HA's MQTT integration to dissolve its
+        // internal topic→entity mapping, so the follow-up config creates a fresh
+        // entity with the correct object_id.
+        const isNewEntity = !this.workerManager.nativeEntities.has(entityId);
+        if (needsTopicClear || isNewEntity) {
+            this.mqttManager.publish(discoveryTopic, '', { retain: true });
         }
 
         this.mqttManager.publish(discoveryTopic, payload, { retain: true });
@@ -249,16 +294,51 @@ class EntityManager {
         // Ensure full path is used for state tracking consistency
         this.stateManager.registerEntity(entityId, scriptPath);
 
-        // For device: true entities HA generates a different entity_id (device-prefixed).
-        // Check HA's registry after a short delay and register the alias so that
-        // ha.getState(), ha.on() etc. work with the user's entity_id immediately.
-        if (payload.device && this.haConnection.isReady) {
+        // Post-registration: apply area_id, labels, and device alias.
+        // HA needs a moment to process the MQTT discovery message before the entity
+        // appears in the registry, so we defer these by 2 seconds.
+        const needsPostUpdate = this.haConnection.isReady && (
+            payload.device || config.area_id || config.area || config.labels
+        );
+        if (needsPostUpdate) {
             setTimeout(async () => {
                 try {
                     const entityReg = await this.haConnection.getEntityRegistry();
                     const haEntry = entityReg.find(e => e.unique_id === uniqueId);
-                    if (haEntry && haEntry.entity_id !== entityId) {
+                    if (!haEntry) return;
+
+                    // Device alias: HA may generate a different entity_id for device-grouped entities
+                    if (payload.device && haEntry.entity_id !== entityId) {
                         this.workerManager.setEntityIdAlias(haEntry.entity_id, entityId);
+                    }
+
+                    // Area and labels: resolve names → IDs and push via WebSocket API
+                    const registryUpdates = {};
+
+                    if (config.area_id) {
+                        registryUpdates.area_id = config.area_id;
+                    } else if (config.area || config.suggested_area) {
+                        const { areas } = await this.haConnection.getHAMetadata();
+                        const areaName = config.area || config.suggested_area;
+                        const resolved = this.resolveId(areaName, areas, 'area_id');
+                        if (resolved) registryUpdates.area_id = resolved;
+                    }
+
+                    if (Array.isArray(config.labels) && config.labels.length > 0) {
+                        const { labels: allLabels } = await this.haConnection.getHAMetadata();
+                        const resolvedLabels = config.labels
+                            .map(l => {
+                                const found = allLabels.find(al =>
+                                    al.label_id === l || al.name?.toLowerCase() === l.toLowerCase()
+                                );
+                                return found ? found.label_id : null;
+                            })
+                            .filter(Boolean);
+                        if (resolvedLabels.length > 0) registryUpdates.labels = resolvedLabels;
+                    }
+
+                    if (Object.keys(registryUpdates).length > 0) {
+                        await this.haConnection.updateEntityRegistry(haEntry.entity_id, registryUpdates);
                     }
                 } catch (_) {}
             }, 2000);
