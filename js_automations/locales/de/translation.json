@@ -39,6 +39,7 @@
   "group_none": "Nicht zugewiesen",
   "script_action_toggle_title": "Start / Stop",
   "script_action_restart_title": "Neustart",
+  "script_action_dismiss_title": "Fehler bestätigen",
   "script_action_duplicate_title": "Duplizieren",
   "download_script_title": "Skript herunterladen",
   "script_action_delete_title": "Löschen",

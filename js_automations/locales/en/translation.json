@@ -39,6 +39,7 @@
   "group_none": "Unassigned",
   "script_action_toggle_title": "Start / Stop",
   "script_action_restart_title": "Restart",
+  "script_action_dismiss_title": "Dismiss error",
   "script_action_duplicate_title": "Duplicate",
   "download_script_title": "Download Script",
   "script_action_delete_title": "Delete",

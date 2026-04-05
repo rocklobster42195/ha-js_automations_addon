@@ -46,18 +46,6 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             results.push(m);
         });
 
-        // 2. Libraries
-        if (fs.existsSync(LIBRARIES_DIR)) {
-            const files = fs.readdirSync(LIBRARIES_DIR).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
-            results.push(...files.map(f => {
-                const m = ScriptHeaderParser.parse(path.join(LIBRARIES_DIR, f));
-                if (!m.name) m.name = f; // Fallback
-                m.status = 'stopped'; // Libraries laufen nicht eigenständig
-                m.running = false;
-                return m;
-            }));
-        }
-
         res.json(results);
     });
 
@@ -90,6 +78,8 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
                 workerManager.startScript(fullPath);
                 io.emit('status_update');
             }, 500);
+        } else if (action === 'dismiss') {
+            workerManager.clearErrorState(filename);
         }
         io.emit('status_update');
         res.json({ ok: true });

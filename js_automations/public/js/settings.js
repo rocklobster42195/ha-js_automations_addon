@@ -257,15 +257,17 @@ function renderSettingsItems(category, section) {
             wrapper.style.borderLeft = '1px solid #555';
         }
 
-        // Label
-        const label = document.createElement('label');
-        label.setAttribute('data-i18n', item.label);
-        label.innerText = i18next.t(item.label);
-        label.style.display = 'block';
-        label.style.marginBottom = '5px';
-        label.style.fontWeight = '500';
-        label.style.fontSize = '0.9rem';
-        wrapper.appendChild(label);
+        // Label (omitted when null — e.g. standalone action buttons)
+        if (item.label !== null) {
+            const label = document.createElement('label');
+            label.setAttribute('data-i18n', item.label);
+            label.innerText = i18next.t(item.label);
+            label.style.display = 'block';
+            label.style.marginBottom = '5px';
+            label.style.fontWeight = '500';
+            label.style.fontSize = '0.9rem';
+            wrapper.appendChild(label);
+        }
 
         // Description
         if (item.description) {
@@ -361,7 +363,7 @@ function renderSettingsItems(category, section) {
         }
         else if (item.type === 'mqtt-test') {
             input = document.createElement('button');
-            input.innerText = i18next.t(item.label);
+            input.innerText = i18next.t('settings.mqtt.mqtt_test_btn');
             input.className = 'btn-primary';
             input.style.width = 'fit-content';
             input.style.marginTop = '5px';
@@ -370,12 +372,11 @@ function renderSettingsItems(category, section) {
         }
         else if (item.type === 'mqtt-autodetect') {
             input = document.createElement('button');
-            input.innerText = i18next.t(item.label);
-            input.className = 'btn-text';
+            input.innerText = i18next.t('settings.mqtt.mqtt_autodetect_btn');
+            input.className = 'btn-outline';
             input.style.width = 'fit-content';
             input.style.marginTop = '5px';
-            input.style.fontSize = '0.85rem';
-            input.style.color = 'var(--accent)';
+            input.style.fontSize = '0.9rem';
             input.onclick = () => discoverMqttSettings(input);
         }
         else {

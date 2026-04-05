@@ -231,13 +231,13 @@ module.exports = [
             },
             {
                 key: 'test',
-                label: 'settings.mqtt.mqtt_test_btn',
+                label: null,
                 type: 'mqtt-test',
                 condition: { key: 'enabled', value: true }
             },
             {
                 key: 'autodetect',
-                label: 'settings.mqtt.mqtt_autodetect_btn',
+                label: null,
                 type: 'mqtt-autodetect',
                 condition: { key: 'enabled', value: true }
             },

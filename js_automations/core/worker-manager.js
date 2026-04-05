@@ -355,7 +355,12 @@ class WorkerManager extends EventEmitter {
         const libDir = path.join(this.scriptsDir, 'libraries');
         if (fs.existsSync(libDir)) {
             const libs = fs.readdirSync(libDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
-            results.push(...libs.map(f => path.join(libDir, f)));
+            const libTsBasenames = new Set(libs.filter(f => f.endsWith('.ts')).map(f => path.basename(f, '.ts')));
+            const filteredLibs = libs.filter(f => {
+                if (f.endsWith('.js')) return !libTsBasenames.has(path.basename(f, '.js'));
+                return true;
+            });
+            results.push(...filteredLibs.map(f => path.join(libDir, f)));
         }
         return results;
     }
@@ -821,6 +826,13 @@ class WorkerManager extends EventEmitter {
     }
 
     /**
+     * Clears the error state for a crashed script so it appears as "stopped".
+     */
+    clearErrorState(filename) {
+        this.lastExitState.delete(filename);
+    }
+
+    /**
      * Stops a script gracefully.
      */
     stopScript(filename, reason = "stopped by user") {
@@ -829,12 +841,14 @@ class WorkerManager extends EventEmitter {
             this.stopReasons.set(filename, reason);
             this.stats.delete(filename);
             this.startTimes.delete(filename);
-            // restartTracker reset is handled in the 'script_exit' event in server.js
-            // 1. Try graceful shutdown
+            // 1. Try graceful shutdown — worker runs ha.onStop() callbacks then process.exit(0)
             worker.postMessage({ type: 'stop_request' });
-            // 2. Force terminate after 2 seconds if still alive
+            // 2. Force-kill if the worker is still alive after 2s.
+            //    Covers: synchronous infinite loops (event loop blocked, message never arrives)
+            //    and ha.onStop() callbacks that never resolve.
             setTimeout(() => {
                 if (this.workers.get(filename) === worker) {
+                    this.emit('log', { source: 'System', message: `[WorkerManager] "${filename}" did not stop gracefully — force-killing.`, level: 'warn' });
                     worker.terminate();
                 }
             }, 2000);

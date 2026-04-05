@@ -120,10 +120,13 @@ class MqttManager extends EventEmitter {
         const mqttEntry = entries.find(e => e.domain === 'mqtt');
 
         if (mqttEntry) {
-            // Standard Home Assistant Mosquitto Add-on values
+            // HA stores the broker hostname as 'broker' (not 'host') in the config entry
+            const brokerFromEntry = mqttEntry.data?.broker || mqttEntry.data?.host;
             const isAddon = !!process.env.SUPERVISOR_TOKEN;
+            // Use core-mosquitto only when running as HA addon AND the broker is the Mosquitto addon
+            const isMosquittoAddon = isAddon && (!brokerFromEntry || brokerFromEntry === 'core-mosquitto');
             const discovery = {
-                host: isAddon ? 'core-mosquitto' : (mqttEntry.data?.host || 'localhost'),
+                host: isMosquittoAddon ? 'core-mosquitto' : (brokerFromEntry || 'localhost'),
                 port: mqttEntry.data?.port || 1883,
                 username: mqttEntry.data?.username || ''
             };

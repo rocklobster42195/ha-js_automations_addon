@@ -30,6 +30,7 @@ class HAConnector {
         return new Promise((resolve, reject) => {
             console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
             this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
+            this.ws.setMaxListeners(0); // Remove the default 10 listener limit for this central component
             this.ws.on('message', (data) => {
                 try {
                     const msg = JSON.parse(data);

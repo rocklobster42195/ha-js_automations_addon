@@ -206,11 +206,14 @@ function renderScripts(scripts, updateGlobal = true) {
             const badge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
             // Libraries are passive; hide most controls.
             const isLib = key === LIB_GROUP;
-            const controlsHtml = isLib ? 
+            const firstBtn = s.status === 'error'
+                ? `<button class="btn-row" onclick="event.stopPropagation(); dismissError('${s.filename}')" title="${i18next.t('script_action_dismiss_title')}"><i class="mdi mdi-check"></i></button>`
+                : `<button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}"><i class="mdi ${toggleIcon}"></i></button>`;
+            const controlsHtml = isLib ?
                 `<span style="font-size:0.75rem; color:#666; font-style:italic; margin-right:10px;">${i18next.t('status_passive_library')}</span>
-                 <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>` 
-                : 
-                `<button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}"><i class="mdi ${toggleIcon}"></i></button>
+                 <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>`
+                :
+                `${firstBtn}
                  <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="${i18next.t('script_action_restart_title')}" ${!s.running ? 'disabled' : ''}><i class="mdi mdi-restart"></i></button>
                  <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>`;
 
@@ -319,6 +322,7 @@ async function duplicateScript(filename) {
 
 async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }
 async function restartScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'restart' }) }); }
+async function dismissError(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'dismiss' }) }); }
 async function deleteScript(f) {
     // Check dependencies (Libraries).
     const dependents = allScripts.filter(s => {
