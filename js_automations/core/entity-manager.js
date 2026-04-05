@@ -160,7 +160,8 @@ class EntityManager {
         // the resulting entity_id is exactly what the user specified (e.g. sensor.mqtt_test_4).
         const discoveryTopic = `homeassistant/${domain}/${objectId}/config`;
 
-        const fallbackIcon = config.icon || 'mdi:eye';
+        // Don't force a fallback icon when device_class is set — HA provides its own class icon.
+        const fallbackIcon = config.icon || (config.device_class ? undefined : 'mdi:eye');
         const payload = {
             name: config.name || config.friendly_name || defaultFriendlyName,
             // default_entity_id: HA 2025.10+ replacement for the deprecated object_id field.
@@ -178,7 +179,15 @@ class EntityManager {
             unit_of_measurement: config.unit_of_measurement,
             device_class: config.device_class,
             state_class: config.state_class,
+            entity_category: config.entity_category,
             options: config.options,
+            min: config.min,
+            max: config.max,
+            step: config.step,
+            mode: config.mode,
+            suggested_display_precision: config.suggested_display_precision,
+            enabled_by_default: config.enabled_by_default,
+            expire_after: config.expire_after,
         };
 
         // Attach the entity to the script's device only if the user opts in via `device: true`
@@ -195,6 +204,9 @@ class EntityManager {
                 manufacturer: deviceConfig.manufacturer || "JS Automations",
                 model: deviceConfig.model || "Script",
             };
+            if (deviceConfig.sw_version) payload.device.sw_version = deviceConfig.sw_version;
+            if (deviceConfig.hw_version) payload.device.hw_version = deviceConfig.hw_version;
+            if (deviceConfig.configuration_url) payload.device.configuration_url = deviceConfig.configuration_url;
         }
 
         // Add command topic for interactive entities
@@ -260,6 +272,21 @@ class EntityManager {
                     );
                     if (staleByName) await removeStale(staleByName);
                 }
+
+                // Case 3: desired entity_id is blocked by a foreign (non-JSA) entity — a relic
+                // from a previous integration (e.g. old Tedee integration, renamed script, etc.).
+                // HA would silently append '_2', '_3'… to avoid the collision. We remove the
+                // blocker so our entity_id lands correctly.
+                const blocker = entityReg.find(e =>
+                    e.entity_id === entityId &&
+                    e.unique_id !== uniqueId &&
+                    !e.unique_id?.startsWith('jsa_') &&
+                    e !== staleById
+                );
+                if (blocker) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] entity_id ${entityId} blocked by foreign relic ${blocker.unique_id} — removing blocker.`, level: 'warn' });
+                    await removeStale(blocker);
+                }
             } catch (err) {
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not check HA registry for stale entity (${entityId}): ${err.message}`, level: 'warn' });
             }
@@ -301,6 +328,9 @@ class EntityManager {
             payload.device || config.area_id || config.area || config.labels
         );
         if (needsPostUpdate) {
+            // Add a small stagger/jitter (0-500ms) to prevent a "thundering herd" of WebSocket 
+            // requests when a script registers many entities at once, avoiding MaxListenersExceededWarning.
+            const stagger = Math.floor(Math.random() * 500);
             setTimeout(async () => {
                 try {
                     const entityReg = await this.haConnection.getEntityRegistry();
@@ -341,7 +371,7 @@ class EntityManager {
                         await this.haConnection.updateEntityRegistry(haEntry.entity_id, registryUpdates);
                     }
                 } catch (_) {}
-            }, 2000);
+            }, 2000 + stagger);
         }
     }
 

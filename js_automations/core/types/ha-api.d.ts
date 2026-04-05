@@ -381,6 +381,26 @@ interface HA {
         device_class?: string;
         /** HA state class for long-term statistics: `'measurement'`, `'total'`, `'total_increasing'`. */
         state_class?: 'measurement' | 'total' | 'total_increasing';
+        /**
+         * Places the entity in HA's diagnostic or config category.
+         * - `'diagnostic'`: shown in a separate "Diagnostic" section (e.g. signal strength, uptime)
+         * - `'config'`: shown in a separate "Configuration" section (e.g. thresholds, modes)
+         */
+        entity_category?: 'diagnostic' | 'config';
+        /** Minimum value for `number` entities. */
+        min?: number;
+        /** Maximum value for `number` entities. */
+        max?: number;
+        /** Step size for `number` entities. */
+        step?: number;
+        /** Display mode for `number` entities: `'auto'`, `'box'`, or `'slider'`. */
+        mode?: 'auto' | 'box' | 'slider';
+        /** Number of decimal places HA should display for sensor values (e.g. `2` → `23.45 °C`). */
+        suggested_display_precision?: number;
+        /** Whether the entity is enabled in HA by default. Set to `false` to create it disabled. */
+        enabled_by_default?: boolean;
+        /** Seconds after the last state update before HA marks the entity as `unavailable`. */
+        expire_after?: number;
         /** Initial state value set when the entity is first created. */
         initial_state?: string | number | boolean;
         /** Initial attributes (merged with the state on first publish). */

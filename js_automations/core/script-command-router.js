@@ -51,11 +51,14 @@ class ScriptCommandRouter {
 
             const scriptName = path.basename(scriptPath);
 
-            if (service === 'turn_on' || service === 'press') {
+            // Only trigger lifecycle actions for exposed control entities (jsa_ prefix)
+            const isExposedAction = entityId.includes('.jsa_');
+
+            if (isExposedAction && (service === 'turn_on' || service === 'press')) {
                 this.workerManager.startScript(scriptName);
-            } else if (service === 'turn_off') {
+            } else if (isExposedAction && service === 'turn_off') {
                 this.workerManager.stopScript(scriptName);
-            } else if (service === 'toggle') {
+            } else if (isExposedAction && service === 'toggle') {
                 if (this.workerManager.workers.has(scriptName))
                     this.workerManager.stopScript(scriptName);
                 else

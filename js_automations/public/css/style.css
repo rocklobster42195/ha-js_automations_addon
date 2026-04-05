@@ -583,6 +583,8 @@ input#search-input:focus { border-color: var(--accent) !important; }
     margin-top: 20px; 
 }
 .btn-primary { background: var(--accent) !important; color: #000 !important; font-weight: bold !important; padding: 10px 30px !important; border-radius: 6px !important; }
+.btn-outline { background: transparent !important; color: var(--accent) !important; font-weight: bold !important; padding: 10px 30px !important; border-radius: 6px !important; border: 2px solid var(--accent) !important; }
+.btn-outline:hover { background: var(--accent) !important; color: #000 !important; }
 .btn-text { color: var(--text-sec) !important; font-size: 0.8rem; padding: 10px; }
 .btn-text:hover { color: #fff !important; }
 

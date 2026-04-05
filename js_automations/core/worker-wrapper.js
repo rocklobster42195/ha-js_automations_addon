@@ -326,6 +326,9 @@ function ensureMessageListener() {
             // FIX: Update cache immediately so ha.states is current in the callback
             if (msg.state) states[msg.entity_id] = JSON.parse(JSON.stringify(msg.state));
 
+            // Skip entity deletion events (new_state: null) — no useful state to deliver
+            if (!msg.state) return;
+
             subscriptionCallbacks.forEach(sub => {
                 // 1. Check Pattern Match
                 if (!matches(msg.entity_id, sub.pattern)) return;
@@ -368,6 +371,23 @@ function ensureMessageListener() {
                     ha.error(`Error in ha.on callback for ${msg.entity_id}: ${e.message}\n${e.stack}`);
                 }
             });
+        }
+
+        // Handle MQTT commands for ha.register()ed entities — routed through ha.on() subscriptions.
+        // The command payload becomes event.state so existing ha.on() handlers work transparently.
+        if (msg.type === 'mqtt_command') {
+            const syntheticState = { state: msg.payload, attributes: {}, entity_id: msg.entityId, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
+            subscriptionCallbacks.forEach(sub => {
+                if (!matches(msg.entityId, sub.pattern)) return;
+                try {
+                    sub.callback({ entity_id: msg.entityId, state: msg.payload, old_state: null, attributes: {} });
+                } catch (e) {
+                    ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`);
+                }
+            });
+            // Update local state cache so ha.getState() reflects the command immediately
+            if (states[msg.entityId]) states[msg.entityId].state = msg.payload;
+            return;
         }
 
         // Handle master request to stop gracefully
@@ -515,6 +535,9 @@ const ha = {
         return new Promise(resolve => {
             const timer = setTimeout(() => {
                 pendingAsks.delete(correlationId);
+                // Auto-dismiss the notification on the device so the user doesn't
+                // see a stale prompt after the timeout has already resolved.
+                ha.notify('clear_notification', { target, data: { tag: correlationId } });
                 parentPort.unref();
                 resolve(defaultAction);
             }, timeout);

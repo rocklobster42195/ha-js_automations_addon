@@ -139,6 +139,7 @@ const SNIPPET_REGISTRY = [
                 "\tdevice_class: '\${5:temperature}',",
                 "\tstate_class: '\${6:measurement}',",
                 "\tinitial_state: \${7:0},",
+                "\tentity_category: '\${8|diagnostic,config|}',",
                 "});\n$0",
             ].join('\n'),
             switch: [
@@ -152,6 +153,7 @@ const SNIPPET_REGISTRY = [
                 "\tname: '\${2:Name}',",
                 "\ticon: '\${3:mdi:format-list-bulleted}',",
                 "\toptions: ['\${4:option1}', '\${5:option2}'],",
+                "\tentity_category: '\${6|diagnostic,config|}',",
                 "});\n$0",
             ].join('\n'),
             number: [
@@ -162,6 +164,8 @@ const SNIPPET_REGISTRY = [
                 "\tmin: \${5:0},",
                 "\tmax: \${6:100},",
                 "\tstep: \${7:1},",
+                "\tmode: '\${8|auto,box,slider|}',",
+                "\tentity_category: '\${9|diagnostic,config|}',",
                 "});\n$0",
             ].join('\n'),
             text: [

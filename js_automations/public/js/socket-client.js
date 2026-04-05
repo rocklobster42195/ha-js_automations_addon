@@ -116,7 +116,7 @@ function initSocket() {
 
     window.socket.on('integration_status', (data) => {
         console.log('Socket: Received integration_status update:', data);
-        
+
         window._lastIntegrationStatus = data;
         // Update global status used by app.js logic
         window.currentIntegrationStatus = data;
@@ -124,6 +124,11 @@ function initSocket() {
         const available = (data && typeof data === 'object') ? (data.is_running || data.available) : data;
 
         window.updateIntegrationStatusUI(true, available);
+
+        // Sync MQTT indicator with current connection state (fixes race condition on page reload)
+        if (data?.mqtt && typeof statusBar !== 'undefined') {
+            statusBar.updateMqttIndicator(data.mqtt);
+        }
 
         // Immediately update status bar slots if stats are included in the status.
         if (data.stats && typeof window.updateStatusBarUI === 'function') {
