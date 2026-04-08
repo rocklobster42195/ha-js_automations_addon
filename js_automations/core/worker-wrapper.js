@@ -156,12 +156,11 @@ const stopCallbacks = [];
 const errorCallbacks = [];
 let isListening = false;
 
-// Echo suppression: track entity IDs registered via ha.register() and their last
-// published state. When ha_event arrives for one of our own entities with the same
-// state we just published, it's our own MQTT echo — suppress it so ha.on() handlers
-// don't fire spuriously (no more "if (state === lastValue) return" in every script).
+// Native entity tracking: entity IDs registered via ha.register().
+// ha_events for these are always HA echoes of the script's own MQTT publishes
+// and are suppressed entirely in the ha_event handler. Commands from HA arrive
+// via mqtt_command instead.
 const nativeEntityIds = new Set();
-const lastPublishedStates = new Map();
 
 // HA non-command states filtered out of mqtt_command dispatches.
 // Scripts should never need to guard against these themselves.
@@ -340,13 +339,12 @@ function ensureMessageListener() {
             // Skip entity deletion events (new_state: null) — no useful state to deliver
             if (!msg.state) return;
 
-            // Echo suppression: if this ha_event is for one of our own registered entities
-            // and the state matches what we last published, it's our own MQTT round-trip
-            // echo — drop it silently. Scripts no longer need manual echo guards.
-            if (nativeEntityIds.has(msg.entity_id)) {
-                const last = lastPublishedStates.get(msg.entity_id);
-                if (last !== undefined && String(msg.state.state) === last) return;
-            }
+            // Native entities (ha.register()) are commanded via mqtt_command, not ha_event.
+            // Any ha_event for a native entity is an HA echo of the script's own MQTT publish
+            // — drop it unconditionally. This correctly handles all entity types including
+            // buttons, which have no initial_state and were not covered by the previous
+            // state-matching suppression.
+            if (nativeEntityIds.has(msg.entity_id)) return;
 
             subscriptionCallbacks.forEach(sub => {
                 // 1. Check Pattern Match
@@ -670,8 +668,6 @@ const ha = {
             current.last_updated = new Date().toISOString();
         }
 
-        // Record the published state for echo suppression.
-        if (state !== undefined) lastPublishedStates.set(entityId, String(states[entityId].state));
         // Send the full merged attribute set to ensure MQTT attributes are not partially cleared.
         parentPort.postMessage({ type: 'update_state', entityId, state: states[entityId].state, attributes: states[entityId].attributes });
     },
@@ -699,11 +695,8 @@ const ha = {
             config = { ...config, unit_of_measurement: config.unit };
             delete config.unit;
         }
-        // Track as a native entity for echo suppression.
+        // Track as a native entity so ha_events for it are suppressed (commands arrive via mqtt_command).
         nativeEntityIds.add(entityId);
-        if (config.initial_state !== undefined) {
-            lastPublishedStates.set(entityId, String(config.initial_state));
-        }
         // Send the intent to the main process, which handles the registration via MQTT.
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },

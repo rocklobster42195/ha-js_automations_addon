@@ -152,25 +152,27 @@ function initSocket() {
                 console.error("Socket: Error requesting integration status:", response.error);
                 if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
             } else {
-                console.log("Socket: Received integration status response:", response);
-                
                 window.currentIntegrationStatus = response;
-                
-                // Trigger global UI update
+                // Update MQTT indicator in status bar
+                if (response?.mqtt && typeof statusBar !== 'undefined') statusBar.updateMqttIndicator(response.mqtt);
+                // Update integration banner
+                if (typeof window.handleIntegrationStatus === 'function') window.handleIntegrationStatus(response);
                 if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
             }
         });
     }
 
-    // Mobile Wake-Up Handler.
-    // Checks connection status immediately when the app becomes visible again.
+    // Wake-Up / Focus Handler.
+    // Refreshes MQTT indicator and banner when the tab becomes visible again.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            console.log('📱 App active: Checking connection...');
             if (window.socket && !window.socket.connected) {
-                console.log('🔌 Socket disconnected. Forcing reconnect...');
                 updateConnectionUI(false);
                 window.socket.connect();
+            } else {
+                // Socket still connected: pull fresh integration status to update
+                // the MQTT indicator and banner without waiting for a server-push event.
+                requestIntegrationStatus();
             }
         }
     });
