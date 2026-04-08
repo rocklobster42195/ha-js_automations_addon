@@ -36,6 +36,11 @@ const statusBar = {
         // Listener for settings changes
         window.addEventListener('settings-changed', (e) => {
             this.render(e.detail);
+            // Re-apply MQTT indicator now that settings are available.
+            // Fixes reload race: integration_status can arrive before currentSettings is set,
+            // causing updateMqttIndicator() to return early with the wrong (disabled) state.
+            const mqtt = window.currentIntegrationStatus?.mqtt;
+            if (mqtt) this.updateMqttIndicator(mqtt);
         });
 
         // Handle MQTT status updates

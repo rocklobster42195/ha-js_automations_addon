@@ -144,7 +144,7 @@ function renderScripts(scripts, updateGlobal = true) {
 
         const header = document.createElement('div');
         header.className = 'section-header';
-        header.style.opacity = isCollapsed ? '0.5' : '1';
+        header.style.opacity = isCollapsed ? '0.7' : '1';
         header.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px;">
                 <i class="mdi ${iconClass}" style="font-size:1rem; ${iconStyle}"></i> 
@@ -166,7 +166,7 @@ function renderScripts(scripts, updateGlobal = true) {
             contentDiv.style.display = nowHidden ? 'none' : 'block';
             const chevron = header.querySelector('.mdi-chevron-up, .mdi-chevron-down');
             if (chevron) chevron.className = `mdi mdi-chevron-${nowHidden ? 'down' : 'up'}`;
-            header.style.opacity = nowHidden ? '0.5' : '1';
+            header.style.opacity = nowHidden ? '0.7' : '1';
             if (nowHidden) {
                 if (!collapsedSections.includes(key)) collapsedSections.push(key);
             } else {
