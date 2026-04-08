@@ -17,6 +17,9 @@ class WorkerManager extends EventEmitter {
         this.stats = new Map();
         this.restartTracker = new Map(); // Tracks start times for loop protection
         this.startTimes = new Map();
+        // Tracks ha.persistent() keys with unsaved in-memory changes per script.
+        // Map<filename, Map<storeKey, dirtyAtTimestamp>>
+        this.dirtyStore = new Map();
         this.haConnector = null;
         this.mqttManager = null;
         this.storeManager = null;
@@ -37,6 +40,7 @@ class WorkerManager extends EventEmitter {
         this.protectedEntities = new Map(); // filename -> Set<entityId> (from @expose headers)
         this.scriptEntityMap = new Map(); // filename -> Set<entityId> (RAM Cache)
         this.entityIdAliases = new Map(); // haEntityId -> userEntityId (for device: true entities)
+        this.entityConflicts = new Map(); // filename -> [{expected, actual}] (for UI warning)
         this.registryPath = '';
         this.saveRegistryTimer = null;
         this.pendingAsks = new Map(); // correlationId -> worker (for ha.ask())
@@ -694,7 +698,16 @@ class WorkerManager extends EventEmitter {
                     this._ensureNotificationListener();
                 }
 
-                // 6. Stats Response
+                // 6. Dirty store tracking for ha.persistent()
+                if (msg.type === 'store_dirty') {
+                    if (!this.dirtyStore.has(scriptMeta.filename)) this.dirtyStore.set(scriptMeta.filename, new Map());
+                    this.dirtyStore.get(scriptMeta.filename).set(msg.key, msg.dirtyAt);
+                }
+                if (msg.type === 'store_clean') {
+                    this.dirtyStore.get(scriptMeta.filename)?.delete(msg.key);
+                }
+
+                // 7. Stats Response
                 if (msg.type === 'stats') {
                     this.stats.set(scriptMeta.filename, {
                         ram_usage: Math.round(msg.heapUsed / 1024 / 1024 * 100) / 100, // MB
@@ -738,7 +751,15 @@ class WorkerManager extends EventEmitter {
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(scriptMeta.filename)) ? 'error' : 'success';
-                
+
+                // Warn if the script had unsaved ha.persistent() state at exit time.
+                const dirtyKeys = this.dirtyStore.get(scriptMeta.filename);
+                if (dirtyKeys && dirtyKeys.size > 0) {
+                    const keys = [...dirtyKeys.keys()].join(', ');
+                    this.emit('log', { source: 'System', message: `[WorkerManager] "${scriptMeta.filename}" exited with unsaved persistent state: ${keys}`, level: 'warn' });
+                }
+                this.dirtyStore.delete(scriptMeta.filename);
+
                 if (type === 'error') this.lastExitState.set(scriptMeta.filename, 'error');
                 this.stopReasons.delete(scriptMeta.filename);
                 
@@ -780,7 +801,50 @@ class WorkerManager extends EventEmitter {
         if (haEntityId && userEntityId && haEntityId !== userEntityId) {
             this.entityIdAliases.set(haEntityId, userEntityId);
             this.emit('log', { source: 'System', message: `[WorkerManager] Entity alias registered: ${haEntityId} → ${userEntityId}`, level: 'debug' });
+
+            // Track conflict per owning script for UI warning badge
+            for (const [file, entityIds] of this.scriptEntityMap.entries()) {
+                if (entityIds.has(userEntityId)) {
+                    if (!this.entityConflicts.has(file)) this.entityConflicts.set(file, []);
+                    const list = this.entityConflicts.get(file);
+                    if (!list.some(c => c.expected === userEntityId)) {
+                        list.push({ expected: userEntityId, actual: haEntityId });
+                    }
+                    break;
+                }
+            }
         }
+    }
+
+    /**
+     * Removes a previously registered alias and its conflict record.
+     * Called by the ACK poll when an entity successfully lands on the correct entity_id,
+     * clearing any stale alias that was registered before cleanup completed.
+     */
+    clearEntityIdAlias(userEntityId) {
+        for (const [haId, userId] of this.entityIdAliases.entries()) {
+            if (userId === userEntityId) {
+                this.entityIdAliases.delete(haId);
+                this.emit('log', { source: 'System', message: `[WorkerManager] Cleared stale alias: ${haId} → ${userEntityId}`, level: 'debug' });
+                break;
+            }
+        }
+        // Clear conflict record for this entity across all scripts
+        for (const [, conflicts] of this.entityConflicts.entries()) {
+            const idx = conflicts.findIndex(c => c.expected === userEntityId);
+            if (idx !== -1) { conflicts.splice(idx, 1); break; }
+        }
+    }
+
+    /**
+     * Returns a plain object mapping filename → conflict list for the UI.
+     */
+    getEntityConflicts() {
+        const result = {};
+        for (const [file, conflicts] of this.entityConflicts.entries()) {
+            if (conflicts.length > 0) result[file] = conflicts;
+        }
+        return result;
     }
 
     /**
@@ -841,16 +905,27 @@ class WorkerManager extends EventEmitter {
             this.stopReasons.set(filename, reason);
             this.stats.delete(filename);
             this.startTimes.delete(filename);
-            // 1. Try graceful shutdown — worker runs ha.onStop() callbacks then process.exit(0)
+            // 1. Try graceful shutdown — worker runs ha.onStop() callbacks then process.exit(0).
+            //    The stop_request handler also flushes all ha.persistent() pending saves.
             worker.postMessage({ type: 'stop_request' });
             // 2. Force-kill if the worker is still alive after 2s.
             //    Covers: synchronous infinite loops (event loop blocked, message never arrives)
             //    and ha.onStop() callbacks that never resolve.
             setTimeout(() => {
-                if (this.workers.get(filename) === worker) {
-                    this.emit('log', { source: 'System', message: `[WorkerManager] "${filename}" did not stop gracefully — force-killing.`, level: 'warn' });
-                    worker.terminate();
+                if (this.workers.get(filename) !== worker) return;
+                // Before killing: attempt a final flush of any dirty persistent state.
+                // Only effective if the event loop is responsive (not blocked). If it is
+                // blocked, the message won't arrive — but in that case ha.persistent()
+                // couldn't have been called either, so there's nothing to flush.
+                const dirty = this.dirtyStore.get(filename);
+                if (dirty && dirty.size > 0) {
+                    worker.postMessage({ type: 'flush_persistent' });
                 }
+                this.emit('log', { source: 'System', message: `[WorkerManager] "${filename}" did not stop gracefully — force-killing.`, level: 'warn' });
+                // Short grace period for flush_persistent to complete, then hard kill.
+                setTimeout(() => {
+                    if (this.workers.get(filename) === worker) worker.terminate();
+                }, 200);
             }, 2000);
         }
     }

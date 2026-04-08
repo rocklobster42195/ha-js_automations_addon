@@ -39,13 +39,13 @@ class MqttManager extends EventEmitter {
             return;
         }
 
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             this._connectToBroker(settings);
 
-            // Wait for first connection success or error
+            // Resolve as soon as MQTT connects, or after 10 s so kernel boot is never blocked.
+            // Do NOT reject on error: the mqtt library retries automatically (reconnectPeriod: 5 s).
+            // Rejecting would abort kernel.start() and prevent scripts from loading.
             this.client.once('connect', () => resolve());
-            this.client.once('error', (err) => reject(err));
-            // Timeout after 10 seconds to not block kernel boot indefinitely
             setTimeout(() => resolve(), 10000);
         });
     }

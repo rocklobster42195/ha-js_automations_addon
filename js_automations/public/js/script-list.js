@@ -204,6 +204,9 @@ function renderScripts(scripts, updateGlobal = true) {
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
             const badge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
+            const conflictBadge = (s.entity_conflicts && s.entity_conflicts.length > 0)
+                ? `<i class="mdi mdi-alert-outline" style="color: var(--color-warning, #f0a500); font-size:0.9rem; margin-right:4px;" title="${s.entity_conflicts.map(c => `${c.expected} → ${c.actual}`).join('\n')}"></i>`
+                : '';
             // Libraries are passive; hide most controls.
             const isLib = key === LIB_GROUP;
             const firstBtn = s.status === 'error'
@@ -222,7 +225,7 @@ function renderScripts(scripts, updateGlobal = true) {
                     <i class="mdi mdi-${icon} ${statusClass}"></i>
                 </div>
                 <div class="script-info">
-                    <div class="script-name">${s.name}</div>
+                    <div class="script-name">${conflictBadge}${s.name}</div>
                     <div class="script-lower-row">
                         <span class="script-filename">${badge}${s.filename}</span>
                         <div class="row-actions">

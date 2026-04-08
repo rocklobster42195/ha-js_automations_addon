@@ -5,6 +5,7 @@
 
 const STORE_TAB_ID = 'System: Store';
 let storeCache = {}; // Lokaler Cache für schnelles Filtern
+let dirtyKeys = new Set(); // Keys mit ungespeicherten ha.persistent()-Änderungen
 let currentSort = { column: 'key', direction: 'asc' };
 
 function sortStore(col) {
@@ -51,9 +52,13 @@ async function loadStoreData() {
 
     try {
         // Wir nutzen die globale apiFetch aus app.js
-        const res = await apiFetch('api/store'); 
-        if (res.ok) {
-            storeCache = await res.json();
+        const [storeRes, dirtyRes] = await Promise.all([
+            apiFetch('api/store'),
+            apiFetch('api/store/dirty'),
+        ]);
+        if (storeRes.ok) {
+            storeCache = await storeRes.json();
+            dirtyKeys = dirtyRes.ok ? new Set(await dirtyRes.json()) : new Set();
             renderStoreTable();
         } else {
             container.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${i18next.t('store.load_error')}</td></tr>`;
@@ -157,7 +162,9 @@ function renderStoreTable() {
         else if (Array.isArray(val)) type = 'array';
         const typeLabel = i18next.t(`store.types.${type}`, { defaultValue: type.toUpperCase().substr(0, 3) });
 
+        const isDirty = dirtyKeys.has(key);
         const row = document.createElement('tr');
+        if (isDirty) row.title = i18next.t('store.dirty_tooltip', { defaultValue: 'Unsaved in-memory changes (ha.persistent)' });
         
         // Value-Darstellung
         let valueHtml = '';
@@ -184,6 +191,7 @@ function renderStoreTable() {
                     <i class="mdi mdi-content-copy copy-btn-inline" data-key="${escapeHtml(key)}" onclick="copyText(this.dataset.key, this)" title="${i18next.t('store.actions.copy_key')}"></i>
                     ${iconHtml}${escapeHtml(key)}
                     <span class="store-type-badge" title="${i18next.t('store.types.type_label')}: ${type}">${typeLabel}</span>
+                    ${isDirty ? `<i class="mdi mdi-circle-medium" style="color:var(--warning, #f59e0b); font-size:1rem;" title="${i18next.t('store.dirty_tooltip')}"></i>` : ''}
                 </div>
             </td>
             <td class="store-val-cell">${valueHtml}</td>

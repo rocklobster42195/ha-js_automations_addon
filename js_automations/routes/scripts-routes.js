@@ -21,16 +21,17 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
     // GET List
     router.get('/', (req, res) => {
         const results = [];
+        const conflicts = workerManager.getEntityConflicts();
 
         // Use centralized getScripts for consistency (handles TS/JS filtering)
         const scripts = workerManager.getScripts();
         scripts.forEach(fullPath => {
             const filename = path.basename(fullPath);
             const isLibrary = path.basename(path.dirname(fullPath)) === 'libraries';
-            
+
             const m = ScriptHeaderParser.parse(fullPath);
             if (!m.name) m.name = filename;
-            
+
             if (isLibrary) {
                 m.status = 'stopped';
                 m.running = false;
@@ -43,6 +44,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
                     if (workerManager.startTimes.has(filename)) m.last_started = workerManager.startTimes.get(filename);
                 }
             }
+            m.entity_conflicts = conflicts[filename] || null;
             results.push(m);
         });
 

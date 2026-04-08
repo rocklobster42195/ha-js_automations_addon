@@ -52,6 +52,7 @@ class Kernel extends EventEmitter {
         this.bridge = null;
         this.systemService = null;
         this.lastStats = null; // Cache for the latest system metrics
+        this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
     }
 
     /**
@@ -198,6 +199,17 @@ class Kernel extends EventEmitter {
                 const fullStatus = await this.getSystemStatus();
                 this.emit('integration_status_changed', fullStatus);
             }
+            // On MQTT reconnect (not the first connect — kernel.start() handles that),
+            // republish entity discovery payloads so HA picks them up again.
+            if (status.connected && this._mqttEverConnected && this.entityManager) {
+                try {
+                    await this.entityManager.createExposedEntities(true);
+                    await this.workerManager.republishNativeEntities(false);
+                } catch (e) {
+                    this.logManager?.add('warn', 'System', `[Kernel] Entity republish after MQTT reconnect failed: ${e.message}`);
+                }
+            }
+            if (status.connected) this._mqttEverConnected = true;
         });
     }
 

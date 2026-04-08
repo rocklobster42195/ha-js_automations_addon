@@ -34,8 +34,9 @@ class EntityManager {
 
         new ScriptCommandRouter(workerManager, stateManager, haConnection, mqttManager);
 
-        this.mqttManager.on('status_change', (status) => {
+        this.mqttManager.on('status_change', async (status) => {
             if (status.connected) {
+                await this.startupAudit();
                 this.createSystemEntities();
                 const activeScripts = this.workerManager.getScripts().map(p => path.basename(p, path.extname(p)));
                 this.cleanupOrphanedEntities(activeScripts);
@@ -241,6 +242,7 @@ class EntityManager {
         // when it sees a new config on the same topic. Publishing empty first forces HA to
         // dissolve the mapping, so the follow-up config creates a fresh entity correctly.
         let needsTopicClear = false;
+        let alreadyCorrect = false; // entity already in HA registry at the correct entity_id
         if (this.haConnection.isReady) {
             try {
                 const entityReg = await this.haConnection.getEntityRegistry();
@@ -259,6 +261,15 @@ class EntityManager {
                 // Case 1: same unique_id, wrong entity_id
                 const staleById = entityReg.find(e => e.unique_id === uniqueId && e.entity_id !== entityId);
                 if (staleById) await removeStale(staleById);
+
+                // Check if entity is already correctly placed (same unique_id, correct entity_id).
+                // If so, skip the topic clear — clearing causes HA MQTT to drop the entity from
+                // its internal mapping, then the republish races against the registry entry still
+                // being present, which causes HA to create a _2 suffix entity instead.
+                alreadyCorrect = !staleById && !!entityReg.find(e => e.unique_id === uniqueId && e.entity_id === entityId);
+                if (alreadyCorrect) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] "${entityId}" already correct in HA registry — skipping topic clear.`, level: 'debug' });
+                }
 
                 // Case 2: HA derived entity_id from name slug (no object_id in old payload).
                 // HA slugifies: lowercase, non-[a-z0-9] → '_', collapse multiple underscores.
@@ -286,6 +297,18 @@ class EntityManager {
                 if (blocker) {
                     this.workerManager.emit('log', { source: 'System', message: `[EntityManager] entity_id ${entityId} blocked by foreign relic ${blocker.unique_id} — removing blocker.`, level: 'warn' });
                     await removeStale(blocker);
+                    alreadyCorrect = false; // blocker removed, not settled yet
+                }
+
+                // Case 4: Orphaned state — entity_id exists in HA's state machine but has no
+                // entity registry entry. HA's entity_id generation checks the state machine for
+                // conflicts, so this orphan silently causes our MQTT entity to land as _2.
+                // The rename API also rejects with "already registered" for the same reason.
+                // Delete the orphaned state first so HA assigns the correct entity_id.
+                if (!alreadyCorrect && this.haConnection.states[entityId] && !entityReg.find(e => e.entity_id === entityId)) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Orphaned state at "${entityId}" — deleting to unblock entity_id assignment.`, level: 'debug' });
+                    await this.haConnection.deleteState(entityId);
+                    needsTopicClear = true;
                 }
             } catch (err) {
                 this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not check HA registry for stale entity (${entityId}): ${err.message}`, level: 'warn' });
@@ -303,8 +326,12 @@ class EntityManager {
         // Publishing empty first forces HA's MQTT integration to dissolve its
         // internal topic→entity mapping, so the follow-up config creates a fresh
         // entity with the correct object_id.
+        //
+        // Skip the topic clear if the entity is already correctly placed in HA's registry.
+        // Clearing when already correct causes a race: MQTT drop + registry-still-present
+        // → republish creates _2 instead of updating the existing entity in-place.
         const isNewEntity = !this.workerManager.nativeEntities.has(entityId);
-        if (needsTopicClear || isNewEntity) {
+        if ((needsTopicClear || isNewEntity) && !alreadyCorrect) {
             this.mqttManager.publish(discoveryTopic, '', { retain: true });
         }
 
@@ -321,58 +348,130 @@ class EntityManager {
         // Ensure full path is used for state tracking consistency
         this.stateManager.registerEntity(entityId, scriptPath);
 
-        // Post-registration: apply area_id, labels, and device alias.
-        // HA needs a moment to process the MQTT discovery message before the entity
-        // appears in the registry, so we defer these by 2 seconds.
-        const needsPostUpdate = this.haConnection.isReady && (
-            payload.device || config.area_id || config.area || config.labels
-        );
-        if (needsPostUpdate) {
-            // Add a small stagger/jitter (0-500ms) to prevent a "thundering herd" of WebSocket 
-            // requests when a script registers many entities at once, avoiding MaxListenersExceededWarning.
-            const stagger = Math.floor(Math.random() * 500);
-            setTimeout(async () => {
-                try {
-                    const entityReg = await this.haConnection.getEntityRegistry();
-                    const haEntry = entityReg.find(e => e.unique_id === uniqueId);
-                    if (!haEntry) return;
+        // Post-registration ACK: actively poll the HA registry until the entity appears,
+        // then apply area/labels and detect/fix _2 collisions deterministically.
+        if (!this.haConnection.isReady) return;
 
-                    // Device alias: HA may generate a different entity_id for device-grouped entities
-                    if (payload.device && haEntry.entity_id !== entityId) {
+        // Stagger to avoid thundering herd when many entities register simultaneously.
+        const stagger = Math.floor(Math.random() * 500);
+        const MAX_ATTEMPTS = 20;
+        const POLL_INTERVAL = 500;
+
+        const applyPostRegistration = async (haEntry) => {
+            const registryUpdates = {};
+            if (config.area_id) {
+                registryUpdates.area_id = config.area_id;
+            } else if (config.area || config.suggested_area) {
+                const { areas } = await this.haConnection.getHAMetadata();
+                const areaName = config.area || config.suggested_area;
+                const resolved = this.resolveId(areaName, areas, 'area_id');
+                if (resolved) registryUpdates.area_id = resolved;
+            }
+            if (Array.isArray(config.labels) && config.labels.length > 0) {
+                const { labels: allLabels } = await this.haConnection.getHAMetadata();
+                const resolvedLabels = config.labels
+                    .map(l => {
+                        const found = allLabels.find(al =>
+                            al.label_id === l || al.name?.toLowerCase() === l.toLowerCase()
+                        );
+                        return found ? found.label_id : null;
+                    })
+                    .filter(Boolean);
+                if (resolvedLabels.length > 0) registryUpdates.labels = resolvedLabels;
+            }
+            if (Object.keys(registryUpdates).length > 0) {
+                await this.haConnection.updateEntityRegistry(haEntry.entity_id, registryUpdates);
+            }
+        };
+
+        const poll = async (attempt) => {
+            if (attempt > MAX_ATTEMPTS) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK timeout: "${entityId}" did not appear in HA registry after ${MAX_ATTEMPTS} attempts.`, level: 'warn' });
+                return;
+            }
+            try {
+                const entityReg = await this.haConnection.getEntityRegistry();
+
+                // Find ALL entries for our unique_id — there can be more than one if a stale _2
+                // and a correct entity coexist with the same unique_id (e.g. after a partial
+                // recovery from a previous run). Prefer the one at the correct entity_id.
+                const haEntries = entityReg.filter(e => e.unique_id === uniqueId);
+                if (haEntries.length === 0) {
+                    // Not yet in registry — retry.
+                    setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+                    return;
+                }
+                const haEntry = haEntries.find(e => e.entity_id === entityId) || haEntries[0];
+
+                if (haEntry.entity_id === entityId) {
+                    // Entity is at the correct ID. Clean up any orphan duplicates (e.g. a stale _2
+                    // with the same unique_id that HA kept around from a previous recovery attempt).
+                    for (const orphan of haEntries.filter(e => e.entity_id !== entityId)) {
+                        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK: removing orphan duplicate "${orphan.entity_id}" for "${entityId}".`, level: 'debug' });
+                        await this.haConnection.removeEntity(orphan.entity_id);
+                    }
+                    this.workerManager.clearEntityIdAlias(entityId);
+                    await applyPostRegistration(haEntry);
+                    return;
+                }
+
+                // Wrong entity_id: check if the correct ID is blocked by a foreign relic.
+                const blocker = entityReg.find(e => e.entity_id === entityId && e.unique_id !== uniqueId);
+                if (blocker) {
+                    this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK: "${entityId}" blocked by relic ${blocker.entity_id} (${blocker.unique_id}) — removing and republishing.`, level: 'warn' });
+                    await this.haConnection.removeEntity(blocker.entity_id);
+                    // Clear retained discovery for the blocker's topic too.
+                    const blockerDomain = blocker.entity_id.split('.')[0];
+                    if (blocker.unique_id) this.mqttManager.publish(`homeassistant/${blockerDomain}/${blocker.unique_id}/config`, '', { retain: true });
+                    // Clear our topic and republish to force HA to re-evaluate.
+                    this.mqttManager.publish(discoveryTopic, '', { retain: true });
+                    await new Promise(r => setTimeout(r, 300));
+                    this.mqttManager.publish(discoveryTopic, payload, { retain: true });
+                    // Restart poll to confirm the new entity_id.
+                    setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+                } else {
+                    // No active blocker. Two sub-cases:
+                    // (a) Numeric collision (_2, _3…): the correct entity_id is free but HA
+                    //     already committed our entity under the wrong ID (race with a blocker
+                    //     that was since removed). Use HA's registry rename API to move it
+                    //     directly — avoids the remove+republish cycle that can loop.
+                    // (b) Genuine device-prefix: HA built the entity_id from the device name.
+                    //     Register an alias so ha.on()/ha.getState() work with the user's ID.
+                    const isNumericCollision = haEntry.entity_id.replace(/_\d+$/, '') === entityId;
+                    if (isNumericCollision) {
+                        const occupant = entityReg.find(e => e.entity_id === entityId);
+                        const haState = this.haConnection.states[entityId];
+                        // If there's an orphaned state at the target (state machine has it, registry
+                        // doesn't), delete it first — otherwise HA rejects the rename with
+                        // "Entity with this ID is already registered" even though the registry is clear.
+                        if (!occupant && haState) {
+                            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK: orphaned state at "${entityId}" blocks rename — deleting state.`, level: 'debug' });
+                            await this.haConnection.deleteState(entityId);
+                            await new Promise(r => setTimeout(r, 100));
+                        }
+                        const renameResult = await this.haConnection.updateEntityRegistry(haEntry.entity_id, { new_entity_id: entityId });
+                        if (renameResult.success) {
+                            this.workerManager.clearEntityIdAlias(entityId);
+                            await applyPostRegistration({ ...haEntry, entity_id: entityId });
+                        } else {
+                            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK: rename of "${haEntry.entity_id}" → "${entityId}" failed (HA error: ${renameResult.error}) — retrying next poll.`, level: 'warn' });
+                            setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+                        }
+                    } else if (payload.device) {
+                        // Genuine device-prefix assignment — alias it.
                         this.workerManager.setEntityIdAlias(haEntry.entity_id, entityId);
+                        await applyPostRegistration(haEntry);
+                    } else {
+                        // Non-device, non-numeric: unexpected state — log and move on.
+                        this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK: "${haEntry.entity_id}" has unexpected entity_id (expected "${entityId}") with no blocker — skipping.`, level: 'warn' });
                     }
+                }
+            } catch (err) {
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] ACK poll error for "${entityId}": ${err.message}`, level: 'warn' });
+            }
+        };
 
-                    // Area and labels: resolve names → IDs and push via WebSocket API
-                    const registryUpdates = {};
-
-                    if (config.area_id) {
-                        registryUpdates.area_id = config.area_id;
-                    } else if (config.area || config.suggested_area) {
-                        const { areas } = await this.haConnection.getHAMetadata();
-                        const areaName = config.area || config.suggested_area;
-                        const resolved = this.resolveId(areaName, areas, 'area_id');
-                        if (resolved) registryUpdates.area_id = resolved;
-                    }
-
-                    if (Array.isArray(config.labels) && config.labels.length > 0) {
-                        const { labels: allLabels } = await this.haConnection.getHAMetadata();
-                        const resolvedLabels = config.labels
-                            .map(l => {
-                                const found = allLabels.find(al =>
-                                    al.label_id === l || al.name?.toLowerCase() === l.toLowerCase()
-                                );
-                                return found ? found.label_id : null;
-                            })
-                            .filter(Boolean);
-                        if (resolvedLabels.length > 0) registryUpdates.labels = resolvedLabels;
-                    }
-
-                    if (Object.keys(registryUpdates).length > 0) {
-                        await this.haConnection.updateEntityRegistry(haEntry.entity_id, registryUpdates);
-                    }
-                } catch (_) {}
-            }, 2000 + stagger);
-        }
+        setTimeout(() => poll(0), 500 + stagger);
     }
 
     /**
@@ -620,6 +719,65 @@ class EntityManager {
     }
 
     /**
+     * Proactively scans the HA entity registry on startup for JSA entities whose
+     * entity_id in HA differs from what our local registry expects (e.g. stale _2 entries).
+     * Removes those stale HA entries before scripts call ha.register(), so the ACK poll
+     * can land entities on the correct ID without blocker conflicts.
+     */
+    async startupAudit() {
+        if (!this.haConnection.isReady) return;
+        try {
+            const entityReg = await this.haConnection.getEntityRegistry();
+
+            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Startup audit: scanning ${entityReg.length} entity registrations.`, level: 'debug' });
+
+            let removedCount = 0;
+
+            const removeEntry = async (haEntry, reason) => {
+                removedCount++;
+                this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Startup audit: ${reason} — removing "${haEntry.entity_id}".`, level: 'debug' });
+                await this.haConnection.removeEntity(haEntry.entity_id);
+                const domain = haEntry.entity_id.split('.')[0];
+                const objId = haEntry.entity_id.split('.').slice(1).join('.');
+                this.mqttManager.publish(`homeassistant/${domain}/${objId}/config`, '', { retain: true });
+                if (haEntry.unique_id && haEntry.unique_id !== objId) {
+                    this.mqttManager.publish(`homeassistant/${domain}/${haEntry.unique_id}/config`, '', { retain: true });
+                }
+            };
+
+            for (const [localEntityId, localPayload] of this.workerManager.nativeEntities.entries()) {
+                if (!localPayload?.unique_id) continue;
+
+                // Pass 1: our entity landed under wrong entity_id in HA (e.g. _2 suffix).
+                // The ACK poll will fix this at runtime, but removing it here before scripts
+                // start gives HA a clean slate for the first ha.register() call.
+                const ourEntry = entityReg.find(e => e.unique_id === localPayload.unique_id && e.entity_id !== localEntityId);
+                if (ourEntry) await removeEntry(ourEntry, `our entity landed as "${ourEntry.entity_id}", expected "${localEntityId}"`);
+
+                // Pass 2: something else is occupying our desired entity_id with a different
+                // unique_id (a blocker). This is the ROOT CAUSE of _2 collisions — HA will
+                // create _2 whenever it sees our discovery payload while the blocker exists.
+                // Remove it proactively so ha.register() can claim the correct entity_id.
+                const blocker = entityReg.find(e =>
+                    e.entity_id === localEntityId &&
+                    e.unique_id !== localPayload.unique_id
+                );
+                if (blocker) await removeEntry(blocker, `"${localEntityId}" is blocked by foreign entity (unique_id: ${blocker.unique_id})`);
+            }
+
+            this.workerManager.emit('log', {
+                source: 'System',
+                message: removedCount > 0
+                    ? `[EntityManager] Startup audit complete: removed ${removedCount} conflicting entity registration(s).`
+                    : `[EntityManager] Startup audit complete: no conflicts found.`,
+                level: 'debug'
+            });
+        } catch (err) {
+            this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Startup audit failed: ${err.message}`, level: 'warn' });
+        }
+    }
+
+    /**
      * Compares the Home Assistant entity registry with local scripts.
      * 1. Removes entities in HA that no longer have a corresponding script file.
      * 2. Ensures all @expose entities exist (Self-Healing).
@@ -632,18 +790,6 @@ class EntityManager {
 
         const entityReg = await this.haConnection.getEntityRegistry();
         const deviceReg = await this.haConnection.getDeviceRegistry();
-
-        // Build entity_id alias map for device: true entities.
-        // When HA generates a device-prefixed entity_id (e.g. sensor.my_device_my_sensor),
-        // map it back to the user's entity_id (e.g. sensor.my_sensor) so that
-        // ha.getState(), ha.on(), ha.states etc. work with the user's id.
-        for (const [userEntityId, payload] of this.workerManager.nativeEntities.entries()) {
-            if (!payload?.unique_id) continue;
-            const haEntry = entityReg.find(e => e.unique_id === payload.unique_id);
-            if (haEntry && haEntry.entity_id !== userEntityId) {
-                this.workerManager.setEntityIdAlias(haEntry.entity_id, userEntityId);
-            }
-        }
 
         // CLEANUP RELIC: Specifically target stubborn legacy entities or prefixed ghost variations.
         // This part targets entities from the old custom integration (platform === 'js_automations').
