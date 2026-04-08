@@ -1,11 +1,20 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (storeManager) => {
-    
+module.exports = (storeManager, workerManager) => {
+
     // GET: Alle Werte laden
     router.get('/', (req, res) => {
         res.json(storeManager.getAll());
+    });
+
+    // GET: Keys mit ungespeicherten ha.persistent()-Änderungen (dirty)
+    router.get('/dirty', (req, res) => {
+        const allDirty = new Set();
+        for (const dirtyMap of workerManager.dirtyStore.values()) {
+            for (const key of dirtyMap.keys()) allDirty.add(key);
+        }
+        res.json([...allDirty]);
     });
 
     // POST: Wert setzen (mit isSecret Support)

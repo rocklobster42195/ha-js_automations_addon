@@ -2,6 +2,11 @@
 (function() {
     const BANNER_ID = 'integration-status-banner';
 
+    // Debounce timer: MQTT error banner is only shown after the connection has been
+    // absent for this many ms. Prevents flashing during startup / reconnect.
+    const MQTT_ERROR_DELAY_MS = 6000;
+    let _mqttErrorTimer = null;
+
     // Helper to get translations with fallback
     const t = (key, defaultVal, options) => {
         return (window.i18next && window.i18next.t) ? window.i18next.t(key, options) : defaultVal;
@@ -188,10 +193,29 @@
             }
         }
 
-        if (type) {
-            showBanner(type, status);
+        if (type === 'mqtt_error') {
+            // Debounce: only show if MQTT is still disconnected after MQTT_ERROR_DELAY_MS.
+            // This prevents the banner from flashing during server startup or brief reconnects.
+            if (!_mqttErrorTimer) {
+                _mqttErrorTimer = setTimeout(() => {
+                    _mqttErrorTimer = null;
+                    const cur = window.currentIntegrationStatus?.mqtt;
+                    if (cur && cur.enabled && !cur.connected) {
+                        showBanner('mqtt_error', window.currentIntegrationStatus);
+                    }
+                }, MQTT_ERROR_DELAY_MS);
+            }
         } else {
-            hideBanner();
+            // Clear any pending debounce and hide/show immediately
+            if (_mqttErrorTimer) {
+                clearTimeout(_mqttErrorTimer);
+                _mqttErrorTimer = null;
+            }
+            if (type) {
+                showBanner(type, status);
+            } else {
+                hideBanner();
+            }
         }
     }
 

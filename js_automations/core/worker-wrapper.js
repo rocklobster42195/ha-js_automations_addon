@@ -156,6 +156,17 @@ const stopCallbacks = [];
 const errorCallbacks = [];
 let isListening = false;
 
+// Echo suppression: track entity IDs registered via ha.register() and their last
+// published state. When ha_event arrives for one of our own entities with the same
+// state we just published, it's our own MQTT echo — suppress it so ha.on() handlers
+// don't fire spuriously (no more "if (state === lastValue) return" in every script).
+const nativeEntityIds = new Set();
+const lastPublishedStates = new Map();
+
+// HA non-command states filtered out of mqtt_command dispatches.
+// Scripts should never need to guard against these themselves.
+const HA_TECH_STATES = new Set(['unknown', 'unavailable', 'None', '']);
+
 const pendingServiceCalls = new Map();
 const pendingAsks = new Map(); // correlationId -> { resolve, timer }
 const ASK_SEP = '__jsa_ask__';
@@ -329,6 +340,14 @@ function ensureMessageListener() {
             // Skip entity deletion events (new_state: null) — no useful state to deliver
             if (!msg.state) return;
 
+            // Echo suppression: if this ha_event is for one of our own registered entities
+            // and the state matches what we last published, it's our own MQTT round-trip
+            // echo — drop it silently. Scripts no longer need manual echo guards.
+            if (nativeEntityIds.has(msg.entity_id)) {
+                const last = lastPublishedStates.get(msg.entity_id);
+                if (last !== undefined && String(msg.state.state) === last) return;
+            }
+
             subscriptionCallbacks.forEach(sub => {
                 // 1. Check Pattern Match
                 if (!matches(msg.entity_id, sub.pattern)) return;
@@ -376,7 +395,10 @@ function ensureMessageListener() {
         // Handle MQTT commands for ha.register()ed entities — routed through ha.on() subscriptions.
         // The command payload becomes event.state so existing ha.on() handlers work transparently.
         if (msg.type === 'mqtt_command') {
-            const syntheticState = { state: msg.payload, attributes: {}, entity_id: msg.entityId, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
+            // Filter HA technical/non-command states globally — scripts never need to guard
+            // against unknown/unavailable/None themselves.
+            if (HA_TECH_STATES.has(msg.payload)) return;
+
             subscriptionCallbacks.forEach(sub => {
                 if (!matches(msg.entityId, sub.pattern)) return;
                 try {
@@ -393,13 +415,20 @@ function ensureMessageListener() {
         // Handle master request to stop gracefully
         if (msg.type === 'stop_request') {
             for (const cb of stopCallbacks) {
-                try { 
-                    await cb(); 
-                } catch (e) { 
-                    ha.error(`onStop Error: ${e.message}\n${e.stack}`); 
+                try {
+                    await cb();
+                } catch (e) {
+                    ha.error(`onStop Error: ${e.message}\n${e.stack}`);
                 }
             }
+            // Flush any pending ha.persistent() debounced saves before exiting.
+            for (const flush of persistentFlushRegistry) flush();
             process.exit(0);
+        }
+
+        // Emergency flush before force-kill — sent when the worker didn't respond to stop_request.
+        if (msg.type === 'flush_persistent') {
+            for (const flush of persistentFlushRegistry) flush();
         }
 
         // Handle stats request
@@ -641,6 +670,8 @@ const ha = {
             current.last_updated = new Date().toISOString();
         }
 
+        // Record the published state for echo suppression.
+        if (state !== undefined) lastPublishedStates.set(entityId, String(states[entityId].state));
         // Send the full merged attribute set to ensure MQTT attributes are not partially cleared.
         parentPort.postMessage({ type: 'update_state', entityId, state: states[entityId].state, attributes: states[entityId].attributes });
     },
@@ -667,6 +698,11 @@ const ha = {
         if (config.unit && !config.unit_of_measurement) {
             config = { ...config, unit_of_measurement: config.unit };
             delete config.unit;
+        }
+        // Track as a native entity for echo suppression.
+        nativeEntityIds.add(entityId);
+        if (config.initial_state !== undefined) {
+            lastPublishedStates.set(entityId, String(config.initial_state));
         }
         // Send the intent to the main process, which handles the registration via MQTT.
         parentPort.postMessage({ type: 'create_entity', entityId, config });
@@ -897,6 +933,9 @@ function createDeepProxy(target, onSave) {
     return new Proxy(target, handler);
 }
 
+// Registry of pending persistent saves — flushed synchronously on worker exit.
+const persistentFlushRegistry = [];
+
 ha.persistent = (key, defaultValue = {}) => {
     // Primitives cannot be proxied — return a ref-like { value } wrapper instead.
     if (typeof defaultValue !== 'object' || defaultValue === null) {
@@ -916,12 +955,38 @@ ha.persistent = (key, defaultValue = {}) => {
     }
 
     let saveTimeout;
-    const debouncedSave = () => {
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => ha.store.set(key, target), 50);
+    let dirty = false;
+
+    const markClean = () => {
+        dirty = false;
+        parentPort.postMessage({ type: 'store_clean', key });
     };
 
-    return createDeepProxy(target, debouncedSave);
+    const flush = () => {
+        if (!dirty) return;
+        clearTimeout(saveTimeout);
+        ha.store.set(key, target);
+        markClean();
+    };
+
+    const onChange = () => {
+        if (!dirty) {
+            // First change since last save: write immediately and mark dirty in parent.
+            dirty = true;
+            parentPort.postMessage({ type: 'store_dirty', key, dirtyAt: Date.now() });
+            ha.store.set(key, target);
+            // Schedule clean-up for any rapid subsequent changes within the debounce window.
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(markClean, 50);
+        } else {
+            // Subsequent rapid change: debounce the save, parent already knows it's dirty.
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => { ha.store.set(key, target); markClean(); }, 50);
+        }
+    };
+
+    persistentFlushRegistry.push(flush);
+    return createDeepProxy(target, onChange);
 };
 
 global.schedule = (exp, cb) => {

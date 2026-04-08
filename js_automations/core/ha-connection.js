@@ -145,7 +145,7 @@ class HAConnector {
      * @param {object} updates - Fields to update (e.g., { area_id, labels }).
      */
     async updateEntityRegistry(entityId, updates) {
-        if (!this.isReady) return false;
+        if (!this.isReady) return { success: false, error: 'not_ready' };
         const id = this.msgId++;
         this.send({ id, type: 'config/entity_registry/update', entity_id: entityId, ...updates });
         return new Promise((resolve) => {
@@ -153,11 +153,15 @@ class HAConnector {
                 const msg = JSON.parse(data);
                 if (msg.id === id) {
                     this.ws.removeListener('message', handler);
-                    resolve(msg.success !== false);
+                    if (msg.success !== false) {
+                        resolve({ success: true });
+                    } else {
+                        resolve({ success: false, error: msg.error?.message || msg.error?.code || JSON.stringify(msg.error) });
+                    }
                 }
             };
             this.ws.on('message', handler);
-            setTimeout(() => { this.ws.removeListener('message', handler); resolve(false); }, 5000);
+            setTimeout(() => { this.ws.removeListener('message', handler); resolve({ success: false, error: 'timeout' }); }, 5000);
         });
     }
 
@@ -165,6 +169,23 @@ class HAConnector {
      * Removes an entity from the Home Assistant entity registry.
      * @param {string} entityId - The entity ID to remove (e.g., 'switch.my_script').
      */
+    /**
+     * Deletes an entity state from Home Assistant's state machine via REST API.
+     * Use this to remove orphaned states (present in state machine but not in entity registry)
+     * that would block entity_id assignment or rename operations.
+     * @param {string} entityId - The entity ID whose state to delete.
+     */
+    async deleteState(entityId) {
+        if (!this.token) return false;
+        try {
+            const resp = await fetch(`${this.baseUrl}/api/states/${entityId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/json' }
+            });
+            return resp.ok;
+        } catch (err) { return false; }
+    }
+
     async removeEntity(entityId) {
         if (!this.isReady) return;
         const id = this.msgId++;

@@ -24,8 +24,13 @@ class ScriptHeaderParser {
             expose: null
         };
 
+        // Strip leading TypeScript triple-slash directives (/// <reference .../>) before
+        // matching the JSDoc block — they appear before /** in .ts files and would break
+        // the start-of-file anchor used by the JSDoc regex.
+        const stripped = content.replace(/^(\/\/\/[^\n]*\n)+/, '');
+
         // Look for the first JSDoc block at the beginning of the file
-        const jsDocMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
+        const jsDocMatch = stripped.match(/^\s*\/\*\*([\s\S]*?)\*\//);
         
         if (jsDocMatch) {
             // Block found -> Parsing tags

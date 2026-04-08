@@ -272,28 +272,59 @@ Der Zustand wird als JSON auf `jsa/<domain>/<object_id>/data` publiziert: `{ "st
 
 ### Stale Entity Detection
 
-Beim `ha.register()`-Aufruf wird die HA Entity Registry via WebSocket gecheckt, um Altlasten zu erkennen:
+Beim `ha.register()`-Aufruf wird vor dem Publizieren des Discovery-Payloads die HA Entity Registry via WebSocket gecheckt, um Altlasten und Konflikte zu erkennen:
 
 **Case 1 — Falsche Entity-ID, gleiche `unique_id`**:  
-Existiert eine Entity mit derselben `unique_id` (`jsa_<object_id>`) aber einer anderen `entity_id`? Das passiert z.B. nach einer Umbenennung. → Entity aus Registry entfernen, Discovery-Topic clearen.
+Existiert eine Entity mit derselben `unique_id` (`jsa_<scriptSlug>_<objectId>`) aber einer anderen `entity_id`? Das passiert z.B. nach einer Umbenennung oder Umzug in eine andere Skript-Datei. → Entity aus Registry entfernen, Discovery-Topic clearen.
 
 **Case 2 — Name-Slug Entity-ID aus altem Payload**:  
 Existiert eine Entity mit der slugifizierten Version des Friendly-Names (z.B. `sensor.anzahl_freifunk_clients` anstatt `sensor.freifunk_clients`)? Das ist ein Relikt aus Zeiten vor `default_entity_id`. → Ebenfalls entfernen.
 
-Nach beiden Checks wird das Discovery-Topic kurz geclearet (leerer String, retained), bevor der korrekte Payload veröffentlicht wird. Das zwingt HA, die Entity komplett neu einzulesen.
+**Case 3 — Fremde Entity blockiert die gewünschte Entity-ID**:  
+Liegt eine Entity eines anderen Systems (z.B. einer nativen Integration) exakt unter der gewünschten `entity_id` und hat eine andere `unique_id`? HA würde dann stillschweigend `_2` anhängen. → Blocker aus Registry entfernen, Discovery-Topic neu veröffentlichen.
+
+**Case 4 — Orphaned State**:  
+Existiert ein State in HAs State Machine unter der gewünschten Entity-ID, ohne dass ein Registry-Eintrag dazu gehört? Das passiert wenn eine Entity aus einem vorherigen Run aus der Registry entfernt wurde, ihr State aber im HA-Speicher verblieben ist.
+
+Dieses Phantom blockiert auf zwei Wegen:
+- **Entity-Erstellung**: HAs `async_generate_entity_id()` prüft die State Machine — findet es den State, hängt es `_2` an.
+- **Registry-Rename**: `config/entity_registry/update` mit `new_entity_id` prüft ebenfalls die State Machine und lehnt mit `"Entity with this ID is already registered"` ab, obwohl `config/entity_registry/list` keinen Eintrag zeigt.
+
+→ State via REST `DELETE /api/states/<entity_id>` löschen, bevor der Payload veröffentlicht wird.
+
+**`alreadyCorrect`-Optimierung**:  
+Liegt die Entity bereits korrekt in der Registry (gleiche `unique_id`, erwartete `entity_id`)? Dann wird das Discovery-Topic **nicht** gecleart — ein unnötiges Clear veranlasst HA, die Entity neu anzulegen, was in einem Race mit dem noch-vorhandenen Registry-Eintrag wieder `_2` produzieren kann. Der Payload wird dann einfach als Update auf die bestehende Entity veröffentlicht.
+
+Nach allen Checks wird das Discovery-Topic bei Bedarf gecleart (leerer String, retained) und der korrekte Payload veröffentlicht.
+
+### ACK Poll: Bestätigung der Entity-ID
+
+Nach dem Publizieren des Discovery-Payloads startet ein **ACK Poll** — ein Polling-Loop der alle 500 ms die Entity Registry abfragt, bis die Entity korrekt registriert ist (max. 20 Versuche = ca. 10 Sekunden).
+
+Der Poll läuft parallel und blockiert nicht. Er prüft vier Zustände:
+
+**1. Korrekte Entity-ID** (`haEntry.entity_id === entityId`):  
+Erfolg. Etwaige Duplikate mit derselben `unique_id` aber falscher Entity-ID werden bereinigt. `area_id` und `labels` werden via `config/entity_registry/update` gesetzt.
+
+**2. Blocker in Registry** (andere Entity belegt `entity_id` mit fremder `unique_id`):  
+Entity + Retained MQTT-Topic des Blockers werden entfernt, unser Topic wird neu veröffentlicht. Nächster Poll-Versuch.
+
+**3. Numeric Collision** (Entity landete als `<wunsch>_2`, `<wunsch>_3` etc.):  
+Zuerst wird geprüft, ob ein Orphaned State an der Ziel-ID existiert (State Machine besetzt, Registry leer) → wenn ja, REST DELETE. Anschließend: Registry-Rename via `config/entity_registry/update { new_entity_id }`. Bei Erfolg abgeschlossen, sonst nächster Versuch.
+
+**4. Device-Prefix** (HA hat Entity-ID aus dem Gerätename gebildet, kein `_2`-Muster):  
+Ein Entity-ID-Alias wird registriert, damit `ha.getState()` und `ha.on()` unter der vom Nutzer erwarteten ID funktionieren.
 
 ### Post-Registration: area_id und labels
 
-MQTT Discovery kennt kein `area_id`- oder `labels`-Feld. Diese Werte können nur über die HA Entity Registry API gesetzt werden — ein WebSocket-`config/entity_registry/update`-Call.
-
-Da HA die Entity erst verarbeiten muss bevor sie in der Registry erscheint, wird dieser Call mit 2 Sekunden Verzögerung ausgeführt:
+MQTT Discovery kennt kein `area_id`- oder `labels`-Feld. Diese Werte können nur über die HA Entity Registry API gesetzt werden — ein WebSocket-`config/entity_registry/update`-Call. Das geschieht im ACK Poll, sobald die Entity in der Registry erscheint:
 
 ```
 ha.register('sensor.x', { area_id: 'living_room', labels: ['important'] })
   ↓
 MQTT Discovery Payload publizieren
-  ↓  (2 Sekunden warten)
-Entity Registry abfragen → haEntry finden (über unique_id)
+  ↓  ACK Poll (alle 500 ms)
+Entity Registry abfragen → Entity unter korrekter entity_id gefunden
   ↓
 config/entity_registry/update { area_id: 'living_room', label_ids: [...] }
 ```
@@ -360,7 +391,7 @@ Folgende WebSocket-Commands werden genutzt:
 | Command | Zweck |
 |---|---|
 | `config/entity_registry/list` | Alle registrierten Entities abrufen |
-| `config/entity_registry/update` | `area_id`, `labels`, `name` einer Entity setzen |
+| `config/entity_registry/update` | `area_id`, `labels`, `name` oder `new_entity_id` einer Entity setzen |
 | `config/entity_registry/remove` | Entity aus der Registry löschen |
 | `config/device_registry/list` | Geräte-Registry für Device-Cleanup abrufen |
 | `config/area_registry/list` | Area-Namen → IDs auflösen |
@@ -370,6 +401,14 @@ Folgende WebSocket-Commands werden genutzt:
 | `get_config` | HA-Konfiguration (Sprache, etc.) |
 | `get_services` | Service-Definitionen für IntelliSense |
 | `call_service` | Service aufrufen (mit optionalem `return_response`) |
+
+`updateEntityRegistry()` gibt `{ success: boolean, error?: string }` zurück — bei `success: false` enthält `error` den HA-Fehlertext (z.B. `"Entity with this ID is already registered"`), was eine saubere Fehlerdiagnose ohne separaten Try-Catch erlaubt.
+
+### State Machine API
+
+Zusätzlich zur Entity Registry wird die HA REST API für einen spezifischen Fall genutzt:
+
+`deleteState(entityId)` — `DELETE /api/states/<entity_id>` — entfernt einen State aus HAs State Machine. Wird ausschließlich für **Orphaned States** verwendet: States die ohne zugehörigen Registry-Eintrag existieren und die Entity-ID-Vergabe blockieren (siehe Case 4 in Abschnitt 7). Diese Methode darf nicht für States normaler Entities genutzt werden.
 
 ---
 
