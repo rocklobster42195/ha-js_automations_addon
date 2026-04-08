@@ -368,10 +368,11 @@ class Kernel extends EventEmitter {
     
     _onScriptStart({ filename, meta }) {
         if (!meta || meta.expose !== 'button') {
-            // StateManager still tracks by filename for persistence, 
+            // StateManager still tracks by filename for persistence,
             // but EntityManager now handles the HA state via events.
             this.stateManager.saveScriptStarted(filename);
         }
+        this.emit('status_update');
     }
 
     _onScriptExit(d) {
