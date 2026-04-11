@@ -16,10 +16,13 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
+            build_from: ghcr.io/home-assistant/amd64-base:latest
           - arch: aarch64
             platform: linux/aarch64
+            build_from: ghcr.io/home-assistant/aarch64-base:latest
           - arch: armv7
             platform: linux/armv7
+            build_from: ghcr.io/home-assistant/armv7-base:latest
     permissions:
       contents: read
       packages: write
@@ -60,3 +63,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: BUILD_FROM=${{ matrix.build_from }}

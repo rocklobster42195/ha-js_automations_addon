@@ -1,8 +1,8 @@
-ARG BUILDPLATFORM
-FROM --platform=${BUILDPLATFORM} node:24-alpine
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
-# System-Tools für NPM (wichtig für manche Pakete)
-RUN apk add --no-cache git python3 make g++
+# Node.js und Build-Tools installieren
+RUN apk add --no-cache nodejs npm git python3 make g++
 
 # Setze das Arbeitsverzeichnis auf den finalen App-Ort
 WORKDIR /app
@@ -14,8 +14,9 @@ RUN npm install --production
 # Kopiere den gesamten App-Code
 COPY . .
 
+# s6-overlay Service-Scripts deployen und ausführbar machen
+COPY rootfs /
+RUN chmod a+x /etc/s6-overlay/s6-rc.d/js_automations/run
+
 # Setze den Port frei
 EXPOSE 3000
-
-# Starte den Server aus dem Unterordner
-CMD ["node", "js_automations/server.js"]
