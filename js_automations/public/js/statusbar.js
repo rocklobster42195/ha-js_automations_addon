@@ -554,7 +554,7 @@ const statusBar = {
         }
 
         try {
-            await fetch('/api/ha/call-service', {
+            await apiFetch('api/ha/call-service', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ domain, service, entity_id: entityId })

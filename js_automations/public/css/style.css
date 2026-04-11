@@ -467,13 +467,15 @@ input#search-input:focus { border-color: var(--accent) !important; }
 }
 
 /* LOGS */
-.log-section { 
-    flex: 1; 
-    display: flex; 
-    flex-direction: column; 
-    background: #000; 
-    overflow: hidden; 
+.log-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    overflow: hidden;
     min-height: 45px; /* Log Header height */
+    position: relative;
+    z-index: 1;
 }
 .log-header { 
     padding: 8px 15px; 
