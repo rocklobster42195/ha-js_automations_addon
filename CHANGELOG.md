@@ -1,4 +1,4 @@
 # Changelog
 
-## [2.48.x] - 2026-03-29
-### Initial Release
+## [2.50.x] - 2026-04-11
+feat: migrate to official HA base image 
