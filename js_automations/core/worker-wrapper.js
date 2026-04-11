@@ -25,9 +25,11 @@ if (workerData.storageDir) {
 // When capability_enforcement is enabled, block undeclared module access before user code loads.
 // Module._load is an internal Node.js API used widely in the ecosystem (Jest, nock, proxyquire).
 //
-// The hook is guarded by _scriptExecuting so that system internals (e.g. node-cron loading
-// child_process for its background-task feature) are not blocked during the worker setup phase.
-// Only requires that originate during actual user script execution are enforced.
+// System packages listed in SYSTEM_INTERNAL_PACKAGES are allowed to require sensitive native
+// modules freely — they are used internally by the ha API and their native deps are an
+// implementation detail the user has no control over.
+// All other npm packages (e.g. axios) are subject to the same permission checks as user code,
+// ensuring that @permission network/exec is enforced even for indirect requires.
 let _scriptExecuting = false;
 
 if (workerData.capabilityEnforcement) {
@@ -37,15 +39,20 @@ if (workerData.capabilityEnforcement) {
     const NETWORK_MODULES = new Set(['http', 'https', 'net', 'tls', 'dns']);
     const EXEC_MODULES    = new Set(['child_process']);
 
+    // Packages used internally by the ha API that may require privileged native modules.
+    // node-cron requires child_process for its BackgroundScheduledTask feature at load time,
+    // even when only foreground tasks are used.
+    const SYSTEM_INTERNAL_PACKAGES = ['node-cron'];
+
     Module._load = function (request, parent, isMain) {
         if (_scriptExecuting) {
-            // Only block requires that originate from user code.
-            // npm packages may legitimately use system APIs internally
-            // (e.g. node-cron requires child_process for its background task feature).
             const parentFile = parent?.filename || '';
-            const isNpmInternal = parentFile.includes('node_modules');
+            const isSystemInternal = SYSTEM_INTERNAL_PACKAGES.some(pkg =>
+                parentFile.includes(`node_modules/${pkg}`) ||
+                parentFile.includes(`node_modules\\${pkg}`)
+            );
 
-            if (!isNpmInternal) {
+            if (!isSystemInternal) {
                 if (NETWORK_MODULES.has(request) && !_permissions.has('network')) {
                     throw new Error(
                         `PermissionDeniedError: '${request}' requires @permission network in your script header.`
