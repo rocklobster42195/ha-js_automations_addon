@@ -454,6 +454,45 @@ input#search-input:focus { border-color: var(--accent) !important; }
     color: #fff;
 }
 
+/* Snippet dropdown panel (opened by the single toolbar puzzle button) */
+#snippet-toolbar-dropdown {
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px;
+    min-width: 180px;
+    max-height: 60vh;
+    overflow-y: auto;
+    align-items: stretch;
+}
+#snippet-toolbar-dropdown .snip-group-sep {
+    border-top: 1px solid var(--border);
+    margin: 3px 0;
+}
+#snippet-toolbar-dropdown button {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: var(--text-sec);
+    background: none;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+#snippet-toolbar-dropdown button:hover {
+    background: #2a2a2a;
+    color: #fff;
+}
+#snippet-toolbar-dropdown button i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
 /* RESIZER */
 #resizer {
     flex-shrink: 0;

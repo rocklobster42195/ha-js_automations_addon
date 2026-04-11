@@ -447,13 +447,37 @@ function _closeRegisterPicker() {
 const TOOLBAR_GROUPS = ['general', 'entity', 'store'];
 
 /**
- * Builds snippet buttons inside the given container element.
- * Groups are separated by <div class="toolbar-separator">.
+ * Builds a single "Snippets" toggle button inside the given container.
+ * Clicking it opens a dropdown panel with all grouped snippet entries.
  * @param {HTMLElement} container
  */
 function buildSnippetToolbar(container) {
     if (!container) return;
     container.innerHTML = '';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'btn-snippets-toggle';
+    const label = (typeof i18next !== 'undefined')
+        ? i18next.t('snippets_title', { defaultValue: 'Snippets' })
+        : 'Snippets';
+    toggleBtn.title = label;
+    toggleBtn.setAttribute('data-i18n', 'snippets_title');
+    toggleBtn.setAttribute('data-i18n-title', '');
+    toggleBtn.innerHTML = '<i class="mdi mdi-puzzle-outline"></i>';
+    toggleBtn.onclick = (e) => { e.stopPropagation(); _toggleSnippetDropdown(toggleBtn); };
+    container.appendChild(toggleBtn);
+}
+
+function _toggleSnippetDropdown(anchorBtn) {
+    // If already open, close and return
+    if (document.getElementById('snippet-toolbar-dropdown')) {
+        _closeSnippetDropdown();
+        return;
+    }
+
+    const dropdown = document.createElement('div');
+    dropdown.id = 'snippet-toolbar-dropdown';
+    dropdown.className = 'snippet-variant-picker';
 
     let firstGroup = true;
     for (const group of TOOLBAR_GROUPS) {
@@ -462,8 +486,8 @@ function buildSnippetToolbar(container) {
 
         if (!firstGroup) {
             const sep = document.createElement('div');
-            sep.className = 'toolbar-separator';
-            container.appendChild(sep);
+            sep.className = 'snip-group-sep';
+            dropdown.appendChild(sep);
         }
         firstGroup = false;
 
@@ -473,13 +497,40 @@ function buildSnippetToolbar(container) {
                 ? i18next.t(def.labelKey, { defaultValue: def.id })
                 : def.id;
             btn.title = label;
-            btn.setAttribute('data-i18n', def.labelKey);
-            btn.setAttribute('data-i18n-title', '');
-            btn.innerHTML = `<i class="mdi ${def.icon}"></i>`;
-            btn.onclick = () => insertSnippet(def.id, 'full');
-            container.appendChild(btn);
+            btn.innerHTML = `<i class="mdi ${def.icon}"></i><span>${label}</span>`;
+            btn.onclick = () => {
+                _closeSnippetDropdown();
+                insertSnippet(def.id, 'full');
+            };
+            dropdown.appendChild(btn);
         }
     }
+
+    // Position below the anchor button
+    const rect = anchorBtn.getBoundingClientRect();
+    dropdown.style.top  = `${rect.bottom + 4}px`;
+    dropdown.style.left = `${rect.left}px`;
+    document.body.appendChild(dropdown);
+
+    // Auto-close on Escape or click outside
+    const onKey = (e) => {
+        if (e.key === 'Escape') { _closeSnippetDropdown(); document.removeEventListener('keydown', onKey); }
+    };
+    const onClickOut = (e) => {
+        if (!dropdown.contains(e.target) && e.target !== anchorBtn) {
+            _closeSnippetDropdown();
+            document.removeEventListener('mousedown', onClickOut);
+        }
+    };
+    setTimeout(() => {
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('mousedown', onClickOut);
+    }, 0);
+}
+
+function _closeSnippetDropdown() {
+    const el = document.getElementById('snippet-toolbar-dropdown');
+    if (el) el.remove();
 }
 
 // ---------------------------------------------------------------------------
