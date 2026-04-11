@@ -14,9 +14,8 @@ RUN npm install --production
 # Kopiere den gesamten App-Code
 COPY . .
 
-# s6-overlay Service-Scripts deployen und ausführbar machen
-COPY rootfs /
-RUN chmod a+x /etc/services.d/js_automations/run
-
 # Setze den Port frei
 EXPOSE 3000
+
+# Node direkt als PID 1 starten (s6-overlay wird nicht verwendet)
+ENTRYPOINT ["node", "js_automations/server.js"]
