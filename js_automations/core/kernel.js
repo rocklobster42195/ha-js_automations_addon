@@ -158,6 +158,21 @@ class Kernel extends EventEmitter {
         if (settings.system?.default_throttle !== undefined) {
             workerSettings.default_throttle = settings.system.default_throttle;
         }
+        if (settings.danger?.filesystem_enabled !== undefined) {
+            workerSettings.filesystem_enabled = settings.danger.filesystem_enabled;
+        }
+        if (settings.danger?.capability_enforcement !== undefined) {
+            workerSettings.capability_enforcement = settings.danger.capability_enforcement;
+        }
+        if (settings.danger?.quota_internal !== undefined) {
+            workerSettings.quota_internal = settings.danger.quota_internal;
+        }
+        if (settings.danger?.quota_shared !== undefined) {
+            workerSettings.quota_shared = settings.danger.quota_shared;
+        }
+        if (settings.danger?.quota_media !== undefined) {
+            workerSettings.quota_media = settings.danger.quota_media;
+        }
         if (Object.keys(workerSettings).length > 0) {
             this.workerManager.setSettings(workerSettings);
         }

@@ -593,6 +593,97 @@ interface HA {
      */
     persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
     persistent<T extends object = Record<string, any>>(key: string, defaultValue?: T): T;
+
+    /**
+     * Filesystem API — available when the `filesystem_enabled` setting is on.
+     * Uses virtual paths: `internal://`, `shared://`, `media://`.
+     * Requires `@permission fs:read` and/or `@permission fs:write` in the script header
+     * when capability enforcement is active.
+     */
+    readonly fs?: HaFs;
+}
+
+/** Virtual path roots: internal://, shared://, media:// */
+type VirtualPath = `internal://${string}` | `shared://${string}` | `media://${string}`;
+
+/** File/directory metadata returned by ha.fs.stat() */
+interface FsStat {
+    size: number;
+    modified: Date;
+    isDirectory: boolean;
+}
+
+/**
+ * Filesystem API injected as `ha.fs`.
+ * Available only when the `filesystem_enabled` addon setting is enabled.
+ */
+interface HaFs {
+    /**
+     * Reads a file. Returns a UTF-8 string by default; pass `'binary'` for a Buffer.
+     * @requires @permission fs:read
+     */
+    read(virtualPath: VirtualPath, encoding?: 'utf8'): Promise<string>;
+    read(virtualPath: VirtualPath, encoding: 'binary'): Promise<Buffer>;
+
+    /**
+     * Writes (or overwrites) a file. Creates parent directories if needed.
+     * @requires @permission fs:write
+     */
+    write(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
+
+    /**
+     * Appends data to a file. Creates the file and parent directories if needed.
+     * @requires @permission fs:write
+     */
+    append(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
+
+    /**
+     * Returns `true` if the path exists (file or directory).
+     * @requires @permission fs:read
+     */
+    exists(virtualPath: VirtualPath): Promise<boolean>;
+
+    /**
+     * Lists entries in a directory. Directory names are suffixed with `/`.
+     * @requires @permission fs:read
+     */
+    list(virtualPath: VirtualPath): Promise<string[]>;
+
+    /**
+     * Returns file/directory metadata.
+     * @requires @permission fs:read
+     */
+    stat(virtualPath: VirtualPath): Promise<FsStat>;
+
+    /**
+     * Moves or renames a file. Both paths must be valid virtual paths.
+     * @requires @permission fs:write
+     */
+    move(srcVirtual: VirtualPath, destVirtual: VirtualPath): Promise<void>;
+
+    /**
+     * Deletes a file or directory (recursively for directories).
+     * @requires @permission fs:write
+     */
+    delete(virtualPath: VirtualPath): Promise<void>;
+
+    /**
+     * Watches a file or directory for changes.
+     * @param callback Called with `(event, filename)` on each change.
+     * @returns Unsubscribe function — call it to stop watching.
+     * @requires @permission fs:read
+     */
+    watch(virtualPath: VirtualPath, callback: (event: string, filename: string | null) => void): () => void;
+
+    /**
+     * Log rotation helper. Trims the file when it exceeds `maxSize`,
+     * keeping up to `keep` numbered backup files.
+     * @example
+     * await ha.fs.rotate('internal://app.log', { maxSize: '5MB', keep: 3 });
+     * // Produces: app.log, app.1.log, app.2.log, app.3.log
+     * @requires @permission fs:write
+     */
+    rotate(virtualPath: VirtualPath, options?: { maxSize?: string | number; keep?: number }): Promise<void>;
 }
 
 /**

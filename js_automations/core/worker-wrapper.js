@@ -926,6 +926,17 @@ const ha = {
 // Injection
 global.ha = ha;
 
+// --- 4b. FS INJECTION ---
+if (workerData.filesystemEnabled && workerData.fsDataDir) {
+    const { buildHaFs } = require('./fs-service');
+    ha.fs = buildHaFs({
+        dataDir: workerData.fsDataDir,
+        capabilityEnforcement: workerData.capabilityEnforcement,
+        permissions: workerData.permissions || [],
+        quotas: workerData.fsQuotas || {},
+    });
+}
+
 /**
  * Helper to create a deep, recursive proxy that triggers a callback on any modification.
  * @param {object} target The object to wrap.

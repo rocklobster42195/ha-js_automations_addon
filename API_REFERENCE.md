@@ -434,3 +434,103 @@ async function checkWeather() {
 }
 ```
 The system automatically applies important default settings to the `axios` instance (like disabling keep-alive) to prevent scripts from hanging, so you don't have to worry about complex configuration.
+
+---
+
+## Filesystem API (`ha.fs`)
+
+`ha.fs` provides sandboxed file access. It is only available when **Settings → Danger Zone → Enable Filesystem Access** is turned on.
+
+### Virtual Roots
+
+| Prefix | Maps to | Purpose |
+|---|---|---|
+| `internal://` | `/config/js-automations/data/` | Script-private persistent data |
+| `shared://` | `/share/` | Cross-addon data exchange, NAS mounts |
+| `media://` | `/media/` | Camera snapshots, audio, images |
+
+Path traversal (`../`) is always blocked. `move()` requires both paths to be within the same virtual root.
+
+### `@permission` Tag
+
+Scripts using `ha.fs` should declare the required permissions in their header:
+
+```javascript
+/**
+ * @name My Script
+ * @permission fs:read, fs:write
+ */
+```
+
+When **Capability Enforcement** is enabled (default: on), calling `ha.fs` methods without the matching `@permission` throws a `PermissionDeniedError` at runtime.
+
+### Methods
+
+| Method | Permission | Description |
+|---|---|---|
+| `ha.fs.read(path, encoding?)` | `fs:read` | Read file as UTF-8 string (default) or `Buffer` (`'binary'`) |
+| `ha.fs.write(path, data)` | `fs:write` | Write or overwrite a file. Creates parent directories. |
+| `ha.fs.append(path, data)` | `fs:write` | Append to a file. Creates it if needed. |
+| `ha.fs.exists(path)` | `fs:read` | Returns `true` if the path exists. |
+| `ha.fs.list(path)` | `fs:read` | Lists directory entries. Directories are suffixed with `/`. |
+| `ha.fs.stat(path)` | `fs:read` | Returns `{ size, modified: Date, isDirectory }`. |
+| `ha.fs.move(src, dest)` | `fs:write` | Move or rename. Both paths must share the same virtual root. |
+| `ha.fs.delete(path)` | `fs:write` | Delete a file or directory (recursive). |
+| `ha.fs.watch(path, callback)` | `fs:read` | Watch for changes. Returns an unsubscribe function. |
+| `ha.fs.rotate(path, options?)` | `fs:write` | Log rotation. Renames `.log` → `.1.log` → `.2.log` … |
+
+### Storage Quotas
+
+Per-root size limits can be configured under **Settings → Danger Zone** (visible when filesystem access is enabled). `0` = unlimited.
+
+### Examples
+
+```javascript
+/**
+ * @name CSV Logger
+ * @permission fs:write
+ */
+
+// Append a row
+const row = `${new Date().toISOString()},${price}\n`;
+await ha.fs.append('internal://prices.csv', row);
+
+// Rotate when file exceeds 5 MB, keep 3 backups
+await ha.fs.rotate('internal://prices.csv', { maxSize: '5MB', keep: 3 });
+```
+
+```javascript
+/**
+ * @name Config Watcher
+ * @permission fs:read
+ */
+
+let config = JSON.parse(await ha.fs.read('shared://my-script/config.json'));
+
+const stop = ha.fs.watch('shared://my-script/config.json', async () => {
+    config = JSON.parse(await ha.fs.read('shared://my-script/config.json'));
+    ha.log('Config reloaded');
+});
+
+ha.onStop(() => stop());
+```
+
+---
+
+## Capability & Permission System
+
+Scripts can declare which sensitive capabilities they use via `@permission` in the script header. This serves two purposes: **transparency** (the script list shows badges for each declared/detected capability) and optionally **enforcement** (undeclared capabilities throw at runtime).
+
+### Permission Tokens
+
+| Token | What it covers | Enforcement |
+|---|---|---|
+| `network` | `fetch()`, `http`, `https`, `axios`, `got`, … | ✓ (Module._load hook + fetch override) |
+| `fs:read` | `ha.fs.read`, `.exists`, `.list`, `.stat`, `.watch` | ✓ |
+| `fs:write` | `ha.fs.write`, `.append`, `.delete`, `.move`, `.rotate` | ✓ |
+| `fs` | Alias for `fs:read` + `fs:write` | ✓ |
+| `exec` | `child_process` (`exec`, `spawn`, …) | ✓ |
+
+### Auto-Detection
+
+The UI statically analyses script source at load time and highlights any capability that is used but not declared (amber badge) or declared but not detected (dimmed badge). Enforcement is a separate runtime mechanism.

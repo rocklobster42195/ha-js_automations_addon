@@ -214,6 +214,10 @@
       "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection.",
       "filesystem_enabled": "Enable Filesystem Access (ha.fs)",
       "filesystem_enabled_desc": "Grants scripts access to ha.fs for reading and writing files within sandboxed directories (/config/js_automations/data/, /share/, /media/). Use with caution.",
+      "quota_internal": "Quota: internal://",
+      "quota_shared": "Quota: shared://",
+      "quota_media": "Quota: media://",
+      "quota_desc": "Maximum total size for this virtual root. 0 = unlimited.",
       "capability_enforcement": "Enforce @permission Declarations",
       "capability_enforcement_desc": "When enabled, scripts that use network (http/https/fetch) or shell execution (child_process) without declaring @permission in their header will throw a PermissionDeniedError at runtime."
     }
