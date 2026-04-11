@@ -621,7 +621,10 @@ class WorkerManager extends EventEmitter {
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info',
                 language: language,
-                defaultThrottle: this.settings.default_throttle || 0
+                defaultThrottle: this.settings.default_throttle || 0,
+                permissions: scriptMeta.permissions || [],
+                capabilityEnforcement: this.settings.capability_enforcement === true,
+                filesystemEnabled: this.settings.filesystem_enabled === true
             },
             env: { 
                 ...process.env, 

@@ -21,7 +21,8 @@ class ScriptHeaderParser {
             loglevel: 'info',
             dependencies: [],
             includes: [],
-            expose: null
+            expose: null,
+            permissions: []
         };
 
         // Strip leading TypeScript triple-slash directives (/// <reference .../>) before
@@ -55,6 +56,20 @@ class ScriptHeaderParser {
         return metadata;
     }
 
+    // Parse metadata from a raw source string (no file I/O).
+    static _parseSource(source) {
+        const metadata = { name: null, description: '', permissions: [], dependencies: [], includes: [], expose: null, icon: 'mdi:script-text', area: '', label: '', loglevel: 'info' };
+        const content = source.replace(/^\uFEFF/, '').replace(/^(\/\/\/[^\n]*\n)+/, '');
+        const jsDocMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
+        if (jsDocMatch) {
+            jsDocMatch[1].split('\n').forEach(line => {
+                const match = line.match(/@(\w+)(?:\s+(.*))?/);
+                if (match) this._applyMeta(metadata, match[1], match[2]);
+            });
+        }
+        return metadata;
+    }
+
     static _applyMeta(metadata, key, val) {
         val = val ? val.trim() : '';
         if (key === 'npm' || key === 'include') {
@@ -63,6 +78,14 @@ class ScriptHeaderParser {
             else metadata.includes.push(...list);
         } else if (key === 'expose') {
             metadata.expose = val || 'switch';
+        } else if (key === 'permission') {
+            const tokens = val.split(/[\s,]+/).map(s => s.toLowerCase().trim()).filter(Boolean);
+            const expanded = [];
+            for (const t of tokens) {
+                if (t === 'fs') { expanded.push('fs:read', 'fs:write'); }
+                else expanded.push(t);
+            }
+            metadata.permissions = [...new Set([...metadata.permissions, ...expanded])];
         } else if (metadata.hasOwnProperty(key)) {
             metadata[key] = val;
         }
@@ -102,9 +125,12 @@ class ScriptHeaderParser {
         
         const deps = meta.npmModules || meta.dependencies;
         if (deps && deps.length > 0) lines.push(` * @npm ${deps.join(', ')}`);
-        
+
         const incs = meta.includes;
         if (incs && incs.length > 0) lines.push(` * @include ${incs.join(', ')}`);
+
+        const perms = meta.permissions;
+        if (perms && perms.length > 0) lines.push(` * @permission ${perms.join(', ')}`);
 
         lines.push(' */');
         

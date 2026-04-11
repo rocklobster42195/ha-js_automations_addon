@@ -303,15 +303,29 @@ module.exports = [
                 max: 20, 
                 default: 5 
             },
-            { 
-                key: 'restart_time', 
-                label: 'settings.danger.restart_time', 
-                description: 'settings.danger.restart_time_desc', 
-                type: 'number', 
-                min: 10, 
-                max: 300, 
+            {
+                key: 'restart_time',
+                label: 'settings.danger.restart_time',
+                description: 'settings.danger.restart_time_desc',
+                type: 'number',
+                min: 10,
+                max: 300,
                 default: 60,
                 unit: 's'
+            },
+            {
+                key: 'filesystem_enabled',
+                label: 'settings.danger.filesystem_enabled',
+                description: 'settings.danger.filesystem_enabled_desc',
+                type: 'toggle',
+                default: false
+            },
+            {
+                key: 'capability_enforcement',
+                label: 'settings.danger.capability_enforcement',
+                description: 'settings.danger.capability_enforcement_desc',
+                type: 'toggle',
+                default: true
             }
         ]
     }

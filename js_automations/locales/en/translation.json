@@ -211,7 +211,11 @@
       "restart_count": "Max Restarts",
       "restart_count_desc": "Number of crashes within the time window before Safe Mode is activated.",
       "restart_time": "Time Window (Seconds)",
-      "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection."
+      "restart_time_desc": "Period in seconds during which crashes are counted for bootloop detection.",
+      "filesystem_enabled": "Enable Filesystem Access (ha.fs)",
+      "filesystem_enabled_desc": "Grants scripts access to ha.fs for reading and writing files within sandboxed directories (/config/js_automations/data/, /share/, /media/). Use with caution.",
+      "capability_enforcement": "Enforce @permission Declarations",
+      "capability_enforcement_desc": "When enabled, scripts that use network (http/https/fetch) or shell execution (child_process) without declaring @permission in their header will throw a PermissionDeniedError at runtime."
     }
   },
   "banner_close_tooltip": "Close",
@@ -277,5 +281,24 @@
       "error_invalid_number": "Value is not a valid number",
       "error_invalid_json_start": "Value does not look like JSON (must start with { or [)"
     }
-  }
+  },
+  "cap_network":                   "Network access",
+  "cap_fs_read":                   "File read access",
+  "cap_fs_write":                  "File write access",
+  "cap_exec":                      "Shell execution",
+  "cap_preview_loading":           "Analyzing script…",
+  "cap_preview_none":              "No special capabilities detected.",
+  "cap_preview_capabilities":      "Capabilities detected:",
+  "cap_preview_undeclared_warning":"This script uses capabilities not declared in its @permission header.",
+  "cap_preview_undeclared_list":   "Undeclared:",
+  "cap_preview_confirm":           "Confirm Import",
+  "cap_tip_network":        "Network access (declared)",
+  "cap_tip_fs_read":        "File read access (declared)",
+  "cap_tip_fs_write":       "File write access (declared)",
+  "cap_tip_exec":           "Shell execution (declared)",
+  "cap_tip_network_warn":   "Network access detected — add @permission network to your header",
+  "cap_tip_fs_read_warn":   "File read access detected — add @permission fs:read to your header",
+  "cap_tip_fs_write_warn":  "File write access detected — add @permission fs:write to your header",
+  "cap_tip_exec_warn":      "Shell execution detected — add @permission exec to your header",
+  "cap_tip_unused":         "Declared in @permission but not detected in source"
 }

@@ -21,6 +21,40 @@ if (workerData.storageDir) {
     }
 }
 
+// --- 1b. CAPABILITY ENFORCEMENT ---
+// When capability_enforcement is enabled, block undeclared module access before user code loads.
+// Module._load is an internal Node.js API used widely in the ecosystem (Jest, nock, proxyquire).
+if (workerData.capabilityEnforcement) {
+    const _permissions = new Set(workerData.permissions || []);
+    const _origLoad = Module._load;
+
+    const NETWORK_MODULES = new Set(['http', 'https', 'net', 'tls', 'dns']);
+    const EXEC_MODULES    = new Set(['child_process']);
+
+    Module._load = function (request, parent, isMain) {
+        if (NETWORK_MODULES.has(request) && !_permissions.has('network')) {
+            throw new Error(
+                `PermissionDeniedError: '${request}' requires @permission network in your script header.`
+            );
+        }
+        if (EXEC_MODULES.has(request) && !_permissions.has('exec')) {
+            throw new Error(
+                `PermissionDeniedError: 'child_process' requires @permission exec in your script header.`
+            );
+        }
+        return _origLoad.apply(this, arguments);
+    };
+
+    // Block native fetch (Node 18+) when network is not declared
+    if (!_permissions.has('network') && typeof globalThis.fetch === 'function') {
+        globalThis.fetch = () => {
+            throw new Error(
+                `PermissionDeniedError: fetch() requires @permission network in your script header.`
+            );
+        };
+    }
+}
+
 // --- AXIOS MONKEY-PATCH ---
 // This ensures that any script `require('axios')` gets the proper defaults
 // to prevent the worker process from hanging.

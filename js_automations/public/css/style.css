@@ -308,14 +308,25 @@ input#search-input:focus { border-color: var(--accent) !important; }
     align-items: center;
 }
 
-.script-filename { 
-    font-size: 0.75rem; 
-    color: #555; 
-    font-family: monospace; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
-    white-space: nowrap;
+/* Badge strip (left side of lower row) */
+.script-badges {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    flex-shrink: 1;
 }
+
+/* Capability Badges */
+.cap-badge {
+    font-size: 0.85rem;
+    vertical-align: middle;
+    cursor: default;
+    color: var(--secondary-text-color, #777);
+}
+.cap-badge-warn      { color: #f0a500; }
+.cap-badge-warn-exec { color: #e53935; }
+.cap-badge-unused    { color: var(--secondary-text-color, #777); opacity: 0.35; }
 
 /* Rechter Block: Buttons */
 .row-actions { 
@@ -916,6 +927,46 @@ input#search-input:focus { border-color: var(--accent) !important; }
 
 .settings-item-wrapper:last-child {
     margin-bottom: 0;
+}
+
+/* Toggle Switch */
+.setting-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 42px;
+    height: 24px;
+    cursor: pointer;
+}
+.setting-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #444;
+    border-radius: 24px;
+    transition: background 0.2s;
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+.setting-toggle input:checked + .toggle-slider {
+    background: var(--primary-color, #03a9f4);
+}
+.setting-toggle input:checked + .toggle-slider::before {
+    transform: translateX(18px);
 }
 
 .settings-section:last-child {

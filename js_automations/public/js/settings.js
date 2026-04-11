@@ -287,12 +287,25 @@ function renderSettingsItems(category, section) {
         const catSettings = window.currentSettings[catId] || {};
         const value = catSettings[item.key] !== undefined ? catSettings[item.key] : item.default;
 
-        if (item.type === 'boolean') {
+        if (item.type === 'toggle') {
+            const label = document.createElement('label');
+            label.className = 'setting-toggle';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = !!value;
+            cb.onchange = (e) => saveSetting(catId, item.key, e.target.checked);
+            const slider = document.createElement('span');
+            slider.className = 'toggle-slider';
+            label.appendChild(cb);
+            label.appendChild(slider);
+            input = label;
+        }
+        else if (item.type === 'boolean') {
             input = document.createElement('input');
             input.type = 'checkbox';
             input.checked = value;
             input.onchange = (e) => saveSetting(catId, item.key, e.target.checked);
-        } 
+        }
         else if (item.type === 'select') {
             input = document.createElement('select');
             input.style.padding = '5px';
