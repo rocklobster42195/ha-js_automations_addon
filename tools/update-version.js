@@ -1,84 +1,126 @@
 /**
-* Dieses Skript synchronisiert die Version aus package.json mit config.yaml und README.md.
-* Es wird automatisch von npm version aufgerufen, wenn die Version erhöht wird.
-* Wichtig: Dieses Skript sollte vor dem Commit ausgeführt werden, damit die geänderten Dateien im selben Commit landen.
-* 
-* Ab jetzt musst du nie wieder Dateien manuell anfassen. Gib einfach im Terminal ein:
-* npm version patch   # Für Bugfixes (2.30.1 -> 2.30.2)
-* ODER
-* npm version minor   # Für Features (2.30.1 -> 2.31.0)
-*
-* package.json wird erhöht.
-* tools/update-version.js läuft und aktualisiert config.yaml & README.md.
-* Ein Git Commit 2.30.2 wird erstellt (mit allen 3 Dateien).
-* Ein Git Tag v2.30.2 wird erstellt.
-*/
+ * Synchronizes the version from package.json into config.yaml, README.md, and CHANGELOG.md.
+ * Runs automatically via the npm "version" lifecycle hook (npm version patch/minor/major).
+ *
+ * Usage:
+ *   npm version patch   → bug fix  (2.30.1 → 2.30.2)
+ *   npm version minor   → feature  (2.30.1 → 2.31.0)
+ *   npm version major   → breaking (2.30.1 → 3.0.0)
+ *
+ * What happens:
+ *   1. package.json is bumped by npm.
+ *   2. This script runs and updates config.yaml, README.md, CHANGELOG.md.
+ *   3. npm creates a commit (including all staged files) and a git tag.
+ *
+ * To publish the release afterwards:
+ *   npm run release
+ */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const rootDir = path.resolve(__dirname, '..');
-const configPath = path.join(rootDir, 'config.yaml');
-const readmePath = path.join(rootDir, 'README.md');
+const rootDir     = path.resolve(__dirname, '..');
+const configPath  = path.join(rootDir, 'config.yaml');
+const readmePath  = path.join(rootDir, 'README.md');
+const changelogPath = path.join(rootDir, 'CHANGELOG.md');
 const packagePath = path.join(rootDir, 'package.json');
 
-// 1. Neue Version aus package.json lesen (wurde von npm bereits aktualisiert)
-const pkg = require(packagePath);
-const newVersion = pkg.version;
-const license = pkg.license || 'MIT';
+// --- Helpers ---
 
-console.log(`🔄 Synchronisiere Version ${newVersion}...`);
-
-// 2. Alte Version aus config.yaml ermitteln (um sie in der README zu ersetzen)
-let oldVersion = null;
-let archs = [];
-if (fs.existsSync(configPath)) {
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    
-    // Version finden
-    const match = configContent.match(/^version: ["']?([\d\.]+)["']?/m);
-    if (match) oldVersion = match[1];
-
-    // Architekturen finden (extrahiert alle Einträge unter 'arch:')
-    const archSection = configContent.match(/arch:[\s\S]*?(\s+-\s+.*)+/);
-    if (archSection) {
-        archs = archSection[0].split('\n').filter(line => line.includes('-')).map(line => line.replace('-', '').trim());
+function assertContains(filePath, needle, label) {
+    const content = fs.readFileSync(filePath, 'utf8');
+    if (!content.includes(needle)) {
+        console.error(`  ❌ ${label}: "${needle}" not found after update — regex may have missed.`);
+        process.exit(1);
     }
 }
 
-// 3. config.yaml aktualisieren
+function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// --- Read version ---
+const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+const newVersion = pkg.version;
+const license    = pkg.license || 'MIT';
+
+console.log(`\n🔄 Synchronizing version ${newVersion}...\n`);
+
+// --- 1. config.yaml ---
+let archs = [];
 if (fs.existsSync(configPath)) {
     let content = fs.readFileSync(configPath, 'utf8');
-    // Ersetzt version: "x.x.x" durch die neue Version
+
+    // Extract architectures using line-by-line parsing (avoids fragile multi-line regex)
+    let inArch = false;
+    for (const line of content.split('\n')) {
+        if (/^arch:/.test(line)) { inArch = true; continue; }
+        if (inArch) {
+            const m = line.match(/^\s+-\s+(\S+)/);
+            if (m) archs.push(m[1]);
+            else if (line.trim() && !/^\s*#/.test(line)) break; // end of arch block
+        }
+    }
+
     content = content.replace(/^version:.*$/m, `version: "${newVersion}"`);
     fs.writeFileSync(configPath, content);
-    console.log(`✅ config.yaml aktualisiert`);
+    assertContains(configPath, newVersion, 'config.yaml');
+    console.log(`  ✅ config.yaml        → ${newVersion}`);
 }
 
-// 4. README.md aktualisieren
+// --- 2. README.md ---
 if (fs.existsSync(readmePath)) {
     let content = fs.readFileSync(readmePath, 'utf8');
-    
-    // Aktualisiere Add-on Version Badge
-    content = content.replace(/(badge\/version-)([\d\.]+)(-darkgreen)/, `$1${newVersion}$3`);
 
-    // Aktualisiere Lizenz Badge
-    content = content.replace(/(badge\/license-)([\w\.\-]+)(-blue)/, `$1${license}$3`);
+    content = content.replace(/(badge\/version-)([\d.]+)(-darkgreen)/, `$1${newVersion}$3`);
+    content = content.replace(/(badge\/license-)([\w.\-]+)(-blue)/, `$1${license}$3`);
 
-    // Aktualisiere Architekturen Badge
-    const archString = archs.join('%20%7C%20'); // URL-encoded pipe "|"
-    content = content.replace(/(badge\/arch-)(.*)(-lightgrey)/, `$1${archString}$3`);
+    if (archs.length > 0) {
+        const archString = archs.join('%20%7C%20');
+        content = content.replace(/(badge\/arch-)(.*)(-lightgrey)/, `$1${archString}$3`);
+    }
 
     fs.writeFileSync(readmePath, content);
-    console.log(`✅ README.md Badges aktualisiert (Add-on: ${newVersion}`);
+    assertContains(readmePath, newVersion, 'README.md');
+    console.log(`  ✅ README.md          → badge updated`);
 }
 
-// 5. Dateien für den Commit stagen (WICHTIG für npm version)
-try {
-    // Fügt die geänderten Dateien zum aktuellen Commit hinzu, den npm gleich erstellt
-    execSync(`git add "${configPath}" "${readmePath}"`);
-    console.log(`➕ Dateien zu git hinzugefügt`);
-} catch (e) {
-    console.error("⚠️ Konnte git add nicht ausführen", e);
+// --- 3. CHANGELOG.md ---
+if (fs.existsSync(changelogPath)) {
+    let content = fs.readFileSync(changelogPath, 'utf8');
+    const dateStr = today();
+
+    // Stamp the topmost ## [...] entry with the real version + today's date.
+    // Matches patterns like: ## [2.50.x], ## [Unreleased], ## [2.50.5]
+    content = content.replace(
+        /^(##\s*\[)[^\]]*(\])\s*-?\s*[\d-]*/m,
+        `$1${newVersion}$2 - ${dateStr}`
+    );
+
+    // Prepend a fresh [Unreleased] section for the next development cycle
+    if (!content.startsWith('## [Unreleased]')) {
+        content = `## [Unreleased]\n\n---\n\n${content}`;
+    }
+
+    fs.writeFileSync(changelogPath, content);
+    assertContains(changelogPath, newVersion, 'CHANGELOG.md');
+    console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr} finalized`);
 }
+
+// --- 4. Stage all modified files ---
+// npm will create the commit + tag after this script exits.
+// All staged files are included in that single commit automatically.
+try {
+    const filesToStage = [configPath, readmePath, changelogPath, packagePath]
+        .filter(fs.existsSync)
+        .map(f => `"${f}"`)
+        .join(' ');
+    execSync(`git add ${filesToStage}`);
+    console.log(`  ➕ Staged: config.yaml, README.md, CHANGELOG.md, package.json`);
+} catch (e) {
+    console.error(`  ⚠️  git add failed: ${e.message}`);
+}
+
+console.log(`\n✔  Version ${newVersion} ready. Run "npm run release" to publish.\n`);
