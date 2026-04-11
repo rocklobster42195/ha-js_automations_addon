@@ -27,6 +27,9 @@ const statusBar = {
 
     fetchPromise: null,
 
+    // Entity IDs configured as header action buttons (null = slot empty)
+    headerActionEntities: [],
+
     init() {
         this.injectStyles();
         window.cachedEntities = window.cachedEntities || [];
@@ -65,6 +68,7 @@ const statusBar = {
                 }
             }
             this.updateEntityState(data);
+            this.updateHeaderAction(data.entity_id, data.new_state);
         });
 
         // Perform initial render if settings are available
@@ -164,6 +168,7 @@ const statusBar = {
         this.renderSlot('slot1', conf.slot1, conf.customEntitySlot1, conf.show_sparkline_slot1);
         this.renderSlot('slot2', conf.slot2, conf.customEntitySlot2, conf.show_sparkline_slot2);
         this.renderSlot('slot3', conf.slot3, conf.customEntitySlot3, conf.show_sparkline_slot3);
+        this.renderHeaderActions(conf);
     },
 
     renderSlot(slotId, type, customEntity, showSparkline) {
@@ -450,6 +455,113 @@ const statusBar = {
                 }
             }
         });
+    },
+
+    // ─── Header Action Buttons ───────────────────────────────────────────────
+
+    renderHeaderActions(conf) {
+        const container = document.getElementById('header-entity-actions');
+        if (!container) return;
+
+        this.headerActionEntities = [];
+        container.innerHTML = '';
+
+        ['header_action_1', 'header_action_2', 'header_action_3'].forEach(key => {
+            const entityId = (conf[key] || '').trim().toLowerCase();
+            if (!entityId) { this.headerActionEntities.push(null); return; }
+
+            this.headerActionEntities.push(entityId);
+
+            const btn = document.createElement('button');
+            btn.className = 'header-entity-btn';
+            btn.dataset.entity = entityId;
+            btn.title = entityId;
+            btn.innerHTML = '<i class="mdi mdi-flash"></i>';
+            btn.addEventListener('click', () => this.triggerHeaderAction(entityId));
+            container.appendChild(btn);
+
+            // Apply initial state from cache or wait for load
+            const cached = window.cachedEntities?.find(e => e.entity_id === entityId);
+            if (cached) {
+                this.updateHeaderAction(entityId, cached);
+            } else if (this.fetchPromise) {
+                this.fetchPromise.then(data => {
+                    const state = data?.find(s => s.entity_id === entityId);
+                    if (state) this.updateHeaderAction(entityId, state);
+                }).catch(() => {});
+            } else {
+                // Retry once the cache is populated
+                setTimeout(() => {
+                    const state = window.cachedEntities?.find(e => e.entity_id === entityId);
+                    if (state) this.updateHeaderAction(entityId, state);
+                }, 2500);
+            }
+        });
+    },
+
+    updateHeaderAction(entityId, state) {
+        const btn = document.querySelector(`#header-entity-actions [data-entity="${entityId}"]`);
+        if (!btn) return;
+
+        const domain = entityId.split('.')[0];
+        const isOn = state?.state === 'on';
+        const isButton = domain === 'button' || domain === 'input_button';
+
+        // Icon: prefer entity attribute, then domain default
+        let iconName = 'flash';
+        if (state?.attributes?.icon) {
+            iconName = state.attributes.icon.replace('mdi:', '');
+        } else if (domain === 'switch') {
+            iconName = isOn ? 'toggle-switch' : 'toggle-switch-off';
+        } else if (isButton) {
+            iconName = 'gesture-tap-button';
+        }
+        btn.querySelector('i').className = `mdi mdi-${iconName}`;
+
+        // Color
+        btn.style.color = this.getEntityColor(state, isButton || isOn);
+
+        // Tooltip with friendly name
+        const friendly = state?.attributes?.friendly_name || entityId;
+        btn.title = `${friendly}\n(${entityId})`;
+    },
+
+    getEntityColor(state, isActive) {
+        if (!isActive) return 'var(--secondary-text-color, #777)';
+        const a = state?.attributes || {};
+        if (a.rgb_color) return `rgb(${a.rgb_color.join(',')})`;
+        if (a.icon_color) return a.icon_color;
+        return 'var(--primary-color, #03a9f4)';
+    },
+
+    async triggerHeaderAction(entityId) {
+        const domain = entityId.split('.')[0];
+        const isButton = domain === 'button' || domain === 'input_button';
+
+        let service;
+        if (isButton) {
+            service = 'press';
+        } else if (domain === 'switch') {
+            const cached = window.cachedEntities?.find(e => e.entity_id === entityId);
+            service = cached?.state === 'on' ? 'turn_off' : 'turn_on';
+            // Optimistic color flip
+            const btn = document.querySelector(`#header-entity-actions [data-entity="${entityId}"]`);
+            if (btn) btn.style.color = cached?.state === 'on'
+                ? 'var(--secondary-text-color, #777)'
+                : 'var(--primary-color, #03a9f4)';
+        } else {
+            service = 'press';
+        }
+
+        try {
+            await fetch('/api/ha/call-service', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ domain, service, entity_id: entityId })
+            });
+        } catch (e) {
+            console.error('[Header Action] Service call failed:', e);
+        }
     }
 };
 

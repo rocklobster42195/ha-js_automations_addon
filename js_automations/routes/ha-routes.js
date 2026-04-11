@@ -38,5 +38,26 @@ module.exports = (haConnector) => {
         }
     });
 
+    /**
+     * @route POST /api/ha/call-service
+     * @group Home Assistant - HA Actions
+     * @param {string} domain - HA service domain (e.g. 'switch', 'button')
+     * @param {string} service - Service name (e.g. 'turn_on', 'press')
+     * @param {string} entity_id - Target entity ID
+     * @param {object} [service_data] - Additional service data
+     */
+    router.post('/call-service', async (req, res) => {
+        const { domain, service, entity_id, service_data = {} } = req.body;
+        if (!domain || !service) {
+            return res.status(400).json({ error: 'domain and service are required' });
+        }
+        try {
+            await haConnector.callService(domain, service, { entity_id, ...service_data });
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     return router;
 };

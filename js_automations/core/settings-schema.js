@@ -186,6 +186,27 @@ module.exports = [
                 type: 'boolean',
                 default: true,
                 description: 'settings.statusbar.hide_sparkline_on_dense_desc'
+            },
+
+            // Header Action Buttons
+            {
+                key: 'header_action_1',
+                label: 'settings.statusbar.header_action_1',
+                description: 'settings.statusbar.header_action_desc',
+                type: 'entity-picker',
+                default: ''
+            },
+            {
+                key: 'header_action_2',
+                label: 'settings.statusbar.header_action_2',
+                type: 'entity-picker',
+                default: ''
+            },
+            {
+                key: 'header_action_3',
+                label: 'settings.statusbar.header_action_3',
+                type: 'entity-picker',
+                default: ''
             }
         ]
     },
