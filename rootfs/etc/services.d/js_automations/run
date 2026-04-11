@@ -1,17 +1,3 @@
-#!/usr/bin/with-contenv bashio
-# ==============================================================================
-# Home Assistant Add-on: JS Automations
-# Starts the Node.js automation server
-# ==============================================================================
-
-if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    bashio::log.info "Starting JS Automations v$(bashio::addon.version)..."
-    export PORT="$(bashio::addon.ingress_port)"
-    bashio::log.info "Ingress port: ${PORT}"
-else
-    bashio::log.info "No Supervisor found — standalone mode on port 3000"
-fi
-
-cd /app || bashio::exit.nok "Failed to change to /app directory"
-
+#!/bin/sh
+cd /app
 exec node js_automations/server.js
