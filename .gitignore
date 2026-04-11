@@ -35,6 +35,7 @@ Thumbs.db
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
 scripts
 docs
+.release-notes.tmp
 
 .claude
 CLAUDE.md
