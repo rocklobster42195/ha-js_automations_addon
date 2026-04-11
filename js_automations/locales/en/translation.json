@@ -166,7 +166,11 @@
       "show_sparkline": "Show Sparkline",
       "show_sparkline_desc": "Displays a small historical graph for this value.",
       "hide_sparkline_on_dense": "Hide sparklines when dense",
-      "hide_sparkline_on_dense_desc": "Automatically hides mini charts when all 3 slots are active. This prevents the status bar from looking cluttered or text being truncated."
+      "hide_sparkline_on_dense_desc": "Automatically hides mini charts when all 3 slots are active. This prevents the status bar from looking cluttered or text being truncated.",
+      "header_action_1": "Header Action 1",
+      "header_action_2": "Header Action 2",
+      "header_action_3": "Header Action 3",
+      "header_action_desc": "HA entity to show as a quick-action button in the sidebar header (switch or button)."
     },
     "mqtt": {
       "enabled": "Enable MQTT",

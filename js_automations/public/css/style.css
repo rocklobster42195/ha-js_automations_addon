@@ -142,11 +142,30 @@ body.expert-mode .nav-logo { color: #2e7d32; } /* Expert Mode: Dark Green */
 }
 
 .header-actions { display: flex; gap: 2px; width: 100%; }
-.header-actions button { 
-    color: var(--text-sec) !important; font-size: 1.3rem !important; 
-    width: 32px; height: 32px; 
+.header-actions button {
+    color: var(--text-sec) !important; font-size: 1.3rem !important;
+    width: 32px; height: 32px;
 }
 .header-actions button:hover { color: #fff !important; background: #252525 !important; }
+
+/* Header Entity Action Buttons */
+#header-entity-actions { display: flex; gap: 2px; margin-left: auto; }
+.header-entity-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    transition: background 0.15s, opacity 0.15s;
+    padding: 0;
+}
+.header-entity-btn:hover { background: #252525 !important; }
+.header-entity-btn:active { opacity: 0.7; }
 
 /* Notification Dot */
 .has-notification { position: relative; }

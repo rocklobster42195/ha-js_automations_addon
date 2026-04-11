@@ -170,7 +170,11 @@
       "show_sparkline": "Sparkline anzeigen",
       "show_sparkline_desc": "Zeigt einen kleinen historischen Graphen an.",
       "hide_sparkline_on_dense": "Sparklines bei Platzmangel ausblenden",
-      "hide_sparkline_on_dense_desc": "Blendet Diagramme automatisch aus, wenn alle 3 Slots aktiv sind."
+      "hide_sparkline_on_dense_desc": "Blendet Diagramme automatisch aus, wenn alle 3 Slots aktiv sind.",
+      "header_action_1": "Header-Aktion 1",
+      "header_action_2": "Header-Aktion 2",
+      "header_action_3": "Header-Aktion 3",
+      "header_action_desc": "HA-Entity als Schnellzugriff-Button im Sidebar-Header (switch oder button)."
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",

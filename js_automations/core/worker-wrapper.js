@@ -1098,7 +1098,6 @@ try {
     require(scriptPath);
 } catch (err) {
     ha.error(err);
-    console.error(`[Worker Error] ${workerData.filename}:`, err);
     // Exit after a short delay to allow log delivery
     setTimeout(() => process.exit(1), 100);
 }
