@@ -16,7 +16,7 @@ COPY . .
 
 # s6-overlay Service-Scripts deployen und ausführbar machen
 COPY rootfs /
-RUN chmod a+x /etc/s6-overlay/s6-rc.d/js_automations/run
+RUN chmod a+x /etc/services.d/js_automations/run
 
 # Setze den Port frei
 EXPOSE 3000
