@@ -217,6 +217,10 @@
       "restart_time_desc": "Zeitraum für die Bootloop-Erkennung.",
       "filesystem_enabled": "Dateisystemzugriff aktivieren (ha.fs)",
       "filesystem_enabled_desc": "Gewährt Skripten Zugriff auf ha.fs zum Lesen und Schreiben von Dateien in abgesicherten Verzeichnissen (/config/js_automations/data/, /share/, /media/). Mit Vorsicht verwenden.",
+      "quota_internal": "Quota: internal://",
+      "quota_shared": "Quota: shared://",
+      "quota_media": "Quota: media://",
+      "quota_desc": "Maximale Gesamtgröße für diesen virtuellen Pfad. 0 = unbegrenzt.",
       "capability_enforcement": "@permission-Deklarationen erzwingen",
       "capability_enforcement_desc": "Wenn aktiviert, werfen Skripte, die Netzwerk (http/https/fetch) oder Shell-Befehle (child_process) ohne @permission im Header nutzen, zur Laufzeit einen PermissionDeniedError."
     }

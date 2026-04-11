@@ -624,7 +624,13 @@ class WorkerManager extends EventEmitter {
                 defaultThrottle: this.settings.default_throttle || 0,
                 permissions: scriptMeta.permissions || [],
                 capabilityEnforcement: this.settings.capability_enforcement === true,
-                filesystemEnabled: this.settings.filesystem_enabled === true
+                filesystemEnabled: this.settings.filesystem_enabled === true,
+                fsDataDir: this.scriptsDir ? path.join(this.scriptsDir, 'data') : '',
+                fsQuotas: {
+                    internal: (this.settings.quota_internal || 0) * 1024 * 1024,
+                    shared:   (this.settings.quota_shared   || 0) * 1024 * 1024,
+                    media:    (this.settings.quota_media    || 0) * 1024 * 1024,
+                }
             },
             env: { 
                 ...process.env, 

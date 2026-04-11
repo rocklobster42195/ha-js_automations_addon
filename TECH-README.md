@@ -166,6 +166,31 @@ Damit Skripte `require('axios')` schreiben können ohne `axios` selbst zu instal
 
 Worker Threads haben ein bekanntes Problem mit HTTP-Keep-Alive-Verbindungen: Offene Sockets verhindern, dass sich der Thread beendet. Der Wrapper patcht `Module.prototype.require` so dass jedes `require('axios')` automatisch `keepAlive: false` erhält.
 
+### Capability Enforcement (1b)
+
+Nach der Module-Path-Injection und vor dem Axios-Patch wird (wenn `capabilityEnforcement: true` in `workerData`) ein `Module._load`-Hook installiert:
+
+- **`NETWORK_MODULES`** (`http`, `https`, `net`, `tls`, `dns`): Wirft `PermissionDeniedError` wenn `@permission network` fehlt.
+- **`EXEC_MODULES`** (`child_process`): Wirft `PermissionDeniedError` wenn `@permission exec` fehlt.
+- **`globalThis.fetch`**: Wird durch eine werfende Funktion ersetzt wenn `@permission network` fehlt.
+
+Der Hook ist minimal invasiv — er delegiert alle erlaubten Calls an das originale `Module._load` weiter.
+
+### Filesystem Injection (4b)
+
+Nach `global.ha = ha` wird (wenn `filesystemEnabled: true` und `fsDataDir` nicht leer) `ha.fs` injiziert:
+
+```js
+const { buildHaFs } = require('./fs-service');
+ha.fs = buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas });
+```
+
+`fs-service.js` ist ein reines Utility-Modul. `buildHaFs()` gibt ein Objekt mit 10 Methoden zurück (read, write, append, exists, list, stat, move, delete, watch, rotate). Jede Methode:
+1. Prüft die `@permission`-Deklaration (wenn enforcement aktiv)
+2. Löst den virtuellen Pfad auf (`internal://` → `fsDataDir`, `shared://` → `/share`, `media://` → `/media`) mit Traversal-Guard
+3. Prüft die Storage-Quota (nur bei write/append)
+4. Führt die eigentliche `fs/promises`-Operation aus
+
 ### Das `ha`-Objekt
 
 Der Wrapper erzeugt ein globales `ha`-Objekt mit folgenden Methoden, die alle intern `parentPort.postMessage()` aufrufen:
@@ -471,7 +496,41 @@ Jede Änderung an Store-Daten oder HA-States triggert eine Neugeierung mit Debou
 
 ---
 
-## 12. Settings: Schema-Driven UI
+## 12. Capability & Permission System
+
+### Übersicht
+
+Das Capability-System hat zwei unabhängige Schichten:
+
+1. **Statische Analyse (UI)** — `core/capability-analyzer.js` scannt den Script-Quelltext per Regex und erkennt genutzten Capabilities (`network`, `fs:read`, `fs:write`, `exec`). Die Script-Liste zeigt Badges für jede Capability. Badges sind grau wenn deklariert+erkannt, amber bei undeklarierten, rot bei undeklarierten `exec`.
+2. **Runtime-Enforcement (Worker)** — `core/worker-wrapper.js` blockiert undeklarierten Zugriff zur Laufzeit via `Module._load`-Hook + `globalThis.fetch`-Override (network/exec) sowie per `checkRead()`/`checkWrite()` in `ha.fs` (filesystem).
+
+### `@permission`-Tag
+
+Geparst von `core/script-header-parser.js`. Das `fs`-Alias wird zu `['fs:read', 'fs:write']` expandiert. Permissions landen als Array in `scriptMeta.permissions` und werden über `workerData.permissions` an den Worker übergeben.
+
+### `_updateWorkerManagerSettings` in `kernel.js`
+
+Settings aus `settings.json` sind **nested** (`danger.filesystem_enabled`), `this.settings` im WorkerManager ist **flat**. `kernel.js` mappt beim Boot und bei jedem `settings_updated`-Event manuell:
+
+```
+danger.filesystem_enabled  → filesystem_enabled
+danger.capability_enforcement → capability_enforcement
+danger.quota_*             → quota_internal / quota_shared / quota_media
+```
+
+Neue Settings in der `danger`-Section müssen hier immer eingetragen werden.
+
+### `core/capability-analyzer.js`
+
+- Entfernt JSDoc-Header vor der Analyse (verhindert False Positives aus Code-Beispielen in `@description`)
+- `analyze(source)` → `{ detected: string[] }`
+- `diff(declared, detected)` → `{ undeclared: string[], unused: string[] }`
+- Kollabiert `fs:read` wenn `fs:write` bereits erkannt (write impliziert read)
+
+---
+
+## 13. Settings: Schema-Driven UI
 
 `core/settings-schema.js` definiert die Struktur der Einstellungen als Array von Sections mit Items. Dasselbe Schema wird für zwei Zwecke verwendet:
 
@@ -483,6 +542,7 @@ Jede Änderung an Store-Daten oder HA-States triggert eine Neugeierung mit Debou
 | Typ | Beschreibung |
 |---|---|
 | `text` / `number` / `boolean` | Standard-Eingabefelder |
+| `toggle` | CSS Toggle-Switch (visuell hervorgehoben, für Danger-Zone-Settings) |
 | `select` | Dropdown mit `options: [{ value, label }]` |
 | `entity-picker` | HA-Entity-Autocomplete |
 | `mqtt-test` | Spezieller Button: testet MQTT-Verbindung ohne zu speichern |

@@ -321,6 +321,42 @@ module.exports = [
                 default: false
             },
             {
+                key: 'quota_internal',
+                label: 'settings.danger.quota_internal',
+                description: 'settings.danger.quota_desc',
+                type: 'number',
+                min: 0,
+                max: 10240,
+                default: 0,
+                unit: 'MB',
+                indent: true,
+                condition: { key: 'filesystem_enabled', value: true }
+            },
+            {
+                key: 'quota_shared',
+                label: 'settings.danger.quota_shared',
+                description: 'settings.danger.quota_desc',
+                type: 'number',
+                min: 0,
+                max: 10240,
+                default: 0,
+                unit: 'MB',
+                indent: true,
+                condition: { key: 'filesystem_enabled', value: true }
+            },
+            {
+                key: 'quota_media',
+                label: 'settings.danger.quota_media',
+                description: 'settings.danger.quota_desc',
+                type: 'number',
+                min: 0,
+                max: 10240,
+                default: 0,
+                unit: 'MB',
+                indent: true,
+                condition: { key: 'filesystem_enabled', value: true }
+            },
+            {
                 key: 'capability_enforcement',
                 label: 'settings.danger.capability_enforcement',
                 description: 'settings.danger.capability_enforcement_desc',

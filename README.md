@@ -28,6 +28,8 @@
 - **Smart Triggers** — `ha.on()` supports wildcards, arrays, and RegExp. `ha.waitFor()` pauses until a state is reached. `ha.waitUntil()` waits for complex multi-entity conditions.
 - **Persistent Store & Magic Variables** — Share data between scripts or survive reboots with `ha.store`. Use `ha.persistent()` to work with persistent objects as if they were plain JavaScript — nested property changes are saved automatically.
 - **Global Libraries & Auto-NPM** — Write shared code once, `@include` it anywhere. npm packages listed in the script header are installed automatically.
+- **Filesystem API (`ha.fs`)** — Read, write, append, list, watch, and rotate files across three sandboxed virtual roots: `internal://` (script-private data), `shared://` (/share, NAS mounts), `media://` (/media). Opt-in via Settings → Danger Zone.
+- **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
 
 ---
@@ -90,6 +92,7 @@ Every script starts with a JSDoc-style header that configures the engine's behav
 | `@area` | Home Assistant area to assign the exposed entity to |
 | `@label` | HA Label for sidebar grouping — inherits icon and color from the HA Label Registry |
 | `@expose` | Expose as `switch` or `button` entity in HA |
+| `@permission` | Declare required capabilities: `network`, `fs:read`, `fs:write`, `exec` (comma-separated) |
 
 ---
 
