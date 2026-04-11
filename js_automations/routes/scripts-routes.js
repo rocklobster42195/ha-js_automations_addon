@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const ScriptHeaderParser = require('../core/script-header-parser');
+const CapabilityAnalyzer = require('../core/capability-analyzer');
 const axios = require('axios');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -31,6 +32,16 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
             const m = ScriptHeaderParser.parse(fullPath);
             if (!m.name) m.name = filename;
+
+            try {
+                const source = fs.readFileSync(fullPath, 'utf8');
+                const { detected } = CapabilityAnalyzer.analyze(source);
+                const declared = m.permissions || [];
+                const { undeclared, unused } = CapabilityAnalyzer.diff(declared, detected);
+                m.capabilities = { detected, declared, undeclared, unused };
+            } catch (e) {
+                m.capabilities = { detected: [], declared: m.permissions || [], undeclared: [], unused: [] };
+            }
 
             if (isLibrary) {
                 m.status = 'stopped';
@@ -260,14 +271,29 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         res.json({ filename });
     });
 
+    // POST Preview (raw source → capability analysis, no file written)
+    router.post('/preview', (req, res) => {
+        const { source } = req.body;
+        if (typeof source !== 'string') return res.status(400).json({ error: 'source required' });
+        try {
+            const meta = ScriptHeaderParser._parseSource(source);
+            const { detected } = CapabilityAnalyzer.analyze(source);
+            const declared = meta.permissions || [];
+            const { undeclared, unused } = CapabilityAnalyzer.diff(declared, detected);
+            res.json({ name: meta.name, description: meta.description, permissions: declared, capabilities: { detected, declared, undeclared, unused } });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // POST Import (URL/Gist)
     router.post('/import', async (req, res) => {
-        const { url, type, name } = req.body;
+        const { url, type, name, dryRun } = req.body;
         try {
             const response = await axios.get(url, { responseType: 'text' });
             const code = response.data;
             const urlExt = path.extname(url.split('?')[0]) || '.js';
-            
+
             // Dateinamen aus URL ableiten und bereinigen
             let filename;
             if (name && name.trim()) {
@@ -275,7 +301,16 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             } else {
                 filename = path.parse(path.basename(url).split('?')[0]).name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + urlExt;
             }
-            
+
+            // Dry-run: analyse and return preview without writing
+            if (dryRun) {
+                const meta = ScriptHeaderParser._parseSource(code);
+                const { detected } = CapabilityAnalyzer.analyze(code);
+                const declared = meta.permissions || [];
+                const { undeclared, unused } = CapabilityAnalyzer.diff(declared, detected);
+                return res.json({ filename, name: meta.name, description: meta.description, permissions: declared, capabilities: { detected, declared, undeclared, unused } });
+            }
+
             const targetDir = (type === 'library') ? LIBRARIES_DIR : SCRIPTS_DIR;
             const fullPath = path.join(targetDir, filename);
 
@@ -340,7 +375,9 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         }
 
         // Use Parser to update metadata (handles @expose and formatting centrally)
-        ScriptHeaderParser.updateMetadata(fullPath, req.body);
+        // Preserve @permission tag — it's edited in source, not via wizard form
+        const existingMeta = ScriptHeaderParser.parse(fullPath);
+        ScriptHeaderParser.updateMetadata(fullPath, { ...req.body, permissions: existingMeta.permissions });
         
         // 5. REFACTORING: Update consumers
         let updatedConsumers = 0;

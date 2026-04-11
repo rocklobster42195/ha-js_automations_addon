@@ -214,7 +214,11 @@
       "restart_count": "Max. Neustarts",
       "restart_count_desc": "Anzahl der Abstürze innerhalb des Zeitfensters bis der Safe-Mode aktiviert wird.",
       "restart_time": "Zeitfenster (Sekunden)",
-      "restart_time_desc": "Zeitraum für die Bootloop-Erkennung."
+      "restart_time_desc": "Zeitraum für die Bootloop-Erkennung.",
+      "filesystem_enabled": "Dateisystemzugriff aktivieren (ha.fs)",
+      "filesystem_enabled_desc": "Gewährt Skripten Zugriff auf ha.fs zum Lesen und Schreiben von Dateien in abgesicherten Verzeichnissen (/config/js_automations/data/, /share/, /media/). Mit Vorsicht verwenden.",
+      "capability_enforcement": "@permission-Deklarationen erzwingen",
+      "capability_enforcement_desc": "Wenn aktiviert, werfen Skripte, die Netzwerk (http/https/fetch) oder Shell-Befehle (child_process) ohne @permission im Header nutzen, zur Laufzeit einen PermissionDeniedError."
     }
   },
   "statusbar": {
@@ -288,5 +292,24 @@
       "error_invalid_number": "Wert ist keine gültige Zahl",
       "error_invalid_json_start": "Wert sieht nicht nach JSON aus (muss mit { oder [ beginnen)"
     }
-  }
+  },
+  "cap_network":                   "Netzwerkzugriff",
+  "cap_fs_read":                   "Dateizugriff (lesen)",
+  "cap_fs_write":                  "Dateizugriff (schreiben)",
+  "cap_exec":                      "Shell-Ausführung",
+  "cap_preview_loading":           "Skript wird analysiert…",
+  "cap_preview_none":              "Keine besonderen Berechtigungen erkannt.",
+  "cap_preview_capabilities":      "Erkannte Berechtigungen:",
+  "cap_preview_undeclared_warning":"Dieses Skript nutzt Berechtigungen, die nicht in @permission deklariert sind.",
+  "cap_preview_undeclared_list":   "Nicht deklariert:",
+  "cap_preview_confirm":           "Import bestätigen",
+  "cap_tip_network":        "Netzwerkzugriff (deklariert)",
+  "cap_tip_fs_read":        "Lesezugriff auf Dateien (deklariert)",
+  "cap_tip_fs_write":       "Schreibzugriff auf Dateien (deklariert)",
+  "cap_tip_exec":           "Shell-Ausführung (deklariert)",
+  "cap_tip_network_warn":   "Netzwerkzugriff erkannt — @permission network im Header ergänzen",
+  "cap_tip_fs_read_warn":   "Lesezugriff erkannt — @permission fs:read im Header ergänzen",
+  "cap_tip_fs_write_warn":  "Schreibzugriff erkannt — @permission fs:write im Header ergänzen",
+  "cap_tip_exec_warn":      "Shell-Ausführung erkannt — @permission exec im Header ergänzen",
+  "cap_tip_unused":         "In @permission deklariert, aber im Quellcode nicht erkannt"
 }

@@ -25,6 +25,45 @@ let wizardOriginalFilename = null; // Für Edit-Mode
 let wizardDuplicateCode = null; // Für Duplicate-Mode
 let wizardNpmModules = [];
 let wizardIncludes = [];
+let wizardImportPreviewed = false; // Two-step import: true after preview shown
+
+/** Renders capability preview data into a panel element. */
+function renderCapPreview(el, data) {
+    if (!el) return;
+    el.classList.remove('hidden');
+
+    const CAP_ICONS = { network: 'mdi-web', 'fs:read': 'mdi-file-eye-outline', 'fs:write': 'mdi-file-edit-outline', exec: 'mdi-console' };
+    const caps = data.capabilities;
+    const detected = caps ? caps.detected : [];
+    const undeclared = caps ? caps.undeclared : [];
+
+    let html = '';
+
+    if (data.name) html += `<div class="cap-preview-name"><i class="mdi mdi-script-text"></i> <strong>${data.name}</strong></div>`;
+    if (data.description) html += `<div class="cap-preview-desc">${data.description}</div>`;
+
+    if (detected.length === 0) {
+        html += `<div class="cap-preview-none"><i class="mdi mdi-check-circle-outline"></i> ${i18next.t('cap_preview_none')}</div>`;
+    } else {
+        // Collapse fs:read when fs:write is also present
+        const hasFsWrite = detected.includes('fs:write');
+        const visible = detected.filter(t => !(t === 'fs:read' && hasFsWrite));
+        html += `<div class="cap-preview-caps-label">${i18next.t('cap_preview_capabilities')}</div>`;
+        html += visible.map(t => {
+            const icon = CAP_ICONS[t] || 'mdi-circle-small';
+            const isWarn = undeclared.includes(t);
+            const cls = isWarn ? (t === 'exec' ? 'cap-preview-item cap-preview-item-exec' : 'cap-preview-item cap-preview-item-warn') : 'cap-preview-item';
+            const label = i18next.t(`cap_${t.replace(':', '_')}`, { defaultValue: t });
+            return `<div class="${cls}"><i class="mdi ${icon}"></i> ${label}</div>`;
+        }).join('');
+
+        if (undeclared.length > 0) {
+            html += `<div class="cap-preview-warning"><i class="mdi mdi-alert-outline"></i> ${i18next.t('cap_preview_undeclared_warning')}<br><small>${i18next.t('cap_preview_undeclared_list')} <code>${undeclared.join(', ')}</code></small></div>`;
+        }
+    }
+
+    el.innerHTML = html;
+}
 
 function injectCreationWizard() {
     if (document.getElementById('creation-wizard-modal')) return;
@@ -58,6 +97,18 @@ function injectCreationWizard() {
         .lang-card.active { color: #fff; }
         .lang-card.active#lang-card-js { border-color: #f7df1e; color: #f7df1e; background: rgba(247, 223, 30, 0.1); }
         .lang-card.active#lang-card-ts { border-color: #3178c6; color: #3178c6; background: rgba(49, 120, 198, 0.1); }
+
+        /* Capability Preview Panel */
+        .cap-preview-panel { margin-top: 14px; padding: 10px 12px; background: rgba(255,255,255,0.04); border: 1px solid #333; border-radius: 6px; font-size: 0.85rem; }
+        .cap-preview-name { font-weight: bold; margin-bottom: 3px; }
+        .cap-preview-desc { color: #888; margin-bottom: 8px; font-size: 0.8rem; }
+        .cap-preview-caps-label { color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; margin-top: 6px; }
+        .cap-preview-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--secondary-text-color, #aaa); }
+        .cap-preview-item-warn { color: #f0a500; }
+        .cap-preview-item-exec { color: #e53935; }
+        .cap-preview-none { color: #5a9e5a; display: flex; align-items: center; gap: 6px; }
+        .cap-preview-warning { margin-top: 8px; padding: 7px 9px; background: rgba(240,165,0,0.1); border: 1px solid rgba(240,165,0,0.3); border-radius: 4px; color: #f0a500; font-size: 0.8rem; }
+        .cap-preview-loading { color: #666; display: flex; align-items: center; gap: 6px; }
     </style>
     `;
     document.head.insertAdjacentHTML('beforeend', css);
@@ -183,6 +234,7 @@ function injectCreationWizard() {
                     <input type="file" id="wizard-file-input" accept=".js,.ts" style="display:none" onchange="handleFileSelect(this)">
                     <div id="wizard-file-name" class="file-info"></div>
                 </div>
+                <div id="wizard-upload-preview" class="cap-preview-panel hidden"></div>
             </div>
 
             <!-- TAB: IMPORT -->
@@ -208,6 +260,7 @@ function injectCreationWizard() {
                         <i class="mdi mdi-alert" style="font-size: 1.2rem;"></i>
                         <small data-i18n="wizard_import_warning">Achtung: Importiere nur Code aus vertrauenswürdigen Quellen.</small>
                     </div>
+                    <div id="wizard-import-preview" class="cap-preview-panel hidden"></div>
                 </div>
             </div>
 
@@ -365,6 +418,7 @@ function updateWizardLibrarySuggestions() {
 }
 
 function closeCreationWizard() {
+    wizardImportPreviewed = false;
     document.getElementById('creation-wizard-modal').classList.add('hidden');
 }
 
@@ -379,18 +433,36 @@ function switchWizardTab(tab) {
     if (tab === 'new') btn.textContent = i18next.t('button_create');
     if (tab === 'upload') btn.textContent = i18next.t('wizard_btn_upload');
     if (tab === 'import') btn.textContent = i18next.t('wizard_btn_import');
-    
+
+    // Reset import preview state when switching tabs
+    wizardImportPreviewed = false;
+    const importPrev = document.getElementById('wizard-import-preview');
+    if (importPrev) importPrev.classList.add('hidden');
+    const uploadPrev = document.getElementById('wizard-upload-preview');
+    if (uploadPrev) uploadPrev.classList.add('hidden');
+
     validateWizardState();
 }
 
 function handleFileSelect(input) {
+    const previewEl = document.getElementById('wizard-upload-preview');
+    if (previewEl) previewEl.classList.add('hidden');
+
     if (input.files && input.files[0]) {
         document.getElementById('wizard-file-name').textContent = input.files[0].name;
-        // Auto-fill name input
         const nameInput = document.getElementById('wizard-upload-name');
         if (nameInput && !nameInput.value) {
             nameInput.value = input.files[0].name.replace(/\.(js|ts)$/i, '');
         }
+        // Non-blocking capability preview
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const res = await apiFetch('api/scripts/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: e.target.result }) });
+                if (res.ok) renderCapPreview(previewEl, await res.json());
+            } catch (_) { /* preview unavailable, upload proceeds normally */ }
+        };
+        reader.readAsText(input.files[0]);
     }
     validateWizardState();
 }
@@ -697,6 +769,22 @@ async function executeWizardAction() {
             const type = document.getElementById('wizard-import-type').value;
             const name = document.getElementById('wizard-import-name').value.trim();
             if (!url) throw new Error(i18next.t('error_wizard_url_required'));
+
+            if (!wizardImportPreviewed) {
+                // Step 1: dry-run preview
+                const previewEl = document.getElementById('wizard-import-preview');
+                if (previewEl) previewEl.innerHTML = `<div class="cap-preview-loading"><i class="mdi mdi-loading mdi-spin"></i> ${i18next.t('cap_preview_loading')}</div>`;
+                if (previewEl) previewEl.classList.remove('hidden');
+                const res = await apiFetch('api/scripts/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, type, name, dryRun: true }) });
+                if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_import_failed', { defaultValue: 'Import failed' })); }
+                renderCapPreview(previewEl, await res.json());
+                wizardImportPreviewed = true;
+                btn.textContent = i18next.t('cap_preview_confirm');
+                btn.disabled = false;
+                return; // Stop here — wait for second click
+            }
+
+            // Step 2: actual import
             const res = await apiFetch('api/scripts/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, type, name }) });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_import_failed', { defaultValue: 'Import failed' })); }
             const data = await res.json();

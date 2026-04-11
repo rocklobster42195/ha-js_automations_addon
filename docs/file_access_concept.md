@@ -63,6 +63,7 @@ A dedicated backup script runs nightly at 03:00, copies all scripts and a full `
  * @name JSA Backup
  * @icon mdi:backup-restore
  * @description Nightly backup of all scripts and ha.store to NAS.
+ * @permission fs:read, fs:write
  */
 
 const NAS_ROOT = 'shared://jsa-backups';
@@ -117,6 +118,7 @@ Direct filesystem access carries the risk of damaging Home Assistant configurati
     *   `Media`: `/media/` (for camera snapshots, audio files, images).
 *   **Path Sanitization:** All paths provided to the API are checked for "Path Traversal" patterns (e.g., `../`).
 *   **Resource Limits:** Configurable file size quotas per virtual root to prevent scripts from filling the host's storage.
+*   **Permission Transparency:** Scripts using `ha.fs` should declare `@permission fs:read` and/or `@permission fs:write` in their header. The capability system (see `capability_concept.md`) auto-detects filesystem access and shows a badge in the script list — and warns visually when the declaration is missing. With enforcement enabled, undeclared `ha.fs` calls throw a `PermissionDeniedError` at runtime.
 
 ## 3. Use-Cases
 *   **Custom Logging:** Writing detailed CSV or log files for long-term analysis without bloating the Home Assistant database.
@@ -165,6 +167,7 @@ Example: `await ha.fs.write('shared://logs/today.log', 'Data...');`
 ## 6. Implementation Steps
 1.  Add `filesystem_enabled` to `settings-manager.js`.
 2.  Implement a safe `FsService` in `core/` that handles path sanitization and directory creation.
-3.  Inject the `ha.fs` object into the `WorkerWrapper` when the setting is enabled.
+3.  Inject the `ha.fs` object into the `WorkerWrapper` when the setting is enabled. When `capability_enforcement` is also enabled, wrap each method to check `metadata.permissions` and throw `PermissionDeniedError` if `fs:read` or `fs:write` is absent.
 4.  Update the `ha-api.d.ts` for IntelliSense support.
 5.  Add UI components and translations.
+6.  Implement the capability badge system (see `capability_concept.md`) — auto-detection of `ha.fs` usage and `@permission` tag parsing ship together with the filesystem API.

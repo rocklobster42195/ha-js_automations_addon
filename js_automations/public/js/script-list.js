@@ -203,7 +203,8 @@ function renderScripts(scripts, updateGlobal = true) {
             let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
             const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
 
-            const badge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
+            const langBadge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
+            const capBadges = getCapabilityBadgesHTML(s.capabilities);
             const conflictBadge = (s.entity_conflicts && s.entity_conflicts.length > 0)
                 ? `<i class="mdi mdi-alert-outline" style="color: var(--color-warning, #f0a500); font-size:0.9rem; margin-right:4px;" title="${s.entity_conflicts.map(c => `${c.expected} → ${c.actual}`).join('\n')}"></i>`
                 : '';
@@ -227,7 +228,7 @@ function renderScripts(scripts, updateGlobal = true) {
                 <div class="script-info">
                     <div class="script-name">${conflictBadge}${s.name}</div>
                     <div class="script-lower-row">
-                        <span class="script-filename">${badge}${s.filename}</span>
+                        <span class="script-badges">${langBadge}${capBadges}</span>
                         <div class="row-actions">
                             ${controlsHtml}
                         </div>
@@ -241,15 +242,74 @@ function renderScripts(scripts, updateGlobal = true) {
     });
 }
 
+/**
+ * Builds the capability badge HTML for a script's lower row.
+ * Rules:
+ *  - not detected + not declared → hidden (not rendered)
+ *  - detected + declared         → gray (normal)
+ *  - detected + undeclared       → amber warning (red for exec)
+ *  - declared + not detected     → gray at 35% opacity (informational)
+ */
+function getCapabilityBadgesHTML(caps) {
+    if (!caps) return '';
+    const { detected, declared, undeclared } = caps;
+
+    const all = new Set([...detected, ...declared]);
+    if (all.size === 0) return '';
+
+    // When fs:write is present (detected or declared), suppress fs:read badge
+    const hasFsWrite = all.has('fs:write');
+
+    const BADGES = [
+        { token: 'network', icon: 'mdi-web',              tipKey: 'cap_tip_network',   warnKey: 'cap_tip_network_warn'   },
+        { token: 'fs:write', icon: 'mdi-file-edit-outline', tipKey: 'cap_tip_fs_write', warnKey: 'cap_tip_fs_write_warn'  },
+        { token: 'fs:read',  icon: 'mdi-file-eye-outline',  tipKey: 'cap_tip_fs_read',  warnKey: 'cap_tip_fs_read_warn'   },
+        { token: 'exec',     icon: 'mdi-console',           tipKey: 'cap_tip_exec',     warnKey: 'cap_tip_exec_warn'      },
+    ];
+
+    return BADGES.map(({ token, icon, tipKey, warnKey }) => {
+        if (!all.has(token)) return '';
+        if (token === 'fs:read' && hasFsWrite) return '';
+
+        const isDetected  = detected.includes(token);
+        const isUndeclared = undeclared.includes(token);
+        const isUnused     = declared.includes(token) && !isDetected;
+
+        let cls = 'cap-badge';
+        let tip;
+        if (isUndeclared) {
+            cls += token === 'exec' ? ' cap-badge-warn-exec' : ' cap-badge-warn';
+            tip = i18next.t(warnKey);
+        } else if (isUnused) {
+            cls += ' cap-badge-unused';
+            tip = i18next.t('cap_tip_unused');
+        } else {
+            tip = i18next.t(tipKey);
+        }
+
+        return `<i class="mdi ${icon} ${cls}" title="${tip}"></i>`;
+    }).join('');
+}
+
 function buildScriptTooltip(s) {
     const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
     const lines = [`File: ${s.filename} (${lang})`];
     lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
-    
+
     if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
     if (s.last_started) lines.push(`Started: ${new Date(s.last_started).toLocaleString()}`);
-    
-    if (s.description) lines.push(`\nDescription: ${s.description}`);
+
+    if (s.capabilities) {
+        const { detected, undeclared } = s.capabilities;
+        if (detected && detected.length > 0) {
+            lines.push(`\nCapabilities: ${detected.join(', ')}`);
+            if (undeclared && undeclared.length > 0) {
+                lines.push(`Undeclared: ${undeclared.join(', ')} (add @permission)`);
+            }
+        }
+    }
+
+    if (s.description) lines.push(`\n${s.description}`);
     return lines.join('\n');
 }
 
@@ -270,9 +330,10 @@ function updateScriptStats(statsMap) {
     if (changed && document.body.classList.contains('expert-mode')) {
         const rows = document.querySelectorAll('.script-row');
         rows.forEach(row => {
-            const nameEl = row.querySelector('.script-filename');
+            const nameEl = row.querySelector('.script-name');
             if (nameEl) {
-                const s = allScripts.find(script => script.filename === nameEl.textContent);
+                const name = nameEl.textContent.trim();
+                const s = allScripts.find(script => script.name === name);
                 if (s) row.title = buildScriptTooltip(s);
             }
         });
