@@ -24,6 +24,12 @@ if (workerData.storageDir) {
 // --- 1b. CAPABILITY ENFORCEMENT ---
 // When capability_enforcement is enabled, block undeclared module access before user code loads.
 // Module._load is an internal Node.js API used widely in the ecosystem (Jest, nock, proxyquire).
+//
+// The hook is guarded by _scriptExecuting so that system internals (e.g. node-cron loading
+// child_process for its background-task feature) are not blocked during the worker setup phase.
+// Only requires that originate during actual user script execution are enforced.
+let _scriptExecuting = false;
+
 if (workerData.capabilityEnforcement) {
     const _permissions = new Set(workerData.permissions || []);
     const _origLoad = Module._load;
@@ -32,15 +38,25 @@ if (workerData.capabilityEnforcement) {
     const EXEC_MODULES    = new Set(['child_process']);
 
     Module._load = function (request, parent, isMain) {
-        if (NETWORK_MODULES.has(request) && !_permissions.has('network')) {
-            throw new Error(
-                `PermissionDeniedError: '${request}' requires @permission network in your script header.`
-            );
-        }
-        if (EXEC_MODULES.has(request) && !_permissions.has('exec')) {
-            throw new Error(
-                `PermissionDeniedError: 'child_process' requires @permission exec in your script header.`
-            );
+        if (_scriptExecuting) {
+            // Only block requires that originate from user code.
+            // npm packages may legitimately use system APIs internally
+            // (e.g. node-cron requires child_process for its background task feature).
+            const parentFile = parent?.filename || '';
+            const isNpmInternal = parentFile.includes('node_modules');
+
+            if (!isNpmInternal) {
+                if (NETWORK_MODULES.has(request) && !_permissions.has('network')) {
+                    throw new Error(
+                        `PermissionDeniedError: '${request}' requires @permission network in your script header.`
+                    );
+                }
+                if (EXEC_MODULES.has(request) && !_permissions.has('exec')) {
+                    throw new Error(
+                        `PermissionDeniedError: 'child_process' requires @permission exec in your script header.`
+                    );
+                }
+            }
         }
         return _origLoad.apply(this, arguments);
     };
@@ -1095,6 +1111,7 @@ try {
     loadLibraries(); // Load libraries first
     const scriptPath = require.resolve(workerData.path);
     delete require.cache[scriptPath]; // Avoid stale code
+    _scriptExecuting = true;
     require(scriptPath);
 } catch (err) {
     ha.error(err);
