@@ -1,6 +1,9 @@
 'use strict';
 
-// Patterns that indicate network access (HTTP/HTTPS)
+// Patterns that indicate network access (HTTP/HTTPS/WebSocket).
+// Includes commonly used npm packages that wrap network access internally —
+// these would not be caught by scanning their own require('http') calls
+// since those are buried inside the package's node_modules.
 const NETWORK_PATTERNS = [
     /\bfetch\s*\(/,
     /require\s*\(\s*['"]axios['"]\s*\)/,
@@ -13,6 +16,15 @@ const NETWORK_PATTERNS = [
     /\bnew\s+XMLHttpRequest\b/,
     /require\s*\(\s*['"]got['"]\s*\)/,
     /\bgot\s*\(/,
+    // Packages that use network internally (no direct require('http') in user code)
+    /require\s*\(\s*['"]node-unifi['"]\s*\)/,
+    /require\s*\(\s*['"]ws['"]\s*\)/,
+    /require\s*\(\s*['"]socket\.io-client['"]\s*\)/,
+    /require\s*\(\s*['"]mqtt['"]\s*\)/,
+    /require\s*\(\s*['"]undici['"]\s*\)/,
+    /require\s*\(\s*['"]superagent['"]\s*\)/,
+    /require\s*\(\s*['"]needle['"]\s*\)/,
+    /require\s*\(\s*['"]node-ical['"]\s*\)/,
 ];
 
 // Patterns that indicate ha.fs read operations
