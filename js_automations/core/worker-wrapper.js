@@ -55,12 +55,18 @@ if (workerData.capabilityEnforcement) {
             if (!isSystemInternal) {
                 if (NETWORK_MODULES.has(request) && !_permissions.has('network')) {
                     throw new Error(
-                        `PermissionDeniedError: '${request}' requires @permission network in your script header.`
+                        `PermissionDeniedError: '${request}' requires @permission network in your script header.` +
+                        (parentFile.includes('node_modules')
+                            ? ` An npm package you imported is using '${request}' internally — add @permission network to your header.`
+                            : '')
                     );
                 }
                 if (EXEC_MODULES.has(request) && !_permissions.has('exec')) {
                     throw new Error(
-                        `PermissionDeniedError: 'child_process' requires @permission exec in your script header.`
+                        `PermissionDeniedError: 'child_process' requires @permission exec in your script header.` +
+                        (parentFile.includes('node_modules')
+                            ? ` An npm package you imported is using 'child_process' internally — add @permission exec to your header.`
+                            : '')
                     );
                 }
             }

@@ -79,10 +79,13 @@ function initSocket() {
     const handleConnectionEstablished = () => {
         updateConnectionUI(true);
         if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();
-        
+
         // Request latest status explicitly to avoid race conditions.
-        requestIntegrationStatus(); 
+        requestIntegrationStatus();
         if (typeof loadScripts === 'function') loadScripts();
+        // Re-fetch log history on every (re)connect to catch logs emitted before
+        // the socket was established (e.g. during addon startup ingress delay).
+        if (typeof initLogs === 'function') initLogs();
     };
 
     window.socket.on('connect', handleConnectionEstablished);
