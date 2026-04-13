@@ -22,7 +22,8 @@ class ScriptHeaderParser {
             dependencies: [],
             includes: [],
             expose: null,
-            permissions: []
+            permissions: [],
+            card: null,   // null | true | 'dev'
         };
 
         // Strip leading TypeScript triple-slash directives (/// <reference .../>) before
@@ -76,6 +77,10 @@ class ScriptHeaderParser {
             const list = val.split(/[\s,]+/).map(s => s.trim().replace(/['"()]/g, '')).filter(s => s);
             if (key === 'npm') metadata.dependencies.push(...list);
             else metadata.includes.push(...list);
+        } else if (key === 'card') {
+            // @card        → card: true
+            // @card dev    → card: 'dev'
+            metadata.card = val ? val.toLowerCase().trim() : true;
         } else if (key === 'expose') {
             metadata.expose = val || 'switch';
         } else if (key === 'permission') {

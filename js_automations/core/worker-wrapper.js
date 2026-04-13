@@ -225,6 +225,8 @@ const HA_TECH_STATES = new Set(['unknown', 'unavailable', 'None', '']);
 
 const pendingServiceCalls = new Map();
 const pendingAsks = new Map(); // correlationId -> { resolve, timer }
+const actionHandlers = new Map(); // actionName -> async handler
+const entityActionMap = new Map(); // entityId -> actionName (for ha.register action: routing)
 const ASK_SEP = '__jsa_ask__';
 let serviceCallCounter = 0;
 
@@ -349,6 +351,18 @@ function ensureMessageListener() {
             return;
         }
 
+        // Handle ha.frontend.installCard() response
+        if (msg.type === 'install_card_response') {
+            const promise = pendingServiceCalls.get(msg.callId);
+            if (promise) {
+                if (msg.error) promise.reject(new Error(msg.error));
+                else promise.resolve(msg.url);
+                pendingServiceCalls.delete(msg.callId);
+                parentPort.unref();
+            }
+            return;
+        }
+
         // Handle ha.ask() responses from the main process
         if (msg.type === 'ask_response') {
             const pending = pendingAsks.get(msg.correlationId);
@@ -462,8 +476,34 @@ function ensureMessageListener() {
                     ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`);
                 }
             });
+
+            // Route button press to ha.action() handler if registered via ha.register({ action: '...' })
+            const linkedAction = entityActionMap.get(msg.entityId);
+            if (linkedAction && actionHandlers.has(linkedAction)) {
+                Promise.resolve().then(() => actionHandlers.get(linkedAction)({})).catch(e => {
+                    ha.error(`ha.action('${linkedAction}') error: ${e.message}\n${e.stack}`);
+                });
+            }
+
             // Update local state cache so ha.getState() reflects the command immediately
             if (states[msg.entityId]) states[msg.entityId].state = msg.payload;
+            return;
+        }
+
+        // Handle ha.action() calls triggered from the addon UI or a card via Socket.io
+        if (msg.type === 'card_action') {
+            const handler = actionHandlers.get(msg.action);
+            if (!handler) {
+                parentPort.postMessage({ type: 'action_response', callId: msg.callId, error: `Unknown action "${msg.action}"` });
+                return;
+            }
+            try {
+                const result = await handler(msg.payload ?? {});
+                parentPort.postMessage({ type: 'action_response', callId: msg.callId, result: result ?? null });
+            } catch (e) {
+                ha.error(`ha.action('${msg.action}') error: ${e.message}\n${e.stack}`);
+                parentPort.postMessage({ type: 'action_response', callId: msg.callId, error: e.message });
+            }
             return;
         }
 
@@ -752,12 +792,41 @@ const ha = {
             config = { ...config, unit_of_measurement: config.unit };
             delete config.unit;
         }
+        // If action: is specified, link this entity to a ha.action() handler.
+        if (config.action) {
+            entityActionMap.set(entityId, config.action);
+            delete config.action; // Don't forward to MQTT/HA — it's internal routing only
+        }
         // Track as a native entity so ha_events for it are suppressed (commands arrive via mqtt_command).
         nativeEntityIds.add(entityId);
         // Send the intent to the main process, which handles the registration via MQTT.
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },
     
+    // Frontend / Lovelace
+    frontend: {
+        /**
+         * Installs the card embedded in this script's __JSA_CARD__ block to
+         * config/www/jsa-cards/ and registers it as a Lovelace resource.
+         * Skips the write if the card source has not changed (hash-based).
+         *
+         * In @card dev mode the file write and Lovelace registration are skipped;
+         * the preview panel is updated live instead.
+         *
+         * @param {object} [options]
+         * @param {object} [options.config]  - Config object passed to setConfig() on first connect
+         * @param {boolean} [options.force]  - Force reinstall even if hash matches
+         * @returns {Promise<string>} Installed resource URL
+         */
+        installCard: (options = {}) => new Promise((resolve, reject) => {
+            const callId = `card_${serviceCallCounter++}`;
+            ensureMessageListener();
+            parentPort.ref();
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({ type: 'install_card', options, callId });
+        }),
+    },
+
     // Real-time Data
     states: states,
     getState: (entityId) => states[entityId],
@@ -915,6 +984,29 @@ const ha = {
     onStop: (cb) => {
         ensureMessageListener();
         stopCallbacks.push(cb);
+    },
+
+    /**
+     * Registers a named action handler that can be triggered from a Lovelace card
+     * (via __jsa__.callAction()), from a ha.register() button entity (via the action: field),
+     * or from the addon UI.
+     *
+     * @param {string} name - Action name, e.g. 'refresh' or 'set-team'
+     * @param {function} handler - Async function receiving an optional payload object.
+     *   May return a value that is forwarded back to the caller.
+     *
+     * @example
+     * ha.action('refresh', async () => { await update(); });
+     *
+     * @example
+     * ha.action('set-team', async ({ teamId }) => {
+     *   CONFIG.teamId = teamId;
+     *   await update();
+     * });
+     */
+    action: (name, handler) => {
+        ensureMessageListener();
+        actionHandlers.set(name, handler);
     },
 
     onError: (cb) => {

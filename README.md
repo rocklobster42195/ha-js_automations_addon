@@ -31,6 +31,7 @@
 - **Filesystem API (`ha.fs`)** — Read, write, append, list, watch, and rotate files across three sandboxed virtual roots: `internal://` (script-private data), `shared://` (/share, NAS mounts), `media://` (/media). Opt-in via Settings → Danger Zone.
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
+- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic *and* a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed.
 
 ---
 
@@ -93,6 +94,7 @@ Every script starts with a JSDoc-style header that configures the engine's behav
 | `@label` | HA Label for sidebar grouping — inherits icon and color from the HA Label Registry |
 | `@expose` | Expose as `switch` or `button` entity in HA |
 | `@permission` | Declare required capabilities: `network`, `fs:read`, `fs:write`, `exec` (comma-separated) |
+| `@card` | Mark script as a Script Pack. Use `@card dev` during development (preview only, no Lovelace install) |
 
 ---
 
@@ -234,6 +236,86 @@ Write reusable code once, use it everywhere.
 
 const isDark = utils.isDarkOutside();
 ```
+
+---
+
+## The JSA Pack Philosophy
+
+Traditional smart home development splits every feature across two separate worlds: automation logic lives in scripts or YAML, and the dashboard lives in Lovelace as a separate card. They communicate awkwardly — via entities, MQTT helpers, or REST hooks — and must be maintained, versioned, and deployed independently.
+
+**Script Packs collapse this boundary.**
+
+A Script Pack is a single `.js` (or `.ts`) file that contains:
+
+1. **Backend logic** — the normal JSA script: `ha.on()`, `ha.register()`, `ha.registerAction()`, NPM packages, TypeScript types, persistent state.
+2. **Frontend card** — a standard Web Component (no framework required) embedded in a `__JSA_CARD__` block. The add-on extracts and installs it automatically as a Lovelace resource.
+3. **The `__jsa__` bridge** — injected by the add-on at install time, lets the card call named script actions directly: `await __jsa__.callAction('refresh')`. The result flows back as a Promise.
+
+The result is a **deployable mini-integration**: one URL pasted into the import wizard gives you a running script with native HA entities *and* a ready-to-use dashboard card — no HACS, no manual resource management, no copy-pasting between files.
+
+### What this enables
+
+- **One-file distribution** — Share a Script Pack as a GitHub Gist. Anyone imports the URL; the add-on handles NPM packages, TypeScript compilation, entity registration, and card installation automatically.
+- **Direct card-to-script communication** — Card buttons trigger script actions; scripts update entities; cards re-render from live `hass` state. The full interaction loop without infrastructure overhead.
+- **Integrated development** — A dedicated card editor tab in the IDE, a live preview panel with real HA entity data, and width presets to simulate actual Lovelace column sizes.
+
+---
+
+## Script Packs
+
+A Script Pack embeds a Lovelace card directly inside a JSA script. The add-on extracts the card on install and registers it automatically as a Lovelace resource.
+
+### Authoring
+
+Add `@card` (or `@card dev` for development mode) to the script header, then append a `__JSA_CARD__` block containing your Web Component source as Base64:
+
+```javascript
+/**
+ * @name Bundesliga Live
+ * @npm axios
+ * @card dev
+ */
+
+ha.register('sensor.bundesliga_score', { name: 'BL Score' });
+
+ha.registerAction('refresh', async () => {
+    // fetch and update entity
+});
+
+/* __JSA_CARD__
+<base64-encoded Web Component source>
+__JSA_CARD_END__ */
+```
+
+The card editor tab in the IDE handles encoding automatically — you write plain JavaScript, the tab stores Base64.
+
+### The `__jsa__` Bridge
+
+The add-on injects a `__jsa__` object into every installed card:
+
+```javascript
+class MyCard extends HTMLElement {
+    set hass(h) {
+        __jsa__.connect(h); // one-time setup
+        this.render(h.states['sensor.bundesliga_score']);
+    }
+
+    async onRefreshClick() {
+        await __jsa__.callAction('refresh');
+        // hass will be pushed again automatically after the action completes
+    }
+}
+customElements.define('my-card', MyCard);
+```
+
+`callAction(name, payload)` fires a `jsa_action` event on the HA event bus. The script receives it via `ha.registerAction()` and the result is returned as a resolved Promise.
+
+### Card States in the Script List
+
+The script list icon (`mdi:view-dashboard-outline`) reflects the card's install state:
+- **Orange** — `@card dev`: card block exists, dev-mode preview only, not installed
+- **Dark gray** — card block exists but not yet installed to Lovelace
+- **Light gray** — card is installed and active
 
 ---
 

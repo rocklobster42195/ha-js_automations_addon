@@ -205,6 +205,16 @@ function renderScripts(scripts, updateGlobal = true) {
 
             const langBadge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
             const capBadges = getCapabilityBadgesHTML(s.capabilities);
+            let devBadge = '';
+            if (s.card === 'dev') {
+                devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-dev" title="Card: dev mode — preview only, not installed in Lovelace"></i>`;
+            } else if (s.card) {
+                if (s.cardInstalled) {
+                    devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-installed" title="Card: installed in Lovelace"></i>`;
+                } else {
+                    devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-pending" title="Card: embedded block present, not yet installed"></i>`;
+                }
+            }
             const conflictBadge = (s.entity_conflicts && s.entity_conflicts.length > 0)
                 ? `<i class="mdi mdi-alert-outline" style="color: var(--color-warning, #f0a500); font-size:0.9rem; margin-right:4px;" title="${s.entity_conflicts.map(c => `${c.expected} → ${c.actual}`).join('\n')}"></i>`
                 : '';
@@ -228,7 +238,7 @@ function renderScripts(scripts, updateGlobal = true) {
                 <div class="script-info">
                     <div class="script-name">${conflictBadge}${s.name}</div>
                     <div class="script-lower-row">
-                        <span class="script-badges">${langBadge}${capBadges}</span>
+                        <span class="script-badges">${langBadge}${devBadge}${capBadges}</span>
                         <div class="row-actions">
                             ${controlsHtml}
                         </div>

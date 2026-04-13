@@ -210,6 +210,20 @@ async function initMonacoTypeScript() {
         console.error("[Monaco] Failed to load typings:", err);
     }
 
+    // Card-side __jsa__ type defs (available in card tabs for __jsa__.callAction etc.)
+    const jsaCardDefs = `
+declare const __jsa__: {
+  /**
+   * Call a named action handler registered in the parent script via ha.action().
+   * Returns the handler's resolved value.
+   */
+  callAction(action: string, payload?: Record<string, unknown>): Promise<unknown>;
+  /** Filename of the parent script that owns this card (e.g. 'openligadb.js') */
+  scriptName: string;
+};
+`;
+    monaco.languages.typescript.javascriptDefaults.addExtraLib(jsaCardDefs, 'file:///jsa-card-api.d.ts');
+
     // Reactive update when typings change on server
     if (window.socket) {
         window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());

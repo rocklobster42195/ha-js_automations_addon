@@ -78,12 +78,14 @@
                             <button id="btn-script-download" onclick="downloadActiveScript()" data-i18n="download_script_title" data-i18n-title title="Download Script"><i class="mdi mdi-download"></i></button>
                             <button id="btn-script-duplicate" onclick="duplicateActiveScript()" data-i18n="script_action_duplicate_title" data-i18n-title title="Duplizieren"><i class="mdi mdi-content-duplicate"></i></button>
                             <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
+                            <button type="button" id="btn-open-card-tab" onclick="toggleCardTab()" title="Open / Close Card Tab" class="hidden"><i class="mdi mdi-view-dashboard-edit-outline"></i></button>
                             <div class="toolbar-separator"></div>
                             <!-- Snippet buttons injected by editor-snippets.js → buildSnippetToolbar() -->
                             <div id="toolbar-snippets"></div>
+                            <button type="button" id="btn-card-menu" onclick="_toggleCardPreview()" data-i18n="card_preview_toggle_title" data-i18n-title title="Show / Hide Preview"><i class="mdi mdi-monitor-dashboard"></i></button>
                         </div>
                         <div class="toolbar-right">
-                            <button onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
+                            <button type="button" onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
                         </div>
                     </div>
                     <div id="monaco-container"></div>
@@ -210,6 +212,7 @@
     <script src="js/editor-snippets.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/tab-manager.js"></script>
+    <script src="js/card-preview.js"></script>
     <script src="js/script-list.js"></script>
     <script src="js/log-viewer.js"></script>
     <script src="js/layout.js"></script>

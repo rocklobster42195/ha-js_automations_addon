@@ -35,7 +35,9 @@ Thumbs.db
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
 scripts
 docs/Youtube
+docs/ideas
 .release-notes.tmp
 
+# --- AI stuff
 .claude
 CLAUDE.md

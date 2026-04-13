@@ -18,7 +18,9 @@ Dieses Dokument beschreibt die technische Architektur des Addons — wie die ein
 10. [MQTT Manager: Broker-Verbindung und Command-Routing](#10-mqtt-manager-broker-verbindung-und-command-routing)
 11. [TypeScript-Pipeline und IntelliSense](#11-typescript-pipeline-und-intellisense)
 12. [Settings: Schema-Driven UI](#12-settings-schema-driven-ui)
-13. [Ressourcenverbrauch und bekannte Einschränkungen](#13-ressourcenverbrauch-und-bekannte-einschränkungen)
+13. [Capability & Permission System](#13-capability--permission-system)
+14. [Card Manager: Script Pack System](#14-card-manager-script-pack-system)
+15. [Ressourcenverbrauch und bekannte Einschränkungen](#15-ressourcenverbrauch-und-bekannte-einschränkungen)
 
 ---
 
@@ -559,7 +561,98 @@ Items mit `active: false` werden im Schema definiert, aber im UI ausgeblendet (z
 
 ---
 
-## 13. Ressourcenverbrauch und bekannte Einschränkungen
+## 14. Card Manager: Script Pack System
+
+`core/card-manager.js` implementiert das Script Pack Feature — die Möglichkeit, eine Lovelace Web Component direkt in einer JSA-Skriptdatei einzubetten.
+
+### Konzept
+
+Ein Script Pack ist eine einzige `.js`- (oder `.ts`-)Datei die zwei Dinge enthält:
+
+1. **Normales JSA-Skript** — Backend-Logik mit `ha.on()`, `ha.register()`, `ha.registerAction()` etc.
+2. **`__JSA_CARD__`-Block** — Base64-kodierter Web-Component-Quelltext als Block-Kommentar eingebettet
+
+```
+/* __JSA_CARD__
+<base64-encoded Web Component source>
+__JSA_CARD_END__ */
+```
+
+Der CardManager extrahiert den Block, decodiert das Base64, schreibt die Card-JS-Datei nach `config/www/jsa-cards/` und registriert sie als Lovelace-Ressource via HA WebSocket.
+
+### `installCard(scriptFilePath, options)`
+
+Der Haupt-Einstiegspunkt. Wird vom WorkerManager aufgerufen wenn ein Worker eine `install_card`-Message sendet.
+
+**Ablauf:**
+1. `_extractCardBlock()` — Liest die Skriptdatei, findet den `/* __JSA_CARD__`-Block, decodiert Base64 → JavaScript-Quelltext
+2. Hash-Check — SHA-256 über den Kartenquelltext. Wenn `registry[scriptName].hash === hash` und `!options.force` → frühzeitig zurückkehren (kein Schreiben nötig)
+3. Preamble-Injektion — `JSA_PREAMBLE` wird vorne eingefügt. Die Preamble enthält das `__jsa__`-Objekt mit `connect()` und `callAction()`; `{{SCRIPT_ID}}` wird durch den Skript-Dateinamen ersetzt
+4. Config-Wrapping (optional) — Wenn `options.config` übergeben wird, wickelt `_wrapWithConfig()` die Karte in eine IIFE die `setConfig()` beim ersten `connectedCallback` aufruft
+5. Datei schreiben — `config/www/jsa-cards/<scriptName>-card.js`
+6. Lovelace-Ressource anlegen oder aktualisieren via `_upsertLovelaceResource()`
+7. Registry-Eintrag persistieren — `{ hash, resourceUrl, resourceId, cardName }` in `card-registry.json`
+
+**Dev-Mode** (`options.devMode = true`): Schritte 3–7 werden übersprungen. Die Methode gibt nur die Resource-URL zurück, ohne irgendetwas zu schreiben. Wird für den Editor-Preview verwendet.
+
+### `removeCard(scriptFilePath)`
+
+Aufgerufen wenn ein Script Pack gelöscht wird (DELETE-Route in `scripts-routes.js`):
+1. Kartenfile in `config/www/jsa-cards/` löschen (wenn vorhanden)
+2. Lovelace-Ressource via `lovelace/resources/delete` entfernen (fire-and-forget)
+3. Registry-Eintrag löschen + persistieren
+
+### `getCardSource(scriptFilePath)`
+
+Gibt den dekodierten Quelltext des Card-Blocks zurück ohne ihn zu installieren. Wird vom Preview-Endpunkt (`GET /:filename/card/preview-html`) genutzt.
+
+### Die `__jsa__`-Preamble
+
+Jede installierte Karte erhält eine injizierte `const __jsa__`-Konstante (nicht Base64-Teil des Skripts, sondern server-seitig eingefügt):
+
+```
+Card File = JSA_PREAMBLE(scriptId) + decodedCardSource
+```
+
+Die Preamble implementiert:
+- **`__jsa__.connect(hass)`** — Subscribed auf den `jsa_action_result`-Event auf der HA WebSocket-Verbindung. Pending Promises werden über eine `correlationId`-Map aufgelöst.
+- **`__jsa__.callAction(name, payload)`** — Feuert ein `jsa_action`-Event auf den HA Event Bus (`type: 'fire_event'`, `event_type: 'jsa_action'`). Das Skript empfängt es über `ha.registerAction()`. Das Ergebnis kommt als `jsa_action_result`-Event zurück und löst das Promise auf. Timeout nach 10 Sekunden.
+
+Das `jsa_action`-Event enthält `{ script, action, payload, correlation_id }`. Der WorkerManager dispatcht es über `subscriptions` an den richtigen Worker.
+
+### Hash-basiertes Cache-Busting
+
+Die Resource-URL hat das Format `/local/jsa-cards/<scriptName>-card.js?v=<shortHash>` (ersten 8 Zeichen des SHA-256). Wenn sich der Karteninhalt ändert, ändert sich die URL — alle Browser-Tabs cachen die alte Version nicht mehr. Die URL wird bei jedem `installCard()`-Call im Lovelace-Ressourcen-Eintrag aktualisiert (`lovelace/resources/update`).
+
+### Card Registry
+
+`card-registry.json` im Add-on Storage speichert:
+
+```json
+{
+  "my-script": {
+    "hash": "abc123...",
+    "resourceUrl": "/local/jsa-cards/my-script-card.js?v=abc123ab",
+    "resourceId": 42,
+    "cardName": "my-script-card"
+  }
+}
+```
+
+`resourceId` ist die numerische ID des Lovelace-Ressourcen-Eintrags — wird für Updates und Löschvorgänge benötigt.
+
+### Preview-Endpunkt
+
+`GET /:filename/card/preview-html` liefert eine vollständige sandboxed HTML-Seite die:
+- HA Web Component Stubs definiert (`ha-card`, `ha-icon`, etc.) um Lovelace-Karten außerhalb von HA zu rendern
+- Ein Mock-`hass`-Objekt bereitstellt mit `states`, `callService`, `connection` etc.
+- Den dekodierten Kartenquelltext direkt injiziert (kein File-Write, kein Lovelace nötig)
+- Ein Mock-`__jsa__`-Objekt injiziert das `callAction()` per `fetch()` an die JSA HTTP API weiterleitet (statt HA Event Bus) — so funktionieren Script-Pack-Actions im Preview ohne aktive HA WebSocket-Verbindung
+- State-Injection per `postMessage` empfängt (`jsa-set-hass`) — das Preview-Panel in der IDE sendet echte HA Entity-States
+
+---
+
+## 15. Ressourcenverbrauch und bekannte Einschränkungen
 
 ### RAM-Overhead pro Worker Thread
 
