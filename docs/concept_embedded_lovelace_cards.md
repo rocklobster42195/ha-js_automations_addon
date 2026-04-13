@@ -326,7 +326,7 @@ On each `ha.frontend.installCard()` call:
 
 ---
 
-## 10. `ha.action()` — Universal Script Entry Point
+## 10. `ha.action()` — Universal Script Entry Point ✅ Implemented
 
 Data normally flows one way: script → HA entities → `hass.states` → card renders. `ha.action()` is the reverse channel: any external trigger calls a named handler inside the running script.
 
@@ -340,31 +340,27 @@ One handler, multiple possible trigger sources:
 
 ### Trigger 1 — Card Tap / Card UI
 
-The card calls `__jsa__.callAction()` directly. No HA entity needed, supports payloads and return values.
+The card calls `__jsa__.callAction()`. Transport via HA event bus (see Section 10b). No HA entity needed, supports payloads and return values.
 
 ```js
-// Card — __jsa__ is injected at card install time
+// Card — __jsa__ is injected as preamble at card install time
 refreshBtn.onclick = () => __jsa__.callAction('refresh');
 dropdown.onchange = (e) => __jsa__.callAction('set-team', { teamId: e.target.value });
 ```
 
-Transport: custom WebSocket message `jsa/action` → addon → worker thread.
-
 **When to use:** Tap-to-refresh, UI-internal state changes, parameterized calls, anything invisible to HA.
 
-### Trigger 2 — HA Button Entity (linked via `ha.register()`)
+### Trigger 2 — HA Button Entity (linked via `ha.register()`) ✅ Implemented
 
-A button entity visible in the HA UI routes its press to a named action. The handler is shared with all other triggers — no duplication.
+A button entity visible in the HA UI routes its press to a named action. The handler is shared with all triggers — no `ha.on()` needed.
 
 ```js
 ha.register('button.openligadb_refresh', {
   name: 'Manual Refresh',
   icon: 'mdi:refresh',
-  action: 'refresh'   // ← press is routed to ha.action('refresh')
+  action: 'refresh'   // ← MQTT button press routes to ha.action('refresh')
 });
 ```
-
-Instead of writing a separate `ha.on('button.openligadb_refresh', handler)`, the `action` field on `ha.register()` wires the entity to the existing named handler.
 
 **When to use:** The trigger should be visible in HA — usable from automations, dashboards, or voice assistants.
 
@@ -377,16 +373,14 @@ data:
   action: refresh
 ```
 
-Allows HA automations to call into Script Pack logic without needing a dedicated button entity.
-
 ### Comparison
 
-| | `ha.on()` (today) | `ha.action()` |
+| | `ha.on()` | `ha.action()` |
 |---|---|---|
 | Reacts to HA entity state change | Yes | Via linked `ha.register()` |
 | Card UI trigger | No | Yes (`__jsa__.callAction`) |
 | Payload support | No | Yes |
-| Return values | No | Yes (future) |
+| Return values | No | Yes |
 | One handler, multiple triggers | No | Yes |
 | Visible in HA UI | Yes (entity) | Optional (only if registered) |
 
@@ -395,8 +389,121 @@ Allows HA automations to call into Script Pack logic without needing a dedicated
 | Scenario | Behavior |
 |---|---|
 | Action name not registered | Addon logs `warn: Unknown action "x" for script "openligadb"` |
-| Script not running | `callAction()` rejects; card shows error or fallback |
+| Script not running | `callAction()` rejects; card shows "Script not running" |
 | Handler throws | Caught and logged at `error` level in the script's log stream |
+
+---
+
+## 10b. `__jsa__` Injection — Transport Architecture
+
+`__jsa__` is a small helper object prepended to the card code at install time. It bridges the Lovelace frontend and the addon backend without requiring any imports or knowledge of the addon's Ingress URL.
+
+### The Transport Problem
+
+The Lovelace card runs in the HA browser frontend. The addon runs as a separate Node.js process behind Ingress. The card **cannot** directly reach the addon's Socket.io server — it has no Ingress URL and Socket.io is not loaded in the HA frontend context.
+
+### Solution: HA Event Bus as Bidirectional Transport
+
+The card uses `hass.connection` — the HA WebSocket connection already present in every Lovelace frontend. It fires a custom HA event; the addon's `ha-connection.js` receives it via its own WebSocket subscription, routes to the worker, and fires a response event back. The card receives the response via its own subscription.
+
+```
+Card (browser)            HA Event Bus                Addon (ha-connection.js)
+──────────────            ────────────                ────────────────────────
+callAction('refresh')
+  │
+  ├─fire_event──────────► jsa_action               ──► workerManager.callAction()
+  │                       { script, action,                │
+  │                         payload, corr_id }             ▼ worker runs handler
+  │                                                   fire_event ◄────────────
+  │
+  ◄─subscribe──────────── jsa_action_result
+      { corr_id, result }
+  │
+resolve(result)
+```
+
+### `__jsa__` Object (injected as preamble at install time)
+
+```js
+const __jsa__ = (() => {
+  let _conn = null;
+  const _pending = new Map();
+
+  function _subscribe(conn) {
+    if (_conn === conn) return;
+    _conn = conn;
+    conn.subscribeEvents((event) => {
+      const p = _pending.get(event.data.correlation_id);
+      if (!p) return;
+      _pending.delete(event.data.correlation_id);
+      if (event.data.error) p.reject(new Error(event.data.error));
+      else p.resolve(event.data.result ?? null);
+    }, 'jsa_action_result');
+  }
+
+  return {
+    scriptId: '{{SCRIPT_ID}}',  // replaced with script filename (no extension) at install time
+
+    connect(hass) { _subscribe(hass.connection); },
+
+    callAction(name, payload = {}) {
+      if (!_conn) return Promise.reject(new Error('__jsa__ not connected — call connect(hass) first'));
+      const correlationId = Math.random().toString(36).slice(2);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          _pending.delete(correlationId);
+          reject(new Error(`Action "${name}" timed out after 10s`));
+        }, 10000);
+        _pending.set(correlationId, {
+          resolve: (r) => { clearTimeout(timer); resolve(r); },
+          reject:  (e) => { clearTimeout(timer); reject(e); },
+        });
+        _conn.sendMessage({
+          type: 'fire_event',
+          event_type: 'jsa_action',
+          event_data: { script: this.scriptId, action: name, payload, correlation_id: correlationId },
+        });
+      });
+    },
+  };
+})();
+```
+
+`{{SCRIPT_ID}}` is replaced with the script's base filename (e.g. `openligadb`) by `CardManager.installCard()` before writing the card file.
+
+### Card Integration Pattern
+
+```js
+set hass(hass) {
+  __jsa__.connect(hass);  // idempotent — safe to call on every hass update
+  this._hass = hass;
+  this._render();
+}
+
+// Then anywhere in the card:
+refreshBtn.onclick = () => __jsa__.callAction('refresh');
+```
+
+### Addon Side — HA Event Listener ✅ Implemented
+
+In `ha-connection.js`, inside the existing `subscribeToEvents` callback:
+
+```js
+if (event.event_type === 'jsa_action') {
+  const { script, action, payload, correlation_id } = event.data;
+  workerManager.callAction(script + '.js', action, payload ?? {})
+    .then(result => this._fireHAEvent('jsa_action_result', { correlation_id, result }))
+    .catch(err  => this._fireHAEvent('jsa_action_result', { correlation_id, error: err.message }));
+}
+```
+
+`_fireHAEvent` sends a `fire_event` command over the addon's own WebSocket connection to HA.
+
+### Security
+
+- Only authenticated HA users can fire WebSocket events — existing HA auth handles this.
+- The addon validates `script` before routing — unknown or stopped scripts receive `{ error: 'Script not running' }`.
+- Response events carry the `correlation_id` so only the originating card instance resolves.
 
 ---
 
@@ -653,30 +760,49 @@ This is intentional — the script's network capabilities are what power the wiz
 
 Script Packs are a multi-phase feature. Each phase ships independently and delivers usable value on its own.
 
-| Phase | Name | Delivers |
-|---|---|---|
-| **1** | **Foundation** | `__JSA_CARD__` block parsing & encoding, `ha.frontend.installCard()`, hash-based change detection, writing to `config/www/jsa-cards/`, Lovelace resource registration via WebSocket |
-| **2** | **Card Editor** | Virtual card tab in Monaco, coupled tab lifecycle (open/close with script tab), card-specific TypeScript type definitions (`HomeAssistant`, `LovelaceCard`, `LitElement`), card snippet library, first-time template prompt |
-| **3** | **Live Preview** | Floating preview panel, width presets (1col / 2col / 4col / free), auto-reload on save, mock `hass` entity panel, runtime error forwarding from iframe |
-| **4** | **Dev Mode** | `@card dev` state-forwarding from running script to preview, DEV badge in script list, `🃏 Card ▾` toolbar dropdown, "Go live" action |
-| **5** | **Configurable Cards** | `ha.action()` wizard pattern (first-run setup), `getConfigElement()` with live-data dropdowns, wizard card snippet, "script not running" fallback UI |
+| Phase | Status | Name | Delivers |
+|---|---|---|---|
+| **0** | ✅ Done | **`ha.action()`** | Named action handlers, button entity routing via `ha.register({ action: '...' })`, Socket.io `call_action` event for addon UI |
+| **1** | ✅ Done | **Foundation** | `__JSA_CARD__` block parsing & encoding, `ha.frontend.installCard()`, hash-based change detection, writing to `config/www/jsa-cards/`, Lovelace resource registration via HA WebSocket |
+| **2** | ✅ Done | **Card Editor** | Virtual card tab in Monaco, coupled tab lifecycle (open/close with script tab), `__jsa__` type definitions for cards, card snippet library (boilerplate, callAction, config-changed, HA vars), card-mode banner |
+| **3** | ✅ Done | **Live Preview** | Floating preview panel (draggable, position-persistent), width presets (1col/2col/4col/free), auto-reload on Ctrl+S, mock `hass` entity injection, runtime error forwarding from iframe |
+| **4** | ✅ Done | **Dev Mode + `__jsa__`** | `__jsa__` preamble injected at install time, `jsa_action` HA event routing in kernel → worker → `jsa_action_result`, `@card dev` parsed as metadata, DEV/CARD badges in script list, live HA state forwarding into preview, `Card ▾` toolbar dropdown |
+| **5** | ✅ Done | **Configurable Cards** | `ha.action()` wizard pattern (first-run setup), `getConfigElement()` with live-data dropdowns, wizard card snippet, "script not running" fallback UI |
 
 ### Phase Dependencies
 
 ```
-Phase 1 (installCard)
-    └── Phase 2 (card editor)
-            └── Phase 3 (preview)
-                    └── Phase 4 (dev mode)
+Phase 0 (ha.action)  ──────────────────────────────────────┐
+Phase 1 (installCard)                                       │
+    └── Phase 2 (card editor)                               │
+            └── Phase 3 (preview)                           │
+                    └── Phase 4 (dev mode + __jsa__)  ◄─────┘
                             └── Phase 5 (configurable cards)
 ```
 
-Phase 5 requires `ha.action()` to be implemented (already in scope from the card→script communication section). All other infrastructure — embedded blocks, virtual tab, preview, dev mode — must exist before the wizard pattern makes sense to develop.
+Phase 4 depends on both Phase 1 (to know the install path for preamble injection) and Phase 0 (`workerManager.callAction()` already implemented — the HA event listener is the remaining piece).
 
 ### Value at Each Phase
 
-- **After Phase 1:** Script Packs can be built in any external editor and distributed as single files. Cards install automatically. Hash-based cache-busting works.
-- **After Phase 2:** Card code can be written inside JS Automations with IntelliSense and boilerplate snippets. The virtual tab hides the Base64 encoding entirely.
-- **After Phase 3:** CSS and layout work becomes practical. Developers can test cards at realistic column widths without deploying to a real dashboard.
-- **After Phase 4:** The full dev loop is closed. Script-driven state updates appear live in the preview without any file installation or browser refresh.
-- **After Phase 5:** Script Packs can guide users through dynamic first-run configuration. Exotic API integrations become zero-effort to set up — the card itself walks the user through it.
+- **After Phase 0+1:** Script Packs can be authored in any editor and distributed as single files. Cards install automatically with hash-based cache-busting. Button entities route to named action handlers.
+- **After Phase 2:** Card code is written inside JS Automations with proper IntelliSense and boilerplate. The virtual tab hides Base64 encoding completely.
+- **After Phase 3:** CSS and layout work is practical. Width presets let the developer test at real Lovelace column widths without deploying.
+- **After Phase 4:** `__jsa__.callAction()` works from within the card — tap-to-refresh, dropdown-driven config changes, all without HA entities. The full dev loop closes: edit card → live preview with real script data.
+- **After Phase 5:** The card guides the user through dynamic first-run configuration using live data from the running script. Exotic API integrations become zero-setup for end users.
+
+
+### Fehler und Vorschläge nach ersten Tests
+- DEV Badge in der Skriptliste: Wir nutzen das mdi:view-dashboard-outline icon genauso wie die Permission. Wir zeigen damit an, dass es ein Karte enthält. Orange, wenn DEV Mode, dunkelgrau, wenn noch nicht installiert hell grau, wenn installier und läuft.
+- Wenn ich den Karten-Tab schließe, kann ich ihn nicht wieder öffnen. Sollen wir im Skripttab einen open/close Button (mdi:view-dashboard-edit-outline) für die Karte einbauen. Nur sichtbar wenn @card.
+- In der Kartentoolbar stimm was nicht. Cardactions sind rechtsbündig das ist nicht in Ordnung. Für die Snippets benutzen wir auch das Puzzleteil. Das ist ja aus dem Skripttab schon bekannt. 
+- Card preview (mdi:monitor-dashboard nutzen?) wirft einen Fehler: "ReferenceError: __jsa__ is not defined line 108" Die Zeilennummer scheint aber nicht zu stimmen.
+- Können wir Kartenfehler an den JSA-Logger schicken, damit es wartbarer wird?
+- Werden Karten auch irgendwie deinstalliert?
+- Kann man die Packs auch mit TS coden? Also nicht die Karten, sondern das Hauptskript?
+- durchgängig das mdi
+
+
+## Karten Ideen:
+- Das Awtrix-Display bietet eine Vorschau seines Displays als Bild an. Unsere Karte Zeigt genau dieses Bild an und wird auch aktualisiet. Das Bild wird im Browser auch aktualisiert. Config ist die IP Adresse, USR und PW. Noch was?
+- analoguhr gemäß @doc/ideas/uhr.html. Config: 7-Segment-Feld ein- und ausblendbar machen, SWISS_STOP_GO, SMOOTH_SECONDS, DYNAMIC_DATE, PULSE_ON_DONE, GLOW_EFFECT
+- OpenligaDB: @doc/ideas/openligadb-card.js Die Karte hat sich im Layout bewährt. Config-flow: Das Skript hat die shorts für die wichtigsten Ligen fest im Code und bietet diese per SELECT an. Plus sonstige: Hier kann man dann ggf. sein eigene short eingeben. Schritt zwei: Es wird nur der aktuelle Wettbewerb genutzt oder in der Saisonpause, der nächst anstehende. Schritt drei: Das Skript füllt einen Mannschaftsselect mit den Mannschaften des Wettbewerbs. Bei Fußball wird direkt Championsleague, DFB Pokal, europa league mit "aboniert". Bei DFB packen wir noch ein Batch trophy-outline, bei championsleage trophy dazu. europa league mdi:soccer?

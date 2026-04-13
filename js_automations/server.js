@@ -55,6 +55,21 @@ io.on('connection', (socket) => {
             callback({ error: e.message });
         }
     });
+
+    // Trigger a ha.action() handler in a running script — used by Lovelace cards and the addon UI.
+    // data: { script: 'openligadb.js', action: 'refresh', payload: {} }
+    socket.on('call_action', async (data, callback) => {
+        try {
+            if (!data?.script || !data?.action) {
+                return callback({ error: 'Missing script or action' });
+            }
+            const result = await workerManager.callAction(data.script, data.action, data.payload ?? {});
+            callback({ result });
+        } catch (e) {
+            callback({ error: e.message });
+        }
+    });
+
     // The bridge now handles broadcasting the safe mode status, so we
     // don't need to send it on each connection here.
 });
@@ -64,7 +79,7 @@ io.on('connection', (socket) => {
 // The kernel holds all manager instances, so we pass them to the routes.
 const { workerManager, depManager, stateManager, storeManager, haConnector, logManager, systemService } = kernel;
 
-const scriptsRouter = require('./routes/scripts-routes')(workerManager, depManager, stateManager, io, config.SCRIPTS_DIR, config.STORAGE_DIR, config.LIBRARIES_DIR, kernel.mqttManager);
+const scriptsRouter = require('./routes/scripts-routes')(workerManager, depManager, stateManager, io, config.SCRIPTS_DIR, config.STORAGE_DIR, config.LIBRARIES_DIR, kernel.mqttManager, kernel.cardManager);
 
 // We create a proxy for the StoreManager to broadcast changes to workers from the UI.
 const storeManagerUiWrapper = new Proxy(storeManager, {

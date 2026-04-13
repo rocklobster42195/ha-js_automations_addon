@@ -211,6 +211,49 @@ class HAConnector {
     subscribeEvents() { this.send({ id: this.msgId++, type: 'subscribe_events' }); }
     subscribeToEvents(callback) { this.eventListeners.push(callback); }
 
+    /**
+     * Fires a custom event on the HA event bus.
+     * Used to send jsa_action_result back to the originating Lovelace card.
+     * @param {string} eventType
+     * @param {object} eventData
+     */
+    fireEvent(eventType, eventData = {}) {
+        return this.sendCommand('fire_event', { event_type: eventType, event_data: eventData });
+    }
+
+    /**
+     * Sends a WebSocket command to HA and waits for the matching response.
+     * @param {string} type    - HA WebSocket message type
+     * @param {object} payload - Additional fields merged into the message
+     * @param {number} [timeout=5000]
+     * @returns {Promise<object>} HA response result (or { success: false, error } on failure/timeout)
+     */
+    sendCommand(type, payload = {}, timeout = 5000) {
+        if (!this.isReady) return Promise.resolve({ success: false, error: 'not_ready' });
+        const id = this.msgId++;
+        this.send({ id, type, ...payload });
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                this.ws.removeListener('message', handler);
+                resolve({ success: false, error: 'timeout' });
+            }, timeout);
+            const handler = (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    if (msg.id !== id) return;
+                    clearTimeout(timer);
+                    this.ws.removeListener('message', handler);
+                    if (msg.success === false) {
+                        resolve({ success: false, error: msg.error?.message || msg.error?.code || JSON.stringify(msg.error) });
+                    } else {
+                        resolve({ success: true, ...(msg.result || {}) });
+                    }
+                } catch { /* ignore parse errors from unrelated messages */ }
+            };
+            this.ws.on('message', handler);
+        });
+    }
+
     createEntity(domain, name, prefix, options) {
         const entityId = `${domain}.${prefix}_${name}`;
         this.updateState(entityId, 'off', options);

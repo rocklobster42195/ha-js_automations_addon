@@ -245,6 +245,268 @@ const SNIPPET_REGISTRY = [
         full:    "ha.store.delete('${1:key}');\n$0",
         minimal: "ha.store.delete('${1:key}');\n$0",
     },
+
+    // ── Card ─────────────────────────────────────────────────────────────────
+
+    {
+        id: 'card_litelement',
+        icon: 'mdi-view-dashboard-outline',
+        labelKey: 'snippet_card_litelement',
+        toolbarGroup: 'card',
+        contextMenu: false,
+        triggers: [],
+        full: [
+            "class \${1:MyCard} extends HTMLElement {",
+            "  constructor() {",
+            "    super();",
+            "    this.attachShadow({ mode: 'open' });",
+            "  }",
+            "",
+            "  setConfig(config) {",
+            "    this._config = config;",
+            "    this.render();",
+            "  }",
+            "",
+            "  set hass(hass) {",
+            "    this._hass = hass;",
+            "    this.render();",
+            "  }",
+            "",
+            "  render() {",
+            "    this.shadowRoot.innerHTML = \`",
+            "      <style>",
+            "        ha-card { padding: 16px; }",
+            "      </style>",
+            "      <ha-card>",
+            "        <div>\\\${this._config?.title ?? 'My Card'}</div>",
+            "      </ha-card>",
+            "    \`;",
+            "  }",
+            "",
+            "  getCardSize() { return 1; }",
+            "}",
+            "",
+            "customElements.define('\${2:my-jsa-card}', \${1:MyCard});",
+            "$0",
+        ].join('\n'),
+        minimal: "class ${1:MyCard} extends HTMLElement {\n  setConfig(c) { this._config = c; }\n  set hass(h) { this._hass = h; }\n  getCardSize() { return 1; }\n}\ncustomElements.define('${2:my-jsa-card}', ${1:MyCard});\n$0",
+    },
+    {
+        id: 'card_call_action',
+        icon: 'mdi-lightning-bolt',
+        labelKey: 'snippet_card_call_action',
+        toolbarGroup: 'card',
+        contextMenu: false,
+        triggers: ['__jsa__.callAction'],
+        full: [
+            "const result = await __jsa__.callAction('\${1:action-name}', {",
+            "  \${2:// payload}",
+            "});",
+            "$0",
+        ].join('\n'),
+        minimal: "const result = await __jsa__.callAction('${1:action-name}');\n$0",
+    },
+    {
+        id: 'card_config_changed',
+        icon: 'mdi-cog-outline',
+        labelKey: 'snippet_card_config_changed',
+        toolbarGroup: 'card',
+        contextMenu: false,
+        triggers: [],
+        full: [
+            "this.dispatchEvent(new CustomEvent('config-changed', {",
+            "  bubbles: true,",
+            "  composed: true,",
+            "  detail: { config: { ...this._config, \${1:key}: \${2:value} } },",
+            "}));",
+            "$0",
+        ].join('\n'),
+        minimal: "this.dispatchEvent(new CustomEvent('config-changed', { bubbles: true, composed: true, detail: { config: { ...this._config } } }));\n$0",
+    },
+    {
+        id: 'card_ha_vars',
+        icon: 'mdi-palette-outline',
+        labelKey: 'snippet_card_ha_vars',
+        toolbarGroup: 'card',
+        contextMenu: false,
+        triggers: [],
+        full: [
+            "/* HA Theme Variables */",
+            "/* --primary-color         -- accent / brand color */",
+            "/* --primary-text-color    -- main text */",
+            "/* --secondary-text-color  -- muted text */",
+            "/* --card-background-color -- card surface */",
+            "/* --divider-color         -- borders / dividers */",
+            "/* --error-color           -- error / danger */",
+            "/* --success-color         -- success / OK */",
+            "$0",
+        ].join('\n'),
+        minimal: "/* --primary-color, --primary-text-color, --card-background-color */\n$0",
+    },
+    {
+        id: 'card_wizard',
+        icon: 'mdi-wizard-hat',
+        labelKey: 'snippet_card_wizard',
+        toolbarGroup: 'card',
+        contextMenu: false,
+        triggers: [],
+        // Two-step setup wizard: card detects unconfigured state, fetches live data via
+        // __jsa__.callAction(), presents step-by-step selection, fires config-changed on completion.
+        full: [
+            "class \${1:MyWizardCard} extends HTMLElement {",
+            "  constructor() {",
+            "    super();",
+            "    this.attachShadow({ mode: 'open' });",
+            "    this._step = 1;",
+            "    this._step1Items = null;",
+            "    this._step2Items = null;",
+            "    this._selected1 = null;",
+            "    this._query = '';",
+            "    this._loading = false;",
+            "    this._error = null;",
+            "  }",
+            "",
+            "  setConfig(config) {",
+            "    this._config = config;",
+            "    const configured = Boolean(config?.\${3:item_id});",
+            "    this._mode = configured ? 'display' : 'setup';",
+            "    if (!configured && !this._step1Items) this._loadStep1();",
+            "    this._render();",
+            "  }",
+            "",
+            "  set hass(hass) {",
+            "    this._hass = hass;",
+            "    __jsa__.connect(hass);",
+            "    this._render();",
+            "  }",
+            "",
+            "  // ── Wizard step 1 ──────────────────────────────────────────────────────",
+            "",
+            "  async _loadStep1() {",
+            "    this._loading = true; this._error = null; this._render();",
+            "    try {",
+            "      this._step1Items = await __jsa__.callAction('\${4:wizard/step1}');",
+            "    } catch (e) {",
+            "      this._error = e.message;",
+            "    }",
+            "    this._loading = false; this._render();",
+            "  }",
+            "",
+            "  async _selectStep1(item) {",
+            "    this._selected1 = item;",
+            "    this._step = 2; this._step2Items = null; this._query = '';",
+            "    this._loading = true; this._render();",
+            "    try {",
+            "      this._step2Items = await __jsa__.callAction('\${5:wizard/step2}', { id: item.id });",
+            "    } catch (e) {",
+            "      this._error = e.message;",
+            "    }",
+            "    this._loading = false; this._render();",
+            "  }",
+            "",
+            "  // ── Wizard step 2 \u2192 finish ──────────────────────────────────────────",
+            "",
+            "  _finish(item) {",
+            "    this.dispatchEvent(new CustomEvent('config-changed', {",
+            "      bubbles: true, composed: true,",
+            "      detail: {",
+            "        config: {",
+            "          ...this._config,",
+            "          \${6:group_id}: this._selected1.id,",
+            "          \${3:item_id}: item.id,",
+            "          \${7:item_name}: item.name,",
+            "        }",
+            "      },",
+            "    }));",
+            "  }",
+            "",
+            "  // ── Render ─────────────────────────────────────────────────────────────",
+            "",
+            "  _render() {",
+            "    if (this._mode !== 'display') { this._renderWizard(); return; }",
+            "    const state = this._hass?.states?.[this._config?.entity_id];",
+            "    this.shadowRoot.innerHTML = '<style>:host{display:block}'",
+            "      + 'ha-card{background:var(--card-background-color);border-radius:var(--ha-card-border-radius,12px);padding:20px}'",
+            "      + '</style><ha-card>' + (state?.state ?? '\u2013') + '</ha-card>';",
+            "  }",
+            "",
+            "  _renderWizard() {",
+            "    const items = this._step === 1 ? this._step1Items : this._step2Items;",
+            "    const filtered = items ? items.filter(i => i.name.toLowerCase().includes(this._query.toLowerCase())) : null;",
+            "    const stepLabel = this._step === 1 ? 'Select group' : 'Select item';",
+            "    let body = '';",
+            "    if (this._loading) {",
+            "      body = '<div class=\"spinner\">Loading\u2026</div>';",
+            "    } else if (this._error) {",
+            "      body = '<div class=\"error\">\u26a0 ' + this._error + '</div>';",
+            "    } else if (filtered) {",
+            "      body = '<input id=\"q\" type=\"text\" placeholder=\"Search\u2026\" value=\"' + this._query + '\" />'",
+            "        + '<div class=\"list\">' + filtered.map(i => '<div class=\"item\" data-id=\"' + i.id + '\" data-name=\"' + i.name + '\">' + i.name + '</div>').join('') + '</div>'",
+            "        + (this._step === 2 ? '<div class=\"footer\"><button id=\"back\">\u2190 Back</button></div>' : '');",
+            "    }",
+            "    this.shadowRoot.innerHTML = '<style>'",
+            "      + ':host{display:block}'",
+            "      + 'ha-card{background:var(--card-background-color);border-radius:var(--ha-card-border-radius,12px);overflow:hidden;padding:20px}'",
+            "      + 'h3{margin:0 0 4px;font-size:.95rem;font-weight:600;color:var(--primary-text-color)}'",
+            "      + '.step{font-size:.75rem;color:var(--secondary-text-color);margin-bottom:14px}'",
+            "      + 'input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--divider-color);border-radius:6px;background:var(--secondary-background-color);color:var(--primary-text-color);font-size:.9rem;margin-bottom:10px}'",
+            "      + '.list{max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}'",
+            "      + '.item{padding:10px 12px;border-radius:8px;cursor:pointer;font-size:.9rem;color:var(--primary-text-color)}'",
+            "      + '.item:hover{background:var(--secondary-background-color)}'",
+            "      + '.footer{margin-top:14px}'",
+            "      + '#back{padding:8px 16px;background:transparent;color:var(--secondary-text-color);border:1px solid var(--divider-color);border-radius:8px;cursor:pointer;font-size:.85rem}'",
+            "      + '.spinner{text-align:center;padding:30px;color:var(--secondary-text-color);font-size:.85rem}'",
+            "      + '.error{padding:16px;background:#e74c3c22;border-radius:8px;color:var(--error-color,#e74c3c);font-size:.85rem}'",
+            "      + '</style><ha-card>'",
+            "      + '<h3>\u2699 Setup</h3>'",
+            "      + '<div class=\"step\">Step ' + this._step + ' of 2: ' + stepLabel + '</div>'",
+            "      + body + '</ha-card>';",
+            "    this.shadowRoot.getElementById('q')?.addEventListener('input', e => { this._query = e.target.value; this._render(); });",
+            "    this.shadowRoot.querySelectorAll('.item').forEach(el => {",
+            "      el.onclick = () => {",
+            "        const item = { id: el.dataset.id, name: el.dataset.name };",
+            "        this._step === 1 ? this._selectStep1(item) : this._finish(item);",
+            "      };",
+            "    });",
+            "    this.shadowRoot.getElementById('back')?.addEventListener('click', () => { this._step = 1; this._query = ''; this._render(); });",
+            "  }",
+            "",
+            "  // Reuse wizard actions for live data in the Lovelace card editor",
+            "  static getConfigElement() { return document.createElement('\${2:my-wizard-card}-editor'); }",
+            "",
+            "  getCardSize() { return 3; }",
+            "}",
+            "",
+            "customElements.define('\${2:my-wizard-card}', \${1:MyWizardCard});",
+            "$0",
+        ].join('\n'),
+        minimal: [
+            "class \${1:MyWizardCard} extends HTMLElement {",
+            "  setConfig(config) {",
+            "    this._config = config;",
+            "    this._mode = Boolean(config?.\${2:item_id}) ? 'display' : 'setup';",
+            "    if (this._mode === 'setup' && !this._items) this._load();",
+            "    this._render();",
+            "  }",
+            "  set hass(hass) { this._hass = hass; __jsa__.connect(hass); this._render(); }",
+            "  async _load() {",
+            "    try { this._items = await __jsa__.callAction('\${3:wizard/step1}'); }",
+            "    catch (e) { this._error = e.message; }",
+            "    this._render();",
+            "  }",
+            "  _finish(item) {",
+            "    this.dispatchEvent(new CustomEvent('config-changed', {",
+            "      bubbles: true, composed: true,",
+            "      detail: { config: { ...this._config, \${2:item_id}: item.id } },",
+            "    }));",
+            "  }",
+            "  _render() { /* TODO: render wizard or display based on this._mode */ }",
+            "  getCardSize() { return 2; }",
+            "}",
+            "customElements.define('\${4:my-wizard-card}', \${1:MyWizardCard});",
+            "$0",
+        ].join('\n'),
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -444,14 +706,18 @@ function _closeRegisterPicker() {
 // TOOLBAR BUILDER
 // ---------------------------------------------------------------------------
 
-const TOOLBAR_GROUPS = ['general', 'entity', 'store'];
+const TOOLBAR_GROUPS_BY_MODE = {
+    script: ['general', 'entity', 'store'],
+    card:   ['card'],
+};
 
 /**
  * Builds a single "Snippets" toggle button inside the given container.
  * Clicking it opens a dropdown panel with all grouped snippet entries.
  * @param {HTMLElement} container
+ * @param {'script'|'card'} [mode='script']
  */
-function buildSnippetToolbar(container) {
+function buildSnippetToolbar(container, mode = 'script') {
     if (!container) return;
     container.innerHTML = '';
 
@@ -464,11 +730,11 @@ function buildSnippetToolbar(container) {
     toggleBtn.setAttribute('data-i18n', 'snippets_title');
     toggleBtn.setAttribute('data-i18n-title', '');
     toggleBtn.innerHTML = '<i class="mdi mdi-puzzle-outline"></i>';
-    toggleBtn.onclick = (e) => { e.stopPropagation(); _toggleSnippetDropdown(toggleBtn); };
+    toggleBtn.onclick = (e) => { e.stopPropagation(); _toggleSnippetDropdown(toggleBtn, mode); };
     container.appendChild(toggleBtn);
 }
 
-function _toggleSnippetDropdown(anchorBtn) {
+function _toggleSnippetDropdown(anchorBtn, mode = 'script') {
     // If already open, close and return
     if (document.getElementById('snippet-toolbar-dropdown')) {
         _closeSnippetDropdown();
@@ -479,8 +745,10 @@ function _toggleSnippetDropdown(anchorBtn) {
     dropdown.id = 'snippet-toolbar-dropdown';
     dropdown.className = 'snippet-variant-picker';
 
+    const activeGroups = TOOLBAR_GROUPS_BY_MODE[mode] || TOOLBAR_GROUPS_BY_MODE.script;
+
     let firstGroup = true;
-    for (const group of TOOLBAR_GROUPS) {
+    for (const group of activeGroups) {
         const entries = SNIPPET_REGISTRY.filter(s => s.toolbarGroup === group);
         if (entries.length === 0) continue;
 

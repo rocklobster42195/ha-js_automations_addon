@@ -44,7 +44,10 @@ class WorkerManager extends EventEmitter {
         this.registryPath = '';
         this.saveRegistryTimer = null;
         this.pendingAsks = new Map(); // correlationId -> worker (for ha.ask())
+        this.pendingActionCalls = new Map(); // callId -> { resolve, reject } (for ha.action())
+        this._actionCallCounter = 0;
         this._notificationListenerActive = false;
+        this.cardManager = null; // Set by kernel after boot
 
         // Request RAM usage statistics from all workers every 5 seconds.
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -412,6 +415,14 @@ class WorkerManager extends EventEmitter {
         if (count > 0) {
             this.emit('log', { source: 'System', message: `Republished ${count} entities (Skipped ${total - count} healthy ones).`, level: 'debug' });
         }
+
+        // Re-publish per-script availability for currently running scripts so that
+        // ha.register() entities remain available after an MQTT or HA reconnect.
+        for (const scriptFilename of this.workers.keys()) {
+            const slug = path.basename(scriptFilename, path.extname(scriptFilename))
+                .toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+            this.mqttManager.publish(`jsa/script/${slug}/status`, 'online', { retain: true });
+        }
     }
 
     /**
@@ -724,6 +735,26 @@ class WorkerManager extends EventEmitter {
                     });
                 }
 
+                // 8. ha.action() response — resolve the pending callAction() promise
+                if (msg.type === 'action_response') {
+                    const pending = this.pendingActionCalls.get(msg.callId);
+                    if (pending) {
+                        this.pendingActionCalls.delete(msg.callId);
+                        if (msg.error) pending.reject(new Error(msg.error));
+                        else pending.resolve(msg.result);
+                    }
+                }
+
+                // 9. ha.frontend.installCard() — install embedded card and register Lovelace resource
+                if (msg.type === 'install_card' && this.cardManager) {
+                    const devMode = scriptMeta.headers?.card === 'dev';
+                    this.cardManager.installCard(fullPath, { ...msg.options, devMode })
+                        .then(url => worker.postMessage({ type: 'install_card_response', callId: msg.callId, url }))
+                        .catch(err => worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: err.message }));
+                } else if (msg.type === 'install_card' && !this.cardManager) {
+                    worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: 'CardManager not available' });
+                }
+
                 // 6. Lifecycle Control (ha.restart / ha.stop)
                 if (msg.type === 'script_lifecycle') {
                     const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
@@ -756,6 +787,14 @@ class WorkerManager extends EventEmitter {
                 // Clean up any ha.ask() promises that will never resolve
                 for (const [correlationId, askWorker] of this.pendingAsks.entries()) {
                     if (askWorker === worker) this.pendingAsks.delete(correlationId);
+                }
+
+                // Reject any pending ha.action() calls for this worker
+                for (const [callId, pending] of this.pendingActionCalls.entries()) {
+                    if (pending.worker === worker) {
+                        this.pendingActionCalls.delete(callId);
+                        pending.reject(new Error('Script stopped'));
+                    }
                 }
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
@@ -800,6 +839,27 @@ class WorkerManager extends EventEmitter {
             if (worker === exceptWorker) continue;
             worker.postMessage(payload);
         }
+    }
+
+    /**
+     * Calls a named ha.action() handler in a running script worker.
+     * Resolves with the handler's return value, or rejects if the script is not running,
+     * the action is not registered, or the handler throws.
+     *
+     * @param {string} filename - Script filename (e.g. 'openligadb.js')
+     * @param {string} action   - Action name registered via ha.action()
+     * @param {object} payload  - Optional payload passed to the handler
+     * @returns {Promise<any>}
+     */
+    callAction(filename, action, payload = {}) {
+        const worker = this.workers.get(filename);
+        if (!worker) return Promise.reject(new Error(`Script "${filename}" is not running`));
+
+        const callId = `act_${++this._actionCallCounter}`;
+        return new Promise((resolve, reject) => {
+            this.pendingActionCalls.set(callId, { resolve, reject, worker });
+            worker.postMessage({ type: 'card_action', action, payload, callId });
+        });
     }
 
     /**

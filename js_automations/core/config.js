@@ -50,6 +50,8 @@ const ensureDirectories = () => {
     }
 };
 
+const HA_CONFIG_DIR = IS_ADDON ? (fs.existsSync('/homeassistant') ? '/homeassistant' : '/config') : path.resolve(__dirname, '../../ha_config_mock');
+
 module.exports = {
     IS_ADDON,
     SCRIPTS_DIR,
@@ -63,6 +65,7 @@ module.exports = {
     PORT: process.env.PORT || 3000,
     VERSION: packageJson.version,
     ensureDirectories,
-    // Centralized path for HA configuration
-    HA_CONFIG_DIR: IS_ADDON ? (fs.existsSync('/homeassistant') ? '/homeassistant' : '/config') : path.resolve(__dirname, '../../ha_config_mock'),
+    HA_CONFIG_DIR,
+    // Directory where installed card files are written (served by HA as /local/jsa-cards/)
+    WWW_CARDS_DIR: path.join(HA_CONFIG_DIR, 'www', 'jsa-cards'),
 };

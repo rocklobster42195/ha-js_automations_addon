@@ -24,6 +24,7 @@ const workerManager = require('./worker-manager'); // Singleton module
 const MqttManager = require('./mqtt-manager');
 const EntityManager = require('./entity-manager');
 const CompilerManager = require('./compiler-manager');
+const CardManager = require('./card-manager');
 const Bridge = require('./bridge');
 const SystemService = require('../services/system-service');
 
@@ -51,6 +52,7 @@ class Kernel extends EventEmitter {
         this.compilerManager = null;
         this.bridge = null;
         this.systemService = null;
+        this.cardManager = null;
         this.lastStats = null; // Cache for the latest system metrics
         this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
     }
@@ -103,6 +105,10 @@ class Kernel extends EventEmitter {
             this.workerManager.setScriptsDir(SCRIPTS_DIR);
             this.workerManager.setStore(this.storeManager);
             this.workerManager.setMqttManager(this.mqttManager);
+
+            // CardManager — handles Script Pack card installation
+            this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
+            this.workerManager.cardManager = this.cardManager;
 
             // Create SystemService before EntityManager so we can pass it
             this.systemService = new SystemService(config, this.workerManager);
@@ -356,13 +362,23 @@ class Kernel extends EventEmitter {
      * @private
      */
     _setupSystemEventListeners() {
-        // HA state changes
+        // HA state changes + jsa_action routing
         this.haConnector.subscribeToEvents((event) => {
             if (event.event_type === 'state_changed') {
                 const { entity_id, new_state, old_state } = event.data;
                 this.workerManager.dispatchStateChange(entity_id, new_state, old_state);
-                // Forward to UI for Status Bar
+                // Forward to UI for Status Bar and card preview live data
                 this.emit('ha_state_changed', { entity_id, new_state });
+            }
+
+            // Route card-side __jsa__.callAction() calls back to the running script
+            if (event.event_type === 'jsa_action') {
+                const { script, action, payload, correlation_id } = event.data ?? {};
+                if (!script || !action || !correlation_id) return;
+                const filename = script.endsWith('.js') || script.endsWith('.ts') ? script : script + '.js';
+                this.workerManager.callAction(filename, action, payload ?? {})
+                    .then(result => this.haConnector.fireEvent('jsa_action_result', { correlation_id, result }))
+                    .catch(err  => this.haConnector.fireEvent('jsa_action_result', { correlation_id, error: err.message }));
             }
         });
 

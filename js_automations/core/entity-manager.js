@@ -95,18 +95,28 @@ class EntityManager {
 
     /**
      * Updates the HA state of a script's control entity (switch/button)
-     * based on its running status.
+     * based on its running status, and publishes per-script availability so
+     * ha.register() entities go unavailable when their script stops.
      */
     async handleScriptLifecycle({ filename, meta }, action) {
-        if (!meta || !meta.expose || !this.mqttManager.isConnected) return;
-
         const ext = path.extname(filename);
         const scriptNameRaw = path.basename(filename, ext);
         const slug = scriptNameRaw.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        const isRunning = (action === 'start');
+
+        // Per-script availability: drives ha.register() entities to "unavailable" on stop.
+        // The retained state value is preserved in the MQTT broker, so on restart HA
+        // immediately shows the last known value until the script publishes a fresh one.
+        if (this.mqttManager.isConnected) {
+            this.mqttManager.publish(`jsa/script/${slug}/status`, isRunning ? 'online' : 'offline', { retain: true });
+        }
+
+        // @expose control entity handling (switch/button)
+        if (!meta?.expose || !this.mqttManager.isConnected) return;
+
         const domain = meta.expose === 'button' ? 'button' : 'switch';
         const scriptFile = path.basename(filename);
         const entityId = `${domain}.jsa_${slug}`;
-        const isRunning = (action === 'start');
 
         this.stateManager.set(entityId, isRunning ? 'on' : 'off');
 
@@ -115,7 +125,7 @@ class EntityManager {
         if (domain === 'button') entityIcon = 'mdi:play';
         else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
 
-        // Publish state and updated icon to MQTT. The icon is passed as an attribute 
+        // Publish state and updated icon to MQTT. The icon is passed as an attribute
         // to support the icon_template defined in discovery.
         const scriptEntities = this.workerManager.scriptEntityMap.get(scriptFile);
         if (scriptEntities && scriptEntities.has(entityId)) {
@@ -176,7 +186,14 @@ class EntityManager {
             json_attributes_template: "{{ value_json.attributes | tojson }}",
             icon: fallbackIcon,
             force_update: true,
-            availability_topic: 'jsa/status',
+            // Two-level availability: global addon status + per-script status.
+            // When the script stops, jsa/script/<slug>/status → "offline" → entity unavailable.
+            // The retained state value is kept in the broker so restart restores the last value.
+            availability: [
+                { topic: 'jsa/status' },
+                { topic: `jsa/script/${scriptSlug}/status` },
+            ],
+            availability_mode: 'all',
             unit_of_measurement: config.unit_of_measurement,
             device_class: config.device_class,
             state_class: config.state_class,

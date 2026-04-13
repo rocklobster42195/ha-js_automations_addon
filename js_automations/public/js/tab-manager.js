@@ -6,6 +6,9 @@
 var openTabs = [];
 var activeTabFilename = null;
 
+// Suffix used to identify card tabs (not real files — virtual view of __JSA_CARD__ block)
+const CARD_TAB_SUFFIX = '[card]';
+
 function renderTabs() {
     const tabBar = document.getElementById('tab-bar');
     if (!tabBar) return;
@@ -42,28 +45,38 @@ function renderTabs() {
             tabEl.classList.add('dirty');
         }
 
-        const badge = (window.getLanguageBadge) ? window.getLanguageBadge(tabData.filename) : '';
+        const isCardTab = tabData.type === 'card';
+        const badge = (!isCardTab && window.getLanguageBadge) ? window.getLanguageBadge(tabData.filename) : '';
 
         tabEl.onclick = () => switchToTab(tabData.filename);
-        
-        // Live-Daten aus allScripts holen (falls vorhanden), sonst Fallback auf Tab-Daten
-        const scriptFromList = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === tabData.filename) : null;
-        const effectiveIcon = scriptFromList ? scriptFromList.icon : tabData.icon;
 
-        let iconName = effectiveIcon ? effectiveIcon.split(':').pop() : 'script-text';
-        if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(iconName)) {
-            iconName = 'script-text';
-        }
-
+        let iconName = 'view-dashboard';
         let statusClass = '';
-        if (scriptFromList) {
-            if (scriptFromList.running) statusClass = 'status-running';
-            else if (scriptFromList.status === 'error') statusClass = 'status-error';
+        let displayName = tabData.filename;
+
+        if (isCardTab) {
+            // Card tab: show "‹script.js card›" with dashboard icon
+            displayName = tabData.parentScript.replace(/\.[^.]+$/, '') + ' ‹card›';
+            tabEl.classList.add('card-tab');
+        } else {
+            // Live-Daten aus allScripts holen (falls vorhanden), sonst Fallback auf Tab-Daten
+            const scriptFromList = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === tabData.filename) : null;
+            const effectiveIcon = scriptFromList ? scriptFromList.icon : tabData.icon;
+
+            iconName = effectiveIcon ? effectiveIcon.split(':').pop() : 'script-text';
+            if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(iconName)) {
+                iconName = 'script-text';
+            }
+
+            if (scriptFromList) {
+                if (scriptFromList.running) statusClass = 'status-running';
+                else if (scriptFromList.status === 'error') statusClass = 'status-error';
+            }
         }
 
         tabEl.innerHTML = `
             <i class="tab-icon mdi mdi-${iconName} ${statusClass}"></i>
-            <span class="tab-filename ${statusClass}">${badge}${tabData.filename}</span>
+            <span class="tab-filename ${statusClass}">${badge}${displayName}</span>
             <div class="tab-close-container">
                 <span class="tab-dirty-dot">●</span>
                 <button class="tab-close-btn" onclick="event.stopPropagation(); closeTab('${tabData.filename}');">
@@ -117,9 +130,82 @@ async function openOrSwitchToTab(filename, icon) {
         openTabs.push(newTab);
         updateIconDecorations(newTab.model);
         switchToTab(filename);
+
+        // Auto-open paired card tab if the script has a @card header
+        if (/^\s*\*\s*@card\b/m.test(data.content)) {
+            const cardTabName = filename + CARD_TAB_SUFFIX;
+            if (!openTabs.find(t => t.filename === cardTabName)) {
+                await openCardTab(filename);
+            }
+        }
     } catch(e) {
         console.error(`Failed to open script ${filename}`, e);
         document.getElementById('editor-section').classList.add('hidden');
+    }
+}
+
+/**
+ * Opens a virtual card tab for a Script Pack script.
+ * Fetches the decoded __JSA_CARD__ source and opens it in a Monaco model.
+ * @param {string} scriptFilename – parent script filename (e.g. 'openligadb.js')
+ */
+async function openCardTab(scriptFilename) {
+    if (typeof isMonacoReady !== 'undefined' && !isMonacoReady) {
+        setTimeout(() => openCardTab(scriptFilename), 500);
+        return;
+    }
+
+    const cardTabName = scriptFilename + CARD_TAB_SUFFIX;
+    const existingTab = openTabs.find(t => t.filename === cardTabName);
+    if (existingTab) {
+        switchToTab(cardTabName);
+        return;
+    }
+
+    try {
+        const res = await apiFetch(`api/scripts/${scriptFilename}/card`);
+        if (!res.ok) {
+            console.error(`[CardTab] Unexpected error loading card for ${scriptFilename}`, res.status);
+            return;
+        }
+        const data = await res.json();
+
+        const uri = monaco.Uri.parse(`file:///card__${scriptFilename}`);
+        // isNew: no __JSA_CARD__ block exists yet — open with empty content, mark dirty so Ctrl+S creates it
+        const initialContent = data.isNew ? '' : data.content;
+        const newTab = {
+            filename: cardTabName,
+            icon: 'view-dashboard',
+            type: 'card',
+            parentScript: scriptFilename,
+            model: monaco.editor.createModel(initialContent, 'javascript', uri),
+            isDirty: data.isNew,
+            originalContent: data.isNew ? null : data.content,  // null = "not yet saved"
+            viewState: null,
+        };
+
+        newTab.model.onDidChangeContent(() => {
+            // originalContent === null means "new card, not yet written" — always dirty until first save
+            const isNowDirty = newTab.originalContent === null
+                ? true
+                : newTab.model.getValue() !== newTab.originalContent;
+            if (newTab.isDirty !== isNowDirty) {
+                newTab.isDirty = isNowDirty;
+                setDirtyUI(cardTabName, isNowDirty);
+            }
+        });
+
+        // Insert card tab directly after its parent script tab
+        const parentIndex = openTabs.findIndex(t => t.filename === scriptFilename);
+        if (parentIndex !== -1) {
+            openTabs.splice(parentIndex + 1, 0, newTab);
+        } else {
+            openTabs.push(newTab);
+        }
+
+        switchToTab(cardTabName);
+    } catch (e) {
+        console.error(`[CardTab] Failed to open card tab for ${scriptFilename}`, e);
     }
 }
 
@@ -165,6 +251,24 @@ function switchToTab(filename) {
     renderTabs();
     updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
     updateEditorMode(newTab.filename);
+
+    // Rebuild snippet toolbar to match context (script vs. card)
+    const toolbarSnippets = document.getElementById('toolbar-snippets');
+    if (toolbarSnippets && typeof buildSnippetToolbar === 'function') {
+        const snippetMode = newTab.type === 'card' ? 'card' : 'script';
+        buildSnippetToolbar(toolbarSnippets, snippetMode);
+    }
+
+    // Show preview button only when a card tab is active; track parent script for the button handler
+    const isCardTab = newTab.type === 'card';
+    document.body.classList.toggle('card-tab-active', isCardTab);
+    window._activeCardParentScript = isCardTab ? newTab.parentScript : null;
+
+    // Sync Card menu button active state (lit when preview is open)
+    const cardMenuBtn = document.getElementById('btn-card-menu');
+    if (cardMenuBtn && typeof CardPreview !== 'undefined') {
+        cardMenuBtn.classList.toggle('preview-active', CardPreview.isOpen());
+    }
 }
 
 function closeTab(filename) {
@@ -177,16 +281,28 @@ function closeTab(filename) {
 
     const index = openTabs.findIndex(t => t.filename === filename);
     openTabs.splice(index, 1);
-    
+
     if (tabToClose.model) tabToClose.model.dispose();
+
+    // Cascade-close the paired card tab when its parent script is closed
+    if (tabToClose.type !== 'card') {
+        const cardTabName = filename + CARD_TAB_SUFFIX;
+        const cardTabIndex = openTabs.findIndex(t => t.filename === cardTabName);
+        if (cardTabIndex !== -1) {
+            const cardTab = openTabs[cardTabIndex];
+            if (cardTab.model) cardTab.model.dispose();
+            openTabs.splice(cardTabIndex, 1);
+            if (activeTabFilename === cardTabName) activeTabFilename = null;
+        }
+    }
 
     if (openTabs.length === 0) {
         document.getElementById('editor-section').classList.add('hidden');
         activeTabFilename = null;
         if (editor) editor.setModel(null);
-    } else if (activeTabFilename === filename) {
+    } else if (activeTabFilename === filename || activeTabFilename === null) {
         const newIndex = Math.max(0, index - 1);
-        switchToTab(openTabs[newIndex].filename);
+        switchToTab(openTabs[Math.min(newIndex, openTabs.length - 1)].filename);
     }
 
     renderTabs();
@@ -204,6 +320,54 @@ function setDirtyUI(filename, isDirty) {
     }
 }
 
+/**
+ * Updates the card-tab toggle button (#btn-open-card-tab) visibility and icon.
+ * Shows only on script tabs whose script has a @card header.
+ * @param {string} filename - Active tab filename
+ */
+function _updateCardTabBtn(filename) {
+    const btn = document.getElementById('btn-open-card-tab');
+    if (!btn) return;
+
+    const isCardTab = filename.endsWith(CARD_TAB_SUFFIX);
+    if (isCardTab) {
+        btn.classList.add('hidden');
+        return;
+    }
+
+    const script = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
+    const hasCard = !!(script && script.card);
+    btn.classList.toggle('hidden', !hasCard);
+
+    if (hasCard) {
+        const cardTabName = filename + CARD_TAB_SUFFIX;
+        const cardTabOpen = openTabs.some(t => t.filename === cardTabName);
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = cardTabOpen
+                ? 'mdi mdi-view-dashboard-edit-outline'
+                : 'mdi mdi-view-dashboard-edit-outline';
+        }
+        btn.classList.toggle('preview-active', cardTabOpen);
+        btn.title = cardTabOpen ? 'Close Card Tab' : 'Open Card Tab';
+    }
+}
+
+/**
+ * Toggles the card tab for the currently active script tab open or closed.
+ * Called from the #btn-open-card-tab button in the toolbar.
+ */
+function toggleCardTab() {
+    if (!activeTabFilename || activeTabFilename.endsWith(CARD_TAB_SUFFIX)) return;
+    const cardTabName = activeTabFilename + CARD_TAB_SUFFIX;
+    if (openTabs.some(t => t.filename === cardTabName)) {
+        closeTab(cardTabName);
+    } else {
+        openCardTab(activeTabFilename);
+    }
+    _updateCardTabBtn(activeTabFilename);
+}
+
 function updateToolbarUI(filename, icon, isDirty) {
     const saveBtn = document.querySelector('.btn-save');
     const toggleBtn = document.getElementById('btn-script-toggle');
@@ -211,6 +375,21 @@ function updateToolbarUI(filename, icon, isDirty) {
     const editBtn = document.getElementById('btn-script-edit');
     const dupBtn = document.getElementById('btn-script-duplicate');
     const deleteBtn = document.getElementById('btn-script-delete');
+
+    _updateCardTabBtn(filename);
+
+    // Card tabs: save enabled, script controls hidden
+    const isCardTab = filename.endsWith(CARD_TAB_SUFFIX);
+    if (isCardTab) {
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = isDirty ? '1' : '0.4';
+        if (toggleBtn) { toggleBtn.disabled = true; toggleBtn.style.opacity = '0.1'; }
+        if (restartBtn) { restartBtn.disabled = true; restartBtn.style.opacity = '0.1'; }
+        if (editBtn) { editBtn.disabled = true; editBtn.style.opacity = '0.1'; }
+        if (dupBtn) { dupBtn.disabled = true; dupBtn.style.opacity = '0.1'; }
+        if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.style.opacity = '0.1'; }
+        return;
+    }
 
     if (filename === 'System: Store' || filename === 'System: Settings') {
         saveBtn.disabled = true;
@@ -277,52 +456,69 @@ function updateToolbarUI(filename, icon, isDirty) {
 }
 
 function updateEditorMode(filename) {
-    const script = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
+    const isCardTab = filename.endsWith(CARD_TAB_SUFFIX);
+    const script = !isCardTab && (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
     const isLib = script && script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
-    
+
     const container = document.getElementById('editor-wrapper');
     if (!container) return;
 
-    // Remove existing banner if any
+    // Remove existing banners
     const existingBanner = document.getElementById('lib-mode-banner');
     if (existingBanner) existingBanner.remove();
+    const existingCardBanner = document.getElementById('card-mode-banner');
+    if (existingCardBanner) existingCardBanner.remove();
 
-    if (isLib) {
+    if (isCardTab) {
+        const cardTab = openTabs.find(t => t.filename === filename);
+        const banner = document.createElement('div');
+        banner.id = 'card-mode-banner';
+        banner.style.background = '#1a1f2e';
+        banner.style.color = 'var(--accent)';
+        banner.style.padding = '4px 10px';
+        banner.style.fontSize = '0.8rem';
+        banner.style.borderBottom = '1px solid var(--accent-dark, #1a4a8a)';
+        banner.innerHTML = `<i class="mdi mdi-view-dashboard-outline" style="margin-right:6px;"></i> Card Editor — <strong>${cardTab?.parentScript ?? ''}</strong> &nbsp;·&nbsp; Ctrl+S to save`;
+        container.insertBefore(banner, container.firstChild);
+    } else if (isLib) {
         const banner = document.createElement('div');
         banner.id = 'lib-mode-banner';
-        banner.style.background = '#1e2a36'; // Dark Blue/Grey to match theme
-        banner.style.color = '#64b5f6'; // Light Blue Text
+        banner.style.background = '#1e2a36';
+        banner.style.color = '#64b5f6';
         banner.style.padding = '4px 10px';
         banner.style.fontSize = '0.8rem';
         banner.style.borderBottom = '1px solid #0d47a1';
         banner.innerHTML = '<i class="mdi mdi-bookshelf" style="margin-right:6px;"></i> ' + i18next.t('library_mode_banner', { filename });
-        
         container.insertBefore(banner, container.firstChild);
     }
 }
 
+function _isVirtualTab(filename) {
+    return !filename || filename.startsWith('System: ') || filename.endsWith(CARD_TAB_SUFFIX);
+}
+
 async function toggleActiveScript() {
-    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.toggleScript(activeTabFilename);
+    if (!_isVirtualTab(activeTabFilename)) await window.toggleScript(activeTabFilename);
 }
 
 async function restartActiveScript() {
-    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.restartScript(activeTabFilename);
+    if (!_isVirtualTab(activeTabFilename)) await window.restartScript(activeTabFilename);
 }
 
 async function editActiveScript() {
-    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.editScript(activeTabFilename);
+    if (!_isVirtualTab(activeTabFilename)) await window.editScript(activeTabFilename);
 }
 
 async function duplicateActiveScript() {
-    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.duplicateScript(activeTabFilename);
+    if (!_isVirtualTab(activeTabFilename)) await window.duplicateScript(activeTabFilename);
 }
 
 async function deleteActiveScript() {
-    if (activeTabFilename && !activeTabFilename.startsWith('System: ')) await window.deleteScript(activeTabFilename);
+    if (!_isVirtualTab(activeTabFilename)) await window.deleteScript(activeTabFilename);
 }
 
 async function downloadActiveScript() {
-    if (!activeTabFilename || activeTabFilename.startsWith('System: ')) return;
+    if (_isVirtualTab(activeTabFilename)) return;
 
     // Create a temporary link to trigger the download
     const link = document.createElement('a');
@@ -339,12 +535,29 @@ async function saveActiveTab() {
     if (!activeTab || !activeTab.isDirty) return;
 
     const content = activeTab.model.getValue();
-    await apiFetch(`api/scripts/${activeTabFilename}/content`, { 
-        method: 'POST', 
-        headers: {'Content-Type':'application/json'}, 
-        body: JSON.stringify({ content: content }) 
+
+    if (activeTab.type === 'card') {
+        // Card tab: PUT back to the parent script's card endpoint
+        await apiFetch(`api/scripts/${activeTab.parentScript}/card`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        activeTab.originalContent = content;
+        setDirtyUI(activeTabFilename, false);
+        // Auto-reload the preview if it is open
+        if (typeof CardPreview !== 'undefined' && CardPreview.isOpen()) {
+            CardPreview.reload();
+        }
+        return;
+    }
+
+    await apiFetch(`api/scripts/${activeTabFilename}/content`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ content: content })
     });
-    
+
     activeTab.originalContent = content;
     setDirtyUI(activeTabFilename, false);
     if (typeof loadScripts === 'function') await loadScripts();
@@ -365,6 +578,8 @@ function closeAllTabs() {
 // Make globally available
 window.renderTabs = renderTabs;
 window.openOrSwitchToTab = openOrSwitchToTab;
+window.openCardTab = openCardTab;
+window.toggleCardTab = toggleCardTab;
 window.switchToTab = switchToTab;
 window.closeTab = closeTab;
 window.saveActiveTab = saveActiveTab;

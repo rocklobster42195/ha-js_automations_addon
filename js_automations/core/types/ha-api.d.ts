@@ -215,6 +215,58 @@ interface HA {
     /** Registers a callback to be executed when an unhandled error occurs. */
     onError(callback: (error: BackgroundErrorData) => void): void;
 
+    /**
+     * Registers a named action handler that can be triggered from multiple sources:
+     * - A Lovelace card via `__jsa__.callAction('name', payload)`
+     * - A `ha.register()` button entity with `{ action: 'name' }` — fires on button press
+     * - The addon UI (future)
+     *
+     * The handler may return a value that is forwarded back to the caller.
+     *
+     * @example
+     * // Simple trigger — no payload
+     * ha.action('refresh', async () => { await update(); });
+     *
+     * @example
+     * // With payload and return value
+     * ha.action('set-team', async ({ teamId }) => {
+     *   CONFIG.teamId = teamId;
+     *   await update();
+     *   return { ok: true };
+     * });
+     *
+     * @example
+     * // Button entity routed to an action
+     * ha.register('button.openligadb_refresh', { name: 'Refresh', action: 'refresh' });
+     */
+    action(name: string, handler: (payload: Record<string, unknown>) => unknown | Promise<unknown>): void;
+
+    // --- Script Pack: Lovelace Card Installation ---
+    frontend: {
+        /**
+         * Installs the card embedded in this script's `__JSA_CARD__` block to
+         * `config/www/jsa-cards/` and registers it as a Lovelace resource.
+         *
+         * - Skips write if the card source is unchanged (hash-based).
+         * - In `@card dev` mode: skips file write and Lovelace registration entirely.
+         *   The preview panel receives the live card source instead.
+         *
+         * @example
+         * await ha.frontend.installCard();
+         *
+         * @example
+         * await ha.frontend.installCard({
+         *   config: { entity_id: 'sensor.openligadb_bvb', title: 'BVB' },
+         * });
+         */
+        installCard(options?: {
+            /** Config object passed to the card's setConfig() on first connect. */
+            config?: Record<string, unknown>;
+            /** Force reinstall even if the card source hash has not changed. */
+            force?: boolean;
+        }): Promise<string>;
+    };
+
     // --- Home Assistant Services & Entities ---
     /** 
      * Returns a fluent API for a specific entity with domain-specific services.
