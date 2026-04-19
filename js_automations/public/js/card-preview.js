@@ -14,11 +14,16 @@ const CardPreview = (() => {
     let mockStates    = {};  // { entityId: { state, attributes } }
     let cardConfig    = {};  // passed to setConfig() on the mounted card
     let _errors       = [];
+    // Translation helper
+    const _t = (key, fallback) => (typeof window.t === 'function') ? window.t(key) : fallback;
+
+    let _socketListener = null;
     let _discoveryPromise = Promise.resolve(); // resolves when _autoDiscoverEntities() finishes
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     function open(scriptFilename) {
+        if (!scriptFilename) return;
         if (!panel) _create();
         _loadScript(scriptFilename);
         panel.classList.remove('hidden');
@@ -37,6 +42,7 @@ const CardPreview = (() => {
     }
 
     function toggle(scriptFilename) {
+        if (!scriptFilename) return;
         if (!panel || panel.classList.contains('hidden')) {
             open(scriptFilename);
         } else if (currentScript !== scriptFilename) {
@@ -65,6 +71,7 @@ const CardPreview = (() => {
     }
 
     function _loadScript(filename) {
+        if (!filename) return;
         currentScript = filename;
 
         const titleEl = panel.querySelector('.preview-title');
@@ -93,18 +100,24 @@ const CardPreview = (() => {
     }
 
     function _autoDiscoverEntities(filename) {
+        if (!filename) return Promise.resolve();
         const scriptName = filename.replace(/\.[^.]+$/, '').replace(/-/g, '_');
         const storedCfg = localStorage.getItem(`jsa_preview_config_${filename}`);
-        const base = (typeof BASE_PATH !== 'undefined' ? BASE_PATH : '/');
-        return fetch(base + 'api/ha/states')
-            .then(r => r.json())
+        
+        if (typeof window.getHAStates !== 'function') return Promise.resolve();
+
+        return window.getHAStates()
             .then(statesArr => {
                 if (!Array.isArray(statesArr)) return;
                 let changed = false;
                 for (const s of statesArr) {
                     if (!s.entity_id.includes(scriptName)) continue;
-                    // Always refresh state from HA — localStorage values can be stale
-                    mockStates[s.entity_id] = { state: s.state, attributes: s.attributes ?? {} };
+                    // Skip transient re-registration states (unknown + no attributes)
+                    // when we already have meaningful data for this entity in mockStates.
+                    const incoming = s.attributes ?? {};
+                    const current  = (mockStates[s.entity_id] || {}).attributes ?? {};
+                    if (s.state === 'unknown' && !incoming.datetime && current.datetime) continue;
+                    mockStates[s.entity_id] = { state: s.state, attributes: incoming };
                     changed = true;
                     // If config was auto-generated (no stored config), update entity_id to match the real entity
                     if (!storedCfg && !cardConfig.entity_id?.includes(s.entity_id.split('.')[0])) {
@@ -130,6 +143,7 @@ const CardPreview = (() => {
                 <i class="mdi mdi-view-dashboard-outline" style="margin-right:6px;opacity:.7;"></i>
                 <span class="preview-title">Card Preview</span>
                 <div class="preview-titlebar-actions">
+                    <button class="preview-action-btn" id="preview-configure-btn" title="Configure card"><i class="mdi mdi-cog-outline"></i></button>
                     <button class="preview-action-btn" id="preview-reload-btn" title="Reload preview"><i class="mdi mdi-refresh"></i></button>
                     <button class="preview-action-btn" id="preview-close-btn" title="Close preview"><i class="mdi mdi-close"></i></button>
                 </div>
@@ -154,7 +168,7 @@ const CardPreview = (() => {
             <details class="preview-section" id="preview-config-section" open>
                 <summary>
                     <i class="mdi mdi-cog-outline"></i>
-                    Card Config <small>(setConfig)</small>
+                    ${_t('preview.card_config', 'Card Config')} <small>(setConfig)</small>
                 </summary>
                 <div class="preview-config-body">
                     <textarea id="preview-config-input" class="preview-config-textarea" rows="3" spellcheck="false"></textarea>
@@ -165,7 +179,7 @@ const CardPreview = (() => {
             <details class="preview-section" id="preview-hass-section">
                 <summary>
                     <i class="mdi mdi-code-braces"></i>
-                    Entity States <small>(mock hass)</small>
+                    ${_t('preview.entity_states', 'Entity States')} <small>(mock hass)</small>
                 </summary>
                 <div class="preview-hass-body">
                     <div id="preview-hass-list"></div>
@@ -182,7 +196,7 @@ const CardPreview = (() => {
             <details class="preview-section" id="preview-errors-section">
                 <summary>
                     <i class="mdi mdi-alert-circle-outline"></i>
-                    Errors <span id="preview-error-badge"></span>
+                    ${_t('preview.errors', 'Errors')} <span id="preview-error-badge"></span>
                 </summary>
                 <div id="preview-errors-body" class="preview-errors-body"></div>
             </details>
@@ -205,6 +219,7 @@ const CardPreview = (() => {
         // Restore saved width
         const savedWidth = localStorage.getItem('jsa_preview_width') || '380';
         _setWidth(savedWidth);
+
         const savedWidthBtn = panel.querySelector(`[data-width="${savedWidth}"]`);
         if (savedWidthBtn) {
             panel.querySelectorAll('.preview-width-btn').forEach(b => b.classList.remove('active'));
@@ -212,6 +227,9 @@ const CardPreview = (() => {
         }
 
         // Buttons
+        panel.querySelector('#preview-configure-btn').addEventListener('click', () => {
+            if (iframe?.contentWindow) iframe.contentWindow.postMessage({ type: 'jsa-open-editor' }, '*');
+        });
         panel.querySelector('#preview-reload-btn').addEventListener('click', reload);
         panel.querySelector('#preview-close-btn').addEventListener('click', close);
         panel.querySelector('#preview-hass-add-btn').addEventListener('click', _addMockStateFromInputs);
@@ -234,8 +252,14 @@ const CardPreview = (() => {
         // Drag
         _makeDraggable(panel.querySelector('#preview-drag-handle'), panel);
 
-        // Forward live HA state changes to the preview for any tracked entity
+        // Forward live HA state changes
         _initSocketListener();
+
+        // Fallback: poll tracked states every 30s in case socket events are missed
+        setInterval(() => {
+            if (!panel || panel.classList.contains('hidden')) return;
+            _refreshTrackedStates();
+        }, 30000);
 
         _renderMockStates();
         _renderErrors();
@@ -243,18 +267,23 @@ const CardPreview = (() => {
 
     function _initSocketListener() {
         if (!window.socket) return;
-        // Avoid double-registration if panel is recreated
-        window.socket.off('ha_state_changed.card_preview');
-        window.socket.on('ha_state_changed', ({ entity_id, new_state }) => {
+        if (_socketListener) window.socket.off('ha_state_changed', _socketListener);
+        
+        _socketListener = ({ entity_id, new_state }) => {
             if (!new_state) return;
             if (!panel || panel.classList.contains('hidden')) return;
-            // Only push if this entity is already tracked in our mock states
             if (!Object.prototype.hasOwnProperty.call(mockStates, entity_id)) return;
+            // Ignore transient re-registration states: "unknown" with no attributes
+            // while the current mock already has meaningful data (e.g. datetime).
+            const incoming = new_state.attributes ?? {};
+            const current  = mockStates[entity_id].attributes ?? {};
+            if (new_state.state === 'unknown' && !incoming.datetime && current.datetime) return;
             mockStates[entity_id].state = new_state.state;
-            mockStates[entity_id].attributes = new_state.attributes ?? {};
+            mockStates[entity_id].attributes = incoming;
             _renderMockStates();
             _pushHassToIframe();
-        });
+        };
+        window.socket.on('ha_state_changed', _socketListener);
     }
 
     // ── Private: Width ────────────────────────────────────────────────────────
@@ -309,7 +338,7 @@ const CardPreview = (() => {
         if (!list) return;
 
         if (Object.keys(mockStates).length === 0) {
-            list.innerHTML = '<div class="preview-empty-hint">No entities. Add one below to inject into mock hass.</div>';
+            list.innerHTML = `<div class="preview-empty-hint">${_t('preview.no_entities', 'No entities. Add one below to inject into mock hass.')}</div>`;
             return;
         }
 
@@ -357,7 +386,7 @@ const CardPreview = (() => {
                 hint.textContent = '';
                 hint.className = 'preview-config-hint';
             } catch {
-                hint.textContent = 'Invalid JSON';
+                hint.textContent = _t('preview.invalid_json', 'Invalid JSON');
                 hint.className = 'preview-config-hint preview-config-hint-error';
                 return; // don't push invalid config
             }
@@ -411,7 +440,7 @@ const CardPreview = (() => {
             badge.textContent = '';
             badge.className = '';
             sec.classList.remove('has-errors');
-            body.innerHTML = '<div class="preview-empty-hint">No errors.</div>';
+            body.innerHTML = `<div class="preview-empty-hint">${_t('preview.no_errors', 'No errors.')}</div>`;
         } else {
             badge.textContent = `(${_errors.length})`;
             badge.className = 'preview-error-badge';
@@ -420,7 +449,7 @@ const CardPreview = (() => {
             body.innerHTML = _errors.map(e => `
                 <div class="preview-error-row">
                     <span class="preview-error-time">${e.time}</span>
-                    <span class="preview-error-msg">${_escHtml(e.message)}${e.lineno ? ` <span class="preview-error-line">line ${e.lineno}</span>` : ''}</span>
+                    <span class="preview-error-msg">${_escHtml(e.message)}${e.lineno ? ` <span class="preview-error-line">${_t('preview.line', 'line')} ${e.lineno}</span>` : ''}</span>
                 </div>
             `).join('');
         }
@@ -434,19 +463,76 @@ const CardPreview = (() => {
             _addError(e.data.message, e.data.lineno);
             // Also surface in the main JSA log panel so errors are visible without the preview open
             if (typeof appendLog === 'function') {
-                const src = e.data.scriptName ?? currentScript ?? 'Card';
+                const src = e.data.scriptName ?? currentScript ?? _t('preview.card_source', 'Card');
+                // Log card errors to the main log panel for better observability
                 appendLog({ ts: Date.now(), level: 'error', source: src, message: `[Card Preview] ${e.data.message}` });
             }
         }
         if (e.data.type === 'jsa-card-loaded') {
-            // Wait for auto-discovery to finish before pushing hass — ensures fresh HA states
-            // rather than stale localStorage values are sent on first render.
+            // Push stored config immediately so the card uses the right entityId from the start.
+            _pushConfigToIframe();
+            // Push whatever mockStates we already have (from localStorage) so the card renders
+            // immediately rather than waiting for discovery (which requires a socket round-trip).
+            _pushHassToIframe();
+            // Then let discovery refresh from live HA and push again once complete.
             _discoveryPromise.then(_pushHassToIframe);
         }
         if (e.data.type === 'jsa-action-done') {
-            // Action completed — fetch fresh HA states for all tracked entities and push to card
-            _refreshTrackedStates();
+            if (e.data.config && e.data.config.entityId) {
+                cardConfig = { entityId: e.data.config.entityId };
+                if (currentScript) {
+                    localStorage.setItem(`jsa_preview_config_${currentScript}`, JSON.stringify(cardConfig));
+                }
+                _renderCardConfig();
+                _pushConfigToIframe();
+                // Poll until the new entity has real match data (ha.update is fire-and-forget).
+                _pollEntityReady(e.data.config.entityId);
+            } else {
+                // Non-config action (e.g. refresh) — rediscover and push once.
+                _autoDiscoverEntities(currentScript).then(() => _pushHassToIframe());
+                setTimeout(() => _autoDiscoverEntities(currentScript).then(() => _pushHassToIframe()), 2000);
+            }
         }
+    }
+
+    function _pollEntityReady(entityId, attempt) {
+        attempt = attempt || 0;
+        if (attempt > 12) {
+            // Give up active polling — the 5s interval will keep the card in sync from here
+            _refreshTrackedStates();
+            return;
+        }
+        if (typeof window.getHAStates !== 'function') return;
+        window.getHAStates().then(statesArr => {
+            if (!Array.isArray(statesArr)) return;
+            const match = statesArr.find(s => s.entity_id === entityId);
+            if (attempt === 0) {
+                const logFn = typeof appendLog === 'function' ? appendLog : null;
+                if (match) {
+                    const msg = `[Preview] Poll #0 — ${entityId}: state="${match.state}", attrs=${JSON.stringify(match.attributes)}`;
+                    console.log(msg);
+                    if (logFn) logFn({ ts: Date.now(), level: 'info', source: 'card-preview', message: msg });
+                } else {
+                    const msg = `[Preview] Poll #0 — ${entityId}: entity NOT found in HA states (${statesArr.length} total)`;
+                    console.warn(msg);
+                    if (logFn) logFn({ ts: Date.now(), level: 'info', source: 'card-preview', message: msg });
+                }
+            }
+            if (match) {
+                mockStates[entityId] = { state: match.state, attributes: match.attributes ?? {} };
+                _saveMockStates();
+                _renderMockStates();
+                _pushHassToIframe();
+                // Keep polling until datetime attribute arrives (ha.update may still be in flight)
+                if (!match.attributes || !match.attributes.datetime) {
+                    setTimeout(() => _pollEntityReady(entityId, attempt + 1), 1200);
+                }
+            } else {
+                setTimeout(() => _pollEntityReady(entityId, attempt + 1), 1200);
+            }
+        }).catch(() => {
+            setTimeout(() => _pollEntityReady(entityId, attempt + 1), 1500);
+        });
     }
 
     function _refreshTrackedStates() {
@@ -461,11 +547,16 @@ const CardPreview = (() => {
                 for (const s of statesArr) stateMap[s.entity_id] = s;
                 let changed = false;
                 for (const id of tracked) {
-                    if (stateMap[id]) {
-                        mockStates[id].state      = stateMap[id].state;
-                        mockStates[id].attributes = stateMap[id].attributes ?? {};
-                        changed = true;
-                    }
+                    const s = stateMap[id];
+                    if (!s) continue;
+                    // Skip transient re-registration states (unknown + no attributes)
+                    // when we already have meaningful data for this entity.
+                    const incoming = s.attributes ?? {};
+                    const current  = mockStates[id].attributes ?? {};
+                    if (s.state === 'unknown' && !incoming.datetime && current.datetime) continue;
+                    mockStates[id].state      = s.state;
+                    mockStates[id].attributes = incoming;
+                    changed = true;
                 }
                 if (changed) {
                     _renderMockStates();
@@ -517,11 +608,20 @@ const CardPreview = (() => {
         if (stored) {
             const { left, top } = _tryParse(stored, {});
             if (left !== undefined) {
-                panel.style.left   = `${Math.max(0, left)}px`;
-                panel.style.top    = `${Math.max(0, top)}px`;
+                // Clamp: top must be at least 60px (nav bar), left must keep panel partially on screen
+                const minTop  = 60;
+                const maxLeft = window.innerWidth - 100;
+                panel.style.left   = `${Math.min(Math.max(0, left), maxLeft)}px`;
+                panel.style.top    = `${Math.max(minTop, top)}px`;
                 panel.style.right  = 'auto';
                 panel.style.bottom = 'auto';
             }
+        } else {
+            // Default position if nothing is saved yet
+            panel.style.right  = '20px';
+            panel.style.top    = '80px';
+            panel.style.left   = 'auto';
+            panel.style.bottom = 'auto';
         }
     }
 
@@ -543,6 +643,14 @@ const CardPreview = (() => {
 })();
 
 window.CardPreview = CardPreview;
+
+// ── Initialization ────────────────────────────────────────────────────────────
+
+// Attach toggle handler to button on load
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btn-card-menu');
+    if (btn) btn.onclick = _toggleCardPreview;
+});
 
 // ── Preview toggle button ─────────────────────────────────────────────────────
 

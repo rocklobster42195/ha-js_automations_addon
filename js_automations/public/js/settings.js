@@ -579,7 +579,5 @@ function closeSettingsTab() {
 window.openSettingsTab = openSettingsTab;
 window.closeSettingsTab = closeSettingsTab;
 window.loadSettingsData = loadSettingsData;
-window.restartHA = restartHA;
-window.installIntegration = installIntegration;
 window.renderSettingsCategories = renderSettingsCategories;
 window.testMqttConnection = testMqttConnection;

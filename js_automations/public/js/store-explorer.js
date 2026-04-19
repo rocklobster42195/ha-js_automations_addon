@@ -180,7 +180,18 @@ function renderStoreTable() {
                     </button>
                 </div>`;
         } else if (typeof val === 'object') {
-            valueHtml = `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
+            const lines = valStr.split('\n');
+            if (lines.length > 5) {
+                const preview = escapeHtml(lines.slice(0, 5).join('\n') + '\n…');
+                const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                valueHtml = `
+                    <pre class="store-json" id="store-json-${count}" data-collapsed="true">${preview}</pre>
+                    <button class="btn-row store-json-toggle" onclick="toggleStoreJson('store-json-${count}', '${safeKey}')" title="Expand" style="margin-top:4px;font-size:.75em;opacity:.7;display:flex;align-items:center;gap:3px;">
+                        <i class="mdi mdi-chevron-down"></i><span>${lines.length} lines</span>
+                    </button>`;
+            } else {
+                valueHtml = `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
+            }
         } else {
             valueHtml = `<div class="store-value">${escapeHtml(valStr)}</div>`;
         }
@@ -528,6 +539,27 @@ function toggleSecretDisplay(key, spanId, btn) {
     }
 }
 
+function toggleStoreJson(preId, key) {
+    const pre = document.getElementById(preId);
+    if (!pre) return;
+    const item = storeCache[key];
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const valStr = JSON.stringify(val, null, 2);
+    const btn = pre.nextElementSibling;
+    const icon = btn?.querySelector('i');
+
+    if (pre.dataset.collapsed === 'true') {
+        pre.innerHTML = escapeHtml(valStr);
+        pre.dataset.collapsed = 'false';
+        if (icon) icon.className = 'mdi mdi-chevron-up';
+    } else {
+        const lines = valStr.split('\n');
+        pre.innerHTML = escapeHtml(lines.slice(0, 5).join('\n') + '\n…');
+        pre.dataset.collapsed = 'true';
+        if (icon) icon.className = 'mdi mdi-chevron-down';
+    }
+}
+
 // --- INJECTION HELPERS ---
 function injectStoreComponents() {
     // 1. Inject Modal if missing
@@ -641,3 +673,4 @@ window.prettifyStoreJson = prettifyStoreJson;
 window.toggleStoreValueVisibility = toggleStoreValueVisibility;
 window.toggleStoreSecretState = toggleStoreSecretState;
 window.toggleSecretDisplay = toggleSecretDisplay;
+window.toggleStoreJson = toggleStoreJson;

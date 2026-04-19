@@ -298,6 +298,21 @@ class Kernel extends EventEmitter {
             
             this._setupSystemEventListeners();
 
+            // Card startup cleanup: remove orphaned Lovelace resources and card files
+            // for scripts that no longer exist or no longer carry a @card header.
+            try {
+                const knownCardNames = this.workerManager.getScripts()
+                    .map(p => {
+                        const meta = ScriptHeaderParser.parse(p);
+                        if (!meta.card) return null;
+                        return path.basename(p, path.extname(p)) + '-card';
+                    })
+                    .filter(Boolean);
+                await this.cardManager.performStartupCleanup(knownCardNames);
+            } catch (e) {
+                console.warn('[Kernel] Card startup cleanup failed:', e.message);
+            }
+
             // Autostart scripts
             if (!this.systemService.isSafeMode) {
                 const enabled = this.stateManager.getEnabledScripts();
@@ -362,6 +377,10 @@ class Kernel extends EventEmitter {
      * @private
      */
     _setupSystemEventListeners() {
+        // Deduplicate jsa_action events — on WS reconnect a second global subscription can
+        // briefly overlap the first, causing the same event to be delivered twice.
+        const _seenCorrIds = new Set();
+
         // HA state changes + jsa_action routing
         this.haConnector.subscribeToEvents((event) => {
             if (event.event_type === 'state_changed') {
@@ -371,10 +390,23 @@ class Kernel extends EventEmitter {
                 this.emit('ha_state_changed', { entity_id, new_state });
             }
 
+            // Forward card runtime errors (caught by the __jsa__ error boundary) to the script log
+            if (event.event_type === 'jsa_card_error') {
+                const { script, message, line } = event.data ?? {};
+                if (script && message) {
+                    this.logManager.add('error', script,
+                        '[Card] ' + message + (line ? ' (line ' + line + ')' : ''));
+                }
+            }
+
             // Route card-side __jsa__.callAction() calls back to the running script
             if (event.event_type === 'jsa_action') {
                 const { script, action, payload, correlation_id } = event.data ?? {};
                 if (!script || !action || !correlation_id) return;
+                if (_seenCorrIds.has(correlation_id)) return;
+                _seenCorrIds.add(correlation_id);
+                setTimeout(() => _seenCorrIds.delete(correlation_id), 30000);
+
                 const filename = script.endsWith('.js') || script.endsWith('.ts') ? script : script + '.js';
                 this.workerManager.callAction(filename, action, payload ?? {})
                     .then(result => this.haConnector.fireEvent('jsa_action_result', { correlation_id, result }))

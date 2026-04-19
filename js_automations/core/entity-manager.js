@@ -354,11 +354,16 @@ class EntityManager {
 
         this.mqttManager.publish(discoveryTopic, payload, { retain: true });
 
+        // For already-correct entities, skip the initial-state publish: the MQTT broker
+        // already holds the retained state, so publishing 'unknown' here would overwrite
+        // the live entity state before ha.update() can set the real value.
         const initialState = config.initial_state !== undefined ? config.initial_state : 'unknown';
-        this.mqttManager.publishEntityState(payload, initialState, {
-            icon: fallbackIcon,
-            ...config.attributes
-        });
+        if (!alreadyCorrect || config.initial_state !== undefined) {
+            this.mqttManager.publishEntityState(payload, initialState, {
+                icon: fallbackIcon,
+                ...config.attributes
+            });
+        }
 
         // Register in managers to track ownership and state
         this.workerManager.registerEntity(filename, entityId, payload);

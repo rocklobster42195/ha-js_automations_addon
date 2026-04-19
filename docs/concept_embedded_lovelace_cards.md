@@ -1,50 +1,33 @@
-# Concept: Script Packs — Self-Contained Mini-Integrations
+# Script Packs — Embedded Lovelace Cards
 
-* **Status:** Proposal
-* **Date:** 2026-04-12
-
----
-
-## 1. The Problem
-
-Home Assistant is powerful, but integrating exotic APIs — a regional energy provider, a custom sports data feed, a local IoT device with a proprietary protocol — still requires significant overhead:
-
-- Write a custom component in Python (HACS, manifest.json, config_flow, translations, …)
-- Or use a REST sensor and write a Lovelace card separately
-- Manually place JS files in `config/www/`, register Lovelace resources, manage cache-busting
-- Ship all of this as multiple files scattered across different directories
-
-This overhead is a barrier. Many integrations never get written — or never get shared.
+* **Status:** Living Document
+* **Last updated:** 2026-04-19
 
 ---
 
-## 2. The Vision: Script Packs
+## 1. Vision
 
-**A Script Pack is a single `.js` file that is a complete, self-contained mini-integration.**
+A **Script Pack** is a single `.js` file that is a complete, self-contained mini-integration for Home Assistant.
 
 One file contains:
-- The **backend logic** — polling APIs, registering HA entities, handling state changes
-- The **frontend card** — a custom Lovelace card that displays the data
-- The **metadata** — name, icon, version, dependencies
+- **Backend logic** — polling APIs, registering HA entities, handling state changes
+- **Frontend card** — a custom Lovelace card that displays the data
+- **Metadata** — name, icon, version, dependencies, card config wizard
 
 To install a Script Pack, a user pastes a GitHub Gist URL into the Import dialog. One click. The script runs, the card registers itself, and a Lovelace card is available to add to any dashboard. No HACS. No `custom_components`. No manual file placement. No restart.
 
-To share a Script Pack, the author pastes the single `.js` file anywhere — GitHub Gist, raw URL, a forum post — and it works.
-
-**This is the north star: exoctic APIs in HA, with a proper card UI, as a single shareable file.**
+**North star: exotic APIs in HA, with a proper card UI, as a single shareable file.**
 
 ---
 
-## 3. The Embedded Card Block
+## 2. Card Block Format
 
 Card code is stored as a Base64-encoded comment block at the end of the script file. It is invisible to the JS runtime — the addon strips and decodes it before the script runs.
 
-### Format
-
 ```js
 // --- backend logic ---
-ha.register('sensor.openligadb_bvb', { ... });
-ha.frontend.installCard({ config: { entity_id: 'sensor.openligadb_bvb' } });
+ha.register('sensor.openligadb_7', { name: 'BVB', icon: 'mdi:soccer' });
+ha.frontend.installCard();
 
 /* __JSA_CARD__
 Y2xhc3MgT3BlbkxpZ2FEQkNhcmQgZXh0ZW5kcyBIVE1MRWxlbWVudCB7...
@@ -53,32 +36,46 @@ __JSA_CARD_END__ */
 
 | Part | Description |
 |---|---|
-| `__JSA_CARD__` | Opens the card block. One card per script. |
-| Base64 content | `Buffer.from(cardCode).toString('base64')` — binary-safe, no compression. |
-| `__JSA_CARD_END__` | Closes the block. |
+| `/* __JSA_CARD__` | Opens the card block (block-comment form, not inline) |
+| Base64 content | `Buffer.from(cardCode).toString('base64')` — binary-safe, no compression |
+| `__JSA_CARD_END__ */` | Closes the block |
 
-The block is always appended at the end of the file. It survives copy-paste, Gist sharing, and URL imports unchanged. The JS runtime never sees it.
+The block is always appended at the end of the file. It survives copy-paste, Gist sharing, and URL imports unchanged. The JS runtime never sees it. A version comment (e.g. `/* __JSA_CARD__ v2`) is optional and human-readable only — cache-busting uses content hashing.
 
-### Version Tag (optional)
+### Hash-Based Change Detection
 
-```js
-/* __JSA_CARD__ v1.2.0
-...
-__JSA_CARD_END__ */
+On each `ha.frontend.installCard()` call:
+
+1. Decode `__JSA_CARD__` block → SHA-256 hash of decoded source.
+2. Compare against stored hash for this script.
+3. **Match:** return existing URL immediately — no I/O.
+4. **Mismatch / first run:** write file, update Lovelace resource, store new hash.
+
+Stored in `card-registry.json` per script:
+
+```json
+{
+  "openligadb": {
+    "hash": "a3f8c21b9d...",
+    "resourceUrl": "/local/jsa-cards/openligadb-card.js?v=a3f8c21b",
+    "resourceId": "5138934e9dbc4819a6895803ad0c93cf",
+    "cardName": "openligadb-card"
+  }
+}
 ```
 
-The version tag is used for human-readable changelog tracking. Cache-busting uses content hashing, not version numbers.
+**Preamble changes don't change the hash** — the hash covers only the decoded card source. To force reinstall when only the preamble changes, bump a version comment inside the card source.
 
 ---
 
-## 4. `@card` Script Header Tag
+## 3. `@card` Script Header Tag
 
 ```js
 /**
- * @name OpenLigaDB — BVB
+ * @name OpenLigaDB
  * @icon mdi:soccer
- * @card dev
- * @version 1.2.0
+ * @card
+ * @version 2.0.0
  */
 ```
 
@@ -86,13 +83,11 @@ The version tag is used for human-readable changelog tracking. Cache-busting use
 |---|---|
 | *(absent)* | No card. `ha.frontend.installCard()` throws. |
 | `@card` | Card is active. `installCard()` installs and registers on script start. |
-| `@card dev` | **Development mode.** `installCard()` skips file write and Lovelace registration. Card code is served live from memory to the preview panel. Script list shows a yellow **DEV** badge. Remove when ready to ship. |
+| `@card dev` | **Development mode.** `installCard()` skips file write and Lovelace registration. Card code is served live from memory to the preview panel. Script list shows a yellow **DEV** badge. Remove `dev` when ready to ship. |
 
 ---
 
-## 5. API: `ha.frontend.installCard(options?)`
-
-### Signature
+## 4. `ha.frontend.installCard()`
 
 ```typescript
 ha.frontend.installCard(options?: {
@@ -101,420 +96,421 @@ ha.frontend.installCard(options?: {
 }): Promise<string>                  // Resolves to the installed resource URL
 ```
 
-### Behavior
+### What happens at install time
 
-1. Decodes the `__JSA_CARD__` block from the current script file.
-2. Computes a SHA-256 hash of the decoded card source.
-3. Compares against the stored hash for this script.
-4. **Hash unchanged:** returns the existing resource URL immediately — no file write, no Lovelace API call.
-5. **Hash changed or first install:**
-   - Writes `config/www/jsa-cards/<script-name>-card.js`
-   - Updates (or creates) the Lovelace resource entry via WebSocket, including a cache-busting hash in the URL
-6. Returns `/local/jsa-cards/<script-name>-card.js?v=<hash8>`.
+1. Decode `__JSA_CARD__` block.
+2. Compute SHA-256 hash of decoded source.
+3. If hash matches stored value and file exists: return existing URL.
+4. Otherwise:
+   - Prepend `window.customCards.push(...)` synchronously at top of file (required for HA card picker).
+   - Prepend `__jsa__` preamble with `{{SCRIPT_ID}}` replaced.
+   - Write `config/www/jsa-cards/<scriptName>-card.js`.
+   - Register or update Lovelace resource via WebSocket (cache-busting hash in URL).
+5. Return `/local/jsa-cards/<scriptName>-card.js?v=<hash8>`.
 
-### Cache-Busting
+### Card Picker Registration
 
-```
-/local/jsa-cards/openligadb-card.js?v=a3f8c21b
-```
-
-When the card source changes, the hash changes, the URL changes, and all connected HA browser sessions fetch the new version automatically. No manual cache clearing.
-
-### Config Injection
-
-The `config` option is passed to the card's `setConfig()` on first connect via a thin wrapper injected at install time:
+The `window.customCards` block is prepended **synchronously** before all other code so HA reads it at module load time, before any async setup runs. This is required for the card to appear in both the legacy Lovelace picker and the Sections dashboard picker.
 
 ```js
-// Injected by the addon — transparent to the card author
-const __jsa_config__ = { entity_id: 'sensor.openligadb_bvb', title: 'BVB' };
-const __orig_define__ = customElements.define.bind(customElements);
-customElements.define = (name, cls) => {
-  class WrappedCard extends cls {
-    connectedCallback() {
-      super.connectedCallback?.();
-      if (__jsa_config__ && this.setConfig) this.setConfig(__jsa_config__);
-    }
-  }
-  __orig_define__(name, WrappedCard);
-};
-```
-
-The card author writes a normal `setConfig(config)` — no addon-specific code required.
-
-### Error Handling
-
-```
-throws: 'No @card block found in script.'       // __JSA_CARD__ block missing
-throws: 'Script has no @card header tag.'        // @card not declared
-throws: 'File write failed: <reason>'
-throws: 'Lovelace resource registration failed: <reason>'
-```
-
----
-
-## 6. Card Editor: Virtual Tab
-
-Although the card code lives inside the script file, the editor treats it as a **separate virtual tab** — with its own Monaco instance, its own IntelliSense context, and its own snippet set. The card author never sees Base64. They see their card code.
-
-### Tab Coupling
-
-When a script with `@card` is open, a card tab appears attached to it:
-
-```
-[ openligadb.js ] [ 🃏 Card ]   ← tabs in the editor header
-```
-
-- Opening the script tab also shows the card tab in the tab bar.
-- Clicking the card tab opens the virtual card editor.
-- Saving the card tab re-encodes the card code to Base64 and writes the `__JSA_CARD__` block back into the script file. The script file's modification time updates — it's a single file save.
-- Closing the script tab closes the card tab.
-
-### First-Time Card Creation
-
-When `@card` is declared but no `__JSA_CARD__` block exists yet, the card tab shows a creation prompt:
-
-```
-No card found in this script yet.
-
-Choose a starting template:
-[ LitElement (recommended) ]  [ HTMLElement (minimal) ]  [ Empty ]
-```
-
-Selecting a template encodes the boilerplate, appends the `__JSA_CARD__` block to the script file, and opens the editor.
-
-### Card-Specific IntelliSense
-
-The virtual card editor loads a separate type context:
-
-- `HomeAssistant` — `hass.states`, `hass.callService`, `hass.user`, `hass.themes`, etc.
-- `LovelaceCard` — `setConfig()`, `getCardSize()`, `getConfigElement()`
-- `LitElement`, `html`, `css` (if LitElement template was used)
-- HA CSS custom properties — auto-complete for `var(--primary-color)`, `var(--card-background-color)`, etc. inside template literals
-
-### Card-Specific Snippets
-
-The snippet toolbar in the card editor shows a different set than the automation editor:
-
-| Snippet | Inserts |
-|---|---|
-| `LitElement Card` | Full boilerplate: `properties`, `render()`, `styles`, `setConfig()`, `getCardSize()` |
-| `HTMLElement Card` | Minimal: `connectedCallback`, `set hass()`, `setConfig()` |
-| `getConfigElement()` | `ha-form`-based config editor scaffold |
-| HA Theme Variables | Palette of all `var(--...)` custom properties |
-| `__jsa__.callAction()` | Direct card→script action call |
-
----
-
-## 7. Toolbar Integration
-
-When the active script declares `@card`, the editor toolbar shows a card button:
-
-```
-[ Save ] [ Snippets ▾ ] [ Wrap ] [ 🃏 Card ▾ ]
-```
-
-`🃏 Card ▾` dropdown:
-
-| Action | Description |
-|---|---|
-| Edit Card | Open / focus the virtual card tab |
-| Preview | Toggle the live preview panel |
-| Deploy | Manually run `ha.frontend.installCard()` |
-| Go live | Remove `dev` from `@card dev` and deploy |
-
----
-
-## 8. Live Preview
-
-Writing CSS and layout without visual feedback is not viable. The preview panel is a core part of the card development workflow.
-
-### Layout
-
-A **floating panel** that the developer positions alongside the editor. Position and size persist in `localStorage` per script.
-
-```
-┌─ openligadb.js ──────────┬─ 🃏 Card ─────────────────────────────┐
-│  ha.register(...)        │  class OpenLigaDBCard extends Lit...   │
-│  ha.frontend.install...  │    render() {                          │
-│                          │      return html`                       │
-│                          │        <ha-card>...                    │
-└──────────────────────────┴────────────────────────────────────────┘
-
-  ╔═ Preview: openligadb-card ════════════════════[─][□][×]═╗
-  ║  [1col] [2col] [4col] [──────────┤ 380px ├──] [↔ free]  ║
-  ║ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ ║
-  ║  ┌─────────────────────────────────────────────────┐    ║
-  ║  │  🏆 BVB Next Match                              │    ║
-  ║  │  Mo 14.04 · 18:30 · vs. Bayern München         │    ║
-  ║  └─────────────────────────────────────────────────┘    ║
-  ║ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ ║
-  ║  ▼ Entity States (mock hass)                           ║
-  ║    sensor.openligadb_bvb  state: "upcoming"  [edit]    ║
-  ║    attrs: next_match, date, opponent         [+ add]   ║
-  ║                                                        ║
-  ║  ▼ Errors  (none)                                      ║
-  ╚════════════════════════════════════════════════════════╝
-```
-
-### Width Presets
-
-Lovelace cards render very differently across column widths. CSS must be tested at realistic sizes:
-
-| Preset | Width | Represents |
-|---|---|---|
-| **1col** | ~180 px | Narrow column on a dense dashboard |
-| **2col** | ~380 px | Standard single card |
-| **4col** | ~760 px | Full-width or sidebar card |
-| **↔ Free** | drag | Any custom width |
-
-The preview iframe's viewport width is set to the selected value. The card renders exactly as it would on a real dashboard.
-
-### Auto-Reload on Save
-
-Every Ctrl+S on the card tab re-encodes the block, writes the script file, and reloads the preview iframe. No manual refresh needed.
-
-### Live Data Loop (`@card dev` mode)
-
-When `@card dev` is active and the script is running:
-
-1. The script calls `ha.update('sensor.openligadb_bvb', 'upcoming', { next_match: ... })` with real API data.
-2. The addon captures the state update and forwards it to the preview iframe as a mock `hass` state change.
-3. The card re-renders with live data — no file install, no browser refresh, no Lovelace roundtrip.
-
-**The dev loop: edit card → save → preview updates instantly with real backend data.**
-
-### Mock `hass` Panel
-
-The **Entity States** section in the preview panel:
-
-- In `@card dev` mode: entities updated by the running script are injected automatically.
-- Manually: add any entity ID with arbitrary state and attribute values.
-- The mock `hass` object passed to the card matches the real HA `hass` structure exactly (`hass.states[id].state`, `hass.states[id].attributes`, etc.).
-- Values persist in `localStorage` per script.
-
-### Error Reporting
-
-Card runtime errors are caught via `window.onerror` / `unhandledrejection` in the preview iframe and forwarded to the addon log stream:
-
-```
-[openligadb-card][Preview] TypeError: Cannot read properties of undefined (reading 'state')
-    at OpenLigaDBCard.render (openligadb-card:42)
-```
-
----
-
-## 9. Hash-Based Change Detection
-
-Stored in addon state per script:
-
-```json
-{
-  "openligadb": {
-    "cardHash": "a3f8c21b9d...",
-    "resourceUrl": "/local/jsa-cards/openligadb-card.js?v=a3f8c21b",
-    "resourceId": "12"
-  }
-}
-```
-
-On each `ha.frontend.installCard()` call:
-
-1. Decode `__JSA_CARD__` block → hash the source.
-2. Compare against stored hash.
-3. **Match:** return existing URL. No I/O.
-4. **Mismatch / first run:** write file, update Lovelace resource, store new hash.
-
----
-
-## 10. `ha.action()` — Universal Script Entry Point ✅ Implemented
-
-Data normally flows one way: script → HA entities → `hass.states` → card renders. `ha.action()` is the reverse channel: any external trigger calls a named handler inside the running script.
-
-```js
-// Script — define once, trigger from anywhere
-ha.action('refresh', async () => { await update(); });
-ha.action('set-team', async ({ teamId }) => { CONFIG.teamId = teamId; await update(); });
-```
-
-One handler, multiple possible trigger sources:
-
-### Trigger 1 — Card Tap / Card UI
-
-The card calls `__jsa__.callAction()`. Transport via HA event bus (see Section 10b). No HA entity needed, supports payloads and return values.
-
-```js
-// Card — __jsa__ is injected as preamble at card install time
-refreshBtn.onclick = () => __jsa__.callAction('refresh');
-dropdown.onchange = (e) => __jsa__.callAction('set-team', { teamId: e.target.value });
-```
-
-**When to use:** Tap-to-refresh, UI-internal state changes, parameterized calls, anything invisible to HA.
-
-### Trigger 2 — HA Button Entity (linked via `ha.register()`) ✅ Implemented
-
-A button entity visible in the HA UI routes its press to a named action. The handler is shared with all triggers — no `ha.on()` needed.
-
-```js
-ha.register('button.openligadb_refresh', {
-  name: 'Manual Refresh',
-  icon: 'mdi:refresh',
-  action: 'refresh'   // ← MQTT button press routes to ha.action('refresh')
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'openligadb-card',
+  name: 'OpenLigaDB',
+  description: 'Tracks football match data',
+  preview: true,
 });
 ```
 
-**When to use:** The trigger should be visible in HA — usable from automations, dashboards, or voice assistants.
+`preview: true` means HA renders a live thumbnail in the picker using `getStubConfig()`. Use `preview: false` for cards that require real HA state to be meaningful.
 
-### Trigger 3 — HA Automation Service Call (Future)
+### Sections Dashboard: `getGridOptions()` Required
 
-```yaml
-service: jsa.call_action
-data:
-  script: openligadb
-  action: refresh
+The HA sections dashboard (default from HA 2025+) card picker **only shows cards that implement `static getGridOptions()`**. Without it the card is invisible to the picker even if correctly registered.
+
+```js
+static getGridOptions() {
+  return { rows: 3, columns: 12, min_rows: 2, max_rows: 8, min_columns: 4, max_columns: 12 };
+}
 ```
 
-### Comparison
+### Startup & Post-Install Cleanup
 
-| | `ha.on()` | `ha.action()` |
-|---|---|---|
-| Reacts to HA entity state change | Yes | Via linked `ha.register()` |
-| Card UI trigger | No | Yes (`__jsa__.callAction`) |
-| Payload support | No | Yes |
-| Return values | No | Yes |
-| One handler, multiple triggers | No | Yes |
-| Visible in HA UI | Yes (entity) | Optional (only if registered) |
+`CardManager.performStartupCleanup(knownCardNames)` removes orphaned card JS files and Lovelace resources — i.e., resources for scripts that no longer exist or no longer carry a `@card` header.
 
-### Error Handling
-
-| Scenario | Behavior |
-|---|---|
-| Action name not registered | Addon logs `warn: Unknown action "x" for script "openligadb"` |
-| Script not running | `callAction()` rejects; card shows "Script not running" |
-| Handler throws | Caught and logged at `error` level in the script's log stream |
+Called in two places:
+1. **`kernel.start()`** — once at startup, after HA connects, before autostart.
+2. **`worker-manager.js`** — fire-and-forget after each successful production `installCard()`, so dev iterations don't accumulate stale Lovelace entries.
 
 ---
 
-## 10b. `__jsa__` Injection — Transport Architecture
+## 5. `__jsa__` Preamble — Transport Architecture
 
-`__jsa__` is a small helper object prepended to the card code at install time. It bridges the Lovelace frontend and the addon backend without requiring any imports or knowledge of the addon's Ingress URL.
+`__jsa__` is prepended to the card code at install time. It bridges the Lovelace frontend and the addon backend without requiring any imports or knowledge of the addon's Ingress URL.
 
 ### The Transport Problem
 
-The Lovelace card runs in the HA browser frontend. The addon runs as a separate Node.js process behind Ingress. The card **cannot** directly reach the addon's Socket.io server — it has no Ingress URL and Socket.io is not loaded in the HA frontend context.
+The Lovelace card runs in the HA browser frontend. The addon runs as a separate Node.js process behind Ingress. The card **cannot** directly reach the addon's Socket.io server — it has no Ingress URL.
 
 ### Solution: HA Event Bus as Bidirectional Transport
 
-The card uses `hass.connection` — the HA WebSocket connection already present in every Lovelace frontend. It fires a custom HA event; the addon's `ha-connection.js` receives it via its own WebSocket subscription, routes to the worker, and fires a response event back. The card receives the response via its own subscription.
-
 ```
-Card (browser)            HA Event Bus                Addon (ha-connection.js)
-──────────────            ────────────                ────────────────────────
+Card (browser)             HA Event Bus              Addon (kernel.js)
+──────────────             ────────────              ─────────────────
 callAction('refresh')
   │
-  ├─fire_event──────────► jsa_action               ──► workerManager.callAction()
-  │                       { script, action,                │
-  │                         payload, corr_id }             ▼ worker runs handler
-  │                                                   fire_event ◄────────────
+  ├─ subscribe ──────────► jsa_action_result ◄──────────────────────┐
+  │                                                                  │
+  ├─ hass.callWS ────────► jsa_action                               │
+  │                        { script, action,                         │
+  │                          payload, corr_id }                      │
+  │                                    │                             │
+  │                          workerManager.callAction()              │
+  │                                    │ worker runs handler         │
+  │                                    └──► fireEvent ──────────────┘
   │
-  ◄─subscribe──────────── jsa_action_result
+  ◄─ event received ─────── jsa_action_result
       { corr_id, result }
   │
 resolve(result)
 ```
 
-### `__jsa__` Object (injected as preamble at install time)
+### Reliability: Three-Layer Defense
+
+Double-delivery of `jsa_action` events (caused by transient dual WS subscriptions on reconnect) is handled at three levels:
+
+1. **`ha-connection.js`** — `_subscribed` guard prevents duplicate `subscribe_events` calls on reconnect.
+2. **`kernel.js`** — `_seenCorrIds` Set deduplicates `jsa_action` events by correlation ID (30s TTL).
+3. **`__jsa__` preamble** — `settled` flag + 1s error grace period: if an error arrives first but a success follows within 1s, the success wins.
+
+### Unsubscribe Safety
+
+The HA WebSocket library's unsubscribe function returns a Promise that may reject with an internal error. This is caught silently to prevent unhandled rejection crashes:
 
 ```js
-const __jsa__ = (() => {
-  let _conn = null;
-  const _pending = new Map();
-
-  function _subscribe(conn) {
-    if (_conn === conn) return;
-    _conn = conn;
-    conn.subscribeEvents((event) => {
-      const p = _pending.get(event.data.correlation_id);
-      if (!p) return;
-      _pending.delete(event.data.correlation_id);
-      if (event.data.error) p.reject(new Error(event.data.error));
-      else p.resolve(event.data.result ?? null);
-    }, 'jsa_action_result');
-  }
-
-  return {
-    scriptId: '{{SCRIPT_ID}}',  // replaced with script filename (no extension) at install time
-
-    connect(hass) { _subscribe(hass.connection); },
-
-    callAction(name, payload = {}) {
-      if (!_conn) return Promise.reject(new Error('__jsa__ not connected — call connect(hass) first'));
-      const correlationId = Math.random().toString(36).slice(2);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          _pending.delete(correlationId);
-          reject(new Error(`Action "${name}" timed out after 10s`));
-        }, 10000);
-        _pending.set(correlationId, {
-          resolve: (r) => { clearTimeout(timer); resolve(r); },
-          reject:  (e) => { clearTimeout(timer); reject(e); },
-        });
-        _conn.sendMessage({
-          type: 'fire_event',
-          event_type: 'jsa_action',
-          event_data: { script: this.scriptId, action: name, payload, correlation_id: correlationId },
-        });
-      });
-    },
-  };
-})();
+Promise.resolve().then(() => u()).catch(() => {});
 ```
 
-`{{SCRIPT_ID}}` is replaced with the script's base filename (e.g. `openligadb`) by `CardManager.installCard()` before writing the card file.
+### Current Preamble Version: v5
 
-### Card Integration Pattern
-
-```js
-set hass(hass) {
-  __jsa__.connect(hass);  // idempotent — safe to call on every hass update
-  this._hass = hass;
-  this._render();
-}
-
-// Then anywhere in the card:
-refreshBtn.onclick = () => __jsa__.callAction('refresh');
-```
-
-### Addon Side — HA Event Listener ✅ Implemented
-
-In `ha-connection.js`, inside the existing `subscribeToEvents` callback:
-
-```js
-if (event.event_type === 'jsa_action') {
-  const { script, action, payload, correlation_id } = event.data;
-  workerManager.callAction(script + '.js', action, payload ?? {})
-    .then(result => this._fireHAEvent('jsa_action_result', { correlation_id, result }))
-    .catch(err  => this._fireHAEvent('jsa_action_result', { correlation_id, error: err.message }));
-}
-```
-
-`_fireHAEvent` sends a `fire_event` command over the addon's own WebSocket connection to HA.
-
-### Security
-
-- Only authenticated HA users can fire WebSocket events — existing HA auth handles this.
-- The addon validates `script` before routing — unknown or stopped scripts receive `{ error: 'Script not running' }`.
-- Response events carry the `correlation_id` so only the originating card instance resolves.
+Key behaviors:
+- Stores `_hass` alongside `_conn` — required to use `hass.callWS()` (which handles `fire_event` response lifecycle correctly; `conn.sendMessage` leaves the response unhandled).
+- Per-call `subscribeMessage` subscription created **before** firing the event to eliminate the subscription-registration vs. result-delivery race condition.
+- 20s action timeout.
 
 ---
 
-## 11. Distributing a Script Pack
+## 6. Card Editor & Live Preview
+
+### Virtual Card Tab
+
+When a script with `@card` is open, a card tab appears in the editor:
+
+```
+[ openligadb.js ]  [ 🃏 Card ]
+```
+
+- Coupled lifecycle: opens/closes with the script tab.
+- Saving re-encodes the card source to Base64 and writes the `__JSA_CARD__` block back into the script file.
+- First-time: if `@card` is declared but no `__JSA_CARD__` block exists, a template picker is shown.
+
+### Card-Specific IntelliSense & Snippets
+
+The card editor loads a separate type context: `HomeAssistant`, `LovelaceCard`, `LitElement`, HA CSS custom properties.
+
+| Snippet | Inserts |
+|---|---|
+| `Wizard-Card` | Full editor boilerplate using `__jsa__.wizard()` |
+| `HTMLElement Card` | Minimal `set hass()`, `setConfig()`, `getCardSize()` |
+| `Heartbeat Setup` | Instance ID reading from config + auto-tracking call |
+| `Non-blocking Action` | `ha.register()` + fire-and-forget `updateData()` pattern |
+| `Entity Naming` | `sensor.${SCRIPT_NAME}_${id}` convention |
+| `Live Badge` | Pulsing dot CSS animation for live states |
+| `config-changed` | Correct dispatch including required `type` field |
+| `getGridOptions` | Sections dashboard sizing declaration |
+
+### Live Preview Panel
+
+A floating, draggable panel that positions itself alongside the editor. Position and size persist in `localStorage` per script.
+
+**Width presets:**
+
+| Preset | Width | Represents |
+|---|---|---|
+| **1col** | ~180 px | Narrow column |
+| **2col** | ~380 px | Standard single card |
+| **4col** | ~760 px | Full-width card |
+| **↔ Free** | drag | Any custom width |
+
+**`@card dev` live data loop:**
+1. Script calls `ha.update('sensor.openligadb_7', 'live', { score: '2:1' })`.
+2. Addon captures state update, forwards as mock `hass` state change to preview iframe.
+3. Card re-renders with real backend data — no file install, no browser refresh.
+
+**Error forwarding:** Card runtime errors are caught via `window.onerror` / `unhandledrejection` in the preview iframe and forwarded to the JSA log stream.
+
+---
+
+## 7. `ha.action()` — Card ↔ Script Communication
+
+```js
+// Script — define named handlers
+ha.action('refresh', async ({ entityId }) => { await updateMatchData(); });
+ha.action('get_leagues', async () => KNOWN_LEAGUES);
+ha.action('get_teams', async ({ league, season }) => fetchTeams(league, season));
+ha.action('heartbeat', async ({ instanceId, entityId, autoDelete }) => {
+  updateInstanceLastSeen(instanceId, entityId, autoDelete);
+});
+```
+
+```js
+// Card — call via __jsa__
+refreshBtn.onclick = () => __jsa__.callAction('refresh', { entityId: this._entityId });
+```
+
+### Error Handling
+
+| Scenario | Behavior |
+|---|---|
+| Action not registered | Addon logs `warn: Unknown action "x"` |
+| Script not running | `callAction()` rejects after 20s timeout |
+| Handler throws | Caught and logged at `error` level in script log stream |
+
+---
+
+## 8. Developer Experience — Abstractions & Helpers
+
+These are the lessons from building the OpenLigaDB card, translated into framework improvements. Each addresses a concrete pain point.
+
+### 8.1 Declarative Config Wizard — `__jsa__.wizard()`
+
+**Problem:** Every configurable card needs a multi-step setup wizard with loading states, back navigation, error handling, and a correct `config-changed` dispatch. The OpenLigaDB editor class was ~130 lines of boilerplate for this alone — including the non-obvious `type` field requirement that crashes HA if missing.
+
+**Solution:** Inject a wizard builder into the `__jsa__` preamble:
+
+```js
+// In OpenligadbCardEditor.connectedCallback():
+__jsa__.wizard(this, {
+  steps: [
+    {
+      id: 'league',
+      label: 'Liga wählen',
+      action: 'get_leagues',
+      valueKey: 'short',
+      labelKey: 'name',
+      // Optional: season field shown alongside this step
+      seasonField: true,
+    },
+    {
+      id: 'team',
+      label: 'Team wählen',
+      action: 'get_teams',
+      // Passes the previous step's selected value as payload
+      depends: { league: 'league', season: 'season' },
+      valueKey: 'teamId',
+      labelKey: 'teamName',
+    },
+  ],
+  onComplete: (values, instanceId) => ({
+    entityId: values.entityId,
+    instanceId,
+    autoDelete: true,
+  }),
+});
+```
+
+The framework:
+- Renders each step as a styled `<select>` with loading spinner and error state.
+- Generates a `instanceId` (UUID) on first run, re-uses it on reconfigure.
+- Dispatches `config-changed` with the correct `type` field on completion.
+- Dispatches `jsa-editor-close` to close the editor panel.
+- Editor class shrinks from ~130 lines to ~10 lines.
+
+### 8.2 Auto-Heartbeat via `connect()`
+
+**Problem:** Every card with instance tracking must send periodic heartbeats — this is mandatory boilerplate that card authors shouldn't have to implement.
+
+**Solution:** `__jsa__.connect(hass)` handles it automatically:
+
+```js
+set hass(hass) {
+  __jsa__.connect(hass); // triggers heartbeat automatically — no extra code needed
+  this._hass = hass;
+  this._render();
+}
+```
+
+Internally, `connect()`:
+1. Calls `callAction('heartbeat', { instanceId, entityId, autoDelete })` on first connect.
+2. Repeats every 60 minutes via a local `setInterval`.
+3. Reads `instanceId` and `autoDelete` from `this._config` (set via `setConfig()`).
+4. Is idempotent — safe to call on every `set hass()` update.
+
+The card author only needs to store the config: `setConfig(cfg) { this._cfg = cfg; }`.
+
+### 8.3 Error Boundary → JSA Log
+
+**Problem:** Card runtime errors disappear silently in the browser unless the developer has DevTools open.
+
+**Solution:** Inject a global error handler into the card file at install time:
+
+```js
+// Injected once per card file, before the card class
+window.__jsa_errors__ = window.__jsa_errors__ || (() => {
+  const forward = (msg, src, line) =>
+    fetch('/_jsa_card_error', { method: 'POST', body: JSON.stringify({ msg, src, line,
+      script: document.currentScript?.src }) }).catch(() => {});
+  window.addEventListener('error', e => forward(e.message, e.filename, e.lineno));
+  window.addEventListener('unhandledrejection', e => forward(e.reason?.message, '', 0));
+})();
+```
+
+Errors appear in the JSA log stream tagged with the script name — no browser DevTools required.
+
+### 8.4 High-Level API: `ha.frontend.defineCard()` *(Planned)*
+
+The most ambitious abstraction — eliminates all Custom Element boilerplate:
+
+```js
+ha.frontend.defineCard({
+  wizard: [
+    { id: 'league', label: 'Liga wählen', action: 'get_leagues',
+      valueKey: 'short', labelKey: 'name', seasonField: true },
+    { id: 'team', label: 'Team wählen', action: 'get_teams',
+      depends: { league: 'league', season: 'season' },
+      valueKey: 'teamId', labelKey: 'teamName' },
+  ],
+
+  render({ state, attr, config }) {
+    return `
+      <div class="header">${state === 'live' ? '🔴 LIVE' : 'Nächstes Spiel'}</div>
+      <div class="score">${attr.score_home ?? 'VS'} : ${attr.score_away ?? ''}</div>
+    `;
+  },
+
+  styles: `
+    .header { font-size: .85em; color: var(--secondary-text-color); }
+    .score  { font-size: 2.2em; font-weight: 900; }
+  `,
+
+  onTap({ entityId }) {
+    return __jsa__.callAction('refresh', { entityId });
+  },
+
+  gridOptions: { rows: 3, columns: 12, min_rows: 2, max_rows: 8 },
+});
+```
+
+The framework generates the full Custom Element: `set hass()`, `setConfig()`, `getGridOptions()`, `getConfigElement()`, Shadow DOM, heartbeat, error boundary, config-changed dispatch. The developer writes only render logic and action handlers.
+
+This is **non-breaking** — existing cards using the manual approach continue to work. `defineCard()` is an optional higher-level alternative.
+
+---
+
+## 9. Instance Tracking & Cleanup
+
+Multiple displays in a home may show the same team card. The backend tracks which card instances are active and cleans up team entities when all instances are gone.
+
+### 9.1 Registry Schema
+
+```json
+{
+  "sensor.openligadb_7": {
+    "teamId": 7,
+    "teamName": "Borussia Dortmund",
+    "leagueShort": "bl1",
+    "season": 2025,
+    "skipMatchId": null,
+    "instances": {
+      "uuid-abc123": { "lastSeen": 1713456789, "autoDelete": true },
+      "uuid-def456": { "lastSeen": 1713456789, "autoDelete": false }
+    }
+  }
+}
+```
+
+One entity per team (`sensor.openligadb_<teamId>`). Multiple card instances (on different dashboards or displays) share the entity but have independent instance records.
+
+### 9.2 Instance ID Lifecycle
+
+- **Generated** by `__jsa__.wizard()` on first card configuration (UUID v4).
+- **Preserved** on reconfigure — same display, same UUID.
+- **Stored** in Lovelace card YAML alongside `entityId` and `autoDelete`.
+
+```yaml
+type: custom:openligadb-card
+entityId: sensor.openligadb_7
+instanceId: uuid-abc123
+autoDelete: true
+```
+
+### 9.3 Heartbeat Mechanism
+
+The card calls `callAction('heartbeat', { instanceId, entityId, autoDelete })`:
+- On first `connect(hass)`.
+- Every 60 minutes thereafter (local `setInterval`).
+
+The `heartbeat` action handler updates `registry.teams[entityId].instances[instanceId].lastSeen` and `autoDelete`.
+
+### 9.4 Auto-Delete Logic
+
+Run in the script's scheduled polling tick (or a dedicated interval):
+
+```
+For each entityId in registry.teams:
+  instances = registry.teams[entityId].instances
+  if instances is empty → delete entity immediately
+  if ALL instances have autoDelete=true:
+    if ALL instances have lastSeen > threshold → delete entity
+  if ANY instance has autoDelete=false → never auto-delete
+```
+
+**Threshold:** Configurable in JSA Settings (e.g. `card_instance_timeout_days`, default: **7 days**). 7 days survives short holidays; catches cards removed from dashboards within a week.
+
+**On delete:**
+- Remove entity from `registry.teams`.
+- Call `ha.unregister(entityId)` to remove the HA entity.
+- Log at `info` level.
+
+### 9.5 Manual Cleanup
+
+A "Manage Teams" view in the card editor (accessible via the gear icon on a configured card) shows all tracked teams with a delete button — for users with `autoDelete=false` or who want immediate cleanup.
+
+---
+
+## 10. Liga List & Season Detection
+
+Lessons from the OpenLigaDB implementation.
+
+### Liga Selection in Wizard
+
+**Wizard shows** only main leagues (BL1, BL2, BL3, + "Sonstige" custom input). DFB-Pokal, Champions League, Europa League, Conference League are **not** in the selector — a team rarely wants to track only their cup matches.
+
+**Backend checks all** known competitions regardless: `updateMatchData()` fetches all leagues in `KNOWN_LEAGUES` (including UCL, UEL, UECL, DFB) so that multi-competition teams (e.g. BVB in BL1 + UCL simultaneously) always get their next upcoming match regardless of which competition it's in.
+
+### Season Detection — Visible & Editable
+
+`detectSeason()` is a heuristic (`month >= 6 ? year : year - 1`) that works for regular club football but breaks for tournaments like WM/EM (e.g. WM2026 runs in summer 2026 but `detectSeason()` would return 2025 in April 2026).
+
+**Fix:** Show the auto-detected season in the wizard as an editable field, not a hidden value:
+
+```
+Liga: [ 1. Bundesliga ▼ ]
+Saison: [ 2025 ↕ ]    ← auto-detected, user can correct
+```
+
+The user sees what will be used and can override before confirming. The script stores the user-confirmed season, not a re-calculated one.
+
+---
+
+## 11. Distribution
 
 ### As Author
 
 1. Write the script with `@card dev`.
 2. Develop the card in the virtual card tab with live preview.
-3. Remove `@card dev` → the card installs and registers on next run.
-4. Paste the `.js` file to GitHub Gist (or any raw URL host).
+3. Remove `@card dev` (change to `@card`) → card installs and registers on next run.
+4. Paste the `.js` file to GitHub Gist or any raw URL host.
 5. Share the raw URL.
 
 ### As User
@@ -531,278 +527,34 @@ The addon downloads the file, detects the `__JSA_CARD__` block, runs the script,
 
 | Concern | Mitigation |
 |---|---|
-| Path traversal | Card file write target is always `config/www/jsa-cards/` — no user-controlled path segment. |
-| Overwriting user files | `force: false` default. |
-| WebSocket auth | Uses the existing authenticated `haConnection`. |
-| `jsa/action` spoofing | Only authenticated HA users can send WebSocket messages. |
-| Card code execution | Runs in the browser, sandboxed to the Lovelace frontend. No server-side execution. |
-| Import from URL | Warning shown in import dialog. User must confirm. |
+| Path traversal | Card file write target is always `config/www/jsa-cards/` — no user-controlled path segment |
+| Overwriting user files | `force: false` default; hash-based skip |
+| WebSocket auth | Uses the existing authenticated `haConnection` |
+| `jsa_action` spoofing | Only authenticated HA users can send WebSocket events |
+| Card code execution | Runs in the browser, sandboxed to the Lovelace frontend — no server-side execution |
+| Import from URL | Warning shown in import dialog. User must confirm |
 
 ---
 
-## 13. Example: Complete Script Pack
+## 13. Implementation Status
 
-A single file. Zero manual setup. Share the URL, others import it in one click.
+| Phase | Status | Delivers |
+|---|---|---|
+| **0** | ✅ Done | `ha.action()` — named action handlers, button entity routing |
+| **1** | ✅ Done | `__JSA_CARD__` block, `ha.frontend.installCard()`, hash detection, Lovelace registration |
+| **2** | ✅ Done | Virtual card tab in Monaco, coupled tab lifecycle, card IntelliSense, snippet library |
+| **3** | ✅ Done | Live preview panel (draggable, width presets, auto-reload), mock `hass` injection |
+| **4** | ✅ Done | `__jsa__` preamble v5, event bus transport, `@card dev`, DEV/CARD badges, live HA state in preview |
+| **5** | ✅ Done | Configurable cards, wizard pattern, `getConfigElement()`, startup + post-install cleanup |
+| **6** | 🔲 Planned | `__jsa__.wizard()` declarative wizard builder, auto-heartbeat in `connect()`, error boundary → JSA log |
+| **7** | 🔲 Planned | Instance tracking registry, auto-delete with configurable threshold, "Manage Teams" UI |
+| **8** | 🔲 Planned | `ha.frontend.defineCard()` high-level API, season field in wizard, liga list refinement |
 
-```js
-/**
- * @name OpenLigaDB — BVB
- * @icon mdi:soccer
- * @description Tracks upcoming BVB matches. Installs its own Lovelace card.
- * @npm axios
- * @permission network
- * @card
- * @version 1.2.0
- */
+### Phase 6 Priority
 
-const axios = require('axios');
-const ENTITY = 'sensor.openligadb_bvb';
+Phase 6 delivers the highest developer experience improvement per implementation effort:
+- `__jsa__.wizard()` eliminates ~120 lines of wizard boilerplate per card.
+- Auto-heartbeat makes instance tracking transparent.
+- Error boundary removes the biggest debugging friction point.
 
-ha.register(ENTITY, { name: 'BVB Next Match', icon: 'mdi:soccer', initial_state: 'unknown' });
-
-await ha.frontend.installCard({ config: { entity_id: ENTITY, title: 'BVB' } });
-
-ha.action('refresh', async () => { await update(); });
-
-async function update() {
-  const { data } = await axios.get('https://api.openligadb.de/getmatchdata/bl1/2024/7');
-  const next = data.find(m => m.matchIsFinished === false);
-  ha.update(ENTITY, next ? 'upcoming' : 'unknown', {
-    next_match: next?.team2.teamName,
-    date: next?.matchDateTime,
-  });
-}
-
-update();
-ha.schedule('*/30 * * * *', update);
-
-/* __JSA_CARD__
-Y2xhc3MgT3BlbkxpZ2FEQkNhcmQgZXh0ZW5kcyBIVE1MRWxlbWVudCB7CiAgc2V0
-Q29uZmlnKGMpIHsgdGhpcy5fY29uZmlnID0gYzsgfQogIHNldCBoYXNzKGgpIHsK
-...
-X19KU0FfQ0FSRF9FTkRfXw==
-__JSA_CARD_END__ */
-```
-
-One `.js` file. Paste the GitHub raw URL into the Import dialog. Done.
-
----
-
-## 14. Configurable Cards — Setup Wizard
-
-### The Problem with Static Config Forms
-
-HA's standard `getConfigElement()` works well for fixed options — a text field for an entity ID, a toggle for a boolean. But it cannot present **dynamic data** that only the running script knows about: which leagues exist in the API, which teams are in a given league, which devices were discovered on the network.
-
-Static forms require the card author to hard-code all options. That's not acceptable for a "just works" mini-integration.
-
-### Solution: Wizard Mode via `ha.action()`
-
-The card detects whether it has been configured. If not, it renders a **setup wizard** instead of its normal UI. The wizard calls the script backend step by step via `__jsa__.callAction()` to fetch live data — the same network-capable script that is already running.
-
-```
-Card added to dashboard (no config yet)
-         │
-         ▼
-  [ Setup Mode ]  ←─── setConfig({ type: 'custom:openligadb-card' })
-         │
-         ├─ callAction('wizard/leagues') ──→ script fetches API ──→ returns list
-         │
-         ▼
-  User selects league
-         │
-         ├─ callAction('wizard/teams', { leagueId }) ──→ returns teams
-         │
-         ▼
-  User selects team
-         │
-         ├─ dispatch config-changed event
-         │
-         ▼
-  HA saves config to dashboard YAML
-         │
-         ▼
-  [ Display Mode ]  ←─── setConfig({ team_id: 7, team_name: 'BVB', ... })
-```
-
-### Script Side — Registering Wizard Actions
-
-The script registers named `ha.action()` handlers for each wizard step. These run in the script's Node.js context, with full network access:
-
-```js
-// Script (backend)
-ha.action('wizard/leagues', async () => {
-  const { data } = await axios.get('https://api.openligadb.de/getavailableleagues');
-  return data.map(l => ({ id: l.leagueShortcut, name: l.leagueName }));
-});
-
-ha.action('wizard/teams', async ({ leagueId }) => {
-  const { data } = await axios.get(`https://api.openligadb.de/getteams/${leagueId}`);
-  return data.map(t => ({ id: t.teamId, name: t.teamName }));
-});
-```
-
-### Card Side — Wizard State Machine
-
-```js
-setConfig(config) {
-  this._config = config;
-  this._mode = config?.team_id ? 'display' : 'setup';
-  if (this._mode === 'setup' && !this._leagues) this._loadLeagues();
-  this.requestUpdate?.();
-}
-
-async _loadLeagues() {
-  this._loading = true; this.requestUpdate();
-  this._leagues = await __jsa__.callAction('wizard/leagues');
-  this._loading = false; this.requestUpdate();
-}
-
-async _onLeagueSelected(leagueId) {
-  this._selectedLeague = leagueId;
-  this._loading = true; this.requestUpdate();
-  this._teams = await __jsa__.callAction('wizard/teams', { leagueId });
-  this._loading = false; this.requestUpdate();
-}
-
-_onTeamSelected(team) {
-  this.dispatchEvent(new CustomEvent('config-changed', {
-    bubbles: true, composed: true,
-    detail: {
-      config: {
-        ...this._config,
-        league_id: this._selectedLeague,
-        team_id: team.id,
-        team_name: team.name,
-      }
-    }
-  }));
-  // HA receives config-changed, saves to dashboard YAML, calls setConfig() again
-  // → this._mode becomes 'display'
-}
-```
-
-### Wizard UX
-
-```
-┌──────────────────────────────────────────────┐
-│  ⚙ Setup — OpenLigaDB Card                  │
-│                                              │
-│  Step 1 of 2: Select League                  │
-│  ┌──────────────────────────────────────┐    │
-│  │ 🔍  Search...                        │    │
-│  │ ○  Bundesliga 1                      │    │
-│  │ ○  Bundesliga 2                      │    │
-│  │ ○  DFB Pokal                         │    │
-│  └──────────────────────────────────────┘    │
-│                               [ Next → ]     │
-└──────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────┐
-│  ⚙ Setup — OpenLigaDB Card                  │
-│                                              │
-│  Step 2 of 2: Select Team                   │
-│  ┌──────────────────────────────────────┐    │
-│  │ 🔍  Search...                        │    │
-│  │ ○  Borussia Dortmund                 │    │
-│  │ ○  Bayern München                    │    │
-│  │ ○  Bayer 04 Leverkusen               │    │
-│  └──────────────────────────────────────┘    │
-│                    [ ← Back ]  [ Confirm ]   │
-└──────────────────────────────────────────────┘
-```
-
-- Loading spinner while `callAction()` is pending
-- Search filter for long lists
-- Back button to correct a previous step
-- On confirm: `config-changed` fires, HA saves, card transitions to display mode
-
-### Reconfiguration via `getConfigElement()`
-
-After initial setup, clicking "Edit card" in the Lovelace editor calls `getConfigElement()`. The config editor reuses the **same `ha.action()` handlers** to populate dropdowns — so the "which team?" dropdown in the edit dialog always shows live data, not a hard-coded list.
-
-```js
-static getConfigElement() {
-  const el = document.createElement('openligadb-card-editor');
-  return el;
-}
-```
-
-```js
-class OpenLigaDBCardEditor extends HTMLElement {
-  setConfig(config) { this._config = config; this._render(); }
-
-  async _render() {
-    // Re-uses wizard/leagues and wizard/teams actions
-    const leagues = await __jsa__.callAction('wizard/leagues');
-    const teams = this._config.league_id
-      ? await __jsa__.callAction('wizard/teams', { leagueId: this._config.league_id })
-      : [];
-    // render ha-form or custom selects
-  }
-}
-```
-
-### Prerequisite: Script Must Be Running
-
-`callAction()` requires the script to be active. If the script is stopped, `callAction()` rejects and the wizard shows an error:
-
-```
-⚠ Script is not running.
-Start "OpenLigaDB" in JS Automations to configure this card.
-```
-
-This is intentional — the script's network capabilities are what power the wizard. The card makes this dependency explicit rather than silently failing.
-
----
-
-## 15. Implementation Phases
-
-Script Packs are a multi-phase feature. Each phase ships independently and delivers usable value on its own.
-
-| Phase | Status | Name | Delivers |
-|---|---|---|---|
-| **0** | ✅ Done | **`ha.action()`** | Named action handlers, button entity routing via `ha.register({ action: '...' })`, Socket.io `call_action` event for addon UI |
-| **1** | ✅ Done | **Foundation** | `__JSA_CARD__` block parsing & encoding, `ha.frontend.installCard()`, hash-based change detection, writing to `config/www/jsa-cards/`, Lovelace resource registration via HA WebSocket |
-| **2** | ✅ Done | **Card Editor** | Virtual card tab in Monaco, coupled tab lifecycle (open/close with script tab), `__jsa__` type definitions for cards, card snippet library (boilerplate, callAction, config-changed, HA vars), card-mode banner |
-| **3** | ✅ Done | **Live Preview** | Floating preview panel (draggable, position-persistent), width presets (1col/2col/4col/free), auto-reload on Ctrl+S, mock `hass` entity injection, runtime error forwarding from iframe |
-| **4** | ✅ Done | **Dev Mode + `__jsa__`** | `__jsa__` preamble injected at install time, `jsa_action` HA event routing in kernel → worker → `jsa_action_result`, `@card dev` parsed as metadata, DEV/CARD badges in script list, live HA state forwarding into preview, `Card ▾` toolbar dropdown |
-| **5** | ✅ Done | **Configurable Cards** | `ha.action()` wizard pattern (first-run setup), `getConfigElement()` with live-data dropdowns, wizard card snippet, "script not running" fallback UI |
-
-### Phase Dependencies
-
-```
-Phase 0 (ha.action)  ──────────────────────────────────────┐
-Phase 1 (installCard)                                       │
-    └── Phase 2 (card editor)                               │
-            └── Phase 3 (preview)                           │
-                    └── Phase 4 (dev mode + __jsa__)  ◄─────┘
-                            └── Phase 5 (configurable cards)
-```
-
-Phase 4 depends on both Phase 1 (to know the install path for preamble injection) and Phase 0 (`workerManager.callAction()` already implemented — the HA event listener is the remaining piece).
-
-### Value at Each Phase
-
-- **After Phase 0+1:** Script Packs can be authored in any editor and distributed as single files. Cards install automatically with hash-based cache-busting. Button entities route to named action handlers.
-- **After Phase 2:** Card code is written inside JS Automations with proper IntelliSense and boilerplate. The virtual tab hides Base64 encoding completely.
-- **After Phase 3:** CSS and layout work is practical. Width presets let the developer test at real Lovelace column widths without deploying.
-- **After Phase 4:** `__jsa__.callAction()` works from within the card — tap-to-refresh, dropdown-driven config changes, all without HA entities. The full dev loop closes: edit card → live preview with real script data.
-- **After Phase 5:** The card guides the user through dynamic first-run configuration using live data from the running script. Exotic API integrations become zero-setup for end users.
-
-
-### Fehler und Vorschläge nach ersten Tests
-- DEV Badge in der Skriptliste: Wir nutzen das mdi:view-dashboard-outline icon genauso wie die Permission. Wir zeigen damit an, dass es ein Karte enthält. Orange, wenn DEV Mode, dunkelgrau, wenn noch nicht installiert hell grau, wenn installier und läuft.
-- Wenn ich den Karten-Tab schließe, kann ich ihn nicht wieder öffnen. Sollen wir im Skripttab einen open/close Button (mdi:view-dashboard-edit-outline) für die Karte einbauen. Nur sichtbar wenn @card.
-- In der Kartentoolbar stimm was nicht. Cardactions sind rechtsbündig das ist nicht in Ordnung. Für die Snippets benutzen wir auch das Puzzleteil. Das ist ja aus dem Skripttab schon bekannt. 
-- Card preview (mdi:monitor-dashboard nutzen?) wirft einen Fehler: "ReferenceError: __jsa__ is not defined line 108" Die Zeilennummer scheint aber nicht zu stimmen.
-- Können wir Kartenfehler an den JSA-Logger schicken, damit es wartbarer wird?
-- Werden Karten auch irgendwie deinstalliert?
-- Kann man die Packs auch mit TS coden? Also nicht die Karten, sondern das Hauptskript?
-- durchgängig das mdi
-
-
-## Karten Ideen:
-- Das Awtrix-Display bietet eine Vorschau seines Displays als Bild an. Unsere Karte Zeigt genau dieses Bild an und wird auch aktualisiet. Das Bild wird im Browser auch aktualisiert. Config ist die IP Adresse, USR und PW. Noch was?
-- analoguhr gemäß @doc/ideas/uhr.html. Config: 7-Segment-Feld ein- und ausblendbar machen, SWISS_STOP_GO, SMOOTH_SECONDS, DYNAMIC_DATE, PULSE_ON_DONE, GLOW_EFFECT
-- OpenligaDB: @doc/ideas/openligadb-card.js Die Karte hat sich im Layout bewährt. Config-flow: Das Skript hat die shorts für die wichtigsten Ligen fest im Code und bietet diese per SELECT an. Plus sonstige: Hier kann man dann ggf. sein eigene short eingeben. Schritt zwei: Es wird nur der aktuelle Wettbewerb genutzt oder in der Saisonpause, der nächst anstehende. Schritt drei: Das Skript füllt einen Mannschaftsselect mit den Mannschaften des Wettbewerbs. Bei Fußball wird direkt Championsleague, DFB Pokal, europa league mit "aboniert". Bei DFB packen wir noch ein Batch trophy-outline, bei championsleage trophy dazu. europa league mdi:soccer?
+None of these are breaking changes — existing cards continue to work unchanged.

@@ -27,6 +27,7 @@ class HAConnector {
     }
 
     connect() {
+        this._subscribed = false; // reset per-connection subscription guard
         return new Promise((resolve, reject) => {
             console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
             this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
@@ -208,7 +209,11 @@ class HAConnector {
     }
 
     send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(data)); }
-    subscribeEvents() { this.send({ id: this.msgId++, type: 'subscribe_events' }); }
+    subscribeEvents() {
+        if (this._subscribed) return;
+        this._subscribed = true;
+        this.send({ id: this.msgId++, type: 'subscribe_events' });
+    }
     subscribeToEvents(callback) { this.eventListeners.push(callback); }
 
     /**

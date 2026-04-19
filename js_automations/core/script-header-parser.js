@@ -137,6 +137,8 @@ class ScriptHeaderParser {
         const perms = meta.permissions;
         if (perms && perms.length > 0) lines.push(` * @permission ${perms.join(', ')}`);
 
+        if (meta.card) lines.push(` * @card${meta.card === true ? '' : ' ' + meta.card}`);
+
         lines.push(' */');
         
         // 3. Writing back to file

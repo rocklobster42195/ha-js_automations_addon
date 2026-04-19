@@ -314,6 +314,59 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
       const el = document.querySelector('#card-container > *');
       if (el && 'hass' in el) el.hass = { ...mockHass };
     }
+
+    // ── Editor modal (opened via jsa-open-editor postMessage) ───────────────
+    let _editorModal = null;
+    function _openEditorModal() {
+      const editorTag = (_registeredTag || (${safeScriptName} + '-card')) + '-editor';
+      if (!customElements.get(editorTag)) {
+        parent.postMessage({ type: 'jsa-card-error', scriptName: ${safeScriptName}, message: 'No card editor element registered (' + editorTag + '). Does the card define a *-editor custom element?', lineno: 0 }, '*');
+        return;
+      }
+      // Tear down previous modal so _init() runs fresh (picks up latest config)
+      if (_editorModal) { _editorModal.remove(); _editorModal = null; }
+
+      _editorModal = document.createElement('div');
+      _editorModal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--card-background-color,#2c2c2c);border-radius:12px;min-width:300px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.6);';
+
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--divider-color,#383838);display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:.95em;';
+      const closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '&#x2715;';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--primary-text-color,#e0e0e0);font-size:1.1em;padding:0 4px;';
+      closeBtn.onclick = () => { _editorModal.remove(); _editorModal = null; };
+      hdr.appendChild(Object.assign(document.createElement('span'), { textContent: 'Configure Card' }));
+      hdr.appendChild(closeBtn);
+
+      const editorEl = document.createElement(editorTag);
+      editorEl.style.display = 'block';
+      editorEl.hass = mockHass;
+      editorEl.addEventListener('config-changed', (e) => {
+        const cfg = e.detail?.config ?? {};
+        if (cfg.entityId) {
+          const el = document.querySelector('#card-container > *');
+          if (el && typeof el.setConfig === 'function') {
+            try { el.setConfig(cfg); } catch(_) {}
+          }
+        }
+        _updateCardHass();
+        parent.postMessage({ type: 'jsa-action-done', scriptId: ${safeScriptName}, config: cfg }, '*');
+      });
+      editorEl.addEventListener('jsa-editor-close', () => {
+        if (_editorModal) { _editorModal.remove(); _editorModal = null; }
+        parent.postMessage({ type: 'jsa-action-done', scriptId: ${safeScriptName} }, '*');
+      });
+
+      box.appendChild(hdr);
+      box.appendChild(editorEl);
+      _editorModal.appendChild(box);
+      document.body.appendChild(_editorModal);
+      _editorModal.addEventListener('click', e => { if (e.target === _editorModal) { _editorModal.remove(); _editorModal = null; } });
+    }
+
     window.addEventListener('message', (e) => {
       if (e.data?.type === 'jsa-set-hass') {
         _mockStates = e.data.states ?? {};
@@ -327,13 +380,89 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
           }
         }
       }
+      if (e.data?.type === 'jsa-open-editor') _openEditorModal();
     });
 
     // ── Mock __jsa__ (preview: routes callAction via JSA HTTP API, no HA event bus needed) ──
     const _jsaApiBase = window.location.pathname.split('/api/scripts')[0] + '/';
     const __jsa__ = {
       scriptId: ${safeScriptName},
-      connect(hass) { /* preview: no-op — hass provided via mockHass above */ },
+      connect(hass) { /* preview: no-op */ },
+      updateConfig(config) { /* preview: no-op */ },
+      ready() { return Promise.resolve(); },
+      wizard(hostEl, opts) {
+        const sr = hostEl.shadowRoot;
+        if (!sr) return;
+        const steps = opts.steps || [];
+        let stepIdx = 0;
+        const values = {};
+        const cache = {};
+        const CSS = '<style>:host{display:block}.wiz{padding:16px;font-family:inherit}.wiz-title{font-weight:600;margin-bottom:12px;font-size:.95em}select,.wiz-inp{font-family:inherit;padding:8px 12px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);width:100%;box-sizing:border-box;margin-bottom:10px;font-size:1em}.wiz-btns{display:flex;gap:8px;margin-top:4px}.btn-p{background:var(--primary-color);color:#fff;border:none;border-radius:8px;padding:10px 20px;cursor:pointer;font-weight:600;font-size:.95em}.btn-s{background:transparent;border:1px solid var(--divider-color);border-radius:8px;padding:10px 16px;cursor:pointer;color:var(--primary-text-color);font-size:.95em}.wiz-note{font-size:.82em;color:var(--secondary-text-color);margin-bottom:10px;display:flex;align-items:center;gap:6px}.wiz-inp-sm{width:88px !important;display:inline-block !important;margin:0 !important}.wiz-err{color:var(--error-color,#f44336);padding:16px}.wiz-spin{padding:20px;text-align:center;color:var(--secondary-text-color)}</style>';
+        const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        const season0 = () => { const n = new Date(); return n.getMonth() >= 6 ? n.getFullYear() : n.getFullYear() - 1; };
+        const genUUID = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() :
+          'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
+            return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+          });
+        const show = (html) => { sr.innerHTML = CSS + html; };
+        const loadStep = async () => {
+          const step = steps[stepIdx];
+          show('<div class="wiz"><div class="wiz-spin">Laden\u2026</div></div>');
+          const depPayload = {};
+          if (step.depends) { for (const [k, v] of Object.entries(step.depends)) depPayload[k] = values[v]; }
+          const cacheKey = step.action + JSON.stringify(depPayload);
+          let data;
+          if (cache[cacheKey]) { data = cache[cacheKey]; } else {
+            try { data = await __jsa__.callAction(step.action, depPayload); cache[cacheKey] = data; }
+            catch (e) { show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '<br><small>Skript gestartet?</small></div>'); return; }
+          }
+          if (!data || data.length === 0) {
+            show('<div class="wiz"><div class="wiz-err">\u26a0 Keine Eintr\u00e4ge gefunden. Saison oder Liga pr\u00fcfen.</div>' +
+              (stepIdx > 0 ? '<div class="wiz-btns"><button class="btn-s" id="wiz-back">Zur\u00fcck</button></div>' : '') + '</div>');
+            var backEl2 = sr.querySelector('#wiz-back');
+            if (backEl2) backEl2.onclick = function() { stepIdx--; loadStep(); };
+            return;
+          }
+          const isLast = stepIdx === steps.length - 1;
+          const season = values.season != null ? values.season : season0();
+          const optsHtml = (data || []).map(function(item) { return '<option value="' + esc(item[step.valueKey]) + '">' + esc(item[step.labelKey]) + '</option>'; }).join('');
+          const seasonHtml = step.seasonField ? '<div class="wiz-note">Saison <input class="wiz-inp wiz-inp-sm" id="wiz-season" type="number" value="' + season + '" min="2000" max="2100"></div>' : '';
+          const freeInputHtml = step.freeInput ? '<div class="wiz-note">Eigene Liga-ID <input class="wiz-inp" id="wiz-free" type="text" placeholder="z.B. WM2026" autocomplete="off"></div>' : '';
+          show('<div class="wiz"><div class="wiz-title">Schritt ' + (stepIdx + 1) + ' / ' + steps.length + ': ' + esc(step.label) + '</div>' +
+            '<select id="wiz-sel"><option value="">Bitte w\u00e4hlen\u2026</option>' + optsHtml + '</select>' +
+            seasonHtml + freeInputHtml +
+            '<div class="wiz-btns"><button class="btn-p" id="wiz-next">' + (isLast ? 'Speichern' : 'Weiter') + '</button>' +
+            (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zur\u00fcck</button>' : '') + '</div></div>');
+          var freeEl = sr.querySelector('#wiz-free');
+          var selEl  = sr.querySelector('#wiz-sel');
+          if (freeEl) { freeEl.oninput = function() { if (freeEl.value) selEl.value = ''; }; selEl.onchange = function() { if (selEl.value) freeEl.value = ''; }; }
+          sr.querySelector('#wiz-next').onclick = async function() {
+            var freeVal = freeEl ? freeEl.value.trim() : '';
+            var raw = freeVal || selEl.value;
+            if (!raw) return;
+            var item = freeVal ? null : (data || []).find(function(d) { return String(d[step.valueKey]) === raw; });
+            values[step.id] = isNaN(raw) ? raw : Number(raw);
+            values[step.id + '_item'] = item;
+            var seasonEl = sr.querySelector('#wiz-season');
+            if (seasonEl) values.season = parseInt(seasonEl.value, 10) || season0();
+            if (!isLast) { stepIdx++; await loadStep(); } else { await finish(); }
+          };
+          var backEl = sr.querySelector('#wiz-back');
+          if (backEl) backEl.onclick = function() { stepIdx--; loadStep(); };
+        };
+        const finish = async () => {
+          show('<div class="wiz"><div class="wiz-spin">Speichern\u2026</div></div>');
+          try {
+            const instanceId = genUUID();
+            const config = await Promise.resolve(opts.onComplete(values, instanceId));
+            const baseType = (hostEl._cfg && hostEl._cfg.type) || ('custom:' + __jsa__.scriptId + '-card');
+            hostEl.dispatchEvent(new CustomEvent('config-changed', { detail: { config: Object.assign({ type: baseType }, config) }, bubbles: true, composed: true }));
+            hostEl.dispatchEvent(new CustomEvent('jsa-editor-close', { bubbles: true, composed: true }));
+          } catch (e) { show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '</div>'); }
+        };
+        loadStep();
+      },
       callAction(name, payload = {}) {
         const url = _jsaApiBase + 'api/scripts/' + this.scriptId + '/actions/' + encodeURIComponent(name);
         return fetch(url, {
