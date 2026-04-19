@@ -259,10 +259,17 @@ function switchToTab(filename) {
         buildSnippetToolbar(toolbarSnippets, snippetMode);
     }
 
-    // Show preview button only when a card tab is active; track parent script for the button handler
+    // Show preview button for card tabs AND for script tabs that have a @card header
     const isCardTab = newTab.type === 'card';
-    document.body.classList.toggle('card-tab-active', isCardTab);
-    window._activeCardParentScript = isCardTab ? newTab.parentScript : null;
+    let parentScriptForPreview = null;
+    if (isCardTab) {
+        parentScriptForPreview = newTab.parentScript;
+    } else {
+        const scriptMeta = (typeof allScripts !== 'undefined') ? allScripts.find(s => s.filename === filename) : null;
+        if (scriptMeta && scriptMeta.card) parentScriptForPreview = filename;
+    }
+    document.body.classList.toggle('card-tab-active', !!parentScriptForPreview);
+    window._activeCardParentScript = parentScriptForPreview;
 
     // Sync Card menu button active state (lit when preview is open)
     const cardMenuBtn = document.getElementById('btn-card-menu');

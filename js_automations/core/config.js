@@ -52,6 +52,14 @@ const ensureDirectories = () => {
 
 const HA_CONFIG_DIR = IS_ADDON ? (fs.existsSync('/homeassistant') ? '/homeassistant' : '/config') : path.resolve(__dirname, '../../ha_config_mock');
 
+// In dev mode, JSA_DEV_WWW_DIR can point to the HA www directory via a Samba share
+// (e.g. \\192.168.7.151\config\www or a mapped drive like Z:\www).
+// Card files are then written directly to the real HA instance for live testing —
+// Lovelace resource registration works via the existing HA WebSocket connection.
+const WWW_CARDS_DIR = (!IS_ADDON && process.env.JSA_DEV_WWW_DIR)
+    ? path.join(path.resolve(process.env.JSA_DEV_WWW_DIR), 'jsa-cards')
+    : path.join(HA_CONFIG_DIR, 'www', 'jsa-cards');
+
 module.exports = {
     IS_ADDON,
     SCRIPTS_DIR,
@@ -66,6 +74,5 @@ module.exports = {
     VERSION: packageJson.version,
     ensureDirectories,
     HA_CONFIG_DIR,
-    // Directory where installed card files are written (served by HA as /local/jsa-cards/)
-    WWW_CARDS_DIR: path.join(HA_CONFIG_DIR, 'www', 'jsa-cards'),
+    WWW_CARDS_DIR,
 };

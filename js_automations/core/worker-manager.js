@@ -748,8 +748,34 @@ class WorkerManager extends EventEmitter {
                 // 9. ha.frontend.installCard() — install embedded card and register Lovelace resource
                 if (msg.type === 'install_card' && this.cardManager) {
                     const devMode = scriptMeta.headers?.card === 'dev';
+                    if (devMode) {
+                        this.emit('log', { source: path.basename(fullPath, path.extname(fullPath)), level: 'warn',
+                            message: '[Card] @card dev is set — card is preview-only and will NOT be installed to Lovelace. ' +
+                                     'Change @card dev → @card in the script metadata to enable real installation.' });
+                    }
                     this.cardManager.installCard(fullPath, { ...msg.options, devMode })
-                        .then(url => worker.postMessage({ type: 'install_card_response', callId: msg.callId, url }))
+                        .then(url => {
+                            if (!devMode) {
+                                const cardName = `${path.basename(fullPath, path.extname(fullPath))}-card`;
+                                const staticUrl = `/local/jsa-cards/${cardName}.js`;
+                                this.emit('log', { source: path.basename(fullPath, path.extname(fullPath)), level: 'info',
+                                    message: `[Card] Installed: ${url}\n` +
+                                             `[Card] If the card does not appear in the HA card picker (sections dashboard), ` +
+                                             `add this to configuration.yaml and restart HA:\n` +
+                                             `  frontend:\n    extra_module_url:\n      - ${staticUrl}` });
+                                // Fire-and-forget: clean up orphaned resources after each install
+                                // so dev iterations don't accumulate stale Lovelace entries.
+                                const knownCardNames = this.getScripts()
+                                    .map(p => {
+                                        const meta = ScriptHeaderParser.parse(p);
+                                        if (!meta.card) return null;
+                                        return path.basename(p, path.extname(p)) + '-card';
+                                    })
+                                    .filter(Boolean);
+                                this.cardManager.performStartupCleanup(knownCardNames).catch(() => {});
+                            }
+                            worker.postMessage({ type: 'install_card_response', callId: msg.callId, url });
+                        })
                         .catch(err => worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: err.message }));
                 } else if (msg.type === 'install_card' && !this.cardManager) {
                     worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: 'CardManager not available' });
