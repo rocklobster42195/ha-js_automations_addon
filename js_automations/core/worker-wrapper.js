@@ -883,8 +883,8 @@ const ha = {
     },
     
     on: (pattern, arg2, arg3, arg4) => {
-        parentPort.ref(); // Keep alive
         ensureMessageListener();
+        parentPort.ref(); // Keep alive — must come after ensureMessageListener() which may call unref()
         parentPort.postMessage({ type: 'subscribe', pattern });
         
         let callback, filter, threshold;
