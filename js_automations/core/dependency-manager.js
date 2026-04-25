@@ -8,6 +8,12 @@ const fs = require('fs');
 const EventEmitter = require('events');
 const ScriptHeaderParser = require('./script-header-parser');
 
+// Extracts the bare package name, handling scoped packages (@scope/name) and version suffixes (@x.y.z).
+function getPkgBaseName(dep) {
+    if (dep.startsWith('@')) return '@' + dep.slice(1).split('@')[0];
+    return dep.split('@')[0];
+}
+
 class DependencyManager extends EventEmitter {
     constructor(scriptsDir, storageDir) {
         super();
@@ -29,7 +35,7 @@ class DependencyManager extends EventEmitter {
         if (!dependencies || !Array.isArray(dependencies) || dependencies.length === 0) return;
 
         const packagesToInstall = dependencies.filter(dep => {
-            const pkgName = dep.split('@')[0];
+            const pkgName = getPkgBaseName(dep);
             return force || !fs.existsSync(path.join(this.nodeModulesPath, pkgName));
         });
 
@@ -56,7 +62,7 @@ class DependencyManager extends EventEmitter {
      */
     async _installTypeDefinitions(packages) {
         const typesToInstall = packages
-            .map(pkg => pkg.split('@')[0])
+            .map(pkg => getPkgBaseName(pkg))
             .filter(name => !name.startsWith('@types/'))
             .map(name => this._getTypePackageName(name))
             .filter(typeName => !fs.existsSync(path.join(this.nodeModulesPath, typeName)));
@@ -166,7 +172,7 @@ class DependencyManager extends EventEmitter {
             scripts.forEach(file => {
                 const meta = ScriptHeaderParser.parse(file);
                 (meta.dependencies || []).forEach(dep => {
-                    const name = dep.split('@')[0];
+                    const name = getPkgBaseName(dep);
                     requiredPackages.add(name);
                     requiredPackages.add(this._getTypePackageName(name));
                 });

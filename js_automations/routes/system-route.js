@@ -16,8 +16,8 @@ module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemSe
 
     router.get('/ha/metadata', async (req, res) => res.json(await connector.getHAMetadata()));
 
-    router.get('/npm/check/:package', (req, res) => {
-        const pkg = req.params.package;
+    router.get(/^\/npm\/check\/(.+)$/, (req, res) => {
+        const pkg = req.params[0];
         const url = `https://registry.npmjs.org/${pkg}`;
 
         https.get(url, (resp) => {
