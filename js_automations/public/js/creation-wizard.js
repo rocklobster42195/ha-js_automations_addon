@@ -522,7 +522,7 @@ async function validateWizardNpmPackage(pkg) {
     if (lastAt > 0) cleanName = cleanName.substring(0, lastAt);
 
     try {
-        const res = await apiFetch(`api/npm/check/${encodeURIComponent(cleanName)}`);
+        const res = await apiFetch(`api/npm/check/${cleanName}`);
         const data = await res.json();
         pkg.status = data.ok ? 'valid' : 'invalid';
         pkg.error = data.ok ? null : (data.error || 'Unknown error');
