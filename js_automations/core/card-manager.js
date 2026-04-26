@@ -312,7 +312,7 @@ class CardManager {
 
         const existing = this.registry[scriptName];
         const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
-        if (!options.force && existing?.hash === hash && fs.existsSync(cardFilePath)) {
+        if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
             return existing.resourceUrl;
         }
 
@@ -376,9 +376,21 @@ class CardManager {
         }
 
         // Remove Lovelace resource (fire-and-forget — HA may be unavailable)
-        if (entry.resourceId && this.haConnector?.isReady) {
-            this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: entry.resourceId })
-                .catch(e => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
+        if (this.haConnector?.isReady) {
+            if (entry.resourceId) {
+                this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: entry.resourceId }, 15000)
+                    .catch(e => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
+            } else {
+                // resourceId was never persisted — scan all resources to find and delete by URL
+                this.haConnector.sendCommand('lovelace/resources', {}, 15000).then(all => {
+                    const resources = all?.resources ?? (Array.isArray(all) ? all : []);
+                    const match = resources.find(r => r.url?.includes(`/jsa-cards/${entry.cardName}.js`));
+                    if (match) {
+                        const rid = match.id ?? match.resource_id;
+                        return this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
+                    }
+                }).catch(e => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
+            }
         }
 
         delete this.registry[scriptName];
@@ -412,7 +424,7 @@ class CardManager {
         // 2. Remove orphaned Lovelace resources
         if (this.haConnector?.isReady) {
             try {
-                const all = await this.haConnector.sendCommand('lovelace/resources');
+                const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
                 const resources = all?.resources ?? (Array.isArray(all) ? all : []);
                 for (const r of resources) {
                     if (!r.url?.includes('/jsa-cards/')) continue;
@@ -420,7 +432,7 @@ class CardManager {
                     if (!isKnown) {
                         const rid = r.id ?? r.resource_id;
                         try {
-                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid });
+                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
                             console.log(`[CardManager] Startup cleanup: deleted orphaned resource ${r.url} (id=${rid})`);
                         } catch (e) {
                             console.warn(`[CardManager] Startup cleanup: could not delete resource ${rid}: ${e.message}`);
@@ -524,7 +536,7 @@ ${cardCode}
         let foundId = null;
         if (cardName) {
             try {
-                const all = await this.haConnector.sendCommand('lovelace/resources');
+                const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
                 const resources = all?.resources ?? (Array.isArray(all) ? all : []);
                 console.log(`[CardManager] Found ${resources.length} total Lovelace resources, existingId=${existingResourceId}`);
                 for (const r of resources) {
@@ -534,7 +546,7 @@ ${cardCode}
                         foundId = rid;
                     } else {
                         try {
-                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid });
+                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
                             console.log(`[CardManager] Removed stale Lovelace resource: ${r.url} (id=${rid})`);
                         } catch (delErr) {
                             console.warn(`[CardManager] Failed to delete stale resource ${rid}: ${delErr.message}`);
@@ -552,7 +564,7 @@ ${cardCode}
                 resource_id: foundId,
                 res_type: 'module',
                 url,
-            });
+            }, 15000);
             if (result?.success !== false) return foundId;
             console.warn(`[CardManager] Lovelace resource update failed (id=${foundId}), creating new entry.`);
         }
@@ -561,7 +573,7 @@ ${cardCode}
         const result = await this.haConnector.sendCommand('lovelace/resources/create', {
             res_type: 'module',
             url,
-        });
+        }, 15000);
         if (result?.success === false) {
             console.warn(`[CardManager] lovelace/resources/create failed: ${result.error ?? 'unknown error'}`);
             return null;
