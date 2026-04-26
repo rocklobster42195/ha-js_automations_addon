@@ -250,6 +250,8 @@ class HAConnector {
                     this.ws.removeListener('message', handler);
                     if (msg.success === false) {
                         resolve({ success: false, error: msg.error?.message || msg.error?.code || JSON.stringify(msg.error) });
+                    } else if (Array.isArray(msg.result)) {
+                        resolve(msg.result);
                     } else {
                         resolve({ success: true, ...(msg.result || {}) });
                     }

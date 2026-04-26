@@ -266,7 +266,30 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
           connectedCallback() {
             if (tag === 'ha-card') {
               this.style.cssText = 'display:block;border-radius:12px;overflow:hidden;background:var(--card-background-color,#2c2c2c);box-shadow:0 2px 8px rgba(0,0,0,.5);';
+            } else if (tag === 'ha-icon') {
+              this._render();
+              this._obs = new MutationObserver(() => this._render());
+              this._obs.observe(this, { attributes: true, attributeFilter: ['icon', 'style'] });
             }
+          }
+          disconnectedCallback() { if (this._obs) this._obs.disconnect(); }
+          _render() {
+            if (tag !== 'ha-icon') return;
+            // Parse style attribute string directly — most reliable across preview environments.
+            const styleAttr = this.getAttribute('style') || '';
+            const sizeMatch = styleAttr.match(/width\s*:\s*(\d+)/) || styleAttr.match(/--mdi-icon-size\s*:\s*(\d+)/);
+            const size = sizeMatch ? parseInt(sizeMatch[1]) : 40;
+            const colMatch = styleAttr.match(/color\s*:\s*([^;]+)/);
+            const col = colMatch ? colMatch[1].trim() : '#888';
+            const icon = (this.getAttribute('icon') || '').replace(/^mdi:/, '').replace(/-/g, ' ');
+            const abbr = icon.split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
+            if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+            this.shadowRoot.innerHTML =
+              '<style>:host{display:inline-flex;align-items:center;justify-content:center;width:' + size + 'px;height:' + size + 'px}</style>' +
+              '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;' +
+              'background:' + col + ';display:flex;align-items:center;justify-content:center;" title="' + icon + '">' +
+              '<span style="color:#fff;font-size:' + Math.round(size * 0.42) + 'px;font-weight:700;mix-blend-mode:screen;line-height:1">' + abbr + '</span>' +
+              '</div>';
           }
           set header(v) { this.setAttribute('header', v); }
         });
@@ -741,9 +764,9 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         }
 
         // Use Parser to update metadata (handles @expose and formatting centrally)
-        // Preserve @permission tag — it's edited in source, not via wizard form
+        // Preserve @permission and @card tags — they are edited in source, not via the metadata form
         const existingMeta = ScriptHeaderParser.parse(fullPath);
-        ScriptHeaderParser.updateMetadata(fullPath, { ...req.body, permissions: existingMeta.permissions });
+        ScriptHeaderParser.updateMetadata(fullPath, { ...req.body, permissions: existingMeta.permissions, card: existingMeta.card });
         
         // 5. REFACTORING: Update consumers
         let updatedConsumers = 0;
