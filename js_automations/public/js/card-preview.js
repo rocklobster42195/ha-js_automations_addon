@@ -399,7 +399,9 @@ const CardPreview = (() => {
 
     function _pushConfigToIframe() {
         if (!iframe?.contentWindow) return;
-        iframe.contentWindow.postMessage({ type: 'jsa-set-config', config: cardConfig }, '*');
+        // _stub:true tells cards to show demo data when no real entity state exists.
+        // The real HA dashboard never sends this flag, so production behavior is unaffected.
+        iframe.contentWindow.postMessage({ type: 'jsa-set-config', config: { _stub: true, ...cardConfig } }, '*');
     }
 
     function _pushHassToIframe() {
