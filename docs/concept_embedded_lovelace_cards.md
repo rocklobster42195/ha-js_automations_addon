@@ -1,7 +1,7 @@
 # Script Packs — Embedded Lovelace Cards
 
 * **Status:** Living Document
-* **Last updated:** 2026-04-19
+* **Last updated:** 2026-05-03
 
 ---
 
@@ -276,6 +276,51 @@ refreshBtn.onclick = () => __jsa__.callAction('refresh', { entityId: this._entit
 | Script not running | `callAction()` rejects after 20s timeout |
 | Handler throws | Caught and logged at `error` level in script log stream |
 
+### 7.1 Action Return Values
+
+Action handlers can return data. The card receives it as the resolved value of `callAction()` — enabling immediate UI updates without waiting for entity state to propagate through HA.
+
+```ts
+// Script
+ha.action('set_done', async () => {
+    const today = dateISO(0);
+    state.doneDateISO = state.doneDateISO === today ? '' : today;
+    return await refresh(); // returns RefreshResult directly to the card
+});
+```
+
+```js
+// Card
+colToday.onclick = async () => {
+    const newState = await __jsa__.callAction('set_done');
+    this.render(newState, false); // instant update, no HA roundtrip delay
+};
+```
+
+This pattern makes toggle actions feel instantaneous even on slow connections.
+
+### 7.2 Progress Callbacks *(Planned)*
+
+For long-running actions (bulk imports, slow API fetches): the script sends intermediate progress events via `ha.progress(correlationId, data)`, and the card receives them via an `onProgress` callback option.
+
+```ts
+// Script
+ha.action('import_data', async (payload, { correlationId }) => {
+    for (let i = 0; i < items.length; i++) {
+        await processItem(items[i]);
+        ha.progress(correlationId, { done: i + 1, total: items.length });
+    }
+    return { imported: items.length };
+});
+```
+
+```js
+// Card
+await __jsa__.callAction('import_data', {}, {
+    onProgress: ({ done, total }) => updateProgressBar(done, total),
+});
+```
+
 ---
 
 ## 8. Developer Experience — Abstractions & Helpers
@@ -381,6 +426,12 @@ ha.frontend.defineCard({
       valueKey: 'teamId', labelKey: 'teamName' },
   ],
 
+  // Inline stub data for picker preview — no getStubAttrs() override needed
+  stub: {
+    today:    { types: [{ summary: 'Gelbe Tonne', icon: 'mdi:recycle', color: '#F9A825', solid: true }], done: false },
+    tomorrow: { types: [{ summary: 'Biotonne',    icon: 'mdi:leaf',    color: '#4E342E', solid: true }], out: false  },
+  },
+
   render({ state, attr, config }) {
     return `
       <div class="header">${state === 'live' ? '🔴 LIVE' : 'Nächstes Spiel'}</div>
@@ -388,10 +439,14 @@ ha.frontend.defineCard({
     `;
   },
 
+  // Option A: raw CSS string
   styles: `
     .header { font-size: .85em; color: var(--secondary-text-color); }
     .score  { font-size: 2.2em; font-weight: 900; }
   `,
+
+  // Option B: shorthand — framework maps to HA-correct CSS
+  // styles: { layout: 'cols', divider: true, fontSize: 'small' },
 
   onTap({ entityId }) {
     return __jsa__.callAction('refresh', { entityId });
@@ -404,6 +459,48 @@ ha.frontend.defineCard({
 The framework generates the full Custom Element: `set hass()`, `setConfig()`, `getGridOptions()`, `getConfigElement()`, Shadow DOM, heartbeat, error boundary, config-changed dispatch. The developer writes only render logic and action handlers.
 
 This is **non-breaking** — existing cards using the manual approach continue to work. `defineCard()` is an optional higher-level alternative.
+
+### 8.5 CSS Utility Layer *(Planned)*
+
+**Problem:** HA CSS custom properties (`--secondary-text-color`, `--divider-color`, etc.) are hard to discover. Layout boilerplate (flex rows, muted labels, dividers) is copy-pasted into every card and diverges over time.
+
+**Solution:** Opt-in utility stylesheet injected at install time via `ha.frontend.installCard({ injectStyles: true })` (also auto-enabled when using `defineCard()`).
+
+| Class | Maps to |
+|---|---|
+| `.jsa-row` | `display:flex; gap:8px; align-items:center` |
+| `.jsa-col` | `display:flex; flex-direction:column; gap:4px` |
+| `.jsa-muted` | `color:var(--secondary-text-color); font-size:.75em` |
+| `.jsa-badge` | `background:var(--primary-color); color:#fff; border-radius:12px; padding:2px 8px; font-size:.7em` |
+| `.jsa-divider` | `border-top:1px solid var(--divider-color); margin:8px 0` |
+| `.jsa-card-padding` | `padding:16px` (standard ha-card inner padding) |
+
+Cards using these classes automatically adapt to the active HA theme (light/dark) without any extra CSS.
+
+### 8.6 Convenience API — Kleinhelfer *(Planned)*
+
+Small additions to the `__jsa__` preamble that eliminate common one-liners:
+
+```js
+// HA Persistent Notification without a script-side action handler
+__jsa__.notify('Müll rausstellen!', 'Erinnerung');
+
+// localStorage with script-namespaced key — survives page reload
+__jsa__.rememberState('expandedSection', 'today');
+const expanded = __jsa__.rememberState('expandedSection'); // getter
+
+// Fire multiple actions in parallel, like Promise.all
+const [state, leagues] = await __jsa__.callActions([
+    ['get_state',   {}],
+    ['get_leagues', {}],
+]);
+```
+
+| API | Notes |
+|---|---|
+| `notify(msg, title?)` | Fires `persistent_notification.create` via `hass.callService` |
+| `rememberState(key, value?)` | Read when called with 1 arg, write with 2 args. Key prefixed with `jsa_<scriptId>_` |
+| `callActions(pairs)` | `pairs` is `[name, payload][]`; resolves when all settle |
 
 ---
 
@@ -546,9 +643,9 @@ The addon downloads the file, detects the `__JSA_CARD__` block, runs the script,
 | **3** | ✅ Done | Live preview panel (draggable, width presets, auto-reload), mock `hass` injection |
 | **4** | ✅ Done | `__jsa__` preamble v5, event bus transport, `@card dev`, DEV/CARD badges, live HA state in preview |
 | **5** | ✅ Done | Configurable cards, wizard pattern, `getConfigElement()`, startup + post-install cleanup |
-| **6** | 🔲 Planned | `__jsa__.wizard()` declarative wizard builder, auto-heartbeat in `connect()`, error boundary → JSA log |
+| **6** | 🔲 Planned | `__jsa__.wizard()` declarative wizard builder, auto-heartbeat in `connect()`, error boundary → JSA log, CSS utility layer (`injectStyles`) |
 | **7** | 🔲 Planned | Instance tracking registry, auto-delete with configurable threshold, "Manage Teams" UI |
-| **8** | 🔲 Planned | `ha.frontend.defineCard()` high-level API, season field in wizard, liga list refinement |
+| **8** | 🔲 Planned | `ha.frontend.defineCard()` (inline stub, style shorthand), progress callbacks (`ha.progress()`), convenience API (`notify`, `rememberState`, `callActions`), season field in wizard, liga list refinement |
 
 ### Phase 6 Priority
 
@@ -556,5 +653,6 @@ Phase 6 delivers the highest developer experience improvement per implementation
 - `__jsa__.wizard()` eliminates ~120 lines of wizard boilerplate per card.
 - Auto-heartbeat makes instance tracking transparent.
 - Error boundary removes the biggest debugging friction point.
+- CSS utility layer makes layout accessible without deep CSS knowledge.
 
 None of these are breaking changes — existing cards continue to work unchanged.
