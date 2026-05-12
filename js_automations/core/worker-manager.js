@@ -878,7 +878,11 @@ class WorkerManager extends EventEmitter {
      * @returns {Promise<any>}
      */
     callAction(filename, action, payload = {}) {
-        const worker = this.workers.get(filename);
+        const base = filename.replace(/\.(js|ts)$/, '');
+        const worker = this.workers.get(filename)
+            ?? this.workers.get(base + '.ts')
+            ?? this.workers.get(base + '.js')
+            ?? this.workers.get(base);
         if (!worker) return Promise.reject(new Error(`Script "${filename}" is not running`));
 
         const callId = `act_${++this._actionCallCounter}`;
