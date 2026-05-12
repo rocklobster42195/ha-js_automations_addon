@@ -407,7 +407,7 @@ class Kernel extends EventEmitter {
                 _seenCorrIds.add(correlation_id);
                 setTimeout(() => _seenCorrIds.delete(correlation_id), 30000);
 
-                const filename = script.endsWith('.js') || script.endsWith('.ts') ? script : script + '.js';
+                const filename = script.replace(/\.(js|ts)$/, '');
                 this.workerManager.callAction(filename, action, payload ?? {})
                     .then(result => this.haConnector.fireEvent('jsa_action_result', { correlation_id, result }))
                     .catch(err  => this.haConnector.fireEvent('jsa_action_result', { correlation_id, error: err.message }));
