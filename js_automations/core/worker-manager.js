@@ -664,6 +664,7 @@ class WorkerManager extends EventEmitter {
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
                     } catch (err) {
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
+                        else this.emit('log', { source: name, message: `Service call ${msg.domain}.${msg.service} failed: ${err.message}`, level: 'error' });
                     }
                 }
 
