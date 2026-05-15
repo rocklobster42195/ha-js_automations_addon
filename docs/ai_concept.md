@@ -24,14 +24,15 @@ Nutzer sollen beim Schreiben von Skripten KI-Unterstützung bekommen, ohne die O
 | **OpenAI** | `gpt-4o-mini` | ~$0.15/Mio Token | Zuverlässig |
 | **Anthropic** | `claude-haiku-4-5` | ~$0.25/Mio Token | Sehr gute Code-Qualität |
 | **Ollama** | z.B. `qwen2.5-coder` | Kostenlos (lokal) | Erfordert eigene Hardware |
+| **LM Studio** | beliebig (lokal) | Kostenlos (lokal) | Einsteigerfreundlicher als Ollama, OpenAI-kompatibler Endpunkt |
 
-Alle Anbieter außer Ollama sind **OpenAI-API-kompatibel** — eine einzige Implementierung via `openai` npm-Paket deckt alle ab (mit `baseURL`-Override).
+Alle Anbieter außer nativen Anthropic-Calls sind **OpenAI-API-kompatibel** — eine einzige Implementierung via `openai` npm-Paket deckt alle ab (mit `baseURL`-Override).
 
 ---
 
 ## System-Prompt-Strategie
 
-Jede Anfrage an die KI enthält automatisch vier Kontext-Blöcke:
+Jede Anfrage an die KI enthält automatisch bis zu fünf Kontext-Blöcke:
 
 ### Block 1 — Addon-Überblick (`README.md`)
 
@@ -61,6 +62,18 @@ Scripts start with a JSDoc header block:
 ### Block 4 — Live HA Entities
 
 Kompakte Liste aus `haConnection.states` — nur `entity_id: state (friendly_name)`. Wird bei jeder Anfrage frisch befüllt, damit die KI tatsächlich vorhandene Entities verwendet (keine Phantome).
+
+### Block 5 — Fehler-Log (optional, nur bei Debugging-Modus)
+
+Wenn der Nutzer den Modus **Debuggen** wählt, wird der letzte Stack-Trace des Workers automatisch angehängt — als zusätzlicher User-Message-Block:
+
+```
+Current error (from worker console):
+TypeError: Cannot read property 'state' of undefined
+  at ha.on callback (script.js:12)
+```
+
+So muss der Nutzer den Fehler nicht manuell kopieren. Der Log wird aus dem laufenden Worker-Output des betroffenen Skripts gezogen.
 
 ### Vollständiger System-Prompt (Template)
 
@@ -148,12 +161,13 @@ class AiService {
         ].join('\n');
     }
 
-    async generate(userPrompt, scriptContent = null) {
+    async generate(userPrompt, scriptContent = null, errorLog = null) {
         const settings = this.settingsManager.getSettings().ai || {};
         if (!settings.enabled || !settings.api_key) {
             throw new Error('AI is not configured. Please add your API key in Settings → AI.');
         }
 
+        // API-Key darf NIEMALS in Logs landen — nur anonymisiert loggen
         const client = new OpenAI({
             apiKey: settings.api_key,
             baseURL: settings.base_url || undefined,
@@ -167,15 +181,35 @@ class AiService {
             messages.push({ role: 'user', content: `Current script (for context):\n\`\`\`typescript\n${scriptContent}\n\`\`\`` });
         }
 
+        if (errorLog) {
+            messages.push({ role: 'user', content: `Current error (from worker console):\n${errorLog}` });
+        }
+
         messages.push({ role: 'user', content: userPrompt });
 
-        const resp = await client.chat.completions.create({
-            model: settings.model || 'gemini-2.0-flash',
-            messages,
-            max_tokens: 2048,
-        });
-
-        return resp.choices[0].message.content;
+        // Retry bei Rate Limit (HTTP 429) — max. 2 Versuche, exponential backoff
+        let lastError;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const resp = await client.chat.completions.create({
+                    model: settings.model || 'gemini-2.0-flash',
+                    messages,
+                    max_tokens: 2048,
+                    stream: true, // SSE-Streaming für bessere UX
+                });
+                return resp; // Stream-Objekt zurückgeben, Route handled SSE
+            } catch (err) {
+                lastError = err;
+                if (err.status === 429 && attempt === 0) {
+                    await new Promise(r => setTimeout(r, 2000));
+                } else {
+                    break;
+                }
+            }
+        }
+        // Fehler ohne API-Key loggen
+        const safeErr = new Error(lastError.message);
+        throw safeErr;
     }
 }
 
@@ -209,7 +243,8 @@ router.post('/generate', async (req, res) => {
 | Groq | `https://api.groq.com/openai/v1` |
 | OpenAI | *(leer lassen)* |
 | Ollama (lokal) | `http://localhost:11434/v1` |
-| Anthropic Claude | Eigenes SDK nötig — nicht OpenAI-kompatibel ohne Wrapper |
+| LM Studio (lokal) | `http://localhost:1234/v1` |
+| Anthropic Claude | OpenAI-kompatibler Proxy empfohlen (z.B. Amazon Bedrock / litellm) — kein extra SDK |
 
 ---
 
@@ -246,14 +281,20 @@ Neue Sektion `ai` in `core/settings-schema.js`:
                                                ↓ Toggle
 ┌─ AI Assistant ───────────────────────────────────────┐
 │                                                       │
+│  [✨ Generieren]  [🔍 Erklären]  [🐛 Debuggen]  [🔄 Konvertieren]  │
+│  ─────────────────────────────────────────────────── │
+│                                                       │
 │  ┌───────────────────────────────────────────────┐   │
 │  │  Beschreibe was das Skript tun soll...        │   │
 │  │                                               │   │
 │  └───────────────────────────────────────────────┘   │
 │                                                       │
+│  [Wenn Entity > Wert → Aktion]  [Täglich um HH:MM]   │
+│  [Benachrichtigung senden]                            │
+│                                                       │
 │  ☑ Aktuelle Datei als Kontext mitschicken             │
 │                                                       │
-│  [✨ Generieren]                                      │
+│  [✨ Absenden]                                        │
 │                                                       │
 │ ─────────────────────────────────────────────────── │
 │                                                       │
@@ -270,21 +311,181 @@ Neue Sektion `ai` in `core/settings-schema.js`:
 └───────────────────────────────────────────────────────┘
 ```
 
+**Vier Modi:**
+
+| Modus | Verhalten | Checkbox "Aktuelle Datei" |
+|---|---|---|
+| **Generieren** | Neues Skript aus Nutzerbeschreibung | optional |
+| **Erklären** | Erklärt den aktuellen Skript-Inhalt | Pflicht (auto-aktiviert) |
+| **Debuggen** | Fehler analysieren + Fix vorschlagen | Pflicht + letzter Stack-Trace (Block 5) |
+| **Konvertieren** | HA YAML oder ioBroker-Code → JSA-Skript | nein (eigenes Quellcode-Textarea + Format-Dropdown) |
+
+Jeder Modus ergänzt einen Suffix im System-Prompt: z.B. `"Explain this script step by step in German."` oder `"Fix the following error and return the corrected script."`.
+
+### Konvertierungs-Modus
+
+Im Konvertier-Modus ersetzt ein Quellcode-Textarea das normale Prompt-Feld. Ein Format-Dropdown (`HA YAML` / `ioBroker JS`) gibt der KI den nötigen Kontext.
+
+**Unterstützte Quellformate:**
+- **Home Assistant YAML** — `automation:` Blöcke mit `trigger`, `condition`, `action`
+- **ioBroker JavaScript** — `on()`, `setState()`, `getState()`, `schedule()`, `log()`
+
+**Mapping HA YAML → JSA:**
+
+| HA YAML | JSA-Äquivalent |
+|---|---|
+| `trigger: platform: state` | `ha.on('entity_id', e => {...})` |
+| `trigger: platform: time` / `time_pattern` | `schedule('0 9 * * *', () => {...})` |
+| `condition: state` | `if (ha.getStateValue('entity_id') === 'on')` |
+| `action: service: light.turn_on` | `ha.call('light.turn_on', {entity_id: ...})` |
+| `action: service: notify.*` | `ha.notify(message, {title: ...})` |
+| `choose:` / `if:` | JS `if/else` oder `switch` |
+| Template `{{ states('...') }}` | `ha.getStateValue('entity_id')` |
+| Template `{{ state_attr('...') }}` | `ha.getAttr('entity_id', 'attr')` |
+
+HA YAML verwendet in der Regel bereits echte Entity-IDs — diese werden 1:1 übernommen. Ausnahme: via HA-UI exportierte Automationen enthalten häufig UUIDs statt Entity-IDs (`device_id`, `entity_id` als Registry-Entry-UUID). Diese werden serverseitig vor der KI-Anfrage aufgelöst (siehe **Registry-Lookup** unten).
+
+**HA Registry-Lookup (Vorverarbeitung, nur bei HA YAML):**
+
+Der `ai-service.js` lädt einmalig (oder gecacht) die HA-Registries via WebSocket und substituiert alle UUIDs im YAML bevor er die KI aufruft:
+
+```js
+async _resolveYamlIds(yaml) {
+    const [entityRegistry, deviceRegistry] = await Promise.all([
+        this.haConnector.sendMessage({ type: 'config/entity_registry/list' }),
+        this.haConnector.sendMessage({ type: 'config/device_registry/list' }),
+    ]);
+
+    // entity registry entry UUID → entity_id (z.B. "aa39e7a4..." → "binary_sensor.kueche_praesenz")
+    const entryMap = Object.fromEntries(entityRegistry.map(e => [e.id, e.entity_id]));
+
+    // device_id UUID → erste zugehörige entity_id
+    const deviceMap = {};
+    for (const e of entityRegistry) {
+        if (e.device_id && !deviceMap[e.device_id]) deviceMap[e.device_id] = e.entity_id;
+    }
+
+    return yaml
+        .replace(/\b([0-9a-f]{32})\b/g, (uuid) => entryMap[uuid] || deviceMap[uuid] || uuid);
+}
+```
+
+Nicht auflösbare UUIDs bleiben unverändert — die KI setzt dann `ENTITY_TODO` als Fallback.
+
+**Trigger-Typ → State-Wert:** HA-Trigger-Typen wie `not_present`, `turned_on` etc. sind HA-interne Enum-Werte, keine State-Strings. Die KI leitet den korrekten State-Wert aus `domain` und `device_class` der (aufgelösten) Entity ab — diese Information steckt bereits in der Live-Entity-Liste (Block 4):
+
+| HA Trigger-Typ | Domain / device_class | JSA State-Check |
+|---|---|---|
+| `turned_on` | beliebig | `e.state === 'on'` |
+| `turned_off` | beliebig | `e.state === 'off'` |
+| `present` | `binary_sensor` / presence, occupancy | `e.state === 'on'` |
+| `not_present` | `binary_sensor` / presence, occupancy | `e.state === 'off'` |
+| `home` | `person`, `device_tracker` | `e.state === 'home'` |
+| `not_home` | `person`, `device_tracker` | `e.state === 'not_home'` |
+
+**Mapping ioBroker → JSA:**
+
+| ioBroker | JSA-Äquivalent |
+|---|---|
+| `on({id: '...', change: 'any'}, cb)` | `ha.on('entity_id', e => {...})` |
+| `getState('...').val` | `ha.getStateValue('entity_id')` |
+| `setState('...', value)` | `ha.update('entity_id', value)` |
+| `schedule('cron', cb)` | `schedule('cron', cb)` *(identisch)* |
+| `log(msg)` | `ha.log(msg)` |
+| `clearSchedule(id)` | `ha.onStop(() => {...})` |
+
+**Entity-ID-Mapping (ioBroker):** ioBroker-Object-IDs (z.B. `hm-rpc.0.OEQ1234567.1.STATE`) lassen sich nicht automatisch auf HA-Entity-IDs abbilden. Die KI verwendet den Platzhalter `'ENTITY_TODO /* original: hm-rpc.0.OEQ1234567.1.STATE */'`. Nach dem Einfügen in Monaco werden alle `ENTITY_TODO`-Vorkommen mit gelben Squiggles und einem Hover-Tooltip markiert (siehe `markEntityTodos()` unten).
+
+**System-Prompt-Suffix für Konvertier-Modus:**
+
+```
+## Conversion Task
+The user provides code in [HA YAML / ioBroker JS] format.
+Convert it 1:1 to a valid JSA script. Rules:
+- Map all triggers, conditions, and actions using the JSA API shown above
+- HA YAML entity_ids are already resolved — use them as-is
+- For HA device trigger types (not_present, present, turned_on, etc.): look up the entity
+  in the provided entity list, check its domain and device_class attribute, and use the
+  correct state value (e.g. binary_sensor with device_class:presence → 'off' for not_present)
+- Remaining unresolved UUIDs and ioBroker object IDs cannot be mapped —
+  use 'ENTITY_TODO /* original: <id> */' as placeholder
+- Generate a proper JSDoc header (@name, @description, @icon)
+- Prefer ha.entity().service() over ha.call() for readability
+- Replace all Jinja2 templates with JS equivalents
+- Output only the converted TypeScript/JS script, no explanation
+```
+
+**Quick-Prompts:** Vorgefertigte Template-Buttons füllen das Eingabefeld vor. Klick → Text erscheint im Feld, Nutzer ergänzt nur noch Entity-Namen und Werte.
+
 **Ablauf:**
 1. Nutzer klickt "AI" in der Toolbar → Panel öffnet sich als Side-Drawer rechts
-2. Nutzer tippt Prompt: _"Schalte den Badezimmerlüfter ein wenn Luftfeuchtigkeit > 70%, aus bei < 55%"_
-3. Optional: Checkbox "Aktuelle Datei als Kontext" aktivieren → Editor-Inhalt wird mitgeschickt (für Erklärung / Erweiterung bestehender Skripte)
-4. Backend baut System-Prompt, ruft Provider ab
-5. Antwort (Code-Block) erscheint im Panel
-6. "In Editor einfügen" → ersetzt den gesamten Monaco-Inhalt (mit Bestätigung wenn Datei dirty)
+2. Modus auswählen (Standard: Generieren)
+3. Nutzer tippt Prompt oder wählt einen Quick-Prompt
+4. Optional: Checkbox "Aktuelle Datei als Kontext" aktivieren
+5. Backend baut System-Prompt (inkl. Fehler-Log bei Debuggen), ruft Provider ab
+6. Antwort erscheint im Panel via SSE-Streaming (Token für Token)
+7. "In Editor einfügen" → **speichert zuerst die aktuelle Datei**, dann wird Monaco-Inhalt ersetzt
 
 ### Neue Datei: `js_automations/public/js/ai-panel.js`
 
 Kernfunktionen:
 - `toggleAiPanel()` — Panel ein-/ausblenden, Panel-State in `localStorage` merken
-- `submitAiPrompt()` — POST an `/api/ai/generate`, Loading-Spinner, Fehlerbehandlung
-- `insertIntoEditor(code)` — `window.editor.setValue(code)` (Monaco-Global aus `app.js`)
+- `setMode(mode)` — schaltet zwischen `generate` / `explain` / `debug` / `convert` um; im Convert-Modus: Prompt-Textarea ausblenden, Quellcode-Textarea + Format-Dropdown einblenden
+- `insertQuickPrompt(template)` — füllt Textfeld mit vorgefertigtem Template (z.B. `"Wenn [entity_id] > [Wert], dann..."`)
+- `submitAiPrompt()` — POST an `/api/ai/generate`, SSE-Stream lesen, Token-für-Token in Panel rendern
+- `submitConversion()` — bei HA YAML: erst `POST /api/ai/resolve-yaml` (UUID-Auflösung via Registry), dann konvertiertes YAML an `submitAiPrompt()`; bei ioBroker JS: direkt an AI
+- `insertIntoEditor(code)` — **erst `saveCurrentFile()` aufrufen**, dann `window.editor.setValue(code)`; danach `markEntityTodos(editor)` aufrufen
 - Code-Block aus Markdown-Antwort extrahieren (zwischen ` ```typescript ` und ` ``` `)
+- `markEntityTodos(editor)` — setzt Monaco-Marker für alle `ENTITY_TODO`-Vorkommen:
+
+```js
+function markEntityTodos(editor) {
+    const model = editor.getModel();
+    const markers = [];
+    const regex = /ENTITY_TODO/g;
+    let match;
+    while ((match = regex.exec(model.getValue())) !== null) {
+        const pos = model.getPositionAt(match.index);
+        markers.push({
+            severity: monaco.MarkerSeverity.Warning,
+            startLineNumber: pos.lineNumber,
+            startColumn: pos.column,
+            endLineNumber: pos.lineNumber,
+            endColumn: pos.column + 'ENTITY_TODO'.length,
+            message: 'Entity ID not mapped — replace with a valid HA entity ID',
+            source: 'JSA AI Converter'
+        });
+    }
+    monaco.editor.setModelMarkers(model, 'jsa-converter', markers);
+    // Marker löschen sobald keine TODOs mehr vorhanden: setModelMarkers(model, 'jsa-converter', [])
+}
+```
+
+**Monaco Rechtsklick-Integration:**
+
+Über `editor.addAction()` werden zwei Kontextmenü-Einträge registriert, die bei markiertem Code erscheinen:
+
+```js
+editor.addAction({
+    id: 'ai-explain-selection',
+    label: 'AI: Markierung erklären',
+    contextMenuGroupId: 'ai',
+    run: (ed) => {
+        const selected = ed.getModel().getValueInRange(ed.getSelection());
+        openAiPanel('explain', selected);
+    }
+});
+
+editor.addAction({
+    id: 'ai-improve-selection',
+    label: 'AI: Markierung verbessern',
+    contextMenuGroupId: 'ai',
+    run: (ed) => {
+        const selected = ed.getModel().getValueInRange(ed.getSelection());
+        openAiPanel('generate', `Improve this code:\n\`\`\`typescript\n${selected}\n\`\`\``);
+    }
+});
+```
 
 ---
 
@@ -317,13 +518,70 @@ Wird für alle OpenAI-kompatiblen Anbieter (Gemini, Groq, OpenAI, Ollama) benöt
 
 ## Offene Entscheidungen
 
-| # | Frage | Optionen |
+| # | Frage | Empfehlung |
 |---|---|---|
-| 1 | **Streaming** | Token-für-Token (SSE, bessere UX) vs. Komplett-Antwort (einfacher) |
-| 2 | **Chat-History** | Single-Turn (einfach) vs. mehrturnig mit Context (Folgefragen möglich) |
-| 3 | **README-Umfang** | Vollständig (sicher, ~400 Zeilen) vs. nur relevante Sections (spart Tokens) |
-| 4 | **Panel-Position** | Side-Drawer rechts vs. Modal vs. separater Tab |
-| 5 | **Claude-Support** | Über `@anthropic-ai/sdk` nativ vs. OpenAI-kompatibler Proxy |
+| 1 | **Streaming** | ✅ **SSE mit `stream: true`** — `openai`-Package nativ unterstützt, Monaco kann Token-für-Token updaten via `model.applyEdits()`. Deutlich bessere UX bei langen Skripten. |
+| 2 | **Chat-History** | ✅ **Multi-Turn** — Typischer Flow ist iterativ ("Füge Delay ein", "Logge auch den Wert"). Single-Turn zwingt Nutzer zur vollständigen Neu-Beschreibung. Bei kurzen Skripten kaum Token-Mehrkosten. |
+| 3 | **README-Umfang** | Vollständig (sicher, ~400 Zeilen) vs. nur relevante Sections (spart Tokens) — noch offen |
+| 4 | **Panel-Position** | ✅ **Side-Drawer rechts** — festgelegt im UI-Konzept |
+| 5 | **Claude-Support** | ✅ **OpenAI-kompatibler Proxy** (litellm / Amazon Bedrock) — kein zweites SDK, gleiche Codebasis |
+
+---
+
+## Roadmap
+
+### Phase 1 — MVP ✦
+
+Ziel: Funktionierendes AI-Panel das sofort echten Mehrwert liefert.
+
+| Feature | Beschreibung |
+|---|---|
+| Settings-Sektion `ai` | Provider, API-Key, Modell, base_url |
+| `AiService` + `/api/ai/generate` | System-Prompt (Blöcke 1–4), OpenAI-kompatibler Client |
+| Modus: **Generieren** | Freitext-Prompt → JSA-Skript mit JSDoc-Header |
+| Checkbox "Aktuelle Datei" | Editor-Inhalt als Kontext mitschicken |
+| **In Editor einfügen** | Auto-Save vor Überschreiben |
+| Gemini Free als Default | Kostenloser Einstieg ohne Kreditkarte |
+| Rate-Limit-Handling | Retry bei 429 + klare UI-Meldung |
+| API-Key-Schutz | Key nie in Logs |
+
+**Nicht im MVP:** Streaming, Chat-History, weitere Modi. Komplett-Antwort reicht zum Validieren.
+
+---
+
+### Phase 2 — UX & Qualität
+
+| Feature | Beschreibung |
+|---|---|
+| SSE-Streaming | Token-für-Token Ausgabe via `stream: true` |
+| Modus: **Erklären** | Skript-Inhalt erklären lassen |
+| Modus: **Debuggen** | Fehler-Log (Block 5) automatisch anhängen |
+| Quick-Prompts | Template-Buttons unter dem Eingabefeld |
+| Monaco Rechtsklick | "AI: Erklären" / "AI: Verbessern" auf Selektion |
+| Multi-Turn Chat | Folgefragen ohne Kontext-Verlust |
+
+---
+
+### Phase 3 — Konvertierung
+
+| Feature | Beschreibung |
+|---|---|
+| Modus: **Konvertieren** | HA YAML / ioBroker JS → JSA |
+| HA Registry-Lookup | UUIDs (device_id, entity-entry-id) vor KI-Aufruf auflösen |
+| Trigger-Typ-Mapping | `not_present` etc. via `device_class` korrekt übersetzen |
+| Area / Label-Auflösung | `area_id` / `label_id` in Actions → Entity-Liste |
+| `ENTITY_TODO` + Monaco-Marker | Fallback für nicht auflösbare IDs |
+| `variables:` / `repeat:` | YAML-Blöcke → JS-Äquivalente |
+
+---
+
+### Phase 4 — Erweiterungen (Future)
+
+| Feature | Beschreibung |
+|---|---|
+| Node-RED JSON (lineare Flows) | Trigger/Action-Nodes → JSA |
+| LM Studio / Ollama Quicksetup | Guided Setup für lokale Modelle im Settings-Dialog |
+| AI-generierte Script-Metadaten | Name, Icon, Label nach Generierung vorschlagen |
 
 ---
 
@@ -335,3 +593,5 @@ Wird für alle OpenAI-kompatiblen Anbieter (Gemini, Groq, OpenAI, Ollama) benöt
 4. Checkbox "Aktuelle Datei als Kontext": Editor-Inhalt taucht im gesendeten Prompt auf (DevTools Network)
 5. "In Editor einfügen": Monaco-Inhalt wird korrekt ersetzt
 6. Entity-Namen in generiertem Code entsprechen tatsächlich vorhandenen Entities aus der Live-Liste
+7. Konvertier-Modus (HA YAML): Automation einfügen → JSA-Skript korrekt generiert, Entity-IDs direkt übernommen
+8. Konvertier-Modus (ioBroker): Skript mit `hm-rpc.0.XYZ`-IDs → `ENTITY_TODO`-Platzhalter im Output, Monaco zeigt gelbe Squiggles mit Tooltip
