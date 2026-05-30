@@ -115,6 +115,20 @@ Module.prototype.require = function(requestPath) {
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();
 
+// Reference counting for parentPort keep-alive.
+// parentPort.ref()/unref() is a toggle, not a counter — one unref() cancels all
+// previous ref() calls. We track intent ourselves so that a completing service call
+// does not accidentally cancel the keep-alive from registered ha.on() listeners.
+let _refCount = 0;
+function _addRef() {
+    _refCount++;
+    if (_refCount === 1) parentPort.ref();
+}
+function _releaseRef() {
+    if (_refCount > 0) _refCount--;
+    if (_refCount === 0) parentPort.unref();
+}
+
 // 🛡️ GLOBAL CRASH HANDLER
 // Catches errors that would otherwise terminate the script silently.
 process.on('uncaughtException', (err) => {
@@ -244,17 +258,20 @@ class EntitySelector {
         this.list = entities; // Array of HA State objects
         this.ha = parentHa;
         this._throttleMs = workerData.defaultThrottle || 0;
+        this._proxy = null;
 
         // Return a Proxy to allow calling any service name as a method
-        return new Proxy(this, {
+        const proxy = new Proxy(this, {
             get: (target, prop) => {
                 // Do not treat internal JS properties or 'then' (for Promises) as services
                 if (prop in target || typeof prop !== 'string' || prop === 'then') return target[prop];
-                
-                // Treat unknown properties as service calls (snake_case)
-                return (data = {}) => target.call(prop, data);
+
+                // Call via proxy so 'this' inside call() stays the proxy, preserving chaining
+                return (data = {}) => target._proxy.call(prop, data);
             }
         });
+        this._proxy = proxy;
+        return proxy;
     }
 
     /** Returns the number of entities in the current selection */
@@ -364,7 +381,7 @@ function ensureMessageListener() {
                 if (msg.error) promise.reject(new Error(msg.error));
                 else promise.resolve(msg.url);
                 pendingServiceCalls.delete(msg.callId);
-                parentPort.unref();
+                _releaseRef();
             }
             return;
         }
@@ -659,7 +676,7 @@ const ha = {
         });
 
         ensureMessageListener();
-        parentPort.ref(); // Prevent the worker from exiting while waiting for the response
+        _addRef(); // Prevent the worker from exiting while waiting for the response
         parentPort.postMessage({ type: 'register_ask', correlationId });
 
         return new Promise(resolve => {
@@ -668,12 +685,12 @@ const ha = {
                 // Auto-dismiss the notification on the device so the user doesn't
                 // see a stale prompt after the timeout has already resolved.
                 ha.notify('clear_notification', { target, data: { tag: correlationId } });
-                parentPort.unref();
+                _releaseRef();
                 resolve(defaultAction);
             }, timeout);
 
             pendingAsks.set(correlationId, {
-                resolve: (action) => { parentPort.unref(); resolve(action); },
+                resolve: (action) => { _releaseRef(); resolve(action); },
                 timer
             });
         });
@@ -702,15 +719,15 @@ const ha = {
 
                 return (data = {}) => {
                     const callId = ++serviceCallCounter;
-                    parentPort.ref(); // Prevent exit while the call is in progress
+                    _addRef(); // Prevent exit while the call is in progress
                     return new Promise((resolve, reject) => {
-                        pendingServiceCalls.set(callId, { 
+                        pendingServiceCalls.set(callId, {
                             resolve: () => {
-                                parentPort.unref();
+                                _releaseRef();
                                 resolve(apiProxy);
-                            }, 
+                            },
                             reject: (err) => {
-                                parentPort.unref();
+                                _releaseRef();
                                 reject(err);
                             }
                         });
@@ -827,7 +844,7 @@ const ha = {
         installCard: (options = {}) => new Promise((resolve, reject) => {
             const callId = `card_${serviceCallCounter++}`;
             ensureMessageListener();
-            parentPort.ref();
+            _addRef();
             pendingServiceCalls.set(callId, { resolve, reject });
             parentPort.postMessage({ type: 'install_card', options, callId });
         }),
@@ -884,7 +901,7 @@ const ha = {
     
     on: (pattern, arg2, arg3, arg4) => {
         ensureMessageListener();
-        parentPort.ref(); // Keep alive — must come after ensureMessageListener() which may call unref()
+        _addRef(); // Keep alive — must come after ensureMessageListener() which may call unref()
         parentPort.postMessage({ type: 'subscribe', pattern });
         
         let callback, filter, threshold;
@@ -1018,7 +1035,7 @@ const ha = {
     onError: (cb) => {
         if (typeof cb === 'function') {
             errorCallbacks.push(cb);
-            parentPort.ref(); // Keep process alive if an error handler is used
+            _addRef(); // Keep process alive if an error handler is used
         }
     },
 
@@ -1038,7 +1055,7 @@ const ha = {
             if (typeof cb !== 'function') return;
             if (!storeListeners[key]) storeListeners[key] = [];
             storeListeners[key].push(cb);
-            parentPort.ref(); // Keep process alive
+            _addRef(); // Keep process alive
             ensureMessageListener();
         }
     }
@@ -1149,7 +1166,7 @@ ha.persistent = (key, defaultValue = {}) => {
 };
 
 global.schedule = (exp, cb) => {
-    parentPort.ref(); // Keep alive for cron
+    _addRef(); // Keep alive for cron
     ensureMessageListener();
     // Lazy Load Cron only when used
     return require('node-cron').schedule(exp, async () => {
