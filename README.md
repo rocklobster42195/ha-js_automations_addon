@@ -23,7 +23,7 @@
 
 - **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys. Updated automatically as your home changes.
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
-- **Native HA Entities** — Register persistent entities directly in Home Assistant via `ha.register()`. They survive reboots and are editable in the HA device settings.
+- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped. Optionally group multiple entities under a named HA device.
 - **Fluent & Awaitable API** — Interact with entities naturally: `await ha.entity('light.kitchen').turn_on({ brightness: 200 })`. Chain commands, wait for confirmations, build readable sequential logic.
 - **Smart Triggers** — `ha.on()` supports wildcards, arrays, and RegExp. `ha.waitFor()` pauses until a state is reached. `ha.waitUntil()` waits for complex multi-entity conditions.
 - **Persistent Store & Magic Variables** — Share data between scripts or survive reboots with `ha.store`. Use `ha.persistent()` to work with persistent objects as if they were plain JavaScript — nested property changes are saved automatically.
@@ -140,7 +140,7 @@ ha.log(weather.temp); // TypeScript knows this is a number
 
 ## Native Entities (`ha.register`)
 
-Register persistent, native Home Assistant entities via MQTT Discovery. They appear in HA's entity registry, survive reboots, and are fully editable (name, icon, area) in the device settings.
+Register Home Assistant entities via MQTT Discovery. They appear in HA's entity registry and survive reboots — but an entity becomes **unavailable** while its script is not running. State is preserved in the MQTT broker and automatically restored when the script starts again.
 
 ```javascript
 ha.register('sensor.outside_temp', {
@@ -165,6 +165,34 @@ Update state at any time with `ha.update()`:
 ```javascript
 ha.update('sensor.outside_temp', 21.5, { icon: 'mdi:sun-thermometer' });
 ```
+
+### Device Grouping
+
+Use the `device` option to group multiple entities under a shared device card in the HA UI:
+
+```javascript
+ha.register('sensor.weather_temp', {
+    name: 'Temperature',
+    unit: '°C',
+    device_class: 'temperature',
+    device: {
+        name: 'Weather Station',
+        manufacturer: 'AcmeCorp',
+        model: 'v2',
+    },
+});
+
+ha.register('sensor.weather_humidity', {
+    name: 'Humidity',
+    unit: '%',
+    device_class: 'humidity',
+    device: { name: 'Weather Station' }, // same name → same device
+});
+```
+
+Supported device fields: `name`, `manufacturer`, `model`, `sw_version`, `hw_version`, `configuration_url`. Pass `device: true` to use the script name as the device name with default metadata.
+
+> **Entity ID note:** When `device` is set, HA generates the entity_id from the device and entity name slugs, ignoring the path you specified. Omit `device` for exact entity_id control.
 
 > **Mark-and-Sweep:** Entities that are no longer registered by a script are automatically removed from Home Assistant when the script runs again.
 
@@ -278,7 +306,7 @@ Add `@card` (or `@card dev` for development mode) to the script header, then app
 
 ha.register('sensor.bundesliga_score', { name: 'BL Score' });
 
-ha.registerAction('refresh', async () => {
+ha.action('refresh', async () => {
     // fetch and update entity
 });
 
