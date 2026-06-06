@@ -57,7 +57,7 @@ module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemSe
             if (settings) {
                 res.json({ success: true, ...settings });
             } else {
-                res.json({ success: false, error: 'No MQTT configuration found in Home Assistant.' });
+                res.json({ success: false });
             }
         } catch (error) {
             logManager.add('error', 'System', `MQTT Discover Settings API Error: ${error.message}`);

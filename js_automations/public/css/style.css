@@ -1000,6 +1000,16 @@ input#search-input:focus { border-color: var(--accent) !important; }
     margin-bottom: 20px;
 }
 
+.settings-info-box {
+    background: #0d2a35;
+    border-left: 3px solid #4fc3f7;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: #b0c4d8;
+    line-height: 1.5;
+}
+
 .settings-item-wrapper:last-child {
     margin-bottom: 0;
 }

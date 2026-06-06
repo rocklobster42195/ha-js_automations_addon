@@ -222,10 +222,24 @@ module.exports = [
                 default: false
             },
             {
+                key: 'mosquitto_hint',
+                label: null,
+                type: 'info',
+                text: 'settings.mqtt.mosquitto_hint',
+                condition: { key: 'enabled', value: true }
+            },
+            {
+                key: 'autodetect',
+                label: null,
+                type: 'mqtt-autodetect',
+                condition: { key: 'enabled', value: true }
+            },
+            {
                 key: 'host',
                 label: 'settings.mqtt.host',
                 type: 'text',
                 default: 'core-mosquitto',
+                description: 'settings.mqtt.host_desc',
                 condition: { key: 'enabled', value: true }
             },
             {
@@ -254,12 +268,6 @@ module.exports = [
                 key: 'test',
                 label: null,
                 type: 'mqtt-test',
-                condition: { key: 'enabled', value: true }
-            },
-            {
-                key: 'autodetect',
-                label: null,
-                type: 'mqtt-autodetect',
                 condition: { key: 'enabled', value: true }
             },
         ]
