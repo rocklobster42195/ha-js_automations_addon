@@ -120,19 +120,37 @@ class MqttManager extends EventEmitter {
         const mqttEntry = entries.find(e => e.domain === 'mqtt');
 
         if (mqttEntry) {
-            // HA stores the broker hostname as 'broker' (not 'host') in the config entry
-            const brokerFromEntry = mqttEntry.data?.broker || mqttEntry.data?.host;
+            this.logManager.add('debug', 'System', `[MQTT] Found MQTT config entry: ${JSON.stringify(mqttEntry)}`);
+
+            // HA stores broker hostname as 'broker' in data or options (varies by HA version)
+            const brokerFromEntry =
+                mqttEntry.data?.broker   || mqttEntry.data?.host   ||
+                mqttEntry.options?.broker || mqttEntry.options?.host;
+
+            const portFromEntry =
+                mqttEntry.data?.port || mqttEntry.options?.port;
+
+            const usernameFromEntry =
+                mqttEntry.data?.username || mqttEntry.options?.username || '';
+
             const isAddon = !!process.env.SUPERVISOR_TOKEN;
-            // Use core-mosquitto only when running as HA addon AND the broker is the Mosquitto addon
+            // Use core-mosquitto when running as addon and broker points to the Mosquitto addon
             const isMosquittoAddon = isAddon && (!brokerFromEntry || brokerFromEntry === 'core-mosquitto');
             const discovery = {
                 host: isMosquittoAddon ? 'core-mosquitto' : (brokerFromEntry || 'localhost'),
-                port: mqttEntry.data?.port || 1883,
-                username: mqttEntry.data?.username || ''
+                port: portFromEntry || 1883,
+                username: usernameFromEntry
             };
 
             this.logManager.add('debug', 'System', `[MQTT] Discovery successful: ${discovery.host}:${discovery.port}`);
             return discovery;
+        }
+
+        // No MQTT config entry found – when running as addon, suggest core-mosquitto as best guess
+        const isAddon = !!process.env.SUPERVISOR_TOKEN;
+        if (isAddon) {
+            this.logManager.add('debug', 'System', '[MQTT] No MQTT config entry found. Suggesting core-mosquitto as fallback.');
+            return { host: 'core-mosquitto', port: 1883, username: '', _isFallback: true };
         }
 
         return null;

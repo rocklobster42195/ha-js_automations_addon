@@ -182,6 +182,7 @@
     "mqtt": {
       "enabled": "Enable MQTT",
       "host": "Broker Host",
+      "host_desc": "Mosquitto addon: core-mosquitto | External broker: IP or hostname",
       "port": "Port",
       "username": "Username",
       "password": "Password",
@@ -190,7 +191,10 @@
       "mqtt_test_error": "Connection failed: {{error}}",
       "mqtt_autodetect_btn": "Auto-detect from HA",
       "mqtt_autodetect_success": "MQTT settings successfully imported from Home Assistant.",
-      "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant."
+      "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant.",
+      "mqtt_autodetect_password_hint": "Host and port have been imported. Please enter your password manually.",
+      "mqtt_autodetect_fallback": "No MQTT configuration found in HA – core-mosquitto suggested as default. Please enter your credentials manually.",
+      "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>."
     },
     "system": {
       "title": "System Settings",

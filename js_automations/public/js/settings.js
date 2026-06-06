@@ -392,6 +392,12 @@ function renderSettingsItems(category, section) {
             input.style.fontSize = '0.9rem';
             input.onclick = () => discoverMqttSettings(input);
         }
+        else if (item.type === 'info') {
+            input = document.createElement('div');
+            input.className = 'settings-info-box';
+            input.setAttribute('data-i18n', item.text);
+            input.innerHTML = i18next.t(item.text);
+        }
         else {
             input = document.createElement('input');
             input.type = item.mode === 'password' ? 'password' : 'text';
@@ -551,14 +557,22 @@ async function discoverMqttSettings(btn) {
         if (result && result.host) {
             // Update local settings and UI
             if (!window.currentSettings.mqtt) window.currentSettings.mqtt = {};
-            
+
             window.currentSettings.mqtt.host = result.host;
             window.currentSettings.mqtt.port = result.port;
             if (result.username) window.currentSettings.mqtt.username = result.username;
-            
+
             // Re-render to show new values in inputs
             renderAllSettings();
-            alert(i18next.t('settings.system.mqtt_autodetect_success'));
+
+            if (result._isFallback) {
+                alert(i18next.t('settings.mqtt.mqtt_autodetect_fallback'));
+            } else {
+                alert(
+                    i18next.t('settings.system.mqtt_autodetect_success') + '\n\n' +
+                    i18next.t('settings.mqtt.mqtt_autodetect_password_hint')
+                );
+            }
         } else {
             alert(i18next.t('settings.system.mqtt_autodetect_not_found'));
         }
