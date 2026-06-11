@@ -112,6 +112,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initial System Check (Integration Status).
     checkSystemStatus();
+
+    // Handle ?import= deep-link from JSA Library showcase.
+    const importUrl = new URLSearchParams(window.location.search).get('import');
+    if (importUrl) {
+        history.replaceState(null, '', window.location.pathname);
+        setTimeout(() => {
+            openCreationWizard('create');
+            switchWizardTab('import');
+            document.getElementById('wizard-url').value = importUrl;
+            handleImportUrlInput();
+        }, 500);
+    }
 });
 
 /**
