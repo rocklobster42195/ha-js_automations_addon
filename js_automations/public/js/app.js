@@ -113,16 +113,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial System Check (Integration Status).
     checkSystemStatus();
 
-    // Handle ?import= deep-link from JSA Library showcase.
-    const importUrl = new URLSearchParams(window.location.search).get('import');
-    if (importUrl) {
-        history.replaceState(null, '', window.location.pathname);
+    // Handle #import= deep-link from JSA Library showcase.
+    // Hash fragments survive HA ingress redirects unlike query parameters.
+    const hashMatch = window.location.hash.match(/^#import=(.+)$/);
+    if (hashMatch) {
+        const importUrl = decodeURIComponent(hashMatch[1]);
+        try { history.replaceState(null, '', window.location.pathname); } catch {}
         setTimeout(() => {
             openCreationWizard('create');
             switchWizardTab('import');
             document.getElementById('wizard-url').value = importUrl;
             handleImportUrlInput();
-        }, 500);
+        }, 800);
     }
 });
 
