@@ -113,11 +113,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial System Check (Integration Status).
     checkSystemStatus();
 
-    // Handle #import= deep-link from JSA Library showcase.
-    // Hash fragments survive HA ingress redirects unlike query parameters.
+    // Handle deep-link import from JSA Library showcase.
+    // Primary: window.__JSA_IMPORT__ injected server-side via /import?url= route.
+    // Fallback: #import= hash fragment.
     const hashMatch = window.location.hash.match(/^#import=(.+)$/);
-    if (hashMatch) {
-        const importUrl = decodeURIComponent(hashMatch[1]);
+    const importUrl = window.__JSA_IMPORT__ || (hashMatch ? decodeURIComponent(hashMatch[1]) : null);
+    if (importUrl) {
         try { history.replaceState(null, '', window.location.pathname); } catch {}
         setTimeout(() => {
             openCreationWizard('create');

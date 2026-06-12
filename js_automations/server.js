@@ -31,6 +31,19 @@ const io = new Server(server, { path: '/socket.io', cors: { origin: "*" } });
 // Boot the kernel, which instantiates all managers
 kernel.boot(io);
 
+// --- Import Deep-Link Route ---
+// Reads ?url= server-side and injects it into index.html before HA ingress can strip it.
+app.get('/import', (req, res) => {
+    const importUrl = req.query.url || '';
+    const fs = require('fs');
+    const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    const injected = html.replace(
+        '</head>',
+        `<script>window.__JSA_IMPORT__=${JSON.stringify(importUrl)};</script></head>`
+    );
+    res.send(injected);
+});
+
 // --- Global Middleware & Static Files ---
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/locales', express.static(path.join(__dirname, 'locales')));
