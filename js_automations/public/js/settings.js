@@ -250,11 +250,23 @@ function renderAllSettings() {
 
         document.getElementById('btn-copy-jsa-url').addEventListener('click', () => {
             const url = window.location.origin + (window.BASE_PATH || '/').replace(/\/$/, '');
-            navigator.clipboard.writeText(url).then(() => {
+            const showFeedback = () => {
                 const fb = document.getElementById('copy-jsa-feedback');
                 fb.style.display = 'inline';
                 setTimeout(() => { fb.style.display = 'none'; }, 2000);
-            });
+            };
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url).then(showFeedback);
+            } else {
+                // Fallback for HTTP (non-secure) contexts like HA ingress
+                const ta = document.createElement('textarea');
+                ta.value = url;
+                ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); showFeedback(); } catch {}
+                document.body.removeChild(ta);
+            }
         });
     }
 }
