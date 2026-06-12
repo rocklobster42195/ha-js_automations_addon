@@ -15,7 +15,12 @@
 
 **JS Automations** is a professional-grade JavaScript and TypeScript execution engine for Home Assistant. Write automations using standard **Node.js** or **TypeScript** in a secure, isolated environment — with a built-in Web IDE and a powerful `ha` API that puts developer-grade tooling into your smart home.
 
-> 📘 **Deep Dive:** Interested in the internal architecture? Check out the [Technical Documentation](TECH-README.md) or the [API Reference](API_REFERENCE.md).
+> [!TIP]
+> **API Reference:** Complete reference for all `ha` methods → [API Reference](API_REFERENCE.md)
+
+> 💡 **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
+
+> 📘 **Deep Dive:** Internal architecture and advanced concepts → [Technical Documentation](TECH-README.md)
 
 ---
 
@@ -244,6 +249,8 @@ The **+** button opens the creation wizard with three modes:
 1. **New:** Start from scratch (JavaScript or TypeScript) or pick a template.
 2. **Upload:** Drag & drop `.js` / `.ts` files directly into the editor.
 3. **Import:** Paste a raw URL (GitHub/Gist) to fetch code from the web.
+
+> 💡 **Script Library:** Browse and import ready-to-use scripts at [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/) — clicking "Add to JSA" opens the import wizard with the URL pre-filled.
 
 ---
 
