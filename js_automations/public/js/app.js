@@ -113,20 +113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial System Check (Integration Status).
     checkSystemStatus();
 
-    // Handle deep-link import from JSA Library showcase.
-    // Primary: window.__JSA_IMPORT__ injected server-side via /import?url= route.
-    // Fallback: #import= hash fragment.
-    const hashMatch = window.location.hash.match(/^#import=(.+)$/);
-    const importUrl = window.__JSA_IMPORT__ || (hashMatch ? decodeURIComponent(hashMatch[1]) : null);
-    if (importUrl) {
-        try { history.replaceState(null, '', BASE_PATH); } catch {}
-        setTimeout(() => {
-            openCreationWizard('create');
-            switchWizardTab('import');
-            document.getElementById('wizard-url').value = importUrl;
-            handleImportUrlInput();
-        }, 800);
-    }
+
 });
 
 /**
