@@ -153,11 +153,7 @@
       "confirm_delete": "Löschen bestätigen",
       "confirm_delete_desc": "Zeigt einen Bestätigungsdialog vor dem Löschen von Skripten.",
       "language_option_de": "Deutsch",
-      "language_option_en": "English",
-      "script_library": "Script Library",
-      "script_library_desc": "Kopiere deine JSA-URL und füge sie in die JSA Script Library ein, um Skripte per Klick zu importieren.",
-      "copy_jsa_url": "JSA-URL kopieren",
-      "copy_jsa_url_copied": "Kopiert!"
+      "language_option_en": "English"
     },
     "editor": {
       "show_toolbar": "Toolbar anzeigen",
