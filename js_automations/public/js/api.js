@@ -4,8 +4,11 @@
  */
 
 // Robust calculation of the Ingress path: take everything up to the last slash.
+// Special case: strip /import suffix added by the deep-link injection route.
 var BASE_PATH = window.location.pathname;
-if (BASE_PATH.endsWith('.html')) {
+if (BASE_PATH.endsWith('/import')) {
+    BASE_PATH = BASE_PATH.substring(0, BASE_PATH.lastIndexOf('/') + 1);
+} else if (BASE_PATH.endsWith('.html')) {
     BASE_PATH = BASE_PATH.substring(0, BASE_PATH.lastIndexOf('/') + 1);
 } else if (!BASE_PATH.endsWith('/')) {
     BASE_PATH += '/';

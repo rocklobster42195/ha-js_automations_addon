@@ -229,6 +229,34 @@ function renderAllSettings() {
         renderSettingsItems(category, section);
         container.appendChild(section);
     });
+
+    // Append "Copy JSA URL" to the General section
+    const generalSection = document.getElementById('settings-section-general');
+    if (generalSection) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'settings-item-wrapper';
+        wrapper.innerHTML = `
+            <label style="display:block;margin-bottom:5px;font-weight:500;font-size:0.9rem">${i18next.t('settings.general.script_library')}</label>
+            <div style="font-size:0.8rem;color:#aaa;margin-bottom:10px">
+                ${i18next.t('settings.general.script_library_desc')}
+                <a href="https://rocklobster42195.github.io/ha-jsa-library/" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#4caf50)">→</a>
+            </div>
+            <button class="btn-primary" id="btn-copy-jsa-url" style="width:fit-content;font-size:0.9rem">
+                <i class="mdi mdi-link-variant"></i> ${i18next.t('settings.general.copy_jsa_url')}
+            </button>
+            <span id="copy-jsa-feedback" style="margin-left:10px;font-size:0.8rem;color:#4caf50;display:none">${i18next.t('settings.general.copy_jsa_url_copied')}</span>
+        `;
+        generalSection.appendChild(wrapper);
+
+        document.getElementById('btn-copy-jsa-url').addEventListener('click', () => {
+            const url = window.location.origin + (window.BASE_PATH || '/').replace(/\/$/, '');
+            navigator.clipboard.writeText(url).then(() => {
+                const fb = document.getElementById('copy-jsa-feedback');
+                fb.style.display = 'inline';
+                setTimeout(() => { fb.style.display = 'none'; }, 2000);
+            });
+        });
+    }
 }
 
 /**

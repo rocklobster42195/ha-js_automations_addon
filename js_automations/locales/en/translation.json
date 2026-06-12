@@ -152,7 +152,11 @@
       "confirm_delete": "Confirm deletion",
       "confirm_delete_desc": "Shows a confirmation dialog before deleting scripts.",
       "language_option_de": "Deutsch",
-      "language_option_en": "English"
+      "language_option_en": "English",
+      "script_library": "Script Library",
+      "script_library_desc": "Copy your JSA URL and paste it into the JSA Script Library to enable one-click imports.",
+      "copy_jsa_url": "Copy JSA URL",
+      "copy_jsa_url_copied": "Copied!"
     },
     "editor": {
       "show_toolbar": "Show Toolbar",

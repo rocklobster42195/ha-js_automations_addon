@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hashMatch = window.location.hash.match(/^#import=(.+)$/);
     const importUrl = window.__JSA_IMPORT__ || (hashMatch ? decodeURIComponent(hashMatch[1]) : null);
     if (importUrl) {
-        try { history.replaceState(null, '', window.location.pathname); } catch {}
+        try { history.replaceState(null, '', BASE_PATH); } catch {}
         setTimeout(() => {
             openCreationWizard('create');
             switchWizardTab('import');
