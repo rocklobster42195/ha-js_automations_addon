@@ -390,6 +390,11 @@ class Kernel extends EventEmitter {
                 this.emit('ha_state_changed', { entity_id, new_state });
             }
 
+            // Forward non-state events to workers subscribed via ha.onEvent()
+            if (event.event_type !== 'state_changed') {
+                this.workerManager.dispatchCustomEvent(event);
+            }
+
             // Forward card runtime errors (caught by the __jsa__ error boundary) to the script log
             if (event.event_type === 'jsa_card_error') {
                 const { script, message, line } = event.data ?? {};

@@ -584,6 +584,157 @@ interface HA {
     }): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
 
     /**
+     * Fetches aggregated long-term statistics from HA's recorder (the data behind the Energy Dashboard).
+     * Wraps the HA WebSocket `recorder/statistics_during_period` command.
+     *
+     * @param statId The statistic ID — usually the same as an entity ID (e.g. `'sensor.power_usage'`).
+     * @param options Query options. Defaults: last 24 hours, period `'hour'`, types `['mean','min','max','sum']`.
+     * @returns A promise resolving to an array of aggregated statistic entries.
+     *
+     * @example
+     * const stats = await ha.getStatistics('sensor.power_usage', {
+     *   start: new Date(Date.now() - 7 * 86400_000),
+     *   period: 'day',
+     *   types: ['mean', 'sum'],
+     * });
+     * // → [{ start: '2026-06-08T00:00:00Z', mean: 230.4, sum: 1840 }, ...]
+     */
+    getStatistics(statId: string, options?: {
+        /** Start of the statistics window. Defaults to 24 hours ago. */
+        start?: Date;
+        /** End of the statistics window. Defaults to unlimited. */
+        end?: Date;
+        /** Aggregation period. Default: `'hour'`. */
+        period?: 'hour' | 'day' | '5minute';
+        /** Which aggregates to include. Default: `['mean','min','max','sum']`. */
+        types?: Array<'mean' | 'min' | 'max' | 'sum'>;
+    }): Promise<HAStatisticEntry[]>;
+
+    /**
+     * Evaluates a Jinja2 template string via HA's template engine.
+     * Gives access to all HA template functions: `states()`, `distance()`,
+     * `relative_time()`, `area_entities()`, etc.
+     * Wraps the HA WebSocket `render_template` command.
+     *
+     * @param template A Jinja2 template string.
+     * @returns A promise resolving to the rendered value (string, number, or boolean).
+     *
+     * @example
+     * const result = await ha.renderTemplate("{{ states('sun.sun') }}");
+     * // → 'above_horizon'
+     *
+     * const msg = await ha.renderTemplate(
+     *   "Sun sets in {{ relative_time(states.sun.sun.attributes.next_setting) }}."
+     * );
+     */
+    renderTemplate(template: string): Promise<string | number | boolean | null>;
+
+    /**
+     * Fetches events from a HA calendar entity for a given time window.
+     * Wraps the HA WebSocket `calendar/get_events` command.
+     *
+     * @param entityId The calendar entity ID (e.g. `'calendar.family'`).
+     * @param options Time window. Defaults: now → 7 days from now.
+     * @returns A promise resolving to an array of calendar events.
+     *
+     * @example
+     * const events = await ha.getCalendarEvents('calendar.family', {
+     *   start: new Date(),
+     *   end: new Date(Date.now() + 7 * 86400_000),
+     * });
+     * const isHoliday = events.some(e => e.summary.toLowerCase().includes('ferien'));
+     */
+    getCalendarEvents(entityId: EntityID | string, options?: {
+        /** Start of the query window. Defaults to now. */
+        start?: Date;
+        /** End of the query window. Defaults to 7 days from now. */
+        end?: Date;
+    }): Promise<HACalendarEvent[]>;
+
+    /**
+     * Fetches items from a HA todo list entity.
+     * Wraps the HA WebSocket `todo/get_items` command.
+     *
+     * @param entityId The todo entity ID (e.g. `'todo.shopping_list'`).
+     * @returns A promise resolving to an array of todo items.
+     *
+     * @example
+     * const items = await ha.getTodoItems('todo.shopping_list');
+     * const pending = items.filter(i => i.status === 'needs_action');
+     * ha.log(`${pending.length} items left`);
+     */
+    getTodoItems(entityId: EntityID | string): Promise<HATodoItem[]>;
+
+    /**
+     * Returns all labels registered in Home Assistant (HA 2023.6+).
+     * The list is fetched once on startup; restart the script if labels change.
+     *
+     * @example
+     * const labels = ha.getLabels();
+     * // → [{ label_id: 'night_lights', name: 'Night Lights', color: 'blue' }, ...]
+     */
+    getLabels(): HALabel[];
+
+    /**
+     * Returns the entity IDs of all enabled entities that carry a specific label.
+     * The label can be matched by `label_id` or `name`.
+     * The registry is fetched once on startup; restart the script if assignments change.
+     *
+     * @example
+     * for (const id of ha.getEntitiesWithLabel('vacation_safe')) {
+     *   ha.entity(id).turn_off();
+     * }
+     */
+    getEntitiesWithLabel(labelIdOrName: string): EntityID[];
+
+    /**
+     * Returns all floors registered in Home Assistant (HA 2024.2+).
+     * The list is fetched once on startup; restart the script if floors change.
+     *
+     * @example
+     * const floors = ha.getFloors();
+     * // → [{ floor_id: 'ground_floor', name: 'Ground Floor', level: 0 }, ...]
+     */
+    getFloors(): HAFloor[];
+
+    /**
+     * Returns all areas assigned to a given floor.
+     * The list is fetched once on startup.
+     *
+     * @example
+     * const areas = ha.getAreasInFloor('ground_floor');
+     * // → [{ area_id: 'living_room', name: 'Living Room', floor_id: 'ground_floor', ... }, ...]
+     */
+    getAreasInFloor(floorIdOrName: string): Array<{ area_id: string; name: string; floor_id: string; [key: string]: any }>;
+
+    /**
+     * Subscribes to any HA event bus event by type.
+     * Unlike `ha.on()`, which only reacts to `state_changed`, this can receive
+     * automation triggers, NFC tags, custom events, and anything else on the HA event bus.
+     *
+     * Keeps the worker alive as long as the listener is registered.
+     *
+     * @example
+     * ha.onEvent('automation_triggered', (event) => {
+     *   ha.log(`Automation fired: ${event.data.name}`);
+     * });
+     *
+     * ha.onEvent('my_custom_event', (event) => {
+     *   ha.log(event.data.payload);
+     * });
+     */
+    onEvent(eventType: string, callback: (event: HACustomEvent) => void): void;
+
+    /**
+     * Fires a custom event on the HA event bus.
+     * Other scripts can listen for it via `ha.onEvent()`.
+     *
+     * @example
+     * ha.fireEvent('my_custom_event', { payload: 'hello from script A' });
+     */
+    fireEvent(eventType: string, eventData?: Record<string, unknown>): void;
+
+    /**
      * Reads a value from the script's header (e.g., `@name`, `@icon`).
      * @param key The header key (e.g., 'name', 'icon').
      * @param defaultValue A fallback value if the header is not found.
@@ -833,6 +984,65 @@ interface HaFs {
      * @requires @permission fs:write
      */
     rotate(virtualPath: VirtualPath, options?: { maxSize?: string | number; keep?: number }): Promise<void>;
+}
+
+/** One aggregated statistics entry returned by `ha.getStatistics()`. */
+interface HAStatisticEntry {
+    /** ISO 8601 timestamp of the bucket start. */
+    start: string;
+    mean?: number;
+    min?: number;
+    max?: number;
+    sum?: number;
+}
+
+/** One event returned by `ha.getCalendarEvents()`. */
+interface HACalendarEvent {
+    /** Event title. */
+    summary: string;
+    /** ISO 8601 date or datetime string. */
+    start: string;
+    /** ISO 8601 date or datetime string. */
+    end: string;
+    /** `true` for all-day events (start has no time component). */
+    all_day: boolean;
+    description?: string;
+    location?: string;
+}
+
+/** One item returned by `ha.getTodoItems()`. */
+interface HATodoItem {
+    uid: string;
+    summary: string;
+    status: 'needs_action' | 'completed';
+    due?: string;
+    description?: string;
+}
+
+/** A HA label as returned by `ha.getLabels()`. */
+interface HALabel {
+    label_id: string;
+    name: string;
+    color?: string;
+    icon?: string;
+}
+
+/** A HA floor as returned by `ha.getFloors()`. */
+interface HAFloor {
+    floor_id: string;
+    name: string;
+    /** Floor number (e.g. 0 = ground floor, 1 = first floor). */
+    level?: number;
+    icon?: string;
+}
+
+/** An HA event received by `ha.onEvent()` callbacks. */
+interface HACustomEvent {
+    event_type: string;
+    data: Record<string, any>;
+    origin?: string;
+    time_fired?: string;
+    context?: { id: string; parent_id: string | null; user_id: string | null };
 }
 
 /**

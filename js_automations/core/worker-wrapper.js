@@ -229,6 +229,7 @@ for (const k in rawStore) {
 
 const storeListeners = {};
 const subscriptionCallbacks = [];
+const eventTypeCallbacks = []; // for ha.onEvent()
 const stopCallbacks = [];
 const errorCallbacks = [];
 let isListening = false;
@@ -394,6 +395,29 @@ function ensureMessageListener() {
                 else promise.resolve(msg.result);
                 pendingServiceCalls.delete(msg.callId);
                 _releaseRef();
+            }
+            return;
+        }
+
+        if (msg.type === 'get_statistics_response' || msg.type === 'render_template_response' ||
+            msg.type === 'get_calendar_events_response' || msg.type === 'get_todo_items_response') {
+            const promise = pendingServiceCalls.get(msg.callId);
+            if (promise) {
+                if (msg.error) promise.reject(new Error(msg.error));
+                else promise.resolve(msg.result);
+                pendingServiceCalls.delete(msg.callId);
+                _releaseRef();
+            }
+            return;
+        }
+
+        // Handle ha.onEvent() callbacks
+        if (msg.type === 'ha_custom_event') {
+            for (const sub of eventTypeCallbacks) {
+                if (sub.eventType === msg.event.event_type) {
+                    try { sub.callback(msg.event); }
+                    catch (e) { ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`); }
+                }
             }
             return;
         }
@@ -912,7 +936,93 @@ const ha = {
             });
         });
     },
-    
+
+    getStatistics: (statId, options = {}) => {
+        _addRef();
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({
+                type: 'get_statistics',
+                callId,
+                statId,
+                start: options.start instanceof Date ? options.start.toISOString() : options.start,
+                end: options.end instanceof Date ? options.end.toISOString() : options.end,
+                period: options.period,
+                types: options.types,
+            });
+        });
+    },
+
+    renderTemplate: (template) => {
+        _addRef();
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({ type: 'render_template', callId, template });
+        });
+    },
+
+    getCalendarEvents: (entityId, options = {}) => {
+        _addRef();
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({
+                type: 'get_calendar_events',
+                callId,
+                entityId,
+                start: options.start instanceof Date ? options.start.toISOString() : options.start,
+                end: options.end instanceof Date ? options.end.toISOString() : options.end,
+            });
+        });
+    },
+
+    getTodoItems: (entityId) => {
+        _addRef();
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({ type: 'get_todo_items', callId, entityId });
+        });
+    },
+
+    getLabels: () => workerData.initialLabels || [],
+
+    getEntitiesWithLabel: (labelIdOrName) => {
+        const labels = workerData.initialLabels || [];
+        const entityRegistry = workerData.initialEntityRegistry || [];
+        const label = labels.find(l => l.label_id === labelIdOrName || l.name === labelIdOrName);
+        if (!label) return [];
+        return entityRegistry
+            .filter(e => !e.disabled_by && Array.isArray(e.labels) && e.labels.includes(label.label_id))
+            .map(e => e.entity_id);
+    },
+
+    getFloors: () => workerData.initialFloors || [],
+
+    getAreasInFloor: (floorIdOrName) => {
+        const floors = workerData.initialFloors || [];
+        const floor = floors.find(f => f.floor_id === floorIdOrName || f.name === floorIdOrName);
+        if (!floor) return [];
+        return (workerData.initialAreas || []).filter(a => a.floor_id === floor.floor_id);
+    },
+
+    onEvent: (eventType, callback) => {
+        ensureMessageListener();
+        _addRef();
+        eventTypeCallbacks.push({ eventType, callback });
+        parentPort.postMessage({ type: 'subscribe_event_type', eventType });
+    },
+
+    fireEvent: (eventType, eventData = {}) => {
+        parentPort.postMessage({ type: 'fire_event', eventType, eventData });
+    },
+
     /**
      * Reads a value from the script header.
      */
