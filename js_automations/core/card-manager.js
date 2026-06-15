@@ -201,13 +201,25 @@ const __jsa__ = (() => {
           (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zur\u00fcck</button>' : '') +
           '</div></div>');
 
-        // Mutual exclusion: typing in free-input clears select, and vice versa
+        // Mutual exclusion: typing in free-input clears select, and vice versa.
+        // autoFill: when an item is selected, populate other step fields from item properties.
         var freeEl = sr.querySelector('#wiz-free');
         var selEl  = sr.querySelector('#wiz-sel');
         if (freeEl) {
           freeEl.oninput = function() { if (freeEl.value) selEl.value = ''; };
-          selEl.onchange = function() { if (selEl.value) freeEl.value = ''; };
         }
+        selEl.onchange = function() {
+          if (selEl.value) {
+            if (freeEl) freeEl.value = '';
+            if (step.autoFill) {
+              var _item = (data || []).find(function(d) { return String(d[step.valueKey]) === selEl.value; });
+              if (_item) {
+                if (step.autoFill.season) { var _sEl = sr.querySelector('#wiz-season'); if (_sEl && _item[step.autoFill.season] != null) _sEl.value = _item[step.autoFill.season]; }
+                if (step.autoFill.free && freeEl && _item[step.autoFill.free] != null) freeEl.value = _item[step.autoFill.free];
+              }
+            }
+          }
+        };
 
         sr.querySelector('#wiz-next').onclick = async function() {
           var freeVal = freeEl ? freeEl.value.trim() : '';
@@ -290,7 +302,6 @@ class CardManager {
      *
      * @param {string} scriptFilePath - Absolute path to the .js script file
      * @param {object} options
-     * @param {object} [options.config]  - Passed to setConfig() via wrapper injection
      * @param {boolean} [options.force]  - Overwrite even if hash matches
      * @param {boolean} [options.devMode] - @card dev — skip file write and Lovelace registration
      * @returns {Promise<string>} Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
@@ -319,10 +330,7 @@ class CardManager {
         // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
         const preamble = JSA_PREAMBLE.replace('{{SCRIPT_ID}}', scriptName);
 
-        // Wrap card code with config injection if config is provided
-        const wrappedCode = options.config
-            ? this._wrapWithConfig(cardCode, cardName, options.config)
-            : cardCode;
+        const wrappedCode = cardCode;
 
         const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
         const pickerEntry =
@@ -497,29 +505,6 @@ class CardManager {
         } catch {
             return null;
         }
-    }
-
-    // ---------------------------------------------------------------------------
-    // Private: Config Injection Wrapper
-    // ---------------------------------------------------------------------------
-
-    _wrapWithConfig(cardCode, cardName, config) {
-        const configJson = JSON.stringify(config);
-        return `(function(){
-const __jsa_config__ = ${configJson};
-const __orig_define__ = customElements.define.bind(customElements);
-customElements.define = (name, cls) => {
-  class WrappedCard extends cls {
-    connectedCallback() {
-      super.connectedCallback?.();
-      if (__jsa_config__ && this.setConfig) this.setConfig(__jsa_config__);
-    }
-  }
-  __orig_define__(name, WrappedCard);
-  customElements.define = __orig_define__;
-};
-${cardCode}
-})();`;
     }
 
     // ---------------------------------------------------------------------------
