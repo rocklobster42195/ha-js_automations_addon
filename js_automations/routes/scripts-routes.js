@@ -311,6 +311,11 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         }
       });
     }
+    if (!customElements.get('ha-svg-icon')) {
+      customElements.define('ha-svg-icon', class extends HTMLElement {
+        set path(v) {}
+      });
+    }
 
     // ── Intercept customElements.define to capture the card tag ────────────
     let _registeredTag = null;
@@ -475,7 +480,19 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
             (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zur\u00fcck</button>' : '') + '</div></div>');
           var freeEl = sr.querySelector('#wiz-free');
           var selEl  = sr.querySelector('#wiz-sel');
-          if (freeEl) { freeEl.oninput = function() { if (freeEl.value) selEl.value = ''; }; selEl.onchange = function() { if (selEl.value) freeEl.value = ''; }; }
+          if (freeEl) { freeEl.oninput = function() { if (freeEl.value) selEl.value = ''; }; }
+          selEl.onchange = function() {
+            if (selEl.value) {
+              if (freeEl) freeEl.value = '';
+              if (step.autoFill) {
+                var _item = (data || []).find(function(d) { return String(d[step.valueKey]) === selEl.value; });
+                if (_item) {
+                  if (step.autoFill.season) { var _sEl = sr.querySelector('#wiz-season'); if (_sEl && _item[step.autoFill.season] != null) _sEl.value = _item[step.autoFill.season]; }
+                  if (step.autoFill.free && freeEl && _item[step.autoFill.free] != null) freeEl.value = _item[step.autoFill.free];
+                }
+              }
+            }
+          };
           sr.querySelector('#wiz-next').onclick = async function() {
             var freeVal = freeEl ? freeEl.value.trim() : '';
             var raw = freeVal || selEl.value;
