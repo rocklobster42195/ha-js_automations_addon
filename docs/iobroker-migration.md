@@ -35,10 +35,12 @@ The basic structure will feel familiar:
 | `log.warn(msg)` | `ha.warn(msg)` |
 | `log.error(msg)` | `ha.error(msg)` |
 | `$('pattern')` | `ha.select('pattern')` |
-| `request(url, cb)` / `httpGet(url, cb)` | `fetch(url)` (+ `@permission network` in the header) |
+| `request(url, cb)` / `httpGet(url, cb)` | `ha.http.get(url)` / `ha.http.post(url, body)` (+ `@permission network`) |
 | `sendTo(adapter, cmd, data)` | `ha.call('domain.service', data)` |
+| `sendTo('history.0', 'getHistory', { id, start, end })` | `await ha.getHistory(entityId, { start, end })` |
 | Global Scripts | `@include file.js` in the script header |
-| `existsState(id)` | `ha.states['entity_id'] !== undefined` |
+| `existsState(id)` | `ha.entityExists('entity_id')` |
+| `getRooms()` / `getFunctions()` | `ha.getAreas()` / `ha.getEntitiesInArea(areaId)` |
 | `clearSchedule()` / stop script | `ha.stop()` / `ha.onStop(cb)` |
 | Script name, icon, description | JSDoc header: `@name`, `@icon`, `@description` |
 | Persistent variables | `ha.persistent(key, defaultValue)` |
@@ -157,13 +159,24 @@ ha.update('sensor.my_counter', 42.5);
 schedule('0 7 * * 1-5', function() {
   log('Good morning!');
 });
+
+// ioBroker also supports object-style shorthand:
+schedule({ hour: 7, minute: 0, dayOfWeek: [1, 2, 3, 4, 5] }, cb);
 ```
 
 **JSA:**
 ```js
+// Standard cron — identical to ioBroker
 schedule('0 7 * * 1-5', () => {
   ha.log('Good morning!');
 });
+
+// Human-readable shorthands (new in JSA):
+schedule('every weekday at 7:00', () => ha.log('Good morning!'));
+schedule('every 15m', () => ha.log('Quarter-hour tick'));
+schedule('every day at 8:30', cb);
+schedule('every weekend at 10:00', cb);
+schedule('every monday at 9:00', cb);
 ```
 
 ---
@@ -172,9 +185,12 @@ schedule('0 7 * * 1-5', () => {
 
 **ioBroker:**
 ```js
-// request is built-in
-request('https://api.example.com/data', (err, res, body) => {
-  log(body);
+// request / httpGet are built-in
+httpGet('https://api.example.com/data', (err, res) => {
+  log(res.data);
+});
+httpPost('https://api.example.com/submit', { key: 'value' }, (err, res) => {
+  log(res.data);
 });
 ```
 
@@ -184,9 +200,15 @@ request('https://api.example.com/data', (err, res, body) => {
  * @permission network
  */
 
+// Convenience wrapper — automatic JSON parsing, throws on non-2xx
+const data = await ha.http.get('https://api.example.com/data');
+ha.log(data.temperature);
+
+await ha.http.post('https://api.example.com/submit', { key: 'value' });
+
+// For advanced cases (streaming, interceptors) use fetch() directly:
 const res = await fetch('https://api.example.com/data');
 const data = await res.json();
-ha.log(JSON.stringify(data));
 ```
 
 ---
@@ -204,6 +226,81 @@ createState('javascript.0.counter', 0);
 ```js
 const counter = ha.persistent('counter', 0);
 counter.value++;  // auto-saved, survives restarts
+```
+
+---
+
+### Check if an entity exists
+
+**ioBroker:**
+```js
+if (existsState('hm-rpc.0.ABC123.1.STATE')) {
+  const val = getState('hm-rpc.0.ABC123.1.STATE').val;
+}
+```
+
+**JSA:**
+```js
+if (ha.entityExists('sensor.my_sensor')) {
+  const val = ha.getStateValue('sensor.my_sensor');
+}
+```
+
+---
+
+### Query rooms / areas
+
+**ioBroker:**
+```js
+// getRooms() returns the room groups an object belongs to
+const rooms = getRooms();
+// getMembers('enum.rooms.living_room') returns all member IDs
+```
+
+**JSA:**
+```js
+// List all areas
+const areas = ha.getAreas();
+// → [{ area_id: 'living_room', name: 'Living Room' }, ...]
+
+// Get all entities in an area
+const entities = ha.getEntitiesInArea('living_room');
+// → ['light.floor_lamp', 'sensor.temperature', ...]
+
+// Example: turn off all lights in every area
+for (const area of ha.getAreas()) {
+  for (const entityId of ha.getEntitiesInArea(area.area_id)) {
+    if (entityId.startsWith('light.')) {
+      ha.entity(entityId).turn_off();
+    }
+  }
+}
+```
+
+---
+
+### Read state history
+
+**ioBroker:**
+```js
+sendTo('history.0', 'getHistory', {
+  id: 'hm-rpc.0.ABC123.1.POWER',
+  start: Date.now() - 24 * 3600 * 1000,
+  end: Date.now(),
+  count: 100,
+}, (result) => {
+  result.result.forEach(entry => log(`${entry.ts}: ${entry.val}`));
+});
+```
+
+**JSA:**
+```js
+const history = await ha.getHistory('sensor.power_usage', {
+  start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  end: new Date(),
+});
+// → [{ state: '123.4', last_changed: '2026-06-14T10:00:00.000Z' }, ...]
+history.forEach(entry => ha.log(`${entry.last_changed}: ${entry.state}`));
 ```
 
 ---
