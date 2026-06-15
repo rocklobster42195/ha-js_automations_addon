@@ -238,6 +238,125 @@ class HAConnector {
         });
     }
 
+    /**
+     * Fetches long-term statistics for a statistic ID (e.g. energy sensors).
+     * @param {string} statId
+     * @param {{ start?: Date, end?: Date, period?: 'hour'|'day'|'5minute', types?: string[] }} options
+     * @returns {Promise<Array<{start: string, mean?: number, min?: number, max?: number, sum?: number}>>}
+     */
+    async getStatistics(statId, options = {}) {
+        if (!this.isReady) return [];
+        const start = options.start instanceof Date ? options.start : new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const payload = {
+            start_time: start.toISOString(),
+            statistic_ids: [statId],
+            period: options.period || 'hour',
+            types: options.types || ['mean', 'min', 'max', 'sum'],
+        };
+        if (options.end instanceof Date) payload.end_time = options.end.toISOString();
+        const result = await this.sendCommand('recorder/statistics_during_period', payload, 10000);
+        if (!result || typeof result !== 'object') return [];
+        const entries = result[statId] || [];
+        const toIso = (ts) => ts != null ? (typeof ts === 'number' ? new Date(ts * 1000).toISOString() : ts) : undefined;
+        return entries.map(e => {
+            const entry = { start: toIso(e.start) };
+            if (e.mean !== undefined) entry.mean = e.mean;
+            if (e.min  !== undefined) entry.min  = e.min;
+            if (e.max  !== undefined) entry.max  = e.max;
+            if (e.sum  !== undefined) entry.sum  = e.sum;
+            return entry;
+        });
+    }
+
+    /**
+     * Evaluates a Jinja2 template string via HA's template engine.
+     * render_template uses a subscription model: HA first sends a "result" frame
+     * confirming the subscription (result: null), then an "event" frame with the value.
+     * @param {string} template
+     * @returns {Promise<string|number|boolean|null>}
+     */
+    renderTemplate(template) {
+        if (!this.isReady) return Promise.resolve(null);
+        const id = this.msgId++;
+        this.send({ id, type: 'render_template', template });
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                this.ws.removeListener('message', handler);
+                resolve(null);
+            }, 5000);
+            const handler = (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    if (msg.id !== id) return;
+                    // "result" frame just confirms the subscription — ignore unless it's an error
+                    if (msg.type === 'result' && !msg.success) {
+                        clearTimeout(timer);
+                        this.ws.removeListener('message', handler);
+                        resolve(null);
+                        return;
+                    }
+                    // "event" frame carries the actual rendered value
+                    if (msg.type === 'event') {
+                        clearTimeout(timer);
+                        this.ws.removeListener('message', handler);
+                        this.send({ id: this.msgId++, type: 'unsubscribe_events', subscription: id });
+                        resolve(msg.event?.result ?? null);
+                    }
+                } catch {}
+            };
+            this.ws.on('message', handler);
+        });
+    }
+
+    /**
+     * Fetches upcoming events from a HA calendar entity.
+     * @param {string} entityId
+     * @param {{ start?: Date, end?: Date }} options
+     * @returns {Promise<Array<{summary: string, start: string, end: string, all_day: boolean, description?: string}>>}
+     */
+    async getCalendarEvents(entityId, options = {}) {
+        if (!this.isReady) return [];
+        const start = options.start instanceof Date ? options.start : new Date();
+        const end = options.end instanceof Date ? options.end : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const result = await this.sendCommand('calendar/get_events', {
+            entity_ids: [entityId],
+            start: start.toISOString(),
+            end: end.toISOString(),
+        }, 10000);
+        if (!result || typeof result !== 'object') return [];
+        const events = result[entityId]?.events || [];
+        return events.map(e => ({
+            summary: e.summary || '',
+            start: e.start || '',
+            end: e.end || '',
+            all_day: typeof e.start === 'string' && !e.start.includes('T'),
+            ...(e.description ? { description: e.description } : {}),
+            ...(e.location    ? { location: e.location }    : {}),
+        }));
+    }
+
+    /**
+     * Fetches items from a HA todo list entity.
+     * @param {string} entityId
+     * @returns {Promise<Array<{uid: string, summary: string, status: string, due?: string, description?: string}>>}
+     */
+    async getTodoItems(entityId) {
+        if (!this.isReady) return [];
+        const result = await this.sendCommand('todo/item/list', { entity_id: entityId }, 10000);
+        if (!result || typeof result !== 'object') return [];
+        return result.items || result[entityId]?.items || [];
+    }
+
+    /**
+     * Fetches the HA floor registry (HA 2024.2+).
+     * @returns {Promise<Array<{floor_id: string, name: string, level?: number}>>}
+     */
+    async getFloorRegistry() {
+        if (!this.isReady) return [];
+        const result = await this.sendCommand('config/floor_registry/list');
+        return Array.isArray(result) ? result : [];
+    }
+
     getStates() {
         return Object.values(this.states);
     }

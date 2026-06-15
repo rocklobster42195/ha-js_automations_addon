@@ -51,6 +51,9 @@ class WorkerManager extends EventEmitter {
         this.cachedAreas = []; // Area registry fetched from HA on connect
         this.cachedEntityRegistry = []; // Entity registry fetched from HA on connect
         this.cachedDeviceRegistry = []; // Device registry fetched from HA on connect
+        this.cachedLabels = []; // Label registry fetched from HA on connect
+        this.cachedFloors = []; // Floor registry fetched from HA on connect (HA 2024.2+)
+        this.eventTypeSubscriptions = new Map(); // eventType -> Set<filename> for ha.onEvent()
 
         // Request RAM usage statistics from all workers every 5 seconds.
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -157,16 +160,22 @@ class WorkerManager extends EventEmitter {
     async _syncAreaAndEntityRegistry() {
         if (!this.haConnector || !this.haConnector.isReady) return;
         try {
-            const [areas, entityRegistry, deviceRegistry] = await Promise.all([
+            const [areas, entityRegistry, deviceRegistry, labels, floors] = await Promise.all([
                 this.haConnector.sendCommand('config/area_registry/list'),
                 this.haConnector.getEntityRegistry(),
                 this.haConnector.getDeviceRegistry(),
+                this.haConnector.sendCommand('config/label_registry/list'),
+                this.haConnector.getFloorRegistry(),
             ]);
             this.cachedAreas = Array.isArray(areas) ? areas : [];
             this.cachedEntityRegistry = Array.isArray(entityRegistry) ? entityRegistry : [];
             this.cachedDeviceRegistry = Array.isArray(deviceRegistry) ? deviceRegistry : [];
+            this.cachedLabels = Array.isArray(labels) ? labels : [];
+            this.cachedFloors = Array.isArray(floors) ? floors : [];
+            this.emit('log', { source: 'System', level: 'debug',
+                message: `Registry sync: ${this.cachedAreas.length} areas, ${this.cachedLabels.length} labels, ${this.cachedFloors.length} floors` });
         } catch (e) {
-            // Non-fatal: getAreas() / getEntitiesInArea() will return empty arrays
+            this.emit('log', { source: 'System', level: 'warn', message: `Registry sync failed: ${e.message}` });
         }
     }
 
@@ -653,6 +662,8 @@ class WorkerManager extends EventEmitter {
                 initialAreas: this.cachedAreas,
                 initialEntityRegistry: this.cachedEntityRegistry,
                 initialDeviceRegistry: this.cachedDeviceRegistry,
+                initialLabels: this.cachedLabels,
+                initialFloors: this.cachedFloors,
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info',
                 language: language,
@@ -820,6 +831,63 @@ class WorkerManager extends EventEmitter {
                     });
                 } else if (msg.type === 'get_history' && !this.haConnector) {
                     worker.postMessage({ type: 'get_history_response', callId: msg.callId, result: [] });
+                }
+
+                // ha.getStatistics()
+                if (msg.type === 'get_statistics') {
+                    const connector = this.haConnector;
+                    (connector
+                        ? connector.getStatistics(msg.statId, {
+                            start: msg.start ? new Date(msg.start) : undefined,
+                            end: msg.end ? new Date(msg.end) : undefined,
+                            period: msg.period,
+                            types: msg.types,
+                        })
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_statistics_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_statistics_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.renderTemplate()
+                if (msg.type === 'render_template') {
+                    (this.haConnector
+                        ? this.haConnector.renderTemplate(msg.template)
+                        : Promise.resolve(null)
+                    ).then(result => worker.postMessage({ type: 'render_template_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'render_template_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.getCalendarEvents()
+                if (msg.type === 'get_calendar_events') {
+                    (this.haConnector
+                        ? this.haConnector.getCalendarEvents(msg.entityId, {
+                            start: msg.start ? new Date(msg.start) : undefined,
+                            end: msg.end ? new Date(msg.end) : undefined,
+                        })
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_calendar_events_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_calendar_events_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.getTodoItems()
+                if (msg.type === 'get_todo_items') {
+                    (this.haConnector
+                        ? this.haConnector.getTodoItems(msg.entityId)
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_todo_items_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_todo_items_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.onEvent() — register interest in a specific HA event type
+                if (msg.type === 'subscribe_event_type') {
+                    if (!this.eventTypeSubscriptions.has(msg.eventType))
+                        this.eventTypeSubscriptions.set(msg.eventType, new Set());
+                    this.eventTypeSubscriptions.get(msg.eventType).add(scriptMeta.filename);
+                }
+
+                // ha.fireEvent()
+                if (msg.type === 'fire_event' && this.haConnector) {
+                    this.haConnector.fireEvent(msg.eventType, msg.eventData || {});
                 }
 
                 // 6. Lifecycle Control (ha.restart / ha.stop)
@@ -1007,6 +1075,19 @@ class WorkerManager extends EventEmitter {
 
             // Sync cache under user's entity_id (so ha.getState, ha.states work correctly)
             worker.postMessage({ type: 'state_update', entity_id: userEntityId, state: newState });
+        }
+    }
+
+    /**
+     * Forwards a non-state HA event to all workers that subscribed via ha.onEvent().
+     * @param {{ event_type: string, data: object }} event
+     */
+    dispatchCustomEvent(event) {
+        const subscribers = this.eventTypeSubscriptions.get(event.event_type);
+        if (!subscribers) return;
+        for (const filename of subscribers) {
+            const worker = this.workers.get(filename);
+            if (worker) worker.postMessage({ type: 'ha_custom_event', event });
         }
     }
 

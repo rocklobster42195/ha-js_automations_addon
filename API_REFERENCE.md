@@ -511,11 +511,7 @@ const entities = ha.getEntitiesInArea('living_room');
 // → ['light.floor_lamp', 'sensor.temperature', ...]
 
 // Turn off all lights in the living room
-for (const entityId of ha.getEntitiesInArea('living_room')) {
-    if (entityId.startsWith('light.')) {
-        ha.entity(entityId).turn_off();
-    }
-}
+ha.select(ha.getEntitiesInArea('living_room').filter(id => id.startsWith('light.'))).turn_off();
 ```
 
 ---
@@ -551,6 +547,205 @@ ha.log(full[0]?.attributes?.current_temperature);
 ```
 
 > **Note:** History availability depends on the HA recorder integration being configured. Long time windows may return large datasets.
+
+---
+
+## Statistics API
+
+`ha.getStatistics()` fetches **aggregated long-term statistics** from HA's recorder — the same data that powers the Energy Dashboard. Unlike `getHistory()` which returns every raw state change, statistics are pre-aggregated into hourly or daily buckets (mean, min, max, sum).
+
+Use this in an `async` function with `await`.
+
+```javascript
+// Energy usage over the past 7 days (daily buckets)
+const stats = await ha.getStatistics('sensor.power_usage', {
+    start: new Date(Date.now() - 7 * 86400_000),
+    period: 'day',
+    types: ['mean', 'sum'],
+});
+
+for (const entry of stats) {
+    ha.log(`${entry.start}: avg=${entry.mean?.toFixed(1)}W, total=${entry.sum?.toFixed(0)}Wh`);
+}
+
+// Last 24 hours at hourly resolution (default)
+const hourly = await ha.getStatistics('sensor.power_usage');
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `start` | `Date` | 24 hours ago | Start of the window |
+| `end` | `Date` | — | End of the window (optional) |
+| `period` | `'hour' \| 'day' \| '5minute'` | `'hour'` | Aggregation bucket size |
+| `types` | `string[]` | `['mean','min','max','sum']` | Which aggregates to include |
+
+Each entry: `{ start: string, mean?: number, min?: number, max?: number, sum?: number }`
+
+---
+
+## Template API
+
+`ha.renderTemplate()` evaluates a **Jinja2 template** via HA's template engine — giving access to all HA template functions: `states()`, `distance()`, `relative_time()`, `area_entities()`, and everything else available in HA templates.
+
+```javascript
+// Read a state via template
+const sunState = await ha.renderTemplate("{{ states('sun.sun') }}");
+ha.log(sunState); // → 'above_horizon'
+
+// Distance from person to zone
+const dist = await ha.renderTemplate(
+    "{{ distance('person.boris', 'zone.home') | round(1) }}"
+);
+ha.log(`${dist} km from home`);
+
+// Time until next event
+const msg = await ha.renderTemplate(
+    "Sun sets in {{ relative_time(states.sun.sun.attributes.next_setting) }}."
+);
+ha.notify(msg);
+```
+
+Returns a `string`, `number`, or `boolean` — matching whatever the template evaluates to.
+
+---
+
+## Calendar API
+
+`ha.getCalendarEvents()` fetches events from any HA calendar entity (Google Calendar, CalDAV, local calendars).
+
+```javascript
+const events = await ha.getCalendarEvents('calendar.family', {
+    start: new Date(),
+    end: new Date(Date.now() + 7 * 86400_000),
+});
+
+// Check for school holidays
+const isHoliday = events.some(e => e.summary.toLowerCase().includes('ferien'));
+if (isHoliday) ha.log('School holiday this week!');
+
+// List upcoming all-day events
+for (const event of events.filter(e => e.all_day)) {
+    ha.log(`${event.start}: ${event.summary}`);
+}
+```
+
+Each event: `{ summary, start, end, all_day, description?, location? }`
+
+`start` and `end` are ISO strings. All-day events have date-only strings (e.g. `'2026-06-20'`); timed events include a time component.
+
+---
+
+## Todo API
+
+`ha.getTodoItems()` reads items from a HA todo list entity (Google Tasks, CalDAV, local).
+
+```javascript
+const items = await ha.getTodoItems('todo.shopping_list');
+
+const pending = items.filter(i => i.status === 'needs_action');
+ha.log(`${pending.length} items left on the shopping list`);
+
+// Notify if anything is overdue
+const today = new Date().toISOString().slice(0, 10);
+for (const item of pending) {
+    if (item.due && item.due < today) {
+        ha.notify(`Overdue: ${item.summary}`);
+    }
+}
+```
+
+Each item: `{ uid, summary, status: 'needs_action' | 'completed', due?, description? }`
+
+---
+
+## Label API
+
+HA 2023.6+ supports **labels** — a flexible tagging system for entities across areas. JSA exposes the label registry so scripts can query entities by label.
+
+The data is fetched once on startup. Restart the script if labels or assignments change.
+
+```javascript
+// List all labels
+const labels = ha.getLabels();
+// → [{ label_id: 'night_lights', name: 'Night Lights', color: 'blue' }, ...]
+
+// Get entities with a specific label (by ID or name)
+const nightLights = ha.getEntitiesWithLabel('night_lights');
+// → ['light.hallway', 'light.staircase', ...]
+
+// Turn off all "vacation safe" devices
+for (const id of ha.getEntitiesWithLabel('vacation_safe')) {
+    ha.entity(id).turn_off();
+}
+```
+
+---
+
+## Floor API
+
+HA 2024.2+ supports **floors** as a grouping level above areas. Useful for multi-story homes.
+
+The data is fetched once on startup. Restart the script if floors or assignments change.
+
+```javascript
+// List all floors
+const floors = ha.getFloors();
+// → [{ floor_id: 'ground_floor', name: 'Ground Floor', level: 0 }, ...]
+
+// Get all areas on a specific floor
+const areas = ha.getAreasInFloor('ground_floor');
+// → [{ area_id: 'living_room', name: 'Living Room', floor_id: 'ground_floor' }, ...]
+
+// Turn off all lights on the ground floor
+for (const area of ha.getAreasInFloor('Erdgeschoss')) {
+    ha.select(ha.getEntitiesInArea(area.area_id).filter(id => id.startsWith('light.'))).turn_off();
+}
+```
+
+---
+
+## Custom Events (`ha.onEvent` / `ha.fireEvent`)
+
+`ha.onEvent()` subscribes to **any event on the HA event bus** — not just `state_changed`. This includes automation triggers, NFC tag scans, calendar events, service calls, and custom inter-script signals.
+
+`ha.fireEvent()` publishes a custom event that other scripts (or HA automations) can react to.
+
+**Listening to HA events:**
+```javascript
+// React when any automation is triggered
+ha.onEvent('automation_triggered', (event) => {
+    ha.log(`Automation fired: ${event.data.name}`);
+});
+
+// Log every light service call
+ha.onEvent('call_service', (event) => {
+    if (event.data.domain === 'light') {
+        ha.log(`Light service called: ${event.data.service}`);
+    }
+});
+
+// React to an NFC tag scan
+ha.onEvent('tag_scanned', (event) => {
+    ha.log(`Tag: ${event.data.tag_id} scanned by ${event.data.device_id}`);
+});
+```
+
+**Inter-script signalling:**
+```javascript
+// Script A — fire an event
+ha.fireEvent('my_app_event', { command: 'refresh', source: 'script_a' });
+
+// Script B — listen for it
+ha.onEvent('my_app_event', (event) => {
+    if (event.data.command === 'refresh') ha.log('Refresh triggered!');
+});
+```
+
+`ha.onEvent()` keeps the worker alive as long as the listener is registered (same behaviour as `ha.on()`).
+
+> **Note:** `ha.fireEvent()` fires the event on the HA event bus. Any HA automation with an `event` trigger can also react to it.
 
 ---
 
