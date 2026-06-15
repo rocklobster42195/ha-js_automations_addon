@@ -257,7 +257,7 @@ class HAConnector {
         const result = await this.sendCommand('recorder/statistics_during_period', payload, 10000);
         if (!result || typeof result !== 'object') return [];
         const entries = result[statId] || [];
-        const toIso = (ts) => ts != null ? (typeof ts === 'number' ? new Date(ts * 1000).toISOString() : ts) : undefined;
+        const toIso = (ts) => ts != null ? (typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000).toISOString() : ts) : undefined;
         return entries.map(e => {
             const entry = { start: toIso(e.start) };
             if (e.mean !== undefined) entry.mean = e.mean;
@@ -318,21 +318,22 @@ class HAConnector {
         if (!this.isReady) return [];
         const start = options.start instanceof Date ? options.start : new Date();
         const end = options.end instanceof Date ? options.end : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const result = await this.sendCommand('calendar/get_events', {
-            entity_ids: [entityId],
-            start: start.toISOString(),
-            end: end.toISOString(),
-        }, 10000);
-        if (!result || typeof result !== 'object') return [];
-        const events = result[entityId]?.events || [];
-        return events.map(e => ({
-            summary: e.summary || '',
-            start: e.start || '',
-            end: e.end || '',
-            all_day: typeof e.start === 'string' && !e.start.includes('T'),
-            ...(e.description ? { description: e.description } : {}),
-            ...(e.location    ? { location: e.location }    : {}),
-        }));
+        if (!this.baseUrl || !this.token) return [];
+        try {
+            const url = `${this.baseUrl}/api/calendars/${entityId}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${this.token}` } });
+            if (!res.ok) return [];
+            const events = await res.json();
+            if (!Array.isArray(events)) return [];
+            return events.map(e => ({
+                summary: e.summary || '',
+                start: e.start?.dateTime || e.start?.date || e.start || '',
+                end: e.end?.dateTime || e.end?.date || e.end || '',
+                all_day: !!(e.start?.date && !e.start?.dateTime),
+                ...(e.description ? { description: e.description } : {}),
+                ...(e.location    ? { location: e.location }    : {}),
+            }));
+        } catch { return []; }
     }
 
     /**
