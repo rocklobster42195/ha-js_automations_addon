@@ -1,42 +1,35 @@
-## [Unreleased]
+## Closer To The Core
+
+> Seven new ways to talk to Home Assistant — directly from your scripts.
 
 ---
 
-## [2.53.1] - 2026-06-15
+### New API Methods
 
-## [2.53.0] - 2026-06-15
+**`ha.onEvent(eventType, callback)` / `ha.fireEvent(type, data)`**
+Subscribe to any HA event bus event — not just `state_changed`. React to automation triggers, NFC tags, custom integration events, or use `ha.fireEvent()` to signal between scripts.
 
-## [2.52.0] - 2026-06-15
+**`ha.getStatistics(statId, options)`**
+Query HA's long-term recorder statistics — the same data that powers the Energy Dashboard. Hourly, daily or 5-minute buckets with mean, min, max and sum.
 
-## [2.51.14] - 2026-06-15
+**`ha.renderTemplate(template)`**
+Evaluate a Jinja2 template string via HA's own template engine. Full access to `states()`, `distance()`, `relative_time()`, `area_entities()` and everything else HA templates support.
 
-## [2.51.13] - 2026-06-12
+**`ha.getCalendarEvents(entityId, options)`**
+Fetch upcoming events from any HA calendar entity — Google Calendar, CalDAV or local.
 
-## [2.51.12] - 2026-06-12
+**`ha.getTodoItems(entityId)`**
+Read items from any HA todo list entity. Filter by status, check due dates, drive automations from your shopping list.
 
-## [2.51.11] - 2026-06-12
+**`ha.getLabels()` / `ha.getEntitiesWithLabel(label)`**
+Query HA's label registry (2023.6+). Get all labels or resolve every entity carrying a specific label — by ID or display name.
 
-## [2.51.10] - 2026-06-12
+**`ha.getFloors()` / `ha.getAreasInFloor(floor)`**
+Access HA's floor registry (2024.2+). List floors and resolve which areas belong to them — by `floor_id` or display name.
 
-## [2.51.9] - 2026-06-12
+---
 
-## [2.51.8] - 2026-06-12
+### Also
 
-## [2.51.7] - 2026-06-06
-
-## [2.51.6] - 2026-06-06
-
-## [2.51.5] - 2026-05-30
-
-## [2.51.4] - 2026-05-12
-
-## [2.51.3] - 2026-04-29
-
-## [2.51.2] - 2026-04-20
-
-## [2.51.1] - 2026-04-19
-
-# Changelog
-
-## [2.51.0] - 2026-04-13
-feat: lovelace card integration
+- Full **IntelliSense** support for all new methods including typed return interfaces (`HAStatisticEntry`, `HACalendarEvent`, `HATodoItem`, `HALabel`, `HAFloor`, `HACustomEvent`)
+- All new methods documented in the **API Reference**
