@@ -144,6 +144,11 @@ const level = ha.getAttr('sensor.battery', 'battery_level');
 // Get group members as array
 const lights = ha.getGroupMembers('group.living_room_lights');
 
+// Check whether an entity exists before reading its state
+if (ha.entityExists('sensor.my_sensor')) {
+    const val = ha.getStateValue('sensor.my_sensor');
+}
+
 // Read values from the script header (@name super_script)
 const scriptName = ha.getHeader('name', 'script');
 ```
@@ -392,10 +397,31 @@ ha.onError((error) => {
 
 Functions that are always available in the global scope.
 
-### `schedule(cron, callback)`
-Time-based execution using CRON syntax. **Keeps script running.**
+### `schedule(expression, callback)`
+Time-based execution. **Keeps script running.**
+
+Accepts standard 5-field cron expressions **or** human-readable shorthand strings:
+
+| Shorthand | Equivalent cron |
+|---|---|
+| `'every 15m'` | `*/15 * * * *` |
+| `'every hour'` | `0 * * * *` |
+| `'every day at 7:30'` | `30 7 * * *` |
+| `'every weekday at 6:00'` | `0 6 * * 1-5` |
+| `'every weekend at 10:00'` | `0 10 * * 6,0` |
+| `'every monday at 9:00'` | `0 9 * * 1` |
+
 ```javascript
-// Every day at 07:30
+// Shorthand
+schedule('every day at 7:30', () => {
+    ha.log("Time to wake up!");
+});
+
+schedule('every 15m', () => {
+    ha.log("Quarter-hour tick");
+});
+
+// Classic cron expression still works
 schedule('30 7 * * *', () => {
     ha.log("Time to wake up!");
 });
@@ -434,6 +460,97 @@ async function checkWeather() {
 }
 ```
 The system automatically applies important default settings to the `axios` instance (like disabling keep-alive) to prevent scripts from hanging, so you don't have to worry about complex configuration.
+
+---
+
+## HTTP API (`ha.http`)
+
+`ha.http` is a thin convenience wrapper around the native `fetch` API for common GET/POST use-cases. It automatically parses JSON responses and throws on non-2xx status codes.
+
+Requires `@permission network` in the script header.
+
+```javascript
+/**
+ * @permission network
+ */
+
+// GET — returns parsed JSON or plain text
+const data = await ha.http.get('https://api.example.com/data');
+ha.log(data.temperature);
+
+// POST with JSON body
+const result = await ha.http.post('https://api.example.com/submit', { key: 'value' });
+
+// With extra fetch options (custom headers, timeout via AbortSignal, etc.)
+const data = await ha.http.get('https://api.example.com/data', {
+    headers: { 'Authorization': 'Bearer my-token' },
+});
+```
+
+> **Note:** For more complex HTTP scenarios (streaming, interceptors, retry logic) use `fetch` directly or install `axios` via npm.
+
+---
+
+## Area API
+
+JSA exposes the Home Assistant area and entity registry so you can query which entities belong to a room without hardcoding entity IDs.
+
+The data is fetched once on startup. If you add/reassign entities to areas after the script starts, restart the script to pick up the changes.
+
+```javascript
+// List all areas
+const areas = ha.getAreas();
+// → [{ area_id: 'living_room', name: 'Living Room' }, ...]
+
+for (const area of areas) {
+    ha.log(`${area.name} (${area.area_id})`);
+}
+
+// Get all entity IDs in a specific area
+const entities = ha.getEntitiesInArea('living_room');
+// → ['light.floor_lamp', 'sensor.temperature', ...]
+
+// Turn off all lights in the living room
+for (const entityId of ha.getEntitiesInArea('living_room')) {
+    if (entityId.startsWith('light.')) {
+        ha.entity(entityId).turn_off();
+    }
+}
+```
+
+---
+
+## History API
+
+`ha.getHistory()` fetches the recorded state history for an entity from Home Assistant's history system. It wraps the WebSocket `history/history_during_period` command.
+
+Use this in an `async` function with `await`.
+
+```javascript
+// Last 24 hours (default)
+const history = await ha.getHistory('sensor.power_usage');
+ha.log(`${history.length} data points`);
+
+// Custom time window
+const history = await ha.getHistory('sensor.power_usage', {
+    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+    end: new Date(),
+});
+
+// Each entry has at least: state, last_changed
+for (const entry of history) {
+    ha.log(`${entry.last_changed}: ${entry.state}`);
+}
+
+// Include full attributes (minimalResponse: false)
+const full = await ha.getHistory('climate.living_room', {
+    start: new Date(Date.now() - 3600 * 1000),
+    minimalResponse: false,
+});
+ha.log(full[0]?.attributes?.current_temperature);
+```
+
+> **Note:** History availability depends on the HA recorder integration being configured. Long time windows may return large datasets.
 
 ---
 

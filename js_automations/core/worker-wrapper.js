@@ -386,6 +386,18 @@ function ensureMessageListener() {
             return;
         }
 
+        // Handle ha.getHistory() response
+        if (msg.type === 'get_history_response') {
+            const promise = pendingServiceCalls.get(msg.callId);
+            if (promise) {
+                if (msg.error) promise.reject(new Error(msg.error));
+                else promise.resolve(msg.result);
+                pendingServiceCalls.delete(msg.callId);
+                _releaseRef();
+            }
+            return;
+        }
+
         // Handle ha.ask() responses from the main process
         if (msg.type === 'ask_response') {
             const pending = pendingAsks.get(msg.correlationId);
@@ -867,6 +879,39 @@ const ha = {
         const s = states[entityId];
         return (s && Array.isArray(s.attributes?.entity_id)) ? s.attributes.entity_id : [];
     },
+    entityExists: (entityId) => entityId in states,
+    getAreas: () => workerData.initialAreas || [],
+    getEntitiesInArea: (areaId) => {
+        const entityRegistry = workerData.initialEntityRegistry || [];
+        const deviceRegistry = workerData.initialDeviceRegistry || [];
+        // Build device_id → area_id map for the fallback lookup
+        const deviceAreaMap = new Map(deviceRegistry.map(d => [d.id, d.area_id]));
+        return entityRegistry
+            .filter(e => {
+                if (e.disabled_by) return false;
+                // Direct assignment takes priority; fall back to the device's area
+                const effectiveArea = e.area_id ?? deviceAreaMap.get(e.device_id) ?? null;
+                return effectiveArea === areaId;
+            })
+            .map(e => e.entity_id);
+    },
+    getHistory: (entityId, options = {}) => {
+        _addRef();
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, { resolve, reject });
+            parentPort.postMessage({
+                type: 'get_history',
+                callId,
+                entityId,
+                start: options.start instanceof Date ? options.start.toISOString() : options.start,
+                end: options.end instanceof Date ? options.end.toISOString() : options.end,
+                minimalResponse: options.minimalResponse,
+                noAttributes: options.noAttributes,
+            });
+        });
+    },
     
     /**
      * Reads a value from the script header.
@@ -1075,6 +1120,44 @@ if (workerData.filesystemEnabled && workerData.fsDataDir) {
     });
 }
 
+// --- 4c. HTTP CONVENIENCE WRAPPER ---
+{
+    const _httpPermissions = new Set(workerData.permissions || []);
+    const _checkNetworkPermission = () => {
+        if (workerData.capabilityEnforcement && !_httpPermissions.has('network')) {
+            throw new Error('PermissionDeniedError: ha.http requires @permission network in your script header.');
+        }
+    };
+
+    const _parseResponse = async (res) => {
+        if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status} ${res.statusText}${body ? ': ' + body : ''}`);
+        }
+        const ct = res.headers.get('content-type') || '';
+        return ct.includes('application/json') ? res.json() : res.text();
+    };
+
+    ha.http = {
+        async get(url, options = {}) {
+            _checkNetworkPermission();
+            const res = await fetch(url, { method: 'GET', ...options });
+            return _parseResponse(res);
+        },
+        async post(url, body, options = {}) {
+            _checkNetworkPermission();
+            const isJson = body !== null && typeof body === 'object';
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { ...(isJson ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
+                body: isJson ? JSON.stringify(body) : body,
+                ...options,
+            });
+            return _parseResponse(res);
+        },
+    };
+}
+
 /**
  * Helper to create a deep, recursive proxy that triggers a callback on any modification.
  * @param {object} target The object to wrap.
@@ -1165,11 +1248,54 @@ ha.persistent = (key, defaultValue = {}) => {
     return createDeepProxy(target, onChange);
 };
 
+/**
+ * Converts human-readable schedule expressions to cron strings.
+ * Standard cron expressions pass through unchanged.
+ */
+function _parseCronExpression(exp) {
+    if (typeof exp !== 'string') return exp;
+    const s = exp.trim().toLowerCase();
+
+    // "every Nm" / "every N minutes"
+    const everyMinutes = s.match(/^every\s+(\d+)\s*m(?:in(?:utes?)?)?$/);
+    if (everyMinutes) return `*/${everyMinutes[1]} * * * *`;
+
+    // "every Nh" / "every N hours"
+    const everyHours = s.match(/^every\s+(\d+)\s*h(?:ours?)?$/);
+    if (everyHours) return `0 */${everyHours[1]} * * *`;
+
+    // "every minute"
+    if (s === 'every minute') return '* * * * *';
+
+    // "every hour"
+    if (s === 'every hour') return '0 * * * *';
+
+    // "every day at H:MM" / "daily at H:MM"
+    const everyDay = s.match(/^(?:every day|daily) at (\d{1,2}):(\d{2})$/);
+    if (everyDay) return `${parseInt(everyDay[2])} ${parseInt(everyDay[1])} * * *`;
+
+    // "every weekday at H:MM"
+    const everyWeekday = s.match(/^every weekday at (\d{1,2}):(\d{2})$/);
+    if (everyWeekday) return `${parseInt(everyWeekday[2])} ${parseInt(everyWeekday[1])} * * 1-5`;
+
+    // "every weekend at H:MM"
+    const everyWeekend = s.match(/^every weekend at (\d{1,2}):(\d{2})$/);
+    if (everyWeekend) return `${parseInt(everyWeekend[2])} ${parseInt(everyWeekend[1])} * * 6,0`;
+
+    // "every monday at H:MM", "every tuesday at H:MM", etc.
+    const dayNames = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0 };
+    const everyNamed = s.match(/^every (monday|tuesday|wednesday|thursday|friday|saturday|sunday) at (\d{1,2}):(\d{2})$/);
+    if (everyNamed) return `${parseInt(everyNamed[3])} ${parseInt(everyNamed[2])} * * ${dayNames[everyNamed[1]]}`;
+
+    return exp;
+}
+
 global.schedule = (exp, cb) => {
     _addRef(); // Keep alive for cron
     ensureMessageListener();
+    const cronExp = _parseCronExpression(exp);
     // Lazy Load Cron only when used
-    return require('node-cron').schedule(exp, async () => {
+    return require('node-cron').schedule(cronExp, async () => {
         try {
             await cb();
         } catch (e) {

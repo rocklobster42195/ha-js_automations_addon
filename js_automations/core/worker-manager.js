@@ -48,6 +48,9 @@ class WorkerManager extends EventEmitter {
         this._actionCallCounter = 0;
         this._notificationListenerActive = false;
         this.cardManager = null; // Set by kernel after boot
+        this.cachedAreas = []; // Area registry fetched from HA on connect
+        this.cachedEntityRegistry = []; // Entity registry fetched from HA on connect
+        this.cachedDeviceRegistry = []; // Device registry fetched from HA on connect
 
         // Request RAM usage statistics from all workers every 5 seconds.
         setInterval(() => this.broadcastToWorkers({ type: 'get_stats' }), 5000);
@@ -141,11 +144,29 @@ class WorkerManager extends EventEmitter {
         }, 1000); // Wait 1 second before saving
     }
 
-    setConnector(connector) { 
-        this.haConnector = connector; 
+    setConnector(connector) {
+        this.haConnector = connector;
         if (connector) {
             // Automatically sync services once connected
             setTimeout(() => this.syncServiceDefinitions(), 3000);
+            // Fetch area + entity registry for ha.getAreas() / ha.getEntitiesInArea()
+            setTimeout(() => this._syncAreaAndEntityRegistry(), 4000);
+        }
+    }
+
+    async _syncAreaAndEntityRegistry() {
+        if (!this.haConnector || !this.haConnector.isReady) return;
+        try {
+            const [areas, entityRegistry, deviceRegistry] = await Promise.all([
+                this.haConnector.sendCommand('config/area_registry/list'),
+                this.haConnector.getEntityRegistry(),
+                this.haConnector.getDeviceRegistry(),
+            ]);
+            this.cachedAreas = Array.isArray(areas) ? areas : [];
+            this.cachedEntityRegistry = Array.isArray(entityRegistry) ? entityRegistry : [];
+            this.cachedDeviceRegistry = Array.isArray(deviceRegistry) ? deviceRegistry : [];
+        } catch (e) {
+            // Non-fatal: getAreas() / getEntitiesInArea() will return empty arrays
         }
     }
 
@@ -629,6 +650,9 @@ class WorkerManager extends EventEmitter {
                     return states;
                 })(),
                 initialStore: initialStoreValues,
+                initialAreas: this.cachedAreas,
+                initialEntityRegistry: this.cachedEntityRegistry,
+                initialDeviceRegistry: this.cachedDeviceRegistry,
                 storageDir: this.storageDir,
                 loglevel: scriptMeta.loglevel || 'info',
                 language: language,
@@ -780,6 +804,22 @@ class WorkerManager extends EventEmitter {
                         .catch(err => worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: err.message }));
                 } else if (msg.type === 'install_card' && !this.cardManager) {
                     worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: 'CardManager not available' });
+                }
+
+                // ha.getHistory() — proxy the HA WebSocket call to the master process
+                if (msg.type === 'get_history' && this.haConnector) {
+                    this.haConnector.getHistory(msg.entityId, {
+                        start: msg.start ? new Date(msg.start) : undefined,
+                        end: msg.end ? new Date(msg.end) : undefined,
+                        minimalResponse: msg.minimalResponse,
+                        noAttributes: msg.noAttributes,
+                    }).then(result => {
+                        worker.postMessage({ type: 'get_history_response', callId: msg.callId, result });
+                    }).catch(err => {
+                        worker.postMessage({ type: 'get_history_response', callId: msg.callId, error: err.message });
+                    });
+                } else if (msg.type === 'get_history' && !this.haConnector) {
+                    worker.postMessage({ type: 'get_history_response', callId: msg.callId, result: [] });
                 }
 
                 // 6. Lifecycle Control (ha.restart / ha.stop)

@@ -204,6 +204,40 @@ class HAConnector {
         });
     }
 
+    /**
+     * Fetches the state history for an entity from Home Assistant.
+     * @param {string} entityId
+     * @param {{ start?: Date, end?: Date, minimalResponse?: boolean, noAttributes?: boolean }} options
+     * @returns {Promise<Array<{state: string, last_changed: string, attributes?: object}>>}
+     */
+    async getHistory(entityId, options = {}) {
+        if (!this.isReady) return [];
+        const start = options.start instanceof Date ? options.start : new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const end = options.end instanceof Date ? options.end : new Date();
+        const result = await this.sendCommand('history/history_during_period', {
+            start_time: start.toISOString(),
+            end_time: end.toISOString(),
+            entity_ids: [entityId],
+            minimal_response: options.minimalResponse !== false,
+            no_attributes: options.noAttributes === true,
+            significant_changes_only: false,
+        }, 10000);
+        if (!result || typeof result !== 'object') return [];
+        const entries = result[entityId] || [];
+        // HA returns timestamps as Unix floats (seconds) in minimal_response mode.
+        // Field names: state/last_changed/last_updated (full) or s/lc/lu (compact).
+        // last_changed may be absent when only last_updated changed — fall back to last_updated.
+        const toIso = (ts) => ts != null ? new Date(ts * 1000).toISOString() : undefined;
+        return entries.map(e => {
+            const rawTs = e.last_changed ?? e.lc ?? e.last_updated ?? e.lu;
+            return {
+                state: e.state ?? e.s,
+                last_changed: typeof rawTs === 'number' ? toIso(rawTs) : rawTs,
+                ...(e.attributes ? { attributes: e.attributes } : {}),
+            };
+        });
+    }
+
     getStates() {
         return Object.values(this.states);
     }

@@ -181,6 +181,21 @@ interface BackgroundErrorData {
  * Provides access to Home Assistant functionalities, logging, and global store.
  */
 declare const ha: HA;
+/**
+ * Schedules a recurring callback using a cron expression or a human-readable shorthand.
+ *
+ * **Cron format:** standard 5-field cron (e.g. `'0 8 * * *'` — every day at 08:00)
+ *
+ * **Shorthand examples:**
+ * ```
+ * schedule('every 15m', cb)              // → every 15 minutes
+ * schedule('every hour', cb)             // → every full hour
+ * schedule('every day at 7:30', cb)      // → daily at 07:30
+ * schedule('every weekday at 6:00', cb)  // → Mon–Fri at 06:00
+ * schedule('every weekend at 10:00', cb) // → Sat & Sun at 10:00
+ * schedule('every monday at 9:00', cb)   // → every Monday at 09:00
+ * ```
+ */
 declare const schedule: (cronExpression: string, callback: () => void | Promise<void>) => any;
 declare const sleep: (ms: number) => Promise<void>;
 
@@ -514,6 +529,59 @@ interface HA {
     getStateValue(entityId: EntityID): string | number | boolean | undefined;
     /** Gets the members of a group entity. */
     getGroupMembers(entityId: EntityID): EntityID[];
+    /**
+     * Returns `true` if an entity with the given ID exists in the current state cache.
+     * Useful as a safe guard before reading state from an entity that may not be loaded yet.
+     * @example
+     * if (ha.entityExists('sensor.my_sensor')) {
+     *   const val = ha.getStateValue('sensor.my_sensor');
+     * }
+     */
+    entityExists(entityId: string): boolean;
+
+    /**
+     * Returns all areas registered in Home Assistant.
+     * The list is fetched once on startup; restart the script if areas change.
+     * @example
+     * const areas = ha.getAreas();
+     * // → [{ area_id: 'living_room', name: 'Living Room', aliases: [], picture: null }, ...]
+     */
+    getAreas(): Array<{ area_id: string; name: string; aliases: string[]; picture: string | null; [key: string]: any }>;
+
+    /**
+     * Returns the entity IDs of all (enabled) entities assigned to a given area.
+     * The list is fetched once on startup; restart the script if assignments change.
+     * @example
+     * const entities = ha.getEntitiesInArea('living_room');
+     * // → ['light.floor_lamp', 'sensor.temperature', ...]
+     */
+    getEntitiesInArea(areaId: string): EntityID[];
+
+    /**
+     * Fetches the state history for an entity from Home Assistant.
+     * Wraps the HA WebSocket `history/history_during_period` command.
+     *
+     * @param entityId The entity to query (e.g. `'sensor.power_usage'`).
+     * @param options Query options. Defaults: last 24 hours, minimal response enabled.
+     * @returns A promise resolving to an array of state entries ordered by time.
+     *
+     * @example
+     * const history = await ha.getHistory('sensor.power_usage', {
+     *   start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+     *   end: new Date(),
+     * });
+     * // → [{ state: '123.4', last_changed: '2026-06-14T10:00:00Z' }, ...]
+     */
+    getHistory(entityId: EntityID | string, options?: {
+        /** Start of the history window. Defaults to 24 hours ago. */
+        start?: Date;
+        /** End of the history window. Defaults to now. */
+        end?: Date;
+        /** When `true`, only `state` and `last_changed` are returned (no attributes). Default: `true`. */
+        minimalResponse?: boolean;
+        /** When `true`, attributes are omitted entirely. Default: `false`. */
+        noAttributes?: boolean;
+    }): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
 
     /**
      * Reads a value from the script's header (e.g., `@name`, `@icon`).
@@ -645,6 +713,35 @@ interface HA {
      */
     persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
     persistent<T extends object = Record<string, any>>(key: string, defaultValue?: T): T;
+
+    /**
+     * Built-in HTTP convenience wrapper.
+     * Requires `@permission network` in the script header.
+     *
+     * @example
+     * // @permission network
+     * const data = await ha.http.get('https://api.example.com/data');
+     * await ha.http.post('https://api.example.com/submit', { key: 'value' });
+     */
+    readonly http: {
+        /**
+         * Performs an HTTP GET request and returns the parsed response.
+         * Automatically parses JSON when the `Content-Type` is `application/json`, otherwise returns text.
+         * Throws on non-2xx status codes.
+         * @param url The URL to fetch.
+         * @param options Optional `fetch` init options (headers, signal, etc.).
+         */
+        get(url: string, options?: RequestInit): Promise<any>;
+        /**
+         * Performs an HTTP POST request and returns the parsed response.
+         * Objects are serialized as JSON with `Content-Type: application/json`.
+         * Throws on non-2xx status codes.
+         * @param url The URL to post to.
+         * @param body The request body. Objects are sent as JSON; strings/Buffers are sent as-is.
+         * @param options Optional `fetch` init options (additional headers, signal, etc.).
+         */
+        post(url: string, body?: Record<string, any> | string, options?: RequestInit): Promise<any>;
+    };
 
     /**
      * Filesystem API — available when the `filesystem_enabled` setting is on.
