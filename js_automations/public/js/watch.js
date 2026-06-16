@@ -126,7 +126,24 @@ function onWatchUpdate(data) {
         tile.appendChild(bodyEl);
         tile.appendChild(scriptEl);
         _watchWrap.appendChild(tile);
-        _watchTiles.set(label, { el: tile, valueEl, iconEl, scriptEl });
+        _watchTiles.set(label, { el: tile, valueEl, iconEl, scriptEl, filename: data.filename });
+    }
+}
+
+function onWatchClear(data) {
+    if (!_watchWrap) return;
+    for (const [label, entry] of _watchTiles) {
+        if (entry.filename === data.filename) {
+            entry.el.remove();
+            _watchTiles.delete(label);
+        }
+    }
+    if (_watchTiles.size === 0) {
+        const hint = document.createElement('div');
+        hint.id = 'watch-tiles-hint';
+        hint.className = 'watch-hint';
+        hint.textContent = i18next.t('devtools.watch_hint', { defaultValue: 'No watch expressions active. Use ha.watch(\'label\', () => expr) in a script.' });
+        _watchWrap.appendChild(hint);
     }
 }
 

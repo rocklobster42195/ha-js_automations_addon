@@ -435,6 +435,7 @@ class Kernel extends EventEmitter {
         this.workerManager.on('breakpoint_continued', (data) => this.emit('breakpoint_continued', data));
         this.workerManager.on('watch_update', (data) => this.emit('watch_update', data));
         this.workerManager.on('inspect_snapshot', (data) => this.emit('inspect_snapshot', data));
+        this.workerManager.on('watch_clear', (data) => this.emit('watch_clear', data));
 
         // Notify frontend when type definitions are updated
         this.workerManager.on('typings_generated', () => {

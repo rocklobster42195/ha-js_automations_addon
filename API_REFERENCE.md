@@ -79,10 +79,7 @@ ha.watch('Shelly Plug', () => ha.getState('switch.shelly_plug_s'));
 ha.watch('Heating ON', () => ha.getState('climate.living_room')?.state === 'heat');
 
 // Computed number
-ha.watch('Lights on', () =>
-    Object.values(ha.states)
-        .filter(s => s.entity_id.startsWith('light.') && s.state === 'on').length
-);
+ha.watch('Lights on', () => ha.select('light.*').where(s => s.state === 'on').count);
 ```
 
 > **Tip:** Returning the full state object (`ha.getState(...)` without `?.state`) automatically shows the entity's icon in the tile and derives the correct color from the state.
