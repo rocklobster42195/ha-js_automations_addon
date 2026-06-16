@@ -42,7 +42,64 @@ ha.restart("Something went wrong, trying again..."); // Restarts the script
 ha.stop("Job finished successfully.");             // Stops the script
 ```
 
-### 3. Reactive Triggers (`ha.on`)
+### 3. Breakpoints (`ha.breakpoint`) *(Expert Mode)*
+Pauses script execution and displays variables in the **Breakpoints** tab of the developer tools. Click **Continue** in the UI to resume. Auto-resumes after 60 seconds.
+
+> Requires **Expert Mode** to be enabled in Settings → General.
+
+```javascript
+const temp = ha.getState('sensor.outdoor_temp')?.state;
+
+ha.breakpoint('before decision', {
+    temp,
+    threshold: 20,
+    isWarm: parseFloat(temp) > 20,
+});
+
+// execution pauses here until Continue is clicked
+if (parseFloat(temp) > 20) {
+    ha.call('fan.turn_on', { entity_id: 'fan.living_room' });
+}
+```
+
+The second argument accepts any key/value pairs and is shown as a variable inspector in the UI.
+
+### 4. Watch & Inspect *(Expert Mode)*
+
+#### `ha.watch(label, fn)` — Live tile
+Registers an expression that re-evaluates on every HA state change and displays the result as a **live tile** at the top of the **WATCH** tab. Multiple scripts can each register their own watches.
+
+> Requires **Expert Mode** to be enabled in Settings → General.
+
+```javascript
+// Full state object → shows entity icon + state value automatically
+ha.watch('Shelly Plug', () => ha.getState('switch.shelly_plug_s'));
+
+// Works with any expression — boolean renders green/red
+ha.watch('Heating ON', () => ha.getState('climate.living_room')?.state === 'heat');
+
+// Computed number
+ha.watch('Lights on', () =>
+    Object.values(ha.states)
+        .filter(s => s.entity_id.startsWith('light.') && s.state === 'on').length
+);
+```
+
+> **Tip:** Returning the full state object (`ha.getState(...)` without `?.state`) automatically shows the entity's icon in the tile and derives the correct color from the state.
+
+#### `ha.inspect(label, vars)` — One-shot snapshot
+Sends a timestamped variable snapshot to the **Inspect** list at the bottom of the **WATCH** tab. Non-blocking — execution continues immediately.
+
+```javascript
+const motion = ha.getState('binary_sensor.hallway_motion')?.state;
+const light  = ha.getState('light.hallway')?.state;
+
+ha.inspect('hallway check', { motion, light, ts: new Date().toISOString() });
+
+// execution continues here without pausing
+```
+
+### 5. Reactive Triggers (`ha.on`)
 React to changes in Home Assistant. **Using this keeps your script running.**
 
 ```javascript

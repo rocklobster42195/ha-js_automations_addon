@@ -109,7 +109,7 @@ const storeManagerUiWrapper = new Proxy(storeManager, {
 });
 
 const storeRouter = require('./routes/store-route')(storeManagerUiWrapper, workerManager);
-const systemRouter = require('./routes/system-route')(haConnector, logManager, () => kernel.systemOptions, config.SCRIPTS_DIR, systemService, kernel.getSystemStatus.bind(kernel), kernel.mqttManager);
+const systemRouter = require('./routes/system-route')(haConnector, logManager, () => kernel.systemOptions, config.SCRIPTS_DIR, systemService, kernel.getSystemStatus.bind(kernel), kernel.mqttManager, workerManager);
 const settingsRouter = require('./routes/settings-route');
 const haRouter = require('./routes/ha-routes')(haConnector);
 

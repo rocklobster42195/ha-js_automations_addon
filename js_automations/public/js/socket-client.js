@@ -88,7 +88,10 @@ function initSocket() {
         if (typeof initLogs === 'function') initLogs();
     };
 
-    window.socket.on('connect', handleConnectionEstablished);
+    window.socket.on('connect', () => {
+        handleConnectionEstablished();
+        if (typeof window.onSocketReady === 'function') window.onSocketReady();
+    });
 
     window.socket.on('disconnect', () => {
         updateConnectionUI(false);
@@ -97,6 +100,11 @@ function initSocket() {
 
     window.socket.on('log', d => { if(typeof appendLog === 'function') appendLog(d); });
     window.socket.on('status_update', () => { if(typeof loadScripts === 'function') loadScripts(); });
+    window.socket.on('ha_event_stream', d => { if(typeof onHaEventStream === 'function') onHaEventStream(d); });
+    window.socket.on('breakpoint_hit', d => { if(typeof onBreakpointHit === 'function') onBreakpointHit(d); });
+    window.socket.on('breakpoint_continued', d => { if(typeof onBreakpointContinued === 'function') onBreakpointContinued(d); });
+    window.socket.on('watch_update', d => { if(typeof onWatchUpdate === 'function') onWatchUpdate(d); });
+    window.socket.on('inspect_snapshot', d => { if(typeof onInspectSnapshot === 'function') onInspectSnapshot(d); });
     
     window.socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');

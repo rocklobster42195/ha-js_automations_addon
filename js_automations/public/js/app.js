@@ -95,6 +95,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             configureMonaco();
             loadScripts();
             initResizer();
+            initLogPaneResizer();
+            initDevPanelTabs();
+            initEventInspector();
+            initWatch();
+            initRepl();
+            initBreakpoints();
         });
     }
 

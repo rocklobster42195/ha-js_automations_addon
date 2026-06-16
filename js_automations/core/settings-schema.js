@@ -26,13 +26,12 @@ module.exports = [
                 ], 
                 default: 'auto' 
             },
-            { 
-                key: 'expert_mode', 
-                label: 'settings.general.expert_mode', 
-                description: 'settings.general.expert_mode_desc', 
-                type: 'boolean', 
-                default: true,
-                active: false
+            {
+                key: 'expert_mode',
+                label: 'settings.general.expert_mode',
+                description: 'settings.general.expert_mode_desc',
+                type: 'boolean',
+                default: false
             },
             { 
                 key: 'confirm_delete', 

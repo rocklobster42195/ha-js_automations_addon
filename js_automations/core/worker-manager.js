@@ -4,6 +4,7 @@
  */
 const { Worker } = require('worker_threads');
 const path = require('path');
+const os = require('os');
 const EventEmitter = require('events');
 const fs = require('fs');
 const ScriptHeaderParser = require('./script-header-parser');
@@ -17,6 +18,7 @@ class WorkerManager extends EventEmitter {
         this.stats = new Map();
         this.restartTracker = new Map(); // Tracks start times for loop protection
         this.startTimes = new Map();
+        this._activeBreakpoints = new Map(); // filename → { flag: Int32Array, label, vars }
         // Tracks ha.persistent() keys with unsaved in-memory changes per script.
         // Map<filename, Map<storeKey, dirtyAtTimestamp>>
         this.dirtyStore = new Map();
@@ -691,7 +693,21 @@ class WorkerManager extends EventEmitter {
                 if (msg.type === 'log') {
                     this.emit('log', { source: name, message: msg.message, level: msg.level || 'info' });
                 }
-                
+
+                if (msg.type === 'breakpoint') {
+                    const flag = new Int32Array(msg.sab);
+                    this._activeBreakpoints.set(scriptMeta.filename, { flag, label: msg.label, vars: msg.vars });
+                    this.emit('breakpoint_hit', { filename: scriptMeta.filename, name, label: msg.label, vars: msg.vars });
+                }
+
+                if (msg.type === 'watch_update') {
+                    this.emit('watch_update', { label: msg.label, value: msg.value, filename: scriptMeta.filename, name });
+                }
+
+                if (msg.type === 'inspect') {
+                    this.emit('inspect_snapshot', { label: msg.label, vars: msg.vars, filename: scriptMeta.filename, name });
+                }
+
                 // 2. Home Assistant Actions
                 if (msg.type === 'call_service' && this.haConnector) {
                     try {
@@ -918,6 +934,7 @@ class WorkerManager extends EventEmitter {
                 this.subscriptions.delete(scriptMeta.filename);
                 this.stats.delete(scriptMeta.filename);
                 this.startTimes.delete(scriptMeta.filename);
+                this._activeBreakpoints.delete(scriptMeta.filename);
 
                 // Clean up any ha.ask() promises that will never resolve
                 for (const [correlationId, askWorker] of this.pendingAsks.entries()) {
@@ -974,6 +991,96 @@ class WorkerManager extends EventEmitter {
             if (worker === exceptWorker) continue;
             worker.postMessage(payload);
         }
+    }
+
+    /**
+     * Resumes a script paused at a breakpoint.
+     * @param {string} filename
+     */
+    continueBreakpoint(filename) {
+        const bp = this._activeBreakpoints.get(filename);
+        if (!bp) return false;
+        Atomics.store(bp.flag, 0, 1);
+        Atomics.notify(bp.flag, 0);
+        this._activeBreakpoints.delete(filename);
+        this.emit('breakpoint_continued', { filename });
+        return true;
+    }
+
+    /**
+     * Runs a code snippet in a short-lived worker with the full ha API available.
+     * Resolves with { logs: [{level, message}], error: string|null } after completion or 5s timeout.
+     */
+    runRepl(code) {
+        const tmpFile = path.join(os.tmpdir(), `jsa_repl_${Date.now()}.js`);
+        const logs = [];
+
+        return new Promise((resolve) => {
+            try { fs.writeFileSync(tmpFile, code, 'utf8'); }
+            catch (e) { return resolve({ logs: [], error: `Write error: ${e.message}` }); }
+
+            const initialStoreValues = {};
+            if (this.storeManager) {
+                for (const k in this.storeManager.data) {
+                    initialStoreValues[k] = this.storeManager.data[k].value;
+                }
+            }
+            const language = (this.settings.ui_language && this.settings.ui_language !== 'auto')
+                ? this.settings.ui_language : (this.systemLanguage || 'en');
+
+            let worker;
+            try {
+                worker = new Worker(path.join(__dirname, 'worker-wrapper.js'), {
+                    resourceLimits: { maxOldGenerationSizeMb: 64 },
+                    workerData: {
+                        path: tmpFile,
+                        name: 'REPL',
+                        filename: 'repl',
+                        loglevel: 'debug',
+                        language,
+                        storageDir: this.storageDir,
+                        initialStates: this.haConnector ? { ...this.haConnector.states } : {},
+                        initialStore: initialStoreValues,
+                        initialAreas: this.cachedAreas || [],
+                        initialEntityRegistry: this.cachedEntityRegistry || [],
+                        initialDeviceRegistry: this.cachedDeviceRegistry || [],
+                        initialLabels: this.cachedLabels || [],
+                        initialFloors: this.cachedFloors || [],
+                        permissions: ['network', 'exec', 'filesystem'],
+                        capabilityEnforcement: false,
+                        filesystemEnabled: false,
+                        fsDataDir: '',
+                        fsQuotas: { internal: 0, shared: 0, media: 0 },
+                        defaultThrottle: 0,
+                    },
+                    env: { ...process.env, NODE_PATH: path.resolve(this.storageDir, 'node_modules') },
+                    execArgv: ['--enable-source-maps']
+                });
+            } catch (e) {
+                try { fs.unlinkSync(tmpFile); } catch {}
+                return resolve({ logs: [], error: `Worker start error: ${e.message}` });
+            }
+
+            let done = false;
+            const finish = (error = null) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                try { fs.unlinkSync(tmpFile); } catch {}
+                resolve({ logs, error });
+            };
+
+            const timer = setTimeout(() => {
+                worker.terminate();
+                finish('Timeout: REPL execution exceeded 5 seconds.');
+            }, 5000);
+
+            worker.on('message', (msg) => {
+                if (msg.type === 'log') logs.push({ level: msg.level || 'info', message: msg.message });
+            });
+            worker.on('exit', () => finish());
+            worker.on('error', (err) => finish(err.message));
+        });
     }
 
     /**
@@ -1126,6 +1233,9 @@ class WorkerManager extends EventEmitter {
             this.stopReasons.set(filename, reason);
             this.stats.delete(filename);
             this.startTimes.delete(filename);
+            // If paused at a breakpoint, release it first — Atomics.wait blocks the worker's
+            // event loop, so stop_request would never be received without this.
+            this.continueBreakpoint(filename);
             // 1. Try graceful shutdown — worker runs ha.onStop() callbacks then process.exit(0).
             //    The stop_request handler also flushes all ha.persistent() pending saves.
             worker.postMessage({ type: 'stop_request' });

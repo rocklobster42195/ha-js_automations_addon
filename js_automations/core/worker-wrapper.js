@@ -240,6 +240,9 @@ let isListening = false;
 // via mqtt_command instead.
 const nativeEntityIds = new Set();
 
+// Watch expressions: label → { fn, lastSerialized }
+const _watchers = new Map();
+
 // HA non-command states filtered out of mqtt_command dispatches.
 // Scripts should never need to guard against these themselves.
 const HA_TECH_STATES = new Set(['unknown', 'unavailable', 'None', '']);
@@ -469,6 +472,20 @@ function ensureMessageListener() {
             // Skip entity deletion events (new_state: null) — no useful state to deliver
             if (!msg.state) return;
 
+            // Re-evaluate watch expressions on every state change (change-detected, non-blocking)
+            if (_watchers.size > 0) {
+                _watchers.forEach((watcher, label) => {
+                    try {
+                        const value = watcher.fn();
+                        const serialized = JSON.stringify(value);
+                        if (serialized !== watcher.lastSerialized) {
+                            watcher.lastSerialized = serialized;
+                            parentPort.postMessage({ type: 'watch_update', label, value, script: workerData.filename });
+                        }
+                    } catch (e) { /* entity might not exist yet or value not serializable */ }
+                });
+            }
+
             // Native entities (ha.register()) are commanded via mqtt_command, not ha_event.
             // Any ha_event for a native entity is an HA echo of the script's own MQTT publish
             // — drop it unconditionally. This correctly handles all entity types including
@@ -623,7 +640,48 @@ const ha = {
     error: (m) => sendLog('error', m),
     stop: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'stop', reason }),
     restart: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'restart', reason }),
-    
+
+    /**
+     * Pauses script execution until the developer clicks "Continue" in the UI.
+     * The vars object is displayed in the Breakpoints tab as a variable inspector.
+     * Auto-resumes after 60 seconds to prevent scripts from hanging indefinitely.
+     * @param {string} label - Descriptive label shown in the UI
+     * @param {object} [vars] - Variables to inspect (key/value pairs)
+     */
+    breakpoint: (label, vars = {}) => {
+        const sab = new SharedArrayBuffer(4);
+        const flag = new Int32Array(sab);
+        sendLog('info', `⏸ Breakpoint: "${label}"`);
+        parentPort.postMessage({ type: 'breakpoint', label, vars, sab });
+        Atomics.wait(flag, 0, 0, 60000);
+        sendLog('debug', `▶ Continued from breakpoint: "${label}"`);
+    },
+
+    /**
+     * Sends a one-shot variable snapshot to the WATCH tab (non-blocking).
+     * Appears as a timestamped list entry below the live watch tiles.
+     * @param {string} label - Descriptive label shown in the UI
+     * @param {object} [vars] - Variables to display (key/value pairs)
+     */
+    inspect: (label, vars = {}) => {
+        parentPort.postMessage({ type: 'inspect', label, vars, script: workerData.filename });
+    },
+
+    /**
+     * Registers a live watch expression that re-evaluates on every HA state change.
+     * Results appear as updating tiles at the top of the WATCH tab.
+     * @param {string} label - Unique label for the tile (used to identify it in the UI)
+     * @param {function(): unknown} fn - Expression to evaluate; has access to all ha.* APIs
+     */
+    watch: (label, fn) => {
+        ensureMessageListener();
+        _addRef();
+        parentPort.postMessage({ type: 'subscribe', pattern: '*' });
+        const initial = (() => { try { return fn(); } catch (e) { return undefined; } })();
+        _watchers.set(label, { fn, lastSerialized: JSON.stringify(initial) });
+        parentPort.postMessage({ type: 'watch_update', label, value: initial, script: workerData.filename });
+    },
+
     // Commands
     callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
     updateState: (entityId, state, attributes = {}) => parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
