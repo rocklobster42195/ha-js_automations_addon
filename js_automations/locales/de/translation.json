@@ -149,7 +149,7 @@
       "ui_language": "Sprache",
       "ui_language_desc": "Sprache der Benutzeroberfläche anpassen (erfordert Neuladen).",
       "expert_mode": "Expertenmodus",
-      "expert_mode_desc": "Zeigt fortgeschrittene Optionen und technische Details.",
+      "expert_mode_desc": "Aktiviert das Entwickler-Toolkit: Event-Inspector, Live-REPL, Breakpoints und mehr.",
       "confirm_delete": "Löschen bestätigen",
       "confirm_delete_desc": "Zeigt einen Bestätigungsdialog vor dem Löschen von Skripten.",
       "language_option_de": "Deutsch",
@@ -330,5 +330,17 @@
   "cap_tip_fs_read_warn":   "Lesezugriff erkannt — @permission fs:read im Header ergänzen",
   "cap_tip_fs_write_warn":  "Schreibzugriff erkannt — @permission fs:write im Header ergänzen",
   "cap_tip_exec_warn":      "Shell-Ausführung erkannt — @permission exec im Header ergänzen",
-  "cap_tip_unused":         "In @permission deklariert, aber im Quellcode nicht erkannt"
+  "cap_tip_unused":         "In @permission deklariert, aber im Quellcode nicht erkannt",
+  "devtools": {
+    "event_inspector_hint": "Play drücken, um den Event-Stream zu starten.",
+    "breakpoints_hint": "Kein aktiver Breakpoint. ha.breakpoint('label', { vars }) im Skript verwenden.",
+    "watch_section": "Live-Watch",
+    "inspect_section": "Inspect",
+    "watch_hint": "Keine Watch-Ausdrücke aktiv. ha.watch('Label', () => Ausdruck) im Skript verwenden.",
+    "inspect_hint": "Noch keine Einträge. ha.inspect('Label', { vars }) im Skript verwenden.",
+    "inspect_empty": "Keine Variablen.",
+    "col_variable": "Variable",
+    "col_type": "Typ",
+    "col_value": "Wert"
+  }
 }

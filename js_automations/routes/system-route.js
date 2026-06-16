@@ -3,7 +3,7 @@ const https = require('https');
 const archiver = require('archiver');
 const packageJson = require('../../package.json');
 
-module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemService, getCombinedStatus, mqttManager) => {
+module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemService, getCombinedStatus, mqttManager, workerManager) => {
     const router = express.Router();
 
     router.get('/options', (req, res) => {
@@ -104,6 +104,18 @@ module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemSe
         });
 
         archive.finalize();
+    });
+
+    router.post('/debug/repl', async (req, res) => {
+        const { code } = req.body || {};
+        if (!code || typeof code !== 'string') return res.status(400).json({ error: 'Missing code' });
+        if (!workerManager) return res.status(503).json({ error: 'Worker manager not available' });
+        try {
+            const result = await workerManager.runRepl(code);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ logs: [], error: e.message });
+        }
     });
 
     router.post('/system/safe-mode/resolve', (req, res) => {

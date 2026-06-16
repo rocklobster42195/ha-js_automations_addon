@@ -60,6 +60,7 @@ async function loadSettingsData() {
 
         settingsSchema = await schemaRes.json();
         window.currentSettings = await settingsRes.json();
+        applyExpertMode(window.currentSettings?.general?.expert_mode);
         window.dispatchEvent(new CustomEvent('settings-changed', { detail: window.currentSettings }));
         
         renderSettingsCategories();
@@ -447,6 +448,10 @@ async function saveSetting(catId, key, value) {
             body: JSON.stringify(payload)
         });
 
+        if (catId === 'general' && key === 'expert_mode') {
+            applyExpertMode(value);
+        }
+
         // Force reload on language change
         if (catId === 'general' && key === 'ui_language') {
             // Add param to reopen settings after reload
@@ -588,6 +593,10 @@ async function discoverMqttSettings(btn) {
 
 function closeSettingsTab() {
     if (typeof closeTab === 'function') closeTab(SETTINGS_TAB_ID);
+}
+
+function applyExpertMode(enabled) {
+    document.body.classList.toggle('expert-mode', !!enabled);
 }
 
 // Auto-load settings on startup

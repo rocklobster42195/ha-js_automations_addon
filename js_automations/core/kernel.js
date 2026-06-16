@@ -389,6 +389,8 @@ class Kernel extends EventEmitter {
                 // Forward to UI for Status Bar and card preview live data
                 this.emit('ha_state_changed', { entity_id, new_state });
             }
+            // Forward all events to the Event Inspector (opt-in via bridge)
+            this.emit('ha_event', event);
 
             // Forward non-state events to workers subscribed via ha.onEvent()
             if (event.event_type !== 'state_changed') {
@@ -427,6 +429,12 @@ class Kernel extends EventEmitter {
         this.workerManager.on('script_start', this._onScriptStart.bind(this));
         this.workerManager.on('script_exit', this._onScriptExit.bind(this));
         this.workerManager.on('log', this._onWorkerLog.bind(this));
+
+        // Developer tools: breakpoint / watch / inspect events
+        this.workerManager.on('breakpoint_hit', (data) => this.emit('breakpoint_hit', data));
+        this.workerManager.on('breakpoint_continued', (data) => this.emit('breakpoint_continued', data));
+        this.workerManager.on('watch_update', (data) => this.emit('watch_update', data));
+        this.workerManager.on('inspect_snapshot', (data) => this.emit('inspect_snapshot', data));
 
         // Notify frontend when type definitions are updated
         this.workerManager.on('typings_generated', () => {

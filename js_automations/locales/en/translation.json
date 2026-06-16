@@ -148,7 +148,7 @@
       "ui_language": "Interface Language",
       "ui_language_desc": "Adjust the UI language (requires reload).",
       "expert_mode": "Expert Mode",
-      "expert_mode_desc": "Shows advanced options and technical details (e.g., file paths, raw views).",
+      "expert_mode_desc": "Enables the developer toolkit: event inspector, live REPL, breakpoints, and more.",
       "confirm_delete": "Confirm deletion",
       "confirm_delete_desc": "Shows a confirmation dialog before deleting scripts.",
       "language_option_de": "Deutsch",
@@ -319,5 +319,17 @@
   "cap_tip_fs_read_warn":   "File read access detected — add @permission fs:read to your header",
   "cap_tip_fs_write_warn":  "File write access detected — add @permission fs:write to your header",
   "cap_tip_exec_warn":      "Shell execution detected — add @permission exec to your header",
-  "cap_tip_unused":         "Declared in @permission but not detected in source"
+  "cap_tip_unused":         "Declared in @permission but not detected in source",
+  "devtools": {
+    "event_inspector_hint": "Click Play to start the live event stream.",
+    "breakpoints_hint": "No active breakpoint. Use ha.breakpoint('label', { vars }) in a script.",
+    "watch_section": "Live Watch",
+    "inspect_section": "Inspect",
+    "watch_hint": "No watch expressions active. Use ha.watch('label', () => expr) in a script.",
+    "inspect_hint": "No entries yet. Use ha.inspect('label', { vars }) in a script.",
+    "inspect_empty": "No variables.",
+    "col_variable": "Variable",
+    "col_type": "Type",
+    "col_value": "Value"
+  }
 }

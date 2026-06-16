@@ -225,6 +225,28 @@ interface HA {
     stop(reason?: string): void;
     /** Restarts the current script. */
     restart(reason?: string): void;
+    /**
+     * Pauses script execution until the developer clicks "Continue" in the Breakpoints tab.
+     * The vars object is displayed as a variable inspector in the UI.
+     * Auto-resumes after 60 seconds.
+     * @param label - Descriptive label shown in the UI
+     * @param vars  - Variables to inspect (shown as a key/value table)
+     */
+    breakpoint(label: string, vars?: Record<string, unknown>): void;
+    /**
+     * Sends a one-shot variable snapshot to the WATCH tab (non-blocking).
+     * Appears as a timestamped list entry below the live watch tiles.
+     * @param label - Descriptive label shown in the UI
+     * @param vars  - Variables to display (key/value pairs)
+     */
+    inspect(label: string, vars?: Record<string, unknown>): void;
+    /**
+     * Registers a live watch expression that re-evaluates on every HA state change.
+     * Results appear as updating tiles at the top of the WATCH tab.
+     * @param label - Unique label for the tile
+     * @param fn    - Expression to evaluate; has full access to the ha API
+     */
+    watch(label: string, fn: () => unknown): void;
     /** Registers a callback to be executed when the script is stopped. */
     onStop(callback: () => void | Promise<void>): void;
     /** Registers a callback to be executed when an unhandled error occurs. */

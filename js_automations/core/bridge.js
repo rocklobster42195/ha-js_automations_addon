@@ -20,12 +20,29 @@ class Bridge {
     connect() {
         const { logManager } = this.kernel;
 
+        // Tracks which sockets have the Event Inspector open
+        const eventInspectorClients = new Set();
+
         // --- Socket Lifecycle ---
         // Sync current system status whenever a client connects (e.g. after a restart or reload)
         this.io.on('connection', async (socket) => {
             const status = await this.kernel.getSystemStatus();
             socket.emit('integration_status', status);
+
+            socket.on('subscribe_event_inspector', () => eventInspectorClients.add(socket.id));
+            socket.on('unsubscribe_event_inspector', () => eventInspectorClients.delete(socket.id));
+            socket.on('disconnect', () => eventInspectorClients.delete(socket.id));
+
+            socket.on('debug_continue', (filename) => {
+                this.kernel.workerManager.continueBreakpoint(filename);
+            });
         });
+
+        // Breakpoint / watch / inspect events → all connected clients
+        this.kernel.on('breakpoint_hit', (data) => this.io.emit('breakpoint_hit', data));
+        this.kernel.on('breakpoint_continued', (data) => this.io.emit('breakpoint_continued', data));
+        this.kernel.on('watch_update', (data) => this.io.emit('watch_update', data));
+        this.kernel.on('inspect_snapshot', (data) => this.io.emit('inspect_snapshot', data));
         
 
         // --- Log Events ---
@@ -40,6 +57,17 @@ class Bridge {
         // Relays Home Assistant state changes to the UI for the status bar.
         this.kernel.on('ha_state_changed', (data) => {
             this.io.emit('ha_state_changed', data);
+        });
+
+        // Relays all HA events to subscribed Event Inspector clients only
+        this.kernel.on('ha_event', (event) => {
+            if (eventInspectorClients.size === 0) return;
+            const payload = {
+                t: Date.now(),
+                type: event.event_type,
+                data: event.data ?? {}
+            };
+            eventInspectorClients.forEach(id => this.io.to(id).emit('ha_event_stream', payload));
         });
 
         // Relays integration status changes
