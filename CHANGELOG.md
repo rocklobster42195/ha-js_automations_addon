@@ -1,35 +1,32 @@
-## Closer To The Core
+## We See You
 
-> Seven new ways to talk to Home Assistant — directly from your scripts.
-
----
-
-### New API Methods
-
-**`ha.onEvent(eventType, callback)` / `ha.fireEvent(type, data)`**
-Subscribe to any HA event bus event — not just `state_changed`. React to automation triggers, NFC tags, custom integration events, or use `ha.fireEvent()` to signal between scripts.
-
-**`ha.getStatistics(statId, options)`**
-Query HA's long-term recorder statistics — the same data that powers the Energy Dashboard. Hourly, daily or 5-minute buckets with mean, min, max and sum.
-
-**`ha.renderTemplate(template)`**
-Evaluate a Jinja2 template string via HA's own template engine. Full access to `states()`, `distance()`, `relative_time()`, `area_entities()` and everything else HA templates support.
-
-**`ha.getCalendarEvents(entityId, options)`**
-Fetch upcoming events from any HA calendar entity — Google Calendar, CalDAV or local.
-
-**`ha.getTodoItems(entityId)`**
-Read items from any HA todo list entity. Filter by status, check due dates, drive automations from your shopping list.
-
-**`ha.getLabels()` / `ha.getEntitiesWithLabel(label)`**
-Query HA's label registry (2023.6+). Get all labels or resolve every entity carrying a specific label — by ID or display name.
-
-**`ha.getFloors()` / `ha.getAreasInFloor(floor)`**
-Access HA's floor registry (2024.2+). List floors and resolve which areas belong to them — by `floor_id` or display name.
+Expert Mode just got a full developer toolbox — built for the moments when `ha.log()` isn't enough.
 
 ---
 
-### Also
+### Event Inspector
+A live stream of every HA state change and event hitting your scripts. Hit Play, flip a switch, watch it land. Filter by entity or event type, pause when things get busy.
 
-- Full **IntelliSense** support for all new methods including typed return interfaces (`HAStatisticEntry`, `HACalendarEvent`, `HATodoItem`, `HALabel`, `HAFloor`, `HACustomEvent`)
-- All new methods documented in the **API Reference**
+### REPL
+A Monaco editor tab with full `ha.*` API access and snippet support. Test a service call, inspect a state, try something quick — without creating a script file.
+
+### Breakpoints
+Pause a running script mid-execution and inspect variables in the UI. Click **Continue** to resume. Auto-resumes after 60 seconds.
+
+```js
+ha.breakpoint('before decision', { temp, threshold, isWarm });
+```
+
+### Watch & Inspect
+Two new non-blocking debug tools that live in the **WATCH** tab:
+
+- **`ha.watch(label, fn)`** — registers a live expression that re-evaluates on every state change. Results appear as tiles at the top of the tab, color-coded by type. Pass a full state object and the entity's icon appears automatically.
+- **`ha.inspect(label, vars)`** — sends a one-shot variable snapshot to the Inspect list below. Non-blocking, timestamped, always prepended.
+
+```js
+ha.watch('Shelly Plug', () => ha.getState('switch.shelly_plug_s'));
+ha.watch('Lights on', () => ha.select('light.*').where(s => s.state === 'on').count);
+ha.inspect('snapshot', { temp, motion, ts: new Date().toISOString() });
+```
+
+All tools are gated behind **Expert Mode** (Settings → General).

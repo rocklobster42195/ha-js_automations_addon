@@ -935,6 +935,7 @@ class WorkerManager extends EventEmitter {
                 this.stats.delete(scriptMeta.filename);
                 this.startTimes.delete(scriptMeta.filename);
                 this._activeBreakpoints.delete(scriptMeta.filename);
+                this.emit('watch_clear', { filename: scriptMeta.filename });
 
                 // Clean up any ha.ask() promises that will never resolve
                 for (const [correlationId, askWorker] of this.pendingAsks.entries()) {

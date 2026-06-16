@@ -43,6 +43,7 @@ class Bridge {
         this.kernel.on('breakpoint_continued', (data) => this.io.emit('breakpoint_continued', data));
         this.kernel.on('watch_update', (data) => this.io.emit('watch_update', data));
         this.kernel.on('inspect_snapshot', (data) => this.io.emit('inspect_snapshot', data));
+        this.kernel.on('watch_clear', (data) => this.io.emit('watch_clear', data));
         
 
         // --- Log Events ---
