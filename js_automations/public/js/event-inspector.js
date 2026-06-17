@@ -5,8 +5,22 @@
 
 const EVENT_INSPECTOR_MAX = 200;
 
+const EI_EVENT_TYPES = [
+    'state_changed',
+    'call_service',
+    'automation_triggered',
+    'script_started',
+    'timer.finished',
+    'zha_event',
+    'homeassistant_start',
+    'homeassistant_stop',
+    'component_loaded',
+    'tag_scanned',
+];
+
 let _inspectorActive = false;
 let _eventBuffer = [];
+let _filterType   = '';
 let _filterDomain = '';
 let _paused = true;
 
@@ -17,12 +31,23 @@ function initEventInspector() {
     panel.innerHTML = `
         <div class="ei-toolbar">
             <div class="ei-filter-wrap">
-                <input id="ei-filter" class="ei-filter" placeholder="Filter domain or entity..."
+                <input id="ei-type-filter" class="ei-filter" placeholder="Event type..."
+                    autocomplete="off"
+                    oninput="setEiTypeFilter(this.value); renderEiTypeDropdown(this.value); updateEiTypeClearBtn()"
+                    onfocus="renderEiTypeDropdown(this.value)"
+                    onkeydown="handleEiTypeKey(event)">
+                <button id="ei-type-clear-btn" class="ei-clear-btn hidden" onclick="clearEiTypeFilter()" title="Clear">
+                    <i class="mdi mdi-close"></i>
+                </button>
+                <div id="ei-type-dropdown" class="ei-dropdown hidden"></div>
+            </div>
+            <div class="ei-filter-wrap">
+                <input id="ei-filter" class="ei-filter" placeholder="Filter entity..."
                     autocomplete="off"
                     oninput="setEventInspectorFilter(this.value); renderEiDropdown(this.value); updateEiClearBtn()"
                     onfocus="renderEiDropdown(this.value)"
                     onkeydown="handleEiFilterKey(event)">
-                <button id="ei-clear-btn" class="ei-clear-btn hidden" onclick="clearEiFilter()" title="Clear filter">
+                <button id="ei-clear-btn" class="ei-clear-btn hidden" onclick="clearEiFilter()" title="Clear">
                     <i class="mdi mdi-close"></i>
                 </button>
                 <div id="ei-dropdown" class="ei-dropdown hidden"></div>
@@ -39,28 +64,25 @@ function initEventInspector() {
         </div>
     `;
 
-    // Translate hint text after i18n is ready
     const hint = document.getElementById('ei-hint');
     if (hint) hint.textContent = (typeof i18next !== 'undefined')
         ? i18next.t('devtools.event_inspector_hint', { defaultValue: 'Click Play to start the live event stream.' })
         : 'Click Play to start the live event stream.';
 
-    // Set initial active state based on current visibility
     _inspectorActive = !panel.classList.contains('hidden');
 
-    // Subscribe once socket is ready (socket may not exist yet during Monaco init)
     window.onSocketReady = () => {
         if (_inspectorActive) window.socket.emit('subscribe_event_inspector');
     };
-    // Also try immediately in case socket is already connected
     if (window.socket?.connected) window.socket.emit('subscribe_event_inspector');
 
-    // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.ei-filter-wrap')) closeEiDropdown();
+        if (!e.target.closest('.ei-filter-wrap')) {
+            closeEiDropdown();
+            closeEiTypeDropdown();
+        }
     }, true);
 
-    // Subscribe when tab is activated, unsubscribe when hidden
     observeTabVisibility(panel, (visible) => {
         _inspectorActive = visible;
         if (visible) {
@@ -92,11 +114,16 @@ function onHaEventStream(payload) {
 }
 
 function matchesFilter(entry) {
-    if (!_filterDomain) return true;
-    const f = _filterDomain.toLowerCase();
-    if (entry.type.toLowerCase().includes(f)) return true;
-    const entityId = entry.data?.entity_id || entry.data?.new_state?.entity_id || '';
-    return entityId.toLowerCase().includes(f);
+    if (_filterType) {
+        const ft = _filterType.toLowerCase();
+        if (!entry.type.toLowerCase().includes(ft)) return false;
+    }
+    if (_filterDomain) {
+        const fd = _filterDomain.toLowerCase();
+        const entityId = entry.data?.entity_id || entry.data?.new_state?.entity_id || '';
+        if (!entityId.toLowerCase().includes(fd) && !entry.type.toLowerCase().includes(fd)) return false;
+    }
+    return true;
 }
 
 function renderEventInspectorEntry(entry) {
@@ -128,7 +155,6 @@ function renderEventInspectorEntry(entry) {
         <span class="ei-detail">${detail}</span>
     `;
 
-    // Expand raw data on click
     row.addEventListener('click', () => {
         const existing = row.nextSibling;
         if (existing?.classList?.contains('ei-raw')) {
@@ -143,11 +169,72 @@ function renderEventInspectorEntry(entry) {
 
     list.prepend(row);
 
-    // Trim rendered rows
     while (list.children.length > EVENT_INSPECTOR_MAX * 2) {
         list.removeChild(list.lastChild);
     }
 }
+
+// --- Type filter ---
+
+function setEiTypeFilter(val) {
+    _filterType = val;
+    rerenderEiBuffer();
+}
+
+function renderEiTypeDropdown(term) {
+    const dropdown = document.getElementById('ei-type-dropdown');
+    if (!dropdown) return;
+    const t = (term || '').toLowerCase().trim();
+    const matches = t
+        ? EI_EVENT_TYPES.filter(e => e.toLowerCase().includes(t))
+        : EI_EVENT_TYPES;
+
+    if (matches.length === 0) { dropdown.classList.add('hidden'); return; }
+
+    dropdown.innerHTML = '';
+    matches.forEach(evtType => {
+        const row = document.createElement('div');
+        row.className = 'ei-dropdown-row';
+        row.textContent = evtType;
+        row.onmousedown = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('ei-type-filter');
+            if (input) input.value = evtType;
+            setEiTypeFilter(evtType);
+            updateEiTypeClearBtn();
+            closeEiTypeDropdown();
+        };
+        dropdown.appendChild(row);
+    });
+
+    dropdown.classList.remove('hidden');
+}
+
+function closeEiTypeDropdown() {
+    const dropdown = document.getElementById('ei-type-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+}
+
+function clearEiTypeFilter() {
+    const input = document.getElementById('ei-type-filter');
+    if (input) { input.value = ''; input.focus(); }
+    setEiTypeFilter('');
+    closeEiTypeDropdown();
+    updateEiTypeClearBtn();
+}
+
+function updateEiTypeClearBtn() {
+    const input = document.getElementById('ei-type-filter');
+    const btn   = document.getElementById('ei-type-clear-btn');
+    if (btn) btn.classList.toggle('hidden', !input?.value);
+}
+
+function handleEiTypeKey(e) {
+    if (e.key === 'Escape') { clearEiTypeFilter(); closeEiTypeDropdown(); e.target.blur(); }
+    if (e.key === 'Enter')  { closeEiTypeDropdown(); e.target.blur(); }
+}
+
+// --- Entity filter ---
 
 function setEventInspectorFilter(val) {
     _filterDomain = val;
@@ -200,7 +287,7 @@ function renderEiDropdown(term) {
         row.className = 'ei-dropdown-row';
         row.textContent = entityId;
         row.onmousedown = (e) => {
-            e.preventDefault(); // keep focus on input
+            e.preventDefault();
             const input = document.getElementById('ei-filter');
             if (input) input.value = entityId;
             setEventInspectorFilter(entityId);
@@ -239,9 +326,14 @@ function handleEiFilterKey(e) {
 window.initEventInspector        = initEventInspector;
 window.onHaEventStream           = onHaEventStream;
 window.setEventInspectorFilter   = setEventInspectorFilter;
+window.setEiTypeFilter           = setEiTypeFilter;
 window.toggleEventInspectorPause = toggleEventInspectorPause;
 window.clearEventInspector       = clearEventInspector;
 window.renderEiDropdown          = renderEiDropdown;
+window.renderEiTypeDropdown      = renderEiTypeDropdown;
 window.handleEiFilterKey         = handleEiFilterKey;
+window.handleEiTypeKey           = handleEiTypeKey;
 window.clearEiFilter             = clearEiFilter;
+window.clearEiTypeFilter         = clearEiTypeFilter;
 window.updateEiClearBtn          = updateEiClearBtn;
+window.updateEiTypeClearBtn      = updateEiTypeClearBtn;

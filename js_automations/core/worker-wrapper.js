@@ -649,6 +649,10 @@ const ha = {
      * @param {object} [vars] - Variables to inspect (key/value pairs)
      */
     breakpoint: (label, vars = {}) => {
+        if (scriptLevel > 0) {
+            sendLog('info', `⏸ ha.breakpoint("${label}") skipped — set log level to 'debug' to enable breakpoints`);
+            return;
+        }
         const sab = new SharedArrayBuffer(4);
         const flag = new Int32Array(sab);
         sendLog('info', `⏸ Breakpoint: "${label}"`);
@@ -664,6 +668,10 @@ const ha = {
      * @param {object} [vars] - Variables to display (key/value pairs)
      */
     inspect: (label, vars = {}) => {
+        if (scriptLevel > 0) {
+            sendLog('info', `🔍 ha.inspect("${label}") skipped — set log level to 'debug' to enable inspect snapshots`);
+            return;
+        }
         parentPort.postMessage({ type: 'inspect', label, vars, script: workerData.filename });
     },
 

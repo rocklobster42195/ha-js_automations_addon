@@ -100,7 +100,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             initEventInspector();
             initWatch();
             initRepl();
-            initBreakpoints();
         });
     }
 
