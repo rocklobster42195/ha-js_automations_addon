@@ -242,6 +242,9 @@ const nativeEntityIds = new Set();
 
 // Watch expressions: label → { fn, lastSerialized }
 const _watchers = new Map();
+// Keep-alive timer for scripts that only use ha.watch() — parentPort.ref() alone is
+// unreliable in some Node.js versions (especially after Atomics.wait() returns).
+let _watchKeepaliveTimer = null;
 
 // HA non-command states filtered out of mqtt_command dispatches.
 // Scripts should never need to guard against these themselves.
@@ -684,6 +687,9 @@ const ha = {
     watch: (label, fn) => {
         ensureMessageListener();
         _addRef();
+        if (!_watchKeepaliveTimer) {
+            _watchKeepaliveTimer = setInterval(() => {}, 60000);
+        }
         parentPort.postMessage({ type: 'subscribe', pattern: '*' });
         const initial = (() => { try { return fn(); } catch (e) { return undefined; } })();
         _watchers.set(label, { fn, lastSerialized: JSON.stringify(initial) });
