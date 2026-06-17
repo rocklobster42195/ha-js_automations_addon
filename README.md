@@ -13,7 +13,7 @@
 > **Project Status: Pre-release**
 > This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
-**JS Automations** is a professional-grade JavaScript and TypeScript execution engine for Home Assistant. Write automations using standard **Node.js** or **TypeScript** in a secure, isolated environment — with a built-in Web IDE and a powerful `ha` API that puts developer-grade tooling into your smart home.
+**JS Automations** is a Home Assistant **add-on** for developers ready to leave YAML behind. Write automations in **Node.js** or **TypeScript**, run them in a secure, isolated environment, and control your home through a developer-grade `ha` API — complete with a built-in Web IDE.
 
 > [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](API_REFERENCE.md)
