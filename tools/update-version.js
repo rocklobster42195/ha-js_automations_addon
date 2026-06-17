@@ -92,21 +92,12 @@ if (fs.existsSync(changelogPath)) {
     let content = fs.readFileSync(changelogPath, 'utf8');
     const dateStr = today();
 
-    // Stamp the topmost ## [...] entry with the real version + today's date.
-    // Matches patterns like: ## [2.50.x], ## [Unreleased], ## [2.50.5]
-    content = content.replace(
-        /^(##\s*\[)[^\]]*(\])\s*-?\s*[\d-]*/m,
-        `$1${newVersion}$2 - ${dateStr}`
-    );
-
-    // Prepend a fresh [Unreleased] section for the next development cycle
-    if (!content.startsWith('## [Unreleased]')) {
-        content = `## [Unreleased]\n\n---\n\n${content}`;
-    }
+    // Prepend a new versioned section at the top — no placeholder needed.
+    content = `## [${newVersion}] - ${dateStr}\n\n---\n\n${content}`;
 
     fs.writeFileSync(changelogPath, content);
     assertContains(changelogPath, newVersion, 'CHANGELOG.md');
-    console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr} finalized`);
+    console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr} prepended`);
 }
 
 // --- 4. Stage all modified files ---
