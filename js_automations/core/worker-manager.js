@@ -1076,8 +1076,24 @@ class WorkerManager extends EventEmitter {
                 finish('Timeout: REPL execution exceeded 5 seconds.');
             }, 5000);
 
-            worker.on('message', (msg) => {
-                if (msg.type === 'log') logs.push({ level: msg.level || 'info', message: msg.message });
+            worker.on('message', async (msg) => {
+                if (msg.type === 'log') {
+                    logs.push({ level: msg.level || 'info', message: msg.message });
+                }
+                if (msg.type === 'fire_event' && this.haConnector) {
+                    this.haConnector.fireEvent(msg.eventType, msg.eventData || {});
+                }
+                if (msg.type === 'call_service' && this.haConnector) {
+                    try {
+                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                        if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
+                    } catch (err) {
+                        if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
+                    }
+                }
+                if (msg.type === 'update_state') {
+                    this.emit('update_entity_state', { entityId: msg.entityId, state: msg.state, attributes: msg.attributes });
+                }
             });
             worker.on('exit', () => finish());
             worker.on('error', (err) => finish(err.message));

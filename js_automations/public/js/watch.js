@@ -1,13 +1,15 @@
 /**
- * WATCH tab: live watch tiles (top) + inspect snapshots (bottom)
+ * WATCH tab: live watch list (top) + inspect snapshots (bottom)
  */
 
-// label → { el, valueEl, iconEl }
-const _watchTiles = new Map();
-let _watchWrap = null;
+// label → { mainTr, attrsTr, valueEl, iconEl, chevronEl, filename }
+const _watchRows = new Map();
+// filename → { row, continueBtn, iconEl }
+const _activeBreakpoints = new Map();
+let _watchList  = null;
+let _watchTable = null; // <table> inside _watchList, only present when rows exist
 let _inspectList = null;
 
-// Default icons per HA domain (state-aware where useful)
 const _DOMAIN_ICONS = {
     switch:         s => s === 'on' ? 'mdi:toggle-switch' : 'mdi:toggle-switch-off',
     light:          s => s === 'on' ? 'mdi:lightbulb' : 'mdi:lightbulb-outline',
@@ -47,22 +49,35 @@ function _getEntityIcon(v) {
     return fn ? fn(v.state) : null;
 }
 
+function _ensureWatchTable() {
+    if (!_watchTable) {
+        _watchList.querySelectorAll('.watch-hint').forEach(h => h.remove());
+        _watchTable = document.createElement('table');
+        _watchTable.className = 'watch-table';
+        _watchList.appendChild(_watchTable);
+    }
+    return _watchTable;
+}
+
 function initWatch() {
     const panel = document.getElementById('dev-tab-watch');
     if (!panel) return;
 
     panel.innerHTML = `
         <div class="watch-wrap">
-            <div class="watch-tiles-section">
+            <div class="watch-list-section">
                 <div class="watch-section-label">${i18next.t('devtools.watch_section', { defaultValue: 'LIVE WATCH' })}</div>
-                <div id="watch-tiles" class="watch-tiles">
-                    <div id="watch-tiles-hint" class="watch-hint">
+                <div id="watch-list" class="watch-list">
+                    <div id="watch-list-hint" class="watch-hint">
                         ${i18next.t('devtools.watch_hint', { defaultValue: 'No watch expressions active. Use ha.watch(\'label\', () => expr) in a script.' })}
                     </div>
                 </div>
             </div>
             <div class="watch-inspect-section">
-                <div class="watch-section-label">${i18next.t('devtools.inspect_section', { defaultValue: 'INSPECT' })}</div>
+                <div class="watch-inspect-header">
+                    <span class="watch-section-label">${i18next.t('devtools.inspect_section', { defaultValue: 'INSPECT' })}</span>
+                    <button class="watch-clear-btn" onclick="clearInspectList()" title="Clear"><i class="mdi mdi-trash-can-outline"></i></button>
+                </div>
                 <div id="watch-inspect-list" class="watch-inspect-list">
                     <div id="watch-inspect-hint" class="watch-hint">
                         ${i18next.t('devtools.inspect_hint', { defaultValue: 'No entries yet. Use ha.inspect(\'label\', { vars }) in a script.' })}
@@ -71,79 +86,107 @@ function initWatch() {
             </div>
         </div>`;
 
-    _watchWrap = document.getElementById('watch-tiles');
+    _watchList   = document.getElementById('watch-list');
     _inspectList = document.getElementById('watch-inspect-list');
+    _watchTable  = null;
+    _watchRows.clear();
 }
 
 function onWatchUpdate(data) {
-    if (!_watchWrap) return;
-    const { label, value, name } = data;
+    if (!_watchList) return;
+    const { label, value, name, filename } = data;
 
-    const hint = document.getElementById('watch-tiles-hint');
-    if (hint) hint.remove();
+    const icon     = _getEntityIcon(value);
+    const valText  = _formatValue(value);
+    const valClass = 'watch-col-value ' + _valueClass(value);
+    const hasAttrs = _isStateObject(value) && Object.keys(value.attributes || {}).length > 0;
 
-    const icon = _getEntityIcon(value);
-    const valClass = 'watch-tile-value ' + _valueClass(value);
-    const valText = _formatValue(value);
-
-    if (_watchTiles.has(label)) {
-        const entry = _watchTiles.get(label);
-        entry.valueEl.textContent = valText;
-        entry.valueEl.className = valClass;
-        if (entry.iconEl) {
-            entry.iconEl.className = _mdiClass(icon);
-            entry.iconEl.style.color = _iconColor(value);
+    if (_watchRows.has(label)) {
+        const e = _watchRows.get(label);
+        e.valueEl.textContent = valText;
+        e.valueEl.className = valClass;
+        if (e.iconEl) {
+            e.iconEl.className = _mdiClass(icon);
+            e.iconEl.style.color = _iconColor(value);
         }
-    } else {
-        const tile = document.createElement('div');
-        tile.className = 'watch-tile';
-
-        const labelEl = document.createElement('div');
-        labelEl.className = 'watch-tile-label';
-        labelEl.textContent = label;
-
-        let iconEl = null;
-        if (icon) {
-            iconEl = document.createElement('i');
-            iconEl.className = _mdiClass(icon);
-            iconEl.style.color = _iconColor(value);
+        if (e.attrsTr && !e.attrsTr.classList.contains('hidden')) {
+            e.attrsTr.querySelector('td').innerHTML = _renderAttrs(value);
         }
-
-        const valueEl = document.createElement('div');
-        valueEl.className = valClass;
-        valueEl.textContent = valText;
-
-        const bodyEl = document.createElement('div');
-        bodyEl.className = 'watch-tile-body';
-        if (iconEl) bodyEl.appendChild(iconEl);
-        bodyEl.appendChild(valueEl);
-
-        const scriptEl = document.createElement('div');
-        scriptEl.className = 'watch-tile-script';
-        scriptEl.textContent = name || '';
-
-        tile.appendChild(labelEl);
-        tile.appendChild(bodyEl);
-        tile.appendChild(scriptEl);
-        _watchWrap.appendChild(tile);
-        _watchTiles.set(label, { el: tile, valueEl, iconEl, scriptEl, filename: data.filename });
+        return;
     }
+
+    const table = _ensureWatchTable();
+
+    // Main row
+    const mainTr = table.insertRow();
+    mainTr.className = 'watch-main-row';
+
+    const tdIcon = mainTr.insertCell();
+    tdIcon.className = 'watch-col-icon';
+    let iconEl = null;
+    if (icon) {
+        iconEl = document.createElement('i');
+        iconEl.className = _mdiClass(icon);
+        iconEl.style.color = _iconColor(value);
+        tdIcon.appendChild(iconEl);
+    }
+
+    const tdLabel = mainTr.insertCell();
+    tdLabel.className = 'watch-col-label';
+    tdLabel.textContent = label;
+
+    const tdValue = mainTr.insertCell();
+    tdValue.className = valClass;
+    tdValue.textContent = valText;
+
+    const tdScript = mainTr.insertCell();
+    tdScript.className = 'watch-col-script';
+    tdScript.textContent = name || '';
+
+    const tdChevron = mainTr.insertCell();
+    tdChevron.className = 'watch-col-chevron';
+    let chevronEl = null;
+    let attrsTr   = null;
+
+    if (hasAttrs) {
+        chevronEl = document.createElement('i');
+        chevronEl.className = 'mdi mdi-chevron-down';
+        tdChevron.appendChild(chevronEl);
+
+        // Attribute row
+        attrsTr = table.insertRow();
+        attrsTr.className = 'watch-attrs-row hidden';
+        const tdAttrs = attrsTr.insertCell();
+        tdAttrs.colSpan = 5;
+        tdAttrs.innerHTML = _renderAttrs(value);
+
+        mainTr.classList.add('watch-main-row--expandable');
+        mainTr.addEventListener('click', () => {
+            const isOpen = !attrsTr.classList.contains('hidden');
+            attrsTr.classList.toggle('hidden', isOpen);
+            chevronEl.className = `mdi ${isOpen ? 'mdi-chevron-down' : 'mdi-chevron-up'}`;
+        });
+    }
+
+    _watchRows.set(label, { mainTr, attrsTr, valueEl: tdValue, iconEl, chevronEl, filename });
 }
 
 function onWatchClear(data) {
-    if (!_watchWrap) return;
-    for (const [label, entry] of _watchTiles) {
-        if (entry.filename === data.filename) {
-            entry.el.remove();
-            _watchTiles.delete(label);
-        }
+    if (!_watchList) return;
+    const toRemove = [..._watchRows.entries()].filter(([, e]) => e.filename === data.filename);
+    for (const [label, entry] of toRemove) {
+        entry.mainTr.remove();
+        if (entry.attrsTr) entry.attrsTr.remove();
+        _watchRows.delete(label);
     }
-    if (_watchTiles.size === 0) {
+    if (_watchRows.size === 0) {
+        if (_watchTable) { _watchTable.remove(); _watchTable = null; }
+        _watchList.querySelectorAll('.watch-hint').forEach(h => h.remove());
         const hint = document.createElement('div');
-        hint.id = 'watch-tiles-hint';
+        hint.id = 'watch-list-hint';
         hint.className = 'watch-hint';
         hint.textContent = i18next.t('devtools.watch_hint', { defaultValue: 'No watch expressions active. Use ha.watch(\'label\', () => expr) in a script.' });
-        _watchWrap.appendChild(hint);
+        _watchList.appendChild(hint);
     }
 }
 
@@ -188,8 +231,123 @@ function onInspectSnapshot(data) {
 
     row.appendChild(header);
     row.insertAdjacentHTML('beforeend', body);
-
     _inspectList.insertBefore(row, _inspectList.firstChild);
+}
+
+function _setWatchTabBadge(count) {
+    const watchTab = document.querySelector('.log-pane-tab[data-tab="watch"]');
+    if (!watchTab) return;
+    let badge = watchTab.querySelector('.tab-bp-badge');
+    if (count > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'tab-bp-badge';
+            watchTab.appendChild(badge);
+        }
+        badge.textContent = count;
+    } else {
+        if (badge) badge.remove();
+    }
+}
+
+function onBreakpointHit(data) {
+    if (!_inspectList) return;
+    const { filename, name, label, vars } = data;
+
+    const hint = document.getElementById('watch-inspect-hint');
+    if (hint) hint.remove();
+
+    // Auto-switch to WATCH tab
+    const watchTab = document.querySelector('.log-pane-tab[data-tab="watch"]');
+    if (watchTab && !watchTab.classList.contains('active')) watchTab.click();
+
+    const now = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const row = document.createElement('div');
+    row.className = 'inspect-row inspect-row--breakpoint';
+
+    const iconEl = document.createElement('i');
+    iconEl.className = 'mdi mdi-pause inspect-bp-icon';
+
+    const continueBtn = document.createElement('button');
+    continueBtn.className = 'inspect-bp-continue';
+    continueBtn.textContent = 'Continue';
+    continueBtn.onclick = () => continueBreakpoint(filename);
+
+    const header = document.createElement('div');
+    header.className = 'inspect-header';
+    header.appendChild(iconEl);
+    header.insertAdjacentHTML('beforeend',
+        `<span class="inspect-time">${now}</span>
+         <span class="inspect-label">${_esc(label)}</span>
+         <span class="inspect-script">${_esc(name || '')}</span>`);
+    header.appendChild(continueBtn);
+
+    const entries = Object.entries(vars || {});
+    let body = '';
+    if (entries.length > 0) {
+        body = `<table class="inspect-var-table">
+            <thead><tr>
+                <th>${i18next.t('devtools.col_variable', { defaultValue: 'Variable' })}</th>
+                <th>${i18next.t('devtools.col_type', { defaultValue: 'Type' })}</th>
+                <th>${i18next.t('devtools.col_value', { defaultValue: 'Value' })}</th>
+            </tr></thead>
+            <tbody>${entries.map(([k, v]) => `
+                <tr>
+                    <td class="inspect-var-key">${_esc(k)}</td>
+                    <td class="inspect-var-type">${_esc(typeof v)}</td>
+                    <td class="inspect-var-val"><pre>${_esc(_prettyVal(v))}</pre></td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+    }
+
+    row.appendChild(header);
+    row.insertAdjacentHTML('beforeend', body);
+    _inspectList.insertBefore(row, _inspectList.firstChild);
+    _activeBreakpoints.set(filename, { row, continueBtn, iconEl });
+    _setWatchTabBadge(_activeBreakpoints.size);
+    _inspectList.scrollTop = 0;
+}
+
+function onBreakpointContinued(data) {
+    const entry = _activeBreakpoints.get(data.filename);
+    if (!entry) return;
+    entry.row.classList.remove('inspect-row--breakpoint');
+    entry.row.classList.add('inspect-row--breakpoint-done');
+    entry.iconEl.className = 'mdi mdi-play inspect-bp-icon-done';
+    entry.continueBtn.remove();
+    _activeBreakpoints.delete(data.filename);
+    _setWatchTabBadge(_activeBreakpoints.size);
+}
+
+function continueBreakpoint(filename) {
+    if (window.socket) window.socket.emit('debug_continue', filename);
+}
+
+function clearInspectList() {
+    if (!_inspectList) return;
+    _inspectList.innerHTML = '';
+    _activeBreakpoints.clear();
+    _setWatchTabBadge(0);
+    const hint = document.createElement('div');
+    hint.id = 'watch-inspect-hint';
+    hint.className = 'watch-hint';
+    hint.textContent = i18next.t('devtools.inspect_hint', { defaultValue: 'No entries yet. Use ha.inspect(\'label\', { vars }) in a script.' });
+    _inspectList.appendChild(hint);
+}
+
+function _renderAttrs(v) {
+    if (!_isStateObject(v)) return '';
+    const entries = Object.entries(v.attributes || {});
+    if (entries.length === 0) return '';
+    return `<table class="watch-attr-table">
+        ${entries.map(([k, val]) => `
+        <tr>
+            <td class="watch-attr-key">${_esc(k)}</td>
+            <td class="watch-attr-val"><pre>${_esc(_prettyVal(val))}</pre></td>
+        </tr>`).join('')}
+    </table>`;
 }
 
 function _formatValue(v) {
@@ -227,7 +385,7 @@ function _iconColor(v) {
 
 function _mdiClass(icon) {
     if (!icon) return '';
-    return 'mdi ' + icon.replace(':', '-') + ' watch-tile-icon';
+    return 'mdi ' + icon.replace(':', '-');
 }
 
 function _prettyVal(v) {
