@@ -9,18 +9,18 @@
   <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/images/ui.png" width="800" alt="Web UI des Add-ons">
 </p>
 
+**JS Automations** is a Home Assistant **add-on** for developers ready to leave YAML behind. Write automations in **Node.js** or **TypeScript**, run them in a secure, isolated environment, and control your home through a developer-grade `ha` API — complete with a built-in Web IDE.
+
 > [!IMPORTANT]
 > **Project Status: Pre-release**
 > This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
-**JS Automations** is a Home Assistant **add-on** for developers ready to leave YAML behind. Write automations in **Node.js** or **TypeScript**, run them in a secure, isolated environment, and control your home through a developer-grade `ha` API — complete with a built-in Web IDE.
-
 > [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](API_REFERENCE.md)
 
-> 💡 **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
+> **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
 
-> 📘 **Deep Dive:** Internal architecture and advanced concepts → [Technical Documentation](TECH-README.md)
+> **Deep Dive:** Internal architecture and advanced concepts → [Technical Documentation](TECH-README.md)
 
 ---
 
