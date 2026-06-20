@@ -586,6 +586,27 @@ function ensureMessageListener() {
             return;
         }
 
+        // ha.mqtt.subscribe() with no broker configured — release ref, warn once
+        if (msg.type === 'mqtt_subscribe_noop') {
+            if (_mqttSubscriptions.has(msg.subscriptionId)) {
+                _releaseRef();
+                ha.warn(`ha.mqtt.subscribe: MQTT broker is not configured. This subscription will never receive messages.`);
+            }
+            return;
+        }
+
+        // Handle incoming raw MQTT message from ha.mqtt.subscribe()
+        if (msg.type === 'mqtt_raw_message') {
+            const cb = _mqttSubscriptions.get(msg.subscriptionId);
+            if (cb) {
+                let payload = msg.payload;
+                try { payload = JSON.parse(payload); } catch (e) { /* keep as string */ }
+                try { cb(msg.topic, payload); }
+                catch (e) { ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`); }
+            }
+            return;
+        }
+
         // Handle master request to stop gracefully
         if (msg.type === 'stop_request') {
             for (const cb of stopCallbacks) {
@@ -1302,6 +1323,10 @@ if (workerData.filesystemEnabled && workerData.fsDataDir) {
     });
 }
 
+// --- 4b2. MQTT SUBSCRIPTIONS ---
+const _mqttSubscriptions = new Map(); // subscriptionId → callback
+let _mqttSubCounter = 0;
+
 // --- 4c. HTTP CONVENIENCE WRAPPER ---
 {
     const _httpPermissions = new Set(workerData.permissions || []);
@@ -1337,6 +1362,37 @@ if (workerData.filesystemEnabled && workerData.fsDataDir) {
             });
             return _parseResponse(res);
         },
+    };
+}
+
+// --- 4d. MQTT API ---
+{
+    ha.mqtt = {
+        /**
+         * Subscribes to an MQTT topic. Wildcards supported (+ single-level, # multi-level).
+         * Returns an unsubscribe function.
+         */
+        subscribe(topic, callback) {
+            ensureMessageListener();
+            _addRef();
+            const subscriptionId = `mqttsub_${++_mqttSubCounter}`;
+            _mqttSubscriptions.set(subscriptionId, callback);
+            parentPort.postMessage({ type: 'mqtt_subscribe', subscriptionId, topic });
+
+            return () => {
+                if (!_mqttSubscriptions.has(subscriptionId)) return;
+                _mqttSubscriptions.delete(subscriptionId);
+                _releaseRef();
+                parentPort.postMessage({ type: 'mqtt_unsubscribe', subscriptionId });
+            };
+        },
+
+        /**
+         * Publishes a message to an MQTT topic. Objects are JSON-serialized automatically.
+         */
+        publish(topic, payload, options = {}) {
+            parentPort.postMessage({ type: 'mqtt_publish', topic, payload, options });
+        }
     };
 }
 

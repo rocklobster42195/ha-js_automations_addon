@@ -22,6 +22,9 @@ class MqttManager extends EventEmitter {
         this.statusTopic = 'jsa/status';
         this.discoveryPrefix = 'homeassistant';
 
+        // Raw MQTT subscriptions from ha.mqtt.subscribe(): subscriptionId → { topic, scriptId, callback }
+        this._rawSubscriptions = new Map();
+
         // Listen for settings changes to apply MQTT configuration dynamically
         this.settingsManager.on('settings_updated', (settings) => {
             if (settings.mqtt) {
@@ -202,6 +205,14 @@ class MqttManager extends EventEmitter {
                     else this.logManager.add('debug', 'System', '[MQTT] Subscribed to jsa/#');
                 });
 
+                // Re-subscribe to any active raw subscriptions (e.g. after reconnect)
+                const rawTopics = new Set([...this._rawSubscriptions.values()].map(s => s.topic));
+                for (const topic of rawTopics) {
+                    this.client.subscribe(topic, (err) => {
+                        if (err) this.logManager.add('error', 'System', `[MQTT] Failed to resubscribe to raw topic ${topic}: ${err.message}`);
+                    });
+                }
+
                 // Start the health monitoring watchdog
                 this._startHealthCheck();
 
@@ -358,11 +369,82 @@ class MqttManager extends EventEmitter {
         if (this.client) this.client.subscribe(topic);
     }
 
+    /**
+     * Registers a raw MQTT subscription for a script (ha.mqtt.subscribe()).
+     * Subscribes to the broker topic and stores the callback.
+     * @param {string} subscriptionId - Unique ID for this subscription
+     * @param {string} topic - MQTT topic filter (wildcards + and # supported)
+     * @param {string} scriptId - Owning script filename for cleanup on stop
+     * @param {function} callback - Called with (topic, payload) on match
+     */
+    subscribeRaw(subscriptionId, topic, scriptId, callback) {
+        this._rawSubscriptions.set(subscriptionId, { topic, scriptId, callback });
+        if (this.client && this.isConnected) {
+            this.client.subscribe(topic, (err) => {
+                if (err) this.logManager.add('error', 'System', `[MQTT] Failed to subscribe to raw topic ${topic}: ${err.message}`);
+            });
+        }
+    }
+
+    /**
+     * Removes a single raw subscription by ID. Unsubscribes from the broker if
+     * no other subscription needs the same topic.
+     * @param {string} subscriptionId
+     */
+    unsubscribeRaw(subscriptionId) {
+        const sub = this._rawSubscriptions.get(subscriptionId);
+        if (!sub) return;
+        this._rawSubscriptions.delete(subscriptionId);
+        const stillNeeded = [...this._rawSubscriptions.values()].some(s => s.topic === sub.topic);
+        if (!stillNeeded && this.client && this.isConnected) {
+            this.client.unsubscribe(sub.topic);
+        }
+    }
+
+    /**
+     * Removes all raw subscriptions belonging to a specific script.
+     * Called automatically when a script stops.
+     * @param {string} scriptId - Script filename
+     */
+    unsubscribeAllRawByScript(scriptId) {
+        for (const subscriptionId of [...this._rawSubscriptions.keys()]) {
+            if (this._rawSubscriptions.get(subscriptionId).scriptId === scriptId) {
+                this.unsubscribeRaw(subscriptionId);
+            }
+        }
+    }
+
+    /**
+     * Checks whether an MQTT topic matches a filter pattern.
+     * Supports + (single-level) and # (multi-level) wildcards.
+     * @param {string} filter - Topic filter (e.g. 'shellies/+/light/0/status')
+     * @param {string} topic  - Actual incoming topic
+     * @returns {boolean}
+     * @private
+     */
+    _mqttTopicMatches(filter, topic) {
+        const fp = filter.split('/');
+        const tp = topic.split('/');
+        for (let i = 0; i < fp.length; i++) {
+            if (fp[i] === '#') return true;
+            if (i >= tp.length) return false;
+            if (fp[i] !== '+' && fp[i] !== tp[i]) return false;
+        }
+        return fp.length === tp.length;
+    }
+
     _handleIncomingMessage(topic, message) {
         const parts = topic.split('/');
         // Routing logic for command topics: jsa/<domain>/<script_id>/set
         if (parts[0] === 'jsa' && parts[3] === 'set') {
             this.emit('command', { domain: parts[1], scriptId: parts[2], payload: message });
+        }
+
+        // Route to raw subscriptions (ha.mqtt.subscribe())
+        for (const sub of this._rawSubscriptions.values()) {
+            if (this._mqttTopicMatches(sub.topic, topic)) {
+                sub.callback(topic, message);
+            }
         }
     }
 
