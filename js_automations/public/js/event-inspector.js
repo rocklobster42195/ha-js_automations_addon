@@ -28,7 +28,31 @@ function initEventInspector() {
     const panel = document.getElementById('dev-tab-events');
     if (!panel) return;
 
+    const firePlaceholder = (typeof i18next !== 'undefined')
+        ? i18next.t('devtools.fire_event_type', { defaultValue: 'Event type, e.g. my_event' })
+        : 'Event type, e.g. my_event';
+    const dataPlaceholder = (typeof i18next !== 'undefined')
+        ? i18next.t('devtools.fire_event_data', { defaultValue: 'Data (JSON), e.g. {"key":"value"}' })
+        : 'Data (JSON), e.g. {"key":"value"}';
+    const fireBtnLabel = (typeof i18next !== 'undefined')
+        ? i18next.t('devtools.fire_event', { defaultValue: 'Fire' })
+        : 'Fire';
+
     panel.innerHTML = `
+        <div class="ei-fire-panel">
+            <div class="ei-fire-row">
+                <input id="ei-fire-type" class="ei-fire-type" placeholder="${firePlaceholder}"
+                    autocomplete="off" spellcheck="false"
+                    onkeydown="if(event.key==='Enter') eiFireEvent()">
+                <button class="ei-fire-btn" onclick="eiFireEvent()">${fireBtnLabel}</button>
+            </div>
+            <div class="ei-fire-row">
+                <input id="ei-fire-data" class="ei-fire-data" placeholder="${dataPlaceholder}"
+                    autocomplete="off" spellcheck="false"
+                    onkeydown="if(event.key==='Enter') eiFireEvent()">
+                <span id="ei-fire-err" class="ei-fire-err hidden"></span>
+            </div>
+        </div>
         <div class="ei-toolbar">
             <div class="ei-filter-wrap">
                 <input id="ei-type-filter" class="ei-filter" placeholder="Event type..."
@@ -323,8 +347,29 @@ function handleEiFilterKey(e) {
     if (e.key === 'Enter')  { closeEiDropdown(); e.target.blur(); }
 }
 
+function eiFireEvent() {
+    const typeInput = document.getElementById('ei-fire-type');
+    const dataInput = document.getElementById('ei-fire-data');
+    const errEl     = document.getElementById('ei-fire-err');
+    const event_type = typeInput?.value.trim();
+    if (!event_type) { typeInput?.focus(); return; }
+
+    let data = {};
+    const raw = dataInput?.value.trim();
+    if (raw) {
+        try { data = JSON.parse(raw); }
+        catch (e) {
+            if (errEl) { errEl.textContent = 'Invalid JSON'; errEl.classList.remove('hidden'); }
+            return;
+        }
+    }
+    if (errEl) errEl.classList.add('hidden');
+    window.socket?.emit('fire_ha_event', { event_type, data });
+}
+
 window.initEventInspector        = initEventInspector;
 window.onHaEventStream           = onHaEventStream;
+window.eiFireEvent               = eiFireEvent;
 window.setEventInspectorFilter   = setEventInspectorFilter;
 window.setEiTypeFilter           = setEiTypeFilter;
 window.toggleEventInspectorPause = toggleEventInspectorPause;

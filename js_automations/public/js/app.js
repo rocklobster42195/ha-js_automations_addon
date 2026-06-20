@@ -100,6 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             initEventInspector();
             initWatch();
             initRepl();
+            initMqttMonitor();
         });
     }
 

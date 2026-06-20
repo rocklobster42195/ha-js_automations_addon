@@ -341,6 +341,18 @@
     "inspect_empty": "Keine Variablen.",
     "col_variable": "Variable",
     "col_type": "Typ",
-    "col_value": "Wert"
+    "col_value": "Wert",
+    "fire_event": "Auslösen",
+    "fire_event_type": "Event-Typ, z.B. my_event",
+    "fire_event_data": "Daten (JSON), z.B. {\"key\":\"value\"}",
+    "mqtt_topic": "Topic",
+    "mqtt_payload": "Payload",
+    "mqtt_retain": "Retain",
+    "mqtt_publish": "Senden",
+    "mqtt_filter": "Topic filtern...",
+    "mqtt_pause": "Pausieren",
+    "mqtt_clear": "Leeren",
+    "mqtt_hint": "Warte auf MQTT-Nachrichten...",
+    "mqtt_no_filter": "Topic im Filter-Feld eingeben, z.B. jsa/# oder shellies/+/status"
   }
 }

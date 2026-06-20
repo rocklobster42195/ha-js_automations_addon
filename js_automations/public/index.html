@@ -172,14 +172,16 @@
                     <!-- RIGHT: developer tools (expert mode only) -->
                     <div class="log-pane-right">
                         <div class="log-pane-tab-bar">
-                            <button class="log-pane-tab active" data-tab="events">EVENTS</button>
-                            <button class="log-pane-tab" data-tab="watch">WATCH</button>
+                            <button class="log-pane-tab active" data-tab="watch">WATCH</button>
                             <button class="log-pane-tab" data-tab="repl">REPL</button>
+                            <button class="log-pane-tab" data-tab="mqtt">MQTT</button>
+                            <button class="log-pane-tab" data-tab="events">EVENTS</button>
                         </div>
                         <div class="log-pane-content">
-                            <div id="dev-tab-events" class="dev-tab-panel"></div>
-                            <div id="dev-tab-watch" class="dev-tab-panel hidden"></div>
+                            <div id="dev-tab-watch" class="dev-tab-panel"></div>
                             <div id="dev-tab-repl" class="dev-tab-panel hidden"></div>
+                            <div id="dev-tab-mqtt" class="dev-tab-panel hidden"></div>
+                            <div id="dev-tab-events" class="dev-tab-panel hidden"></div>
                         </div>
                     </div>
                 </div>
@@ -249,6 +251,7 @@
     <script src="js/event-inspector.js"></script>
     <script src="js/watch.js"></script>
     <script src="js/repl.js"></script>
+    <script src="js/mqtt-monitor.js"></script>
     <script src="js/integration-banner.js"></script>
 </body>
 
