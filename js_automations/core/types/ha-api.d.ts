@@ -926,6 +926,56 @@ interface HA {
     };
 
     /**
+     * Direct MQTT broker access — subscribe and publish without a HA entity in between.
+     * Wildcards are supported: `+` (single level), `#` (multi-level, must be last segment).
+     * Subscriptions are scoped to the script and cleaned up automatically when it stops.
+     *
+     * @example
+     * // Subscribe to a single topic
+     * ha.mqtt.subscribe('tasmota/sensor1/tele/SENSOR', (topic, payload) => {
+     *   ha.log(`Temperature: ${payload.SI7021?.Temperature}`);
+     * });
+     *
+     * @example
+     * // Wildcard subscription — all Shelly dimmer status topics
+     * ha.mqtt.subscribe('shellies/+/light/0/status', (topic, payload) => {
+     *   const device = topic.split('/')[1];
+     *   ha.log(`${device} is ${payload.ison ? 'on' : 'off'}`);
+     * });
+     *
+     * @example
+     * // Unsubscribe manually
+     * const unsub = ha.mqtt.subscribe('my/topic', (topic, payload) => { ... });
+     * unsub();
+     *
+     * @example
+     * // Publish with retain flag
+     * ha.mqtt.publish('my/status', 'online', { retain: true });
+     */
+    readonly mqtt: {
+        /**
+         * Subscribes to an MQTT topic. Wildcards `+` and `#` are supported.
+         * Payloads are auto-parsed as JSON when valid, otherwise delivered as a string.
+         * Returns an unsubscribe function — call it to stop listening.
+         *
+         * @param topic - MQTT topic filter (e.g. `'shellies/+/light/0/status'`)
+         * @param callback - Receives `(topic, payload)`. Payload is JSON-parsed when valid.
+         * @returns Unsubscribe function
+         */
+        subscribe(topic: string, callback: (topic: string, payload: any) => void): () => void;
+
+        /**
+         * Publishes a message to an MQTT topic.
+         * Objects are automatically serialized to JSON.
+         *
+         * @param topic - MQTT topic to publish to
+         * @param payload - Message payload. Objects are JSON-serialized; strings are sent as-is.
+         * @param options - Optional publish options
+         */
+        publish(topic: string, payload: any, options?: { retain?: boolean; qos?: 0 | 1 | 2 }): void;
+    };
+
+    /**
      * Filesystem API — available when the `filesystem_enabled` setting is on.
      * Uses virtual paths: `internal://`, `shared://`, `media://`.
      * Requires `@permission fs:read` and/or `@permission fs:write` in the script header

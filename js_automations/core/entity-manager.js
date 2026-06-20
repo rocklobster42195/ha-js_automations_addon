@@ -232,6 +232,23 @@ class EntityManager {
             payload.command_topic = `jsa/${domain}/${objectId}/set`;
         }
 
+        // Discovery passthrough: spread any unrecognised config keys directly into the
+        // MQTT Discovery payload. This allows ha.register() to define complex domain-specific
+        // fields (e.g. brightness_command_topic for lights, temperature_command_topic for
+        // climate) without requiring changes to this file.
+        const CONSUMED_KEYS = new Set([
+            'name', 'friendly_name', 'icon', 'unit_of_measurement', 'unit',
+            'device_class', 'state_class', 'entity_category', 'options',
+            'min', 'max', 'step', 'mode', 'suggested_display_precision',
+            'enabled_by_default', 'expire_after', 'initial_state', 'attributes',
+            'area_id', 'area', 'suggested_area', 'labels', 'device', 'action',
+        ]);
+        for (const [key, value] of Object.entries(config)) {
+            if (!CONSUMED_KEYS.has(key) && !(key in payload)) {
+                payload[key] = value;
+            }
+        }
+
         // For device entities: set suggested_area as a discovery-time hint.
         // Standalone entities get their area set post-registration via WebSocket API.
         if (payload.device && (config.area || config.suggested_area)) {

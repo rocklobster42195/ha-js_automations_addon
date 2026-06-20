@@ -846,6 +846,117 @@ ha.action('set-team', async ({ teamId }) => {
 
 ---
 
+## MQTT API (`ha.mqtt`)
+
+`ha.mqtt` gives scripts a direct line to the MQTT broker — no HA entity in between, no polling. Subscribe to any topic, react to raw hardware messages, publish commands, or use MQTT as an inter-script bus that survives HA restarts.
+
+Subscriptions are scoped to the script and cleaned up automatically when the script stops or restarts.
+
+### `ha.mqtt.subscribe(topic, callback)` → unsubscribe function
+
+Subscribes to an MQTT topic. Wildcards are supported:
+- `+` — matches any **single** level (e.g. `shellies/+/light/0/status`)
+- `#` — matches **all remaining** levels (e.g. `zigbee2mqtt/#`). Must be the last segment.
+
+Payloads are **automatically parsed as JSON** when valid; otherwise delivered as a plain string.
+
+Returns an **unsubscribe function** — call it to stop listening.
+
+```javascript
+// Single topic
+ha.mqtt.subscribe('tasmota/sensor1/tele/SENSOR', (topic, payload) => {
+    ha.log(`Temperature: ${payload.SI7021?.Temperature}`);
+});
+
+// Wildcard — all Shelly light status topics
+ha.mqtt.subscribe('shellies/+/light/0/status', (topic, payload) => {
+    const device = topic.split('/')[1];
+    ha.log(`${device} is ${payload.ison ? 'on' : 'off'} at ${payload.brightness}%`);
+});
+
+// Multi-level wildcard
+ha.mqtt.subscribe('zigbee2mqtt/#', (topic, payload) => {
+    ha.log(`Zigbee message on ${topic}`);
+});
+
+// Manual unsubscribe
+const unsub = ha.mqtt.subscribe('my/topic', (topic, payload) => { /* ... */ });
+unsub(); // stops listening
+```
+
+### `ha.mqtt.publish(topic, payload, options?)`
+
+Publishes a message to any MQTT topic. Objects are automatically serialized to JSON.
+
+```javascript
+// Turn on a Shelly dimmer directly via MQTT
+ha.mqtt.publish('shellies/dimmer1/light/0/set', { turn: 'on', brightness: 80 });
+
+// Plain string payload
+ha.mqtt.publish('my/flag', 'ready');
+
+// With retain flag (broker keeps the last message for late subscribers)
+ha.mqtt.publish('my/status', 'online', { retain: true });
+
+// With QoS
+ha.mqtt.publish('critical/alert', 'fire!', { qos: 1 });
+```
+
+### Use Cases
+
+**Talk directly to hardware** — React to Tasmota / Shelly / Zigbee2MQTT raw messages without creating HA entities:
+```javascript
+ha.mqtt.subscribe('tasmota/hallway_switch/stat/POWER', (topic, payload) => {
+    if (payload === 'ON') ha.call('light.turn_on', { entity_id: 'light.hallway', transition: 1 });
+    else ha.call('light.turn_off', { entity_id: 'light.hallway', transition: 1 });
+});
+```
+
+**Zigbee2MQTT button actions without HA integration** — If you run Z2M without the HA integration (or want to process raw payloads before they reach HA), subscribe directly to the broker:
+```javascript
+ha.mqtt.subscribe('zigbee2mqtt/my_remote/action', (topic, payload) => {
+    if (payload === 'brightness_up_click') ha.entity('light.living_room').turn_on({ brightness_step: 30 });
+});
+```
+> **Note:** With the Z2M HA integration active, button actions are already exposed as `event` (or `action` sensor) entities and work with `ha.on()` — `ha.mqtt.subscribe()` is only needed when running without the integration or when you need the raw MQTT payload.
+
+**Inter-script communication via MQTT** — Broker-persistent, survives HA restarts:
+```javascript
+// Script A — publish
+ha.mqtt.publish('jsa/app/mode', { value: 'away' }, { retain: true });
+
+// Script B — subscribe
+ha.mqtt.subscribe('jsa/app/mode', (topic, payload) => {
+    ha.log(`Mode changed to: ${payload.value}`);
+});
+```
+
+**Custom HA device with complex domain** — Combine `ha.register()` passthrough fields with `ha.mqtt.subscribe()`:
+```javascript
+ha.register('light.my_diy_light', {
+    name: 'DIY LED Strip',
+    device_class: 'light',
+    // Raw Discovery fields passed through as-is:
+    brightness_command_topic: 'diy/led/brightness/set',
+    brightness_state_topic:   'diy/led/brightness',
+    brightness_scale: 255,
+    command_topic: 'diy/led/set',
+    state_topic:   'diy/led/state',
+});
+
+ha.mqtt.subscribe('diy/led/+/set', (topic, payload) => {
+    if (topic.includes('brightness')) {
+        ha.update('light.my_diy_light', 'ON', { brightness: Number(payload) });
+        // … forward to real hardware …
+    }
+});
+ha.mqtt.subscribe('diy/led/set', (topic, payload) => {
+    ha.update('light.my_diy_light', payload === 'ON' ? 'on' : 'off');
+});
+```
+
+---
+
 ## Filesystem API (`ha.fs`)
 
 `ha.fs` provides sandboxed file access. It is only available when **Settings → Danger Zone → Enable Filesystem Access** is turned on.

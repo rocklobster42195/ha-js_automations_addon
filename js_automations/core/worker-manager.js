@@ -906,6 +906,38 @@ class WorkerManager extends EventEmitter {
                     this.haConnector.fireEvent(msg.eventType, msg.eventData || {});
                 }
 
+                // ha.mqtt.subscribe() — register raw MQTT subscription for this script
+                if (msg.type === 'mqtt_subscribe') {
+                    if (!this.mqttManager) {
+                        // No MQTT configured — tell the worker to release the ref so the
+                        // script does not hang indefinitely waiting for messages that never arrive.
+                        this.emit('log', { source: name, level: 'warn',
+                            message: `[MQTT] ha.mqtt.subscribe('${msg.topic}'): MQTT broker is not configured. Subscription will not receive messages.` });
+                        worker.postMessage({ type: 'mqtt_subscribe_noop', subscriptionId: msg.subscriptionId });
+                    } else {
+                        this.mqttManager.subscribeRaw(msg.subscriptionId, msg.topic, scriptMeta.filename, (topic, payload) => {
+                            if (this.workers.get(scriptMeta.filename) === worker) {
+                                worker.postMessage({ type: 'mqtt_raw_message', subscriptionId: msg.subscriptionId, topic, payload });
+                            }
+                        });
+                    }
+                }
+
+                // ha.mqtt unsubscribe (returned from ha.mqtt.subscribe())
+                if (msg.type === 'mqtt_unsubscribe' && this.mqttManager) {
+                    this.mqttManager.unsubscribeRaw(msg.subscriptionId);
+                }
+
+                // ha.mqtt.publish()
+                if (msg.type === 'mqtt_publish') {
+                    if (!this.mqttManager) {
+                        this.emit('log', { source: name, level: 'warn',
+                            message: `[MQTT] ha.mqtt.publish('${msg.topic}'): MQTT broker is not configured. Message dropped.` });
+                    } else {
+                        this.mqttManager.publish(msg.topic, msg.payload, msg.options || {});
+                    }
+                }
+
                 // 6. Lifecycle Control (ha.restart / ha.stop)
                 if (msg.type === 'script_lifecycle') {
                     const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
@@ -948,6 +980,11 @@ class WorkerManager extends EventEmitter {
                         this.pendingActionCalls.delete(callId);
                         pending.reject(new Error('Script stopped'));
                     }
+                }
+
+                // Clean up all ha.mqtt.subscribe() subscriptions for this script
+                if (this.mqttManager) {
+                    this.mqttManager.unsubscribeAllRawByScript(scriptMeta.filename);
                 }
                 
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
