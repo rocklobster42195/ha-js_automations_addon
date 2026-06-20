@@ -260,6 +260,10 @@ interface HA {
      *
      * The handler may return a value that is forwarded back to the caller.
      *
+     * For broadcasting to multiple unspecified listeners without a return value, use `ha.fireEvent()` instead.
+     *
+     * @see fireEvent
+     *
      * @example
      * // Simple trigger — no payload
      * ha.action('refresh', async () => { await update(); });
@@ -751,6 +755,11 @@ interface HA {
      * Fires a custom event on the HA event bus.
      * Other scripts can listen for it via `ha.onEvent()`.
      *
+     * Use this for fire-and-forget broadcasts where any number of listeners may react
+     * and no return value is needed. For targeted calls from a card or button entity
+     * that require a response, use `ha.action()` instead.
+     *
+     * @see action
      * @example
      * ha.fireEvent('my_custom_event', { payload: 'hello from script A' });
      */
