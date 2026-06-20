@@ -1,46 +1,17 @@
 ## [2.55.0] - 2026-06-20
 
----
+### On the Wire
 
-## [2.54.1] - 2026-06-17
+Scripts now speak MQTT natively.
 
----
+`ha.mqtt.subscribe()` gives scripts a direct line to the broker — wildcards included. React to raw Tasmota payloads, Zigbee2MQTT messages without the HA integration, DIY hardware, or anything else on the bus.
+`ha.mqtt.publish()` sends messages to any topic, with full JSON serialization and retain/QoS support. Subscriptions are scoped to the script and cleaned up automatically on stop.
 
-## [2.54.0] - 2026-06-17
+`ha.register()` now passes unknown config fields directly into the MQTT Discovery payload. This unlocks complex HA domains — register a native `light` with `brightness_command_topic`, a `climate` with `temperature_command_topic`, or a `cover` with `position_topic` — all handled via `ha.mqtt.subscribe()` in the same script.
 
-### We See You
-
-Expert Mode just got a full developer toolbox — built for the moments when `ha.log()` isn't enough.
-
----
-
-#### Event Inspector
-A live stream of every HA state change and event hitting your scripts. Hit Play, flip a switch, watch it land. Filter by entity or event type, pause when things get busy.
-
-#### REPL
-A Monaco editor tab with full `ha.*` API access and snippet support. Test a service call, inspect a state, try something quick — without creating a script file.
-
-#### Breakpoints
-Pause a running script mid-execution and inspect variables in the UI. Click **Continue** to resume. Auto-resumes after 60 seconds.
-
-```js
-ha.breakpoint('before decision', { temp, threshold, isWarm });
-```
-
-> Breakpoints only activate when the script's log level is set to `debug`.
-
-#### Watch & Inspect
-Two non-blocking debug tools in the **WATCH** tab:
-
-- **`ha.watch(label, fn)`** — live expression that re-evaluates on every state change. Entity icons auto-detected from state objects.
-- **`ha.inspect(label, vars)`** — one-shot variable snapshot, timestamped, non-blocking.
-
-```js
-ha.watch('Shelly Plug', () => ha.getState('switch.shelly_plug_s'));
-ha.watch('Lights on', () => ha.select('light.*').where(s => s.state === 'on').count);
-ha.inspect('snapshot', { temp, motion, ts: new Date().toISOString() });
-```
-
-> `ha.inspect()` only activates when the script's log level is set to `debug`.
-
-All tools are gated behind **Expert Mode** (Settings → General).
+**What's new**
+- `ha.mqtt.subscribe(topic, callback)` — raw broker subscription, returns an unsubscribe function
+- `ha.mqtt.publish(topic, payload, options?)` — publish to any topic, auto-JSON serialization
+- Wildcard support: `+` (single level) and `#` (multi-level)
+- `ha.register()` Discovery passthrough for domain-specific fields
+- Graceful no-op when no MQTT broker is configured — scripts warn instead of hanging
