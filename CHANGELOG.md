@@ -1,5 +1,7 @@
 ## [2.55.0] - 2026-06-20
 
+feat: implement MQTT Monitor with publish functionality and event firing capabilities
+
 ### On the Wire
 
 Scripts now speak MQTT natively.
