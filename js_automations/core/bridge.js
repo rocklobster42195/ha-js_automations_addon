@@ -53,13 +53,18 @@ class Bridge {
 
             socket.on('subscribe_mqtt_monitor', () => {
                 mqttMonitorClients.add(socket.id);
+                if (mqttMonitorClients.size === 1) this.kernel.mqttManager?.startMonitoring();
                 mqttMessageCache.forEach(d => socket.emit('mqtt_message_stream', d));
             });
-            socket.on('unsubscribe_mqtt_monitor', () => mqttMonitorClients.delete(socket.id));
+            socket.on('unsubscribe_mqtt_monitor', () => {
+                mqttMonitorClients.delete(socket.id);
+                if (mqttMonitorClients.size === 0) this.kernel.mqttManager?.stopMonitoring();
+            });
 
             socket.on('disconnect', () => {
                 eventInspectorClients.delete(socket.id);
                 mqttMonitorClients.delete(socket.id);
+                if (mqttMonitorClients.size === 0) this.kernel.mqttManager?.stopMonitoring();
             });
 
             socket.on('debug_continue', (filename) => {

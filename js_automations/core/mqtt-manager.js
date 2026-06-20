@@ -17,6 +17,7 @@ class MqttManager extends EventEmitter {
         this.healthCheckTimer = null;
         this._lastConfig = null;
         this._reconnectFallbackTimer = null;
+        this._monitoring = false;
 
         // Global availability topic as defined in the concept
         this.statusTopic = 'jsa/status';
@@ -212,6 +213,9 @@ class MqttManager extends EventEmitter {
                         if (err) this.logManager.add('error', 'System', `[MQTT] Failed to resubscribe to raw topic ${topic}: ${err.message}`);
                     });
                 }
+
+                // Re-subscribe to wildcard monitor if active
+                if (this._monitoring) this.client.subscribe('#');
 
                 // Start the health monitoring watchdog
                 this._startHealthCheck();
@@ -432,6 +436,27 @@ class MqttManager extends EventEmitter {
             if (fp[i] !== '+' && fp[i] !== tp[i]) return false;
         }
         return fp.length === tp.length;
+    }
+
+    startMonitoring() {
+        if (this._monitoring) return;
+        this._monitoring = true;
+        console.log('[MQTT] startMonitoring called, connected=' + this.isConnected);
+        this.logManager.add('info', 'System', '[MQTT] Monitor: starting (subscribing to #)');
+        if (this.client && this.isConnected) {
+            this.client.subscribe('#', (err) => {
+                if (err) this.logManager.add('error', 'System', `[MQTT] Monitor: failed to subscribe to #: ${err.message}`);
+                else this.logManager.add('info', 'System', '[MQTT] Monitor: subscribed to # (all topics)');
+            });
+        }
+    }
+
+    stopMonitoring() {
+        if (!this._monitoring) return;
+        this._monitoring = false;
+        console.log('[MQTT] stopMonitoring called');
+        this.logManager.add('info', 'System', '[MQTT] Monitor: stopped');
+        if (this.client && this.isConnected) this.client.unsubscribe('#');
     }
 
     _handleIncomingMessage(topic, message) {
