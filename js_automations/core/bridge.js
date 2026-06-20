@@ -23,11 +23,23 @@ class Bridge {
         // Tracks which sockets have the Event Inspector open
         const eventInspectorClients = new Set();
 
+        // Cache for watch tiles and inspect snapshots so reconnecting clients get current state.
+        // watch tiles: filename::label → data; inspect snapshots: per-filename array (capped at 50)
+        const watchTileCache = new Map();
+        const inspectSnapshotCache = new Map(); // filename → data[]
+
         // --- Socket Lifecycle ---
         // Sync current system status whenever a client connects (e.g. after a restart or reload)
         this.io.on('connection', async (socket) => {
             const status = await this.kernel.getSystemStatus();
             socket.emit('integration_status', status);
+
+            // Replay current watch state so the WATCH tab isn't empty after reconnect
+            watchTileCache.forEach((data) => socket.emit('watch_update', data));
+            inspectSnapshotCache.forEach((snapshots) => {
+                // Replay oldest-first so the UI (which inserts at top) ends up newest-at-top
+                snapshots.slice().reverse().forEach((data) => socket.emit('inspect_snapshot', data));
+            });
 
             socket.on('subscribe_event_inspector', () => eventInspectorClients.add(socket.id));
             socket.on('unsubscribe_event_inspector', () => eventInspectorClients.delete(socket.id));
@@ -41,9 +53,25 @@ class Bridge {
         // Breakpoint / watch / inspect events → all connected clients
         this.kernel.on('breakpoint_hit', (data) => this.io.emit('breakpoint_hit', data));
         this.kernel.on('breakpoint_continued', (data) => this.io.emit('breakpoint_continued', data));
-        this.kernel.on('watch_update', (data) => this.io.emit('watch_update', data));
-        this.kernel.on('inspect_snapshot', (data) => this.io.emit('inspect_snapshot', data));
-        this.kernel.on('watch_clear', (data) => this.io.emit('watch_clear', data));
+        this.kernel.on('watch_update', (data) => {
+            watchTileCache.set(`${data.filename}::${data.label}`, data);
+            this.io.emit('watch_update', data);
+        });
+        this.kernel.on('inspect_snapshot', (data) => {
+            if (!inspectSnapshotCache.has(data.filename)) inspectSnapshotCache.set(data.filename, []);
+            const list = inspectSnapshotCache.get(data.filename);
+            list.unshift(data);
+            if (list.length > 50) list.length = 50;
+            this.io.emit('inspect_snapshot', data);
+        });
+        this.kernel.on('watch_clear', (data) => {
+            const prefix = `${data.filename}::`;
+            for (const key of Array.from(watchTileCache.keys())) {
+                if (key.startsWith(prefix)) watchTileCache.delete(key);
+            }
+            inspectSnapshotCache.delete(data.filename);
+            this.io.emit('watch_clear', data);
+        });
         
 
         // --- Log Events ---

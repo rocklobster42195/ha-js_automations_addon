@@ -55,6 +55,9 @@
 4. After installation, go to the add-on's **Configuration** tab to set your preferences.
 5. Start the add-on. Open the Web UI via the **Open Web UI** button.
 
+> [!IMPORTANT]
+> **MQTT Broker strongly recommended.** Entities registered via `ha.register()` use MQTT Discovery and require a broker (e.g. the [Mosquitto add-on](https://github.com/home-assistant/addons/tree/master/mosquitto)) to survive Home Assistant reboots. Without MQTT, registered entities will disappear after a restart.
+
 ### Local Development Setup
 
 1. **Clone the repository** and navigate into the directory.
@@ -165,7 +168,7 @@ ha.register('select.heating_mode', {
 });
 ```
 
-Supported domains: `sensor`, `switch`, `select`, `number`, `text`, `button`.
+Supported domains: `sensor`, `binary_sensor`, `switch`, `select`, `number`, `text`, `button`. Complex domains that require specialized MQTT fields (e.g. `light`, `climate`, `cover`) are not supported.
 
 Update state at any time with `ha.update()`:
 
@@ -284,7 +287,7 @@ Traditional smart home development splits every feature across two separate worl
 
 A Script Pack is a single `.js` (or `.ts`) file that contains:
 
-1. **Backend logic** — the normal JSA script: `ha.on()`, `ha.register()`, `ha.registerAction()`, NPM packages, TypeScript types, persistent state.
+1. **Backend logic** — the normal JSA script: `ha.on()`, `ha.register()`, `ha.action()`, NPM packages, TypeScript types, persistent state.
 2. **Frontend card** — a standard Web Component (no framework required) embedded in a `__JSA_CARD__` block. The add-on extracts and installs it automatically as a Lovelace resource.
 3. **The `__jsa__` bridge** — injected by the add-on at install time, lets the card call named script actions directly: `await __jsa__.callAction('refresh')`. The result flows back as a Promise.
 
@@ -345,7 +348,7 @@ class MyCard extends HTMLElement {
 customElements.define('my-card', MyCard);
 ```
 
-`callAction(name, payload)` fires a `jsa_action` event on the HA event bus. The script receives it via `ha.registerAction()` and the result is returned as a resolved Promise.
+`callAction(name, payload)` fires a `jsa_action` event on the HA event bus. The script receives it via `ha.action()` and the result is returned as a resolved Promise.
 
 ### Card States in the Script List
 

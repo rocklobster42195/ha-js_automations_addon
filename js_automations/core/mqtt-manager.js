@@ -15,6 +15,8 @@ class MqttManager extends EventEmitter {
         this.client = null;
         this.isConnected = false;
         this.healthCheckTimer = null;
+        this._lastConfig = null;
+        this._reconnectFallbackTimer = null;
 
         // Global availability topic as defined in the concept
         this.statusTopic = 'jsa/status';
@@ -162,6 +164,7 @@ class MqttManager extends EventEmitter {
      */
     _connectToBroker(config) {
         const { host, port, username, password } = config;
+        this._lastConfig = config;
         const brokerUrl = `mqtt://${host}:${port}`;
 
         const options = {
@@ -187,6 +190,7 @@ class MqttManager extends EventEmitter {
 
             this.client.on('connect', () => {
                 this.isConnected = true;
+                this._clearReconnectFallback();
                 this.logManager.add('debug', 'System', '[MQTT] Connection established.');
 
                 // Publish Birth Message
@@ -211,6 +215,9 @@ class MqttManager extends EventEmitter {
             this.client.on('error', (err) => {
                 this.logManager.add('error', 'System', `[MQTT] Error: ${err.message}`);
                 this.emit('status_change', { connected: false, error: err.message });
+                // Workaround: mqtt.js sometimes fails to auto-reconnect after initial ECONNREFUSED.
+                // If still disconnected after 15s, force a fresh client.
+                this._scheduleReconnectFallback();
             });
 
             this.client.on('offline', () => {
@@ -359,7 +366,38 @@ class MqttManager extends EventEmitter {
         }
     }
 
+    /**
+     * Schedules a forced client restart if the client is still disconnected after 15 seconds.
+     * Guards against the edge case where mqtt.js fails to auto-reconnect after the initial
+     * ECONNREFUSED (e.g. when the broker is not yet ready on addon startup).
+     * @private
+     */
+    _scheduleReconnectFallback() {
+        if (this._reconnectFallbackTimer || this.isConnected) return;
+        this._reconnectFallbackTimer = setTimeout(() => {
+            this._reconnectFallbackTimer = null;
+            if (this.isConnected || !this._lastConfig || !this.client) return;
+            if (this.client.disconnecting) return;
+            this.logManager.add('warn', 'System', '[MQTT] Fallback: client appears stuck. Forcing fresh reconnect...');
+            this.client.end(true);
+            this.client = null;
+            this._connectToBroker(this._lastConfig);
+        }, 15000);
+    }
+
+    /**
+     * Cancels any pending forced-reconnect fallback timer.
+     * @private
+     */
+    _clearReconnectFallback() {
+        if (this._reconnectFallbackTimer) {
+            clearTimeout(this._reconnectFallbackTimer);
+            this._reconnectFallbackTimer = null;
+        }
+    }
+
     disconnect() {
+        this._clearReconnectFallback();
         if (this.client) {
             this.client.end(true);
             this.client = null;

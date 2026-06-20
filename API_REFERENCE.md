@@ -207,7 +207,7 @@ if (ha.entityExists('sensor.my_sensor')) {
 const scriptName = ha.getHeader('name', 'script');
 ```
 
-### 6. Setting States & Creating Sensors (`ha.updateState`)
+### 6. Setting States & Creating Sensors (`ha.update`)
 Create virtual sensors or update existing ones directly in HA.
 
 ```javascript
@@ -228,19 +228,19 @@ ha.update('sensor.energy_total', 1251.0);
 ha.update('sensor.energy_total', { icon: 'mdi:flash-alert' });
 ```
 
-### 7. Calling Services (`ha.callService`)
+### 7. Calling Services (`ha.call`)
 Trigger any action in Home Assistant.
 
 ```javascript
 // Turn on a light with attributes
-ha.callService('light', 'turn_on', {
+ha.call('light.turn_on', {
     entity_id: 'light.kitchen',
     brightness: 150,
     rgb_color: [255, 0, 0]
 });
 
 // Send a notification
-ha.callService('notify', 'mobile_app_phone', {
+ha.call('notify.mobile_app_phone', {
     title: 'Security Alert',
     message: 'Motion detected in the garage!'
 });
@@ -800,6 +800,49 @@ ha.onEvent('my_app_event', (event) => {
 `ha.onEvent()` keeps the worker alive as long as the listener is registered (same behaviour as `ha.on()`).
 
 > **Note:** `ha.fireEvent()` fires the event on the HA event bus. Any HA automation with an `event` trigger can also react to it.
+
+> **`ha.fireEvent` vs. `ha.action`** — Use `ha.fireEvent` for broadcasts where you don't need a response and any number of listeners (including HA automations) may react. Use [`ha.action`](#action-handlers-haaction) when a UI, card, or button entity calls your script by name and you need to return a value.
+
+---
+
+## Action Handlers (`ha.action`)
+
+`ha.action()` registers a **named handler** inside your script that external callers can invoke directly and await a return value from.
+
+| | `ha.fireEvent` | `ha.action` |
+|---|---|---|
+| Direction | Broadcast | Targeted |
+| Receivers | Any listener (HA + other scripts) | This script, by name |
+| Return value | No | Yes |
+| Who triggers it | You call it yourself | UI / Card / Button entity |
+
+**Triggered from a Lovelace card:**
+```javascript
+// Script side
+ha.action('get_data', async ({ filter }) => {
+    return await fetchData(filter);
+});
+
+// Card side (JavaScript)
+const result = await __jsa__.callAction('get_data', { filter: 'active' });
+```
+
+**Triggered by a button entity press:**
+```javascript
+ha.action('refresh', async () => { await update(); });
+ha.register('button.my_refresh', { name: 'Refresh', action: 'refresh' });
+```
+
+**With payload and return value:**
+```javascript
+ha.action('set-team', async ({ teamId }) => {
+    CONFIG.teamId = teamId;
+    await update();
+    return { ok: true };
+});
+```
+
+> **Note:** `ha.action` handlers only exist while the script is running. If the script is stopped, calls to `__jsa__.callAction()` will time out after 10 seconds.
 
 ---
 
