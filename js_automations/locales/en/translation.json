@@ -340,6 +340,8 @@
     "mqtt_publish": "Publish",
     "mqtt_filter": "Filter topic...",
     "mqtt_pause": "Pause",
+    "mqtt_resume": "Resume",
+    "mqtt_paused_hint": "Stream paused — new messages are buffered",
     "mqtt_clear": "Clear",
     "mqtt_hint": "Waiting for MQTT messages...",
     "mqtt_no_filter": "Enter a topic in the filter field, e.g. jsa/# or shellies/+/status"
