@@ -351,6 +351,8 @@
     "mqtt_publish": "Senden",
     "mqtt_filter": "Topic filtern...",
     "mqtt_pause": "Pausieren",
+    "mqtt_resume": "Fortsetzen",
+    "mqtt_paused_hint": "Stream pausiert — neue Nachrichten werden gepuffert",
     "mqtt_clear": "Leeren",
     "mqtt_hint": "Warte auf MQTT-Nachrichten...",
     "mqtt_no_filter": "Topic im Filter-Feld eingeben, z.B. jsa/# oder shellies/+/status"

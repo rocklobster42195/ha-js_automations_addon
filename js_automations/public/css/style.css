@@ -1675,6 +1675,16 @@ input#search-input:focus { border-color: var(--accent) !important; }
     font-family: inherit;
     font-size: 0.8rem;
 }
+.mm-paused-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 5px 12px;
+    background: #2a2000;
+    color: #ffa726;
+    font-size: 0.78rem;
+    border-bottom: 1px solid #3a2e00;
+}
 .mm-row {
     display: flex;
     align-items: center;

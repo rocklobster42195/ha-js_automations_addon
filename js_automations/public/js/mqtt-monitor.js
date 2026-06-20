@@ -54,6 +54,11 @@ function initMqttMonitor() {
 
     if (window.socket?.connected && _mmActive) window.socket.emit('subscribe_mqtt_monitor');
 
+    // Re-subscribe after socket reconnect (new socket.id — old one is gone from server set)
+    window.socket?.on('connect', () => {
+        if (_mmActive) window.socket.emit('subscribe_mqtt_monitor');
+    });
+
     // Reuse observeTabVisibility from event-inspector.js (loaded before this file)
     observeTabVisibility(panel, (visible) => {
         _mmActive = visible;
@@ -81,14 +86,11 @@ function onMqttMessage(data) {
     if (!_mmActive) return;
 
     const { topic, payload, direction, ts } = data;
-
-    if (!_mmTopicMatches(_mmFilter, topic)) return;
-
     const entry = { topic, payload, direction, ts, id: ++_mmRowId };
     _mmBuffer.unshift(entry);
     if (_mmBuffer.length > MQTT_MONITOR_MAX) _mmBuffer.pop();
 
-    if (!_mmPaused) renderMmEntry(entry);
+    if (!_mmPaused && _mmTopicMatches(_mmFilter, topic)) renderMmEntry(entry);
 }
 
 function renderMmEntry(entry) {
@@ -162,10 +164,27 @@ function mmSetFilter(val) {
 function mmTogglePause() {
     _mmPaused = !_mmPaused;
     const btn = document.getElementById('mm-pause-btn');
+    const t = (key, def) => (typeof i18next !== 'undefined') ? i18next.t(key, { defaultValue: def }) : def;
     if (btn) {
         btn.innerHTML = _mmPaused ? '<i class="mdi mdi-play"></i>' : '<i class="mdi mdi-pause"></i>';
+        btn.title = _mmPaused ? t('devtools.mqtt_resume', 'Resume') : t('devtools.mqtt_pause', 'Pause');
     }
-    if (!_mmPaused) mmRerender();
+    const list = document.getElementById('mm-list');
+    if (list) {
+        let banner = document.getElementById('mm-paused-banner');
+        if (_mmPaused) {
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'mm-paused-banner';
+                banner.className = 'mm-paused-banner';
+                banner.textContent = t('devtools.mqtt_paused_hint', 'Stream paused — new messages are buffered');
+                list.prepend(banner);
+            }
+        } else {
+            banner?.remove();
+            mmRerender();
+        }
+    }
 }
 
 function mmClear() {

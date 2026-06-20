@@ -441,12 +441,9 @@ class MqttManager extends EventEmitter {
     startMonitoring() {
         if (this._monitoring) return;
         this._monitoring = true;
-        console.log('[MQTT] startMonitoring called, connected=' + this.isConnected);
-        this.logManager.add('info', 'System', '[MQTT] Monitor: starting (subscribing to #)');
         if (this.client && this.isConnected) {
             this.client.subscribe('#', (err) => {
                 if (err) this.logManager.add('error', 'System', `[MQTT] Monitor: failed to subscribe to #: ${err.message}`);
-                else this.logManager.add('info', 'System', '[MQTT] Monitor: subscribed to # (all topics)');
             });
         }
     }
@@ -454,8 +451,6 @@ class MqttManager extends EventEmitter {
     stopMonitoring() {
         if (!this._monitoring) return;
         this._monitoring = false;
-        console.log('[MQTT] stopMonitoring called');
-        this.logManager.add('info', 'System', '[MQTT] Monitor: stopped');
         if (this.client && this.isConnected) this.client.unsubscribe('#');
     }
 
