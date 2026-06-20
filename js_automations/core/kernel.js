@@ -437,6 +437,11 @@ class Kernel extends EventEmitter {
         this.workerManager.on('inspect_snapshot', (data) => this.emit('inspect_snapshot', data));
         this.workerManager.on('watch_clear', (data) => this.emit('watch_clear', data));
 
+        // Developer tools: MQTT traffic monitor
+        if (this.mqttManager) {
+            this.mqttManager.on('raw_message', (data) => this.emit('mqtt_traffic', data));
+        }
+
         // Notify frontend when type definitions are updated
         this.workerManager.on('typings_generated', () => {
             if (this.io) this.io.emit('typings_updated');

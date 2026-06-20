@@ -23,6 +23,13 @@ class Bridge {
         // Tracks which sockets have the Event Inspector open
         const eventInspectorClients = new Set();
 
+        // Tracks which sockets have the MQTT Monitor open
+        const mqttMonitorClients = new Set();
+
+        // Ring buffer of recent MQTT messages — replayed to clients on re-subscribe
+        const mqttMessageCache = [];
+        const MQTT_CACHE_MAX = 100;
+
         // Cache for watch tiles and inspect snapshots so reconnecting clients get current state.
         // watch tiles: filename::label → data; inspect snapshots: per-filename array (capped at 50)
         const watchTileCache = new Map();
@@ -43,10 +50,32 @@ class Bridge {
 
             socket.on('subscribe_event_inspector', () => eventInspectorClients.add(socket.id));
             socket.on('unsubscribe_event_inspector', () => eventInspectorClients.delete(socket.id));
-            socket.on('disconnect', () => eventInspectorClients.delete(socket.id));
+
+            socket.on('subscribe_mqtt_monitor', () => {
+                mqttMonitorClients.add(socket.id);
+                mqttMessageCache.forEach(d => socket.emit('mqtt_message_stream', d));
+            });
+            socket.on('unsubscribe_mqtt_monitor', () => mqttMonitorClients.delete(socket.id));
+
+            socket.on('disconnect', () => {
+                eventInspectorClients.delete(socket.id);
+                mqttMonitorClients.delete(socket.id);
+            });
 
             socket.on('debug_continue', (filename) => {
                 this.kernel.workerManager.continueBreakpoint(filename);
+            });
+
+            socket.on('mqtt_ui_publish', ({ topic, payload, retain }) => {
+                if (typeof topic === 'string' && topic.trim() && this.kernel.mqttManager?.isConnected) {
+                    this.kernel.mqttManager.publish(topic.trim(), payload ?? '', { retain: !!retain });
+                }
+            });
+
+            socket.on('fire_ha_event', ({ event_type, data }) => {
+                if (typeof event_type === 'string' && event_type.trim()) {
+                    try { this.kernel.haConnector.fireEvent(event_type.trim(), data ?? {}); } catch (e) {}
+                }
             });
         });
 
@@ -72,7 +101,14 @@ class Bridge {
             inspectSnapshotCache.delete(data.filename);
             this.io.emit('watch_clear', data);
         });
-        
+
+        // MQTT traffic → ring buffer + subscribed MQTT Monitor clients only
+        this.kernel.on('mqtt_traffic', (data) => {
+            mqttMessageCache.push(data);
+            if (mqttMessageCache.length > MQTT_CACHE_MAX) mqttMessageCache.shift();
+            if (mqttMonitorClients.size === 0) return;
+            mqttMonitorClients.forEach(id => this.io.to(id).emit('mqtt_message_stream', data));
+        });
 
         // --- Log Events ---
         // Forwards any log added by managers to the frontend.

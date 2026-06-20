@@ -300,6 +300,7 @@ class MqttManager extends EventEmitter {
         }
 
         this.client.publish(topic, message, options);
+        this.emit('raw_message', { topic, payload: message, direction: 'out', ts: Date.now() });
     }
 
  /**
@@ -434,6 +435,8 @@ class MqttManager extends EventEmitter {
     }
 
     _handleIncomingMessage(topic, message) {
+        this.emit('raw_message', { topic, payload: message, direction: 'in', ts: Date.now() });
+
         const parts = topic.split('/');
         // Routing logic for command topics: jsa/<domain>/<script_id>/set
         if (parts[0] === 'jsa' && parts[3] === 'set') {

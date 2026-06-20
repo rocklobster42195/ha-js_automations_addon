@@ -106,6 +106,7 @@ function initSocket() {
     window.socket.on('watch_update', d => { if(typeof onWatchUpdate === 'function') onWatchUpdate(d); });
     window.socket.on('inspect_snapshot', d => { if(typeof onInspectSnapshot === 'function') onInspectSnapshot(d); });
     window.socket.on('watch_clear', d => { if(typeof onWatchClear === 'function') onWatchClear(d); });
+    window.socket.on('mqtt_message_stream', d => { if(typeof onMqttMessage === 'function') onMqttMessage(d); });
     
     window.socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');
