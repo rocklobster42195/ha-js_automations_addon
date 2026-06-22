@@ -1571,8 +1571,30 @@ input#search-input:focus { border-color: var(--accent) !important; }
     display: flex;
     flex-direction: column;
 }
+.dev-section-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    height: 22px;
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #3a3a3a;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.dev-section-divider::before,
+.dev-section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #2a2a2a;
+}
 .mm-publish-panel {
-    border-bottom: 1px solid #1a1a1a;
+    border-bottom: none;
     padding: 6px 8px;
     flex-shrink: 0;
     display: flex;
