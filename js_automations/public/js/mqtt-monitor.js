@@ -35,6 +35,7 @@ function initMqttMonitor() {
                 <textarea id="mm-payload-input" class="mm-payload-input" rows="2" placeholder="${t('devtools.mqtt_payload', 'Payload')} (JSON or plain text)..." spellcheck="false"></textarea>
             </div>
         </div>
+        <div class="dev-section-divider">Stream</div>
         <div class="mm-toolbar">
             <input id="mm-filter" class="mm-filter" placeholder="${t('devtools.mqtt_filter', 'Filter topic...')}"
                 autocomplete="off" oninput="mmSetFilter(this.value)">

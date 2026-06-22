@@ -53,6 +53,7 @@ function initEventInspector() {
                 <span id="ei-fire-err" class="ei-fire-err hidden"></span>
             </div>
         </div>
+        <div class="dev-section-divider">Stream</div>
         <div class="ei-toolbar">
             <div class="ei-filter-wrap">
                 <input id="ei-type-filter" class="ei-filter" placeholder="Event type..."
