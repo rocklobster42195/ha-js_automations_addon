@@ -6,10 +6,6 @@
 // since those are buried inside the package's node_modules.
 const NETWORK_PATTERNS = [
     /\bfetch\s*\(/,
-    /require\s*\(\s*['"]axios['"]\s*\)/,
-    /import\s*\(\s*['"]axios['"]\s*\)/,
-    /import\s+\S.*\baxios\b/,
-    /\baxios\s*\.\s*\w+\s*\(/,
     /require\s*\(\s*['"]https?['"]\s*\)/,
     /require\s*\(\s*['"]node-fetch['"]\s*\)/,
     /import\s*\(\s*['"]node-fetch['"]\s*\)/,

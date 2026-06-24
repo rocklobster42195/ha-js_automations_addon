@@ -1,6 +1,6 @@
 const express = require('express');
 const https = require('https');
-const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 const packageJson = require('../../package.json');
 
 module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemService, getCombinedStatus, mqttManager, workerManager) => {
@@ -80,7 +80,7 @@ module.exports = (connector, logManager, getSystemOptions, SCRIPTS_DIR, systemSe
 
     // Backup Route (ZIP Download).
     router.get('/system/backup', (req, res) => {
-        const archive = archiver('zip', { zlib: { level: 9 } });
+        const archive = new ZipArchive({ zlib: { level: 9 } });
         
         const now = new Date();
         const yyyy = now.getFullYear();
