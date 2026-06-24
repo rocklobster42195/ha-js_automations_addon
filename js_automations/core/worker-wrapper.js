@@ -6,6 +6,7 @@ const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
+const historyHelpers = require('./ha-history-helpers');
 const Module = require('module');
 
 // --- 1. MODULE PATH INJECTION ---
@@ -1012,40 +1013,49 @@ const ha = {
             })
             .map(e => e.entity_id);
     },
-    getHistory: (entityId, options = {}) => {
-        _addRef();
-        ensureMessageListener();
-        const callId = ++serviceCallCounter;
-        return new Promise((resolve, reject) => {
-            pendingServiceCalls.set(callId, { resolve, reject });
-            parentPort.postMessage({
-                type: 'get_history',
-                callId,
-                entityId,
-                start: options.start instanceof Date ? options.start.toISOString() : options.start,
-                end: options.end instanceof Date ? options.end.toISOString() : options.end,
-                minimalResponse: options.minimalResponse,
-                noAttributes: options.noAttributes,
+    history: {
+        get: (entityId, options = {}) => {
+            _addRef();
+            ensureMessageListener();
+            const callId = ++serviceCallCounter;
+            return new Promise((resolve, reject) => {
+                pendingServiceCalls.set(callId, { resolve, reject });
+                parentPort.postMessage({
+                    type: 'get_history',
+                    callId,
+                    entityId,
+                    start: options.start instanceof Date ? options.start.toISOString() : options.start,
+                    end: options.end instanceof Date ? options.end.toISOString() : options.end,
+                    minimalResponse: options.minimalResponse,
+                    noAttributes: options.noAttributes,
+                });
             });
-        });
-    },
+        },
 
-    getStatistics: (statId, options = {}) => {
-        _addRef();
-        ensureMessageListener();
-        const callId = ++serviceCallCounter;
-        return new Promise((resolve, reject) => {
-            pendingServiceCalls.set(callId, { resolve, reject });
-            parentPort.postMessage({
-                type: 'get_statistics',
-                callId,
-                statId,
-                start: options.start instanceof Date ? options.start.toISOString() : options.start,
-                end: options.end instanceof Date ? options.end.toISOString() : options.end,
-                period: options.period,
-                types: options.types,
+        statistics: (statId, options = {}) => {
+            _addRef();
+            ensureMessageListener();
+            const callId = ++serviceCallCounter;
+            return new Promise((resolve, reject) => {
+                pendingServiceCalls.set(callId, { resolve, reject });
+                parentPort.postMessage({
+                    type: 'get_statistics',
+                    callId,
+                    statId,
+                    start: options.start instanceof Date ? options.start.toISOString() : options.start,
+                    end: options.end instanceof Date ? options.end.toISOString() : options.end,
+                    period: options.period,
+                    types: options.types,
+                });
             });
-        });
+        },
+
+        trend:       (entityId, options)        => historyHelpers.trend(ha, entityId, options),
+        derivative:  (entityId, options)        => historyHelpers.derivative(ha, entityId, options),
+        integral:    (entityId, options)        => historyHelpers.integral(ha, entityId, options),
+        stats:       (entityId, options)        => historyHelpers.stats(ha, entityId, options),
+        timeSince:   (entityId, state)          => historyHelpers.timeSince(ha, entityId, state),
+        timeInState: (entityId, state, options) => historyHelpers.timeInState(ha, entityId, state, options),
     },
 
     renderTemplate: (template) => {

@@ -570,63 +570,64 @@ ha.select(ha.getEntitiesInArea('living_room').filter(id => id.startsWith('light.
 
 ---
 
-## History API
+## `ha.history` — History, Statistics & Computed Helpers
 
-`ha.getHistory()` fetches the recorded state history for an entity from Home Assistant's history system. It wraps the WebSocket `history/history_during_period` command.
+The `ha.history` namespace provides access to HA state history, long-term statistics, and six pure-JS computed helpers built on top of them.
 
-Use this in an `async` function with `await`.
+---
+
+### `ha.history.get()`
+
+Fetches the recorded state history for an entity. Wraps the HA WebSocket `history/history_during_period` command.
 
 ```javascript
 // Last 24 hours (default)
-const history = await ha.getHistory('sensor.power_usage');
+const history = await ha.history.get('sensor.power_usage');
 ha.log(`${history.length} data points`);
 
 // Custom time window
-const history = await ha.getHistory('sensor.power_usage', {
-    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+const history = await ha.history.get('sensor.power_usage', {
+    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     end: new Date(),
 });
-
-// Each entry has at least: state, last_changed
 for (const entry of history) {
     ha.log(`${entry.last_changed}: ${entry.state}`);
 }
 
-// Include full attributes (minimalResponse: false)
-const full = await ha.getHistory('climate.living_room', {
+// Include full attributes
+const full = await ha.history.get('climate.living_room', {
     start: new Date(Date.now() - 3600 * 1000),
     minimalResponse: false,
 });
 ha.log(full[0]?.attributes?.current_temperature);
 ```
 
-> **Note:** History availability depends on the HA recorder integration being configured. Long time windows may return large datasets.
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `start` | `Date` | 24 hours ago | Start of the window |
+| `end` | `Date` | now | End of the window |
+| `minimalResponse` | `boolean` | `true` | Only return `state` + `last_changed` |
+| `noAttributes` | `boolean` | `false` | Omit attributes entirely |
+
+> **Note:** Requires the HA recorder integration. Long windows may return large datasets.
 
 ---
 
-## Statistics API
+### `ha.history.statistics()`
 
-`ha.getStatistics()` fetches **aggregated long-term statistics** from HA's recorder — the same data that powers the Energy Dashboard. Unlike `getHistory()` which returns every raw state change, statistics are pre-aggregated into hourly or daily buckets (mean, min, max, sum).
-
-Use this in an `async` function with `await`.
+Fetches **pre-aggregated long-term statistics** from HA's recorder. Data is bucketed into hourly or daily intervals (mean, min, max, sum) — much faster than `ha.history.get()` for long time ranges. Requires the entity to have `state_class` configured.
 
 ```javascript
 // Energy usage over the past 7 days (daily buckets)
-const stats = await ha.getStatistics('sensor.power_usage', {
+const stats = await ha.history.statistics('sensor.power_usage', {
     start: new Date(Date.now() - 7 * 86400_000),
     period: 'day',
     types: ['mean', 'sum'],
 });
-
 for (const entry of stats) {
     ha.log(`${entry.start}: avg=${entry.mean?.toFixed(1)}W, total=${entry.sum?.toFixed(0)}Wh`);
 }
-
-// Last 24 hours at hourly resolution (default)
-const hourly = await ha.getStatistics('sensor.power_usage');
 ```
-
-**Options:**
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -636,6 +637,163 @@ const hourly = await ha.getStatistics('sensor.power_usage');
 | `types` | `string[]` | `['mean','min','max','sum']` | Which aggregates to include |
 
 Each entry: `{ start: string, mean?: number, min?: number, max?: number, sum?: number }`
+
+---
+
+### Computed Helpers
+
+Six pure-JS functions built on top of `ha.history.get()`. No HA entities are created — all computation happens in the script worker.
+
+**First argument — entity ID or raw array:** All six helpers accept either a string (entity ID, fetches from HA) or an array of `{ state: string, last_changed: string }` objects. This allows feeding external API data into the same computation functions without any additional conversion layer.
+
+```javascript
+// Option A: external data (e.g. from Open-Meteo)
+// @permission network
+const data = await ha.http.get('https://api.open-meteo.com/v1/forecast?...');
+const points = data.hourly.time.map((t, i) => ({
+    state: String(data.hourly.temperature_2m[i]),
+    last_changed: new Date(t).toISOString(),
+}));
+const trend = await ha.history.trend(points, { sensitivity: 0.5 });
+```
+
+**Period strings** accepted by all helpers: `'30m'`, `'2h'`, `'7d'` — or a raw number in milliseconds.
+
+---
+
+#### `ha.history.trend(entityId, options?)`
+
+Returns the trend direction of a numeric sensor using OLS linear regression over all data points in the window.
+
+```javascript
+const trend = await ha.history.trend('sensor.living_room_temperature', { period: '30m' });
+// → 'rising' | 'falling' | 'stable'
+
+if (trend === 'rising') {
+    ha.call('climate.set_temperature', { entity_id: 'climate.living_room', temperature: 21 });
+}
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `period` | `string \| number` | `'1h'` | Time window |
+| `sensitivity` | `number` | `0.1` | Min slope (units/hour) to count as moving |
+
+---
+
+#### `ha.history.derivative(entityId, options?)`
+
+Returns the current rate of change of a numeric sensor.
+
+- **`method: 'linear'`** (default) — OLS slope over all points. Robust for monotone curves (battery, humidity).
+- **`method: 'polynomial'`** — Fits a polynomial curve, returns the instantaneous slope at the last data point. Better for non-linear curves like heating or charging.
+
+```javascript
+// Linear: how fast is the battery draining?
+const rate = await ha.history.derivative('sensor.phone_battery', { period: '2h', unit: 'hour' });
+ha.log(`Battery draining at ${Math.abs(rate).toFixed(1)}%/h`);
+
+// Polynomial: current heating rate of a warming-up room
+const rate = await ha.history.derivative('sensor.living_room_temperature', {
+    period: '45m',
+    unit: 'minute',
+    method: 'polynomial',
+    degree: 2,
+});
+const current = parseFloat(ha.getStateValue('sensor.living_room_temperature'));
+const minutesLeft = rate > 0 ? (21 - current) / rate : Infinity;
+ha.log(`Room reaches 21°C in ~${Math.round(minutesLeft)} min`);
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `period` | `string \| number` | `'1h'` | Time window |
+| `unit` | `'second' \| 'minute' \| 'hour'` | `'minute'` | Rate denominator |
+| `method` | `'linear' \| 'polynomial'` | `'linear'` | Fitting method |
+| `degree` | `number` | `2` | Polynomial degree (polynomial method only; values > 3 risk overfitting) |
+
+---
+
+#### `ha.history.integral(entityId, options?)`
+
+Returns the Riemann integral (area under the curve) of a numeric sensor — useful for converting a rate (W) to a cumulative value (Wh).
+
+```javascript
+const wh = await ha.history.integral('sensor.washing_machine_power', { period: '2h', unit: 'hour' });
+ha.log(`Last wash cycle used ${wh.toFixed(0)} Wh`);
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `period` | `string \| number` | `'1h'` | Time window |
+| `unit` | `'second' \| 'minute' \| 'hour'` | `'hour'` | Time unit for the output |
+| `method` | `'left' \| 'right' \| 'trapezoidal'` | `'trapezoidal'` | Integration method |
+
+---
+
+#### `ha.history.stats(entityId, options?)`
+
+Returns descriptive statistics for a numeric sensor over a time window.
+
+```javascript
+const s = await ha.history.stats('sensor.bedroom_temperature', { period: '24h' });
+ha.notify(
+    `Bedroom: avg ${s.mean.toFixed(1)}°C, min ${s.min.toFixed(1)}°C, max ${s.max.toFixed(1)}°C`,
+    { title: 'Daily Report' }
+);
+```
+
+Returns: `{ mean, min, max, median, stddev, count }`
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `period` | `string \| number` | `'24h'` | Time window |
+
+> For long periods (weeks/months), prefer `ha.history.statistics()` which uses HA's pre-aggregated recorder data.
+
+---
+
+#### `ha.history.timeSince(entityId, state?)`
+
+Returns milliseconds since the last state change, or since a specific state was last entered.
+
+Without `state`: reads `last_changed` directly — no history call needed.
+With `state`: searches history for the last transition into that state (24h window, auto-extends to 7d).
+
+```javascript
+// How long since any state change?
+const ms = await ha.history.timeSince('binary_sensor.front_door');
+
+// How long has the door been open specifically?
+const ms = await ha.history.timeSince('binary_sensor.front_door', 'on');
+if (ms > 10 * 60 * 1000) ha.notify('Front door still open!');
+```
+
+Returns: milliseconds (`NaN` if the state was never found in history).
+
+---
+
+#### `ha.history.timeInState(entityId, state, options?)`
+
+Returns total milliseconds spent in a specific state within a time window.
+
+```javascript
+const ms = await ha.history.timeInState('climate.living_room', 'heat', { period: '24h' });
+const pct = (ms / (24 * 3600000) * 100).toFixed(1);
+ha.log(`Heating was active ${pct}% of the last 24 hours`);
+
+// Specific window
+const ms = await ha.history.timeInState('binary_sensor.garage_door', 'on', {
+    start: new Date('2026-06-01'),
+    end: new Date('2026-06-30'),
+});
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `period` | `string \| number` | `'24h'` | Time window (ignored if `start` is set) |
+| `start` | `Date` | — | Explicit start |
+| `end` | `Date` | now | Explicit end |
 
 ---
 

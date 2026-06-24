@@ -16,11 +16,11 @@
 > This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
 > [!TIP]
-> **API Reference:** Complete reference for all `ha` methods → [API Reference](API_REFERENCE.md)
+> **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/API_REFERENCE.md)
 
 > **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
 
-> **Deep Dive:** Internal architecture and advanced concepts → [Technical Documentation](TECH-README.md)
+> **Deep Dive:** Internal architecture and advanced concepts → [Technical Documentation](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/TECH-README.md)
 
 ---
 
@@ -35,7 +35,8 @@
 - **Persistent Store & Magic Variables** — Share data between scripts or survive reboots with `ha.store`. Use `ha.persistent()` to work with persistent objects as if they were plain JavaScript — nested property changes are saved automatically.
 - **Global Libraries & Auto-NPM** — Write shared code once, `@include` it anywhere. npm packages listed in the script header are installed automatically.
 - **Filesystem API (`ha.fs`)** — Read, write, append, list, watch, and rotate files across three sandboxed virtual roots: `internal://` (script-private data), `shared://` (/share, NAS mounts), `media://` (/media). Opt-in via Settings → Danger Zone.
-- **Deep HA API Access** — `ha.getStatistics()` reads Energy Dashboard data, `ha.renderTemplate()` evaluates Jinja2, `ha.getCalendarEvents()` and `ha.getTodoItems()` access HA calendar/todo entities, `ha.getEntitiesWithLabel()` and `ha.getAreasInFloor()` query the label and floor registries, `ha.onEvent()` subscribes to any HA event bus event (NFC, automation triggers, custom events), and `ha.fireEvent()` fires custom events for inter-script communication.
+- **History & Computed Helpers (`ha.history`)** — Fetch raw state history and pre-aggregated long-term statistics. Six built-in computation functions — `trend()`, `derivative()` (linear or polynomial fit), `integral()`, `stats()`, `timeSince()`, `timeInState()` — work on HA entities or any external data array, no helper entities required.
+- **Deep HA API Access** — `ha.renderTemplate()` evaluates Jinja2 templates, `ha.getCalendarEvents()` and `ha.getTodoItems()` access HA calendar and todo entities, `ha.getEntitiesWithLabel()` and `ha.getAreasInFloor()` query the label and floor registries, `ha.onEvent()` subscribes to any HA event bus event (NFC tags, automation triggers, custom events), and `ha.fireEvent()` fires custom events for inter-script communication.
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
 - **Developer Tools (Expert Mode)** — Enable **Settings → General → Expert Mode** to reveal a split developer panel next to the log console with three tools: **Event Inspector** (live HA event stream with entity filter), **Live REPL** (run ad-hoc JavaScript with full `ha` API access against your live instance), and **Breakpoints** (`ha.breakpoint('label', { vars })` pauses execution and displays variables in a built-in variable inspector — click Continue to resume).
@@ -412,7 +413,7 @@ A graphical UI for `ha.store`:
 
 ## API Documentation
 
-For a complete reference of all `ha` methods, see the [API Reference](API_REFERENCE.md).
+For a complete reference of all `ha` methods, see the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/API_REFERENCE.md).
 
 ---
 

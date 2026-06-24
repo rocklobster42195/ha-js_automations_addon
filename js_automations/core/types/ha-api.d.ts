@@ -176,6 +176,13 @@ interface BackgroundErrorData {
     type: 'background' | 'script';
 }
 
+/** A single history entry — format returned by `ha.history.get()` and accepted by all computed helpers. */
+interface HAHistoryEntry {
+    state: string;
+    last_changed: string;
+    attributes?: Record<string, any>;
+}
+
 /**
  * Defines the global `ha` object available in JS Automations scripts.
  * Provides access to Home Assistant functionalities, logging, and global store.
@@ -584,57 +591,164 @@ interface HA {
     getEntitiesInArea(areaId: string): EntityID[];
 
     /**
-     * Fetches the state history for an entity from Home Assistant.
-     * Wraps the HA WebSocket `history/history_during_period` command.
+     * Access to Home Assistant state history, long-term statistics, and computed helpers.
      *
-     * @param entityId The entity to query (e.g. `'sensor.power_usage'`).
-     * @param options Query options. Defaults: last 24 hours, minimal response enabled.
-     * @returns A promise resolving to an array of state entries ordered by time.
+     * All six computed helpers accept either:
+     * - A **string** (entity ID) — fetches history from HA automatically.
+     * - An **array** of `{ state: string; last_changed: string }` — uses the provided data directly.
+     *   This allows feeding external API data into the same computation functions.
      *
      * @example
-     * const history = await ha.getHistory('sensor.power_usage', {
-     *   start: new Date(Date.now() - 24 * 60 * 60 * 1000),
-     *   end: new Date(),
-     * });
-     * // → [{ state: '123.4', last_changed: '2026-06-14T10:00:00Z' }, ...]
+     * // HA entity (fetches internally)
+     * await ha.history.trend('sensor.temperature', { period: '1h' });
+     *
+     * @example
+     * // External data (e.g. from an API)
+     * const raw = externalData.map((p, i) => ({ state: String(p.value), last_changed: p.timestamp }));
+     * await ha.history.trend(raw, { sensitivity: 0.5 });
      */
-    getHistory(entityId: EntityID | string, options?: {
-        /** Start of the history window. Defaults to 24 hours ago. */
-        start?: Date;
-        /** End of the history window. Defaults to now. */
-        end?: Date;
-        /** When `true`, only `state` and `last_changed` are returned (no attributes). Default: `true`. */
-        minimalResponse?: boolean;
-        /** When `true`, attributes are omitted entirely. Default: `false`. */
-        noAttributes?: boolean;
-    }): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
+    readonly history: {
+        /**
+         * Fetches the state history for an entity from Home Assistant.
+         * Wraps the HA WebSocket `history/history_during_period` command.
+         *
+         * @param entityId The entity to query (e.g. `'sensor.power_usage'`).
+         * @param options Query options. Defaults: last 24 hours, minimal response enabled.
+         * @returns A promise resolving to an array of state entries ordered by time.
+         *
+         * @example
+         * const history = await ha.history.get('sensor.power_usage', {
+         *   start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+         *   end: new Date(),
+         * });
+         * // → [{ state: '123.4', last_changed: '2026-06-14T10:00:00Z' }, ...]
+         */
+        get(entityId: EntityID | string, options?: {
+            /** Start of the history window. Defaults to 24 hours ago. */
+            start?: Date;
+            /** End of the history window. Defaults to now. */
+            end?: Date;
+            /** When `true`, only `state` and `last_changed` are returned (no attributes). Default: `true`. */
+            minimalResponse?: boolean;
+            /** When `true`, attributes are omitted entirely. Default: `false`. */
+            noAttributes?: boolean;
+        }): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
 
-    /**
-     * Fetches aggregated long-term statistics from HA's recorder (the data behind the Energy Dashboard).
-     * Wraps the HA WebSocket `recorder/statistics_during_period` command.
-     *
-     * @param statId The statistic ID — usually the same as an entity ID (e.g. `'sensor.power_usage'`).
-     * @param options Query options. Defaults: last 24 hours, period `'hour'`, types `['mean','min','max','sum']`.
-     * @returns A promise resolving to an array of aggregated statistic entries.
-     *
-     * @example
-     * const stats = await ha.getStatistics('sensor.power_usage', {
-     *   start: new Date(Date.now() - 7 * 86400_000),
-     *   period: 'day',
-     *   types: ['mean', 'sum'],
-     * });
-     * // → [{ start: '2026-06-08T00:00:00Z', mean: 230.4, sum: 1840 }, ...]
-     */
-    getStatistics(statId: string, options?: {
-        /** Start of the statistics window. Defaults to 24 hours ago. */
-        start?: Date;
-        /** End of the statistics window. Defaults to unlimited. */
-        end?: Date;
-        /** Aggregation period. Default: `'hour'`. */
-        period?: 'hour' | 'day' | '5minute';
-        /** Which aggregates to include. Default: `['mean','min','max','sum']`. */
-        types?: Array<'mean' | 'min' | 'max' | 'sum'>;
-    }): Promise<HAStatisticEntry[]>;
+        /**
+         * Fetches pre-aggregated long-term statistics from HA's recorder.
+         * Data is bucketed into hourly or daily intervals (mean, min, max, sum) — much faster than
+         * `ha.history.get()` for long time ranges. Requires the entity to have `state_class` set.
+         *
+         * @param statId The statistic ID — usually the same as an entity ID (e.g. `'sensor.power_usage'`).
+         * @param options Query options. Defaults: last 24 hours, period `'hour'`, types `['mean','min','max','sum']`.
+         * @returns A promise resolving to an array of aggregated statistic entries.
+         *
+         * @example
+         * const stats = await ha.history.statistics('sensor.power_usage', {
+         *   start: new Date(Date.now() - 7 * 86400_000),
+         *   period: 'day',
+         *   types: ['mean', 'sum'],
+         * });
+         * // → [{ start: '2026-06-08T00:00:00Z', mean: 230.4, sum: 1840 }, ...]
+         */
+        statistics(statId: string, options?: {
+            /** Start of the statistics window. Defaults to 24 hours ago. */
+            start?: Date;
+            /** End of the statistics window. Defaults to unlimited. */
+            end?: Date;
+            /** Aggregation period. Default: `'hour'`. */
+            period?: 'hour' | 'day' | '5minute';
+            /** Which aggregates to include. Default: `['mean','min','max','sum']`. */
+            types?: Array<'mean' | 'min' | 'max' | 'sum'>;
+        }): Promise<HAStatisticEntry[]>;
+
+        /**
+         * Returns the trend direction of a numeric sensor over a time window using OLS linear regression.
+         * @param options.period Time window as a human string ('1h', '30m', '2d') or ms. Default: `'1h'`.
+         * @param options.sensitivity Minimum slope magnitude (units/hour) to count as moving. Default: `0.1`.
+         * @example
+         * const t = await ha.history.trend('sensor.living_room_temperature', { period: '30m' });
+         * if (t === 'rising') ha.call('climate.set_temperature', { entity_id: '...', temperature: 21 });
+         */
+        trend(source: EntityID | string | HAHistoryEntry[], options?: {
+            period?: string | number;
+            sensitivity?: number;
+        }): Promise<'rising' | 'falling' | 'stable'>;
+
+        /**
+         * Returns the current rate of change of a numeric sensor.
+         * - `method: 'linear'` (default): OLS slope over all points — robust for monotone curves.
+         * - `method: 'polynomial'`: fits a curve to the data, returns the instantaneous slope at the last point — better for non-linear curves like heating or charging.
+         * @param options.period Time window. Default: `'1h'`.
+         * @param options.unit Rate denominator. Default: `'minute'`.
+         * @param options.method Fitting method. Default: `'linear'`.
+         * @param options.degree Polynomial degree (only for `method: 'polynomial'`). Default: `2`.
+         * @example
+         * const rate = await ha.history.derivative('sensor.living_room_temperature', {
+         *   period: '45m', unit: 'minute', method: 'polynomial', degree: 2,
+         * });
+         * const minutesLeft = rate > 0 ? (21 - parseFloat(ha.getStateValue('sensor.living_room_temperature'))) / rate : Infinity;
+         */
+        derivative(source: EntityID | string | HAHistoryEntry[], options?: {
+            period?: string | number;
+            unit?: 'second' | 'minute' | 'hour';
+            method?: 'linear' | 'polynomial';
+            degree?: number;
+        }): Promise<number>;
+
+        /**
+         * Returns the Riemann integral (area under the curve) of a numeric sensor over a time window.
+         * Useful for converting a rate sensor (W) to a cumulative value (Wh).
+         * @param options.period Time window. Default: `'1h'`.
+         * @param options.unit Time unit for the output denominator. Default: `'hour'`.
+         * @param options.method Integration method. Default: `'trapezoidal'`.
+         * @example
+         * const wh = await ha.history.integral('sensor.washing_machine_power', { period: '2h', unit: 'hour' });
+         * ha.log(`Last wash used ${wh.toFixed(0)} Wh`);
+         */
+        integral(source: EntityID | string | HAHistoryEntry[], options?: {
+            period?: string | number;
+            unit?: 'second' | 'minute' | 'hour';
+            method?: 'left' | 'right' | 'trapezoidal';
+        }): Promise<number>;
+
+        /**
+         * Returns descriptive statistics for a numeric sensor over a time window.
+         * @param options.period Time window. Default: `'24h'`.
+         * @example
+         * const s = await ha.history.stats('sensor.bedroom_temperature', { period: '24h' });
+         * ha.log(`avg ${s.mean.toFixed(1)}°C, min ${s.min.toFixed(1)}°C, max ${s.max.toFixed(1)}°C`);
+         */
+        stats(source: EntityID | string | HAHistoryEntry[], options?: {
+            period?: string | number;
+        }): Promise<{ mean: number; min: number; max: number; median: number; stddev: number; count: number }>;
+
+        /**
+         * Returns milliseconds since the last state change, or since a specific state was last entered.
+         * Without `state`: reads `last_changed` directly — no history call.
+         * With `state`: searches history for the last transition into that state.
+         * @example
+         * const ms = await ha.history.timeSince('binary_sensor.front_door', 'on');
+         * if (ms > 10 * 60 * 1000) ha.notify('Front door still open!');
+         */
+        timeSince(source: EntityID | string | HAHistoryEntry[], state?: string): Promise<number>;
+
+        /**
+         * Returns total milliseconds spent in a specific state within a time window.
+         * @param options.period Time window. Default: `'24h'`.
+         * @param options.start Explicit start (overrides `period`).
+         * @param options.end Explicit end. Default: now.
+         * @example
+         * const ms = await ha.history.timeInState('climate.living_room', 'heat', { period: '24h' });
+         * ha.log(`Heating was active ${(ms / 3600000).toFixed(1)}h today`);
+         */
+        timeInState(source: EntityID | string | HAHistoryEntry[], state: string, options?: {
+            period?: string | number;
+            start?: Date;
+            end?: Date;
+        }): Promise<number>;
+    };
+
 
     /**
      * Evaluates a Jinja2 template string via HA's template engine.
