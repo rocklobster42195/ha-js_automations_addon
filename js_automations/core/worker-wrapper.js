@@ -29,7 +29,7 @@ if (workerData.storageDir) {
 // System packages listed in SYSTEM_INTERNAL_PACKAGES are allowed to require sensitive native
 // modules freely — they are used internally by the ha API and their native deps are an
 // implementation detail the user has no control over.
-// All other npm packages (e.g. axios) are subject to the same permission checks as user code,
+// All other npm packages are subject to the same permission checks as user code,
 // ensuring that @permission network/exec is enforced even for indirect requires.
 let _scriptExecuting = false;
 
@@ -84,34 +84,6 @@ if (workerData.capabilityEnforcement) {
         };
     }
 }
-
-// --- AXIOS MONKEY-PATCH ---
-// This ensures that any script `require('axios')` gets the proper defaults
-// to prevent the worker process from hanging.
-const originalRequire = Module.prototype.require;
-Module.prototype.require = function(requestPath) {
-  const requiredModule = originalRequire.apply(this, arguments);
-  if (requestPath === 'axios') {
-    try {
-        const http = require('http');
-        const https = require('https');
-        requiredModule.defaults.httpAgent = new http.Agent({ keepAlive: false });
-        requiredModule.defaults.httpsAgent = new https.Agent({ keepAlive: false });
-        if (!requiredModule.defaults.headers.common) requiredModule.defaults.headers.common = {};
-        requiredModule.defaults.headers.common['Connection'] = 'close';
-    } catch(e) {
-        // This could happen if http/https are not available, though unlikely.
-        if (parentPort) {
-            parentPort.postMessage({ 
-                type: 'log', 
-                level: 'error', 
-                message: `[Worker] Failed to apply essential defaults to axios: ${e.message}` 
-            });
-        }
-    }
-  }
-  return requiredModule;
-};
 
 // Default: Allow thread to exit if nothing is happening
 parentPort.unref();

@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const ScriptHeaderParser = require('../core/script-header-parser');
 const CapabilityAnalyzer = require('../core/capability-analyzer');
-const axios = require('axios');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -712,8 +711,9 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
     router.post('/import', async (req, res) => {
         const { url, type, name, dryRun } = req.body;
         try {
-            const response = await axios.get(url, { responseType: 'text' });
-            const code = response.data;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const code = await response.text();
             const urlExt = path.extname(url.split('?')[0]) || '.js';
 
             // Dateinamen aus URL ableiten und bereinigen

@@ -174,7 +174,7 @@ const referenceManager = {
             'State Management': ['ha.getState', 'ha.update', 'ha.register', 'ha.getAttr', 'ha.getStateValue'],
             'Services': ['ha.callService'],
             'Data Store': ['ha.store'],
-            'Utilities': ['sleep', 'axios', 'ha.getHeader', 'ha.getGroupMembers'],
+            'Utilities': ['sleep', 'fetch', 'ha.getHeader', 'ha.getGroupMembers'],
             'Selectors': ['ha.select'],
             'Types & Interfaces': ['HAAttributes', 'HAState', 'EntitySelector', 'ServiceMap', 'ChangeFilter', 'EntityID', 'StateChangeData', 'BackgroundErrorData']
         };
