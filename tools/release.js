@@ -105,7 +105,10 @@ if (!releaseNotes) {
         const prevTag = execSync(`git describe --tags --abbrev=0 ${tag}~1`, { stdio: 'pipe' }).toString().trim();
         const log     = execSync(`git log ${prevTag}..${tag} --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
         if (log) {
-            const lines  = log.split('\n').map(l => `- ${l.replace(/^[a-f0-9]+ /, '')}`);
+            const lines  = log.split('\n')
+                .map(l => l.replace(/^[a-f0-9]+ /, ''))
+                .filter(l => !/^\d+\.\d+\.\d+$/.test(l))
+                .map(l => `- ${l}`);
             releaseNotes = lines.join('\n');
             console.log(`  ✅ Auto-collected ${lines.length} commit(s) from ${prevTag}..${tag}`);
         }
