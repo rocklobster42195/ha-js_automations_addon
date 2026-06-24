@@ -1,3 +1,28 @@
+<!-- NEXT -->
+
+feat: add ha.history computed helpers; breaking: remove ha.getHistory/ha.getStatistics
+
+### History Repeating
+
+`ha.history` is now the single namespace for everything time-series related — raw state history, pre-aggregated statistics, and six built-in computation functions that run directly in the script worker. No HA helper entities, no UI configuration needed.
+
+All six helpers accept either an entity ID (fetches from HA automatically) or a plain array of `{ state, last_changed }` objects — so external API data feeds straight into the same functions without any wrapper.
+
+**Breaking change:** `ha.getHistory()` and `ha.getStatistics()` are removed. Use `ha.history.get()` and `ha.history.statistics()`.
+
+**What's new**
+- `ha.history.get()` — replaces `ha.getHistory()`
+- `ha.history.statistics()` — replaces `ha.getStatistics()`
+- `ha.history.trend(source, options)` — `'rising'` / `'falling'` / `'stable'` via OLS regression
+- `ha.history.derivative(source, options)` — rate of change; `method: 'linear'` (OLS) or `'polynomial'` (parabolic/cubic fit, instantaneous slope at last point)
+- `ha.history.integral(source, options)` — area under the curve (e.g. W → Wh), trapezoidal by default
+- `ha.history.stats(source, options)` — mean, min, max, median, stddev, count
+- `ha.history.timeSince(source, state?)` — ms since last state change or last entry into a specific state
+- `ha.history.timeInState(source, state, options)` — total ms spent in a state within a time window
+- All helpers accept an entity ID **or** an external data array (`HAHistoryEntry[]`)
+
+---
+
 ## [2.55.2] - 2026-06-20
 
 ---

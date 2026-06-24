@@ -91,13 +91,34 @@ if (fs.existsSync(readmePath)) {
 if (fs.existsSync(changelogPath)) {
     let content = fs.readFileSync(changelogPath, 'utf8');
     const dateStr = today();
+    const PLACEHOLDER = '<!-- NEXT -->';
+    const SEP = '\n\n---\n';
 
-    // Prepend a new versioned section at the top — no placeholder needed.
-    content = `## [${newVersion}] - ${dateStr}\n\n---\n\n${content}`;
+    if (content.includes(PLACEHOLDER)) {
+        const pIdx = content.indexOf(PLACEHOLDER);
+        const sepIdx = content.indexOf(SEP, pIdx + PLACEHOLDER.length);
+
+        // Extract body written between <!-- NEXT --> and the first --- after it
+        const body = sepIdx !== -1
+            ? content.slice(pIdx + PLACEHOLDER.length, sepIdx).trim()
+            : content.slice(pIdx + PLACEHOLDER.length).trim();
+        const rest = sepIdx !== -1 ? content.slice(sepIdx) : '';
+
+        const newEntry = body
+            ? `## [${newVersion}] - ${dateStr}\n\n${body}`
+            : `## [${newVersion}] - ${dateStr}`;
+
+        // Keep <!-- NEXT --> at top (empty, ready for next release), then new entry
+        content = `${PLACEHOLDER}\n\n---\n\n${newEntry}${rest}`;
+        console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr}${body ? ' (with release notes)' : ' (empty)'}`);
+    } else {
+        // Fallback for CHANGELOGs without the placeholder
+        content = `${PLACEHOLDER}\n\n---\n\n## [${newVersion}] - ${dateStr}\n\n---\n\n${content}`;
+        console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr} prepended (no placeholder found — added it)`);
+    }
 
     fs.writeFileSync(changelogPath, content);
     assertContains(changelogPath, newVersion, 'CHANGELOG.md');
-    console.log(`  ✅ CHANGELOG.md       → [${newVersion}] - ${dateStr} prepended`);
 }
 
 // --- 4. Stage all modified files ---

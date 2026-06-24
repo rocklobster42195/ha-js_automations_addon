@@ -75,18 +75,30 @@ if (!token) {
 }
 
 // --- 4. Extract CHANGELOG entry for this version ---
-let releaseNotes = `Release ${version}`;
+let releaseNotes = '';
+let releaseName  = tag;
+
 if (fs.existsSync(changelogPath)) {
     const content = fs.readFileSync(changelogPath, 'utf8');
     const m = content.match(
-        new RegExp(`##\\s*\\[${version.replace(/\./g, '\\.')}\\][^\n]*\n([\\s\\S]*?)(?=\n## |$)`)
+        new RegExp(`##\\s*\\[${version.replace(/\./g, '\\.')}\\][^\n]*\n([\\s\\S]*?)(?=\n---\n\n## |\\n## |$)`)
     );
     if (m && m[1].trim()) {
-        releaseNotes = m[1].trim();
+        releaseNotes = m[1].trim().replace(/\n---\s*$/, '').trim();
         console.log(`  ✅ CHANGELOG entry found`);
     } else {
-        console.warn(`  ⚠️  No CHANGELOG entry for ${version} — using default notes`);
+        console.warn(`  ⚠️  No CHANGELOG entry for ${version} — release notes will be empty`);
     }
+}
+
+// Use ### Song Title from release notes as GitHub Release name if present
+const titleMatch = releaseNotes.match(/^###\s+(.+)$/m);
+if (titleMatch) {
+    releaseName  = titleMatch[1].trim();
+    releaseNotes = releaseNotes.replace(titleMatch[0], '').replace(/^\n+/, '').trim();
+    console.log(`  ✅ Release name: "${releaseName}"`);
+} else {
+    console.warn(`  ⚠️  No ### title found in CHANGELOG — using tag as release name`);
 }
 
 // --- 5. Push commit + tag (only the specific tag, not all local tags) ---
@@ -105,7 +117,7 @@ console.log(`  🏷️  Creating GitHub Release ${tag}...`);
 
 const body = JSON.stringify({
     tag_name: tag,
-    name:     tag,
+    name:     releaseName,
     body:     releaseNotes,
     draft:    false,
     prerelease: false

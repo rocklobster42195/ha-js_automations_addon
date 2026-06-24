@@ -7,7 +7,10 @@
     "start": "node js_automations/server.js",
     "dev": "nodemon js_automations/server.js",
     "version": "node tools/update-version.js",
-    "release": "node tools/release.js"
+    "release": "node tools/release.js",
+    "ship:patch": "npm version patch && npm run release",
+    "ship:minor": "npm version minor && npm run release",
+    "ship:major": "npm version major && npm run release"
   },
   "keywords": [],
   "author": "",
