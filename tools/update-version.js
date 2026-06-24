@@ -99,10 +99,27 @@ if (fs.existsSync(changelogPath)) {
         const sepIdx = content.indexOf(SEP, pIdx + PLACEHOLDER.length);
 
         // Extract body written between <!-- NEXT --> and the first --- after it
-        const body = sepIdx !== -1
+        let body = sepIdx !== -1
             ? content.slice(pIdx + PLACEHOLDER.length, sepIdx).trim()
             : content.slice(pIdx + PLACEHOLDER.length).trim();
         const rest = sepIdx !== -1 ? content.slice(sepIdx) : '';
+
+        // Auto-collect commits if body is empty (patch with no written notes)
+        if (!body) {
+            try {
+                const prevTag = execSync('git describe --tags --abbrev=0', { stdio: 'pipe' }).toString().trim();
+                const log     = execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+                if (log) {
+                    const lines = log.split('\n')
+                        .map(l => l.replace(/^[a-f0-9]+ /, ''))
+                        .filter(l => !/^\d+\.\d+\.\d+$/.test(l))
+                        .map(l => `- ${l}`);
+                    if (lines.length > 0) body = lines.join('\n');
+                }
+            } catch {
+                // no previous tag or git error → leave body empty
+            }
+        }
 
         const newEntry = body
             ? `## [${newVersion}] - ${dateStr}\n\n${body}`
