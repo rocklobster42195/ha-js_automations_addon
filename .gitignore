@@ -42,3 +42,6 @@ examples
 # --- AI stuff
 .claude
 CLAUDE.md
+
+# --- Local docs (not for repo)
+RELEASE_PIPELINE.md
