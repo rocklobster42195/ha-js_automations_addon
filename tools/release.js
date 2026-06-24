@@ -97,8 +97,21 @@ if (titleMatch) {
     releaseName  = titleMatch[1].trim();
     releaseNotes = releaseNotes.replace(titleMatch[0], '').replace(/^\n+/, '').trim();
     console.log(`  ✅ Release name: "${releaseName}"`);
-} else {
-    console.warn(`  ⚠️  No ### title found in CHANGELOG — using tag as release name`);
+}
+
+// No release notes written → auto-collect commits since previous tag
+if (!releaseNotes) {
+    try {
+        const prevTag = execSync(`git describe --tags --abbrev=0 ${tag}^`, { stdio: 'pipe' }).toString().trim();
+        const log     = execSync(`git log ${prevTag}..${tag} --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+        if (log) {
+            const lines  = log.split('\n').map(l => `- ${l.replace(/^[a-f0-9]+ /, '')}`);
+            releaseNotes = lines.join('\n');
+            console.log(`  ✅ Auto-collected ${lines.length} commit(s) from ${prevTag}..${tag}`);
+        }
+    } catch {
+        console.warn(`  ⚠️  Could not collect commits — release notes will be empty`);
+    }
 }
 
 // --- 5. Push commit + tag (only the specific tag, not all local tags) ---
