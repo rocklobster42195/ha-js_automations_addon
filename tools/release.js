@@ -102,7 +102,7 @@ if (titleMatch) {
 // No release notes written → auto-collect commits since previous tag
 if (!releaseNotes) {
     try {
-        const prevTag = execSync(`git describe --tags --abbrev=0 ${tag}^`, { stdio: 'pipe' }).toString().trim();
+        const prevTag = execSync(`git describe --tags --abbrev=0 ${tag}~1`, { stdio: 'pipe' }).toString().trim();
         const log     = execSync(`git log ${prevTag}..${tag} --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
         if (log) {
             const lines  = log.split('\n').map(l => `- ${l.replace(/^[a-f0-9]+ /, '')}`);
