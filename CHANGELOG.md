@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [2.56.0] - 2026-06-24
+
 feat: add ha.history computed helpers; breaking: remove ha.getHistory/ha.getStatistics
 
 ### History Repeating
