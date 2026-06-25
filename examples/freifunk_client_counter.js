@@ -1,93 +1,95 @@
 /**
  * @name Freifunk Client Counter
  * @icon mdi:account-group
- * @description Counts clients in Freifunk via UniFi WebSocket
- * @label System
+ * @description Counts active clients on a specific SSID via UniFi Controller.
+ * @label Example
  * @npm node-unifi
  */
 
-//https://github.com/jens-maus/node-unifi
+// https://github.com/jens-maus/node-unifi
 const Unifi = require('node-unifi');
 
-// --- CONFIGURATION ---
-const UNIFI_IP = '192.168.7.23';
-const UNIFI_PORT = 443;
-const UNIFI_USER = 'localadmin';
-const UNIFI_PASS = ha.store.get('unifi_localadmin_pw');
-const TARGET_SSID = 'Freifunk';
-// ---------------------
+// --- Config (persisted — edit values in the JSA Global Store under 'freifunk_config') ---
+const config = ha.persistent('freifunk_config', {
+    unifi_ip: '192.168.1.1',
+    unifi_port: 443,
+    unifi_user: 'admin',
+    unifi_password: '',
+    target_ssid: 'Freifunk',
+});
+
+if (!config.unifi_password) {
+    ha.error("No UniFi password set. Enter it in the Global Store under 'freifunk_config' → unifi_password and restart.");
+    ha.stop();
+}
+
+// ─── Setup ────────────────────────────────────────────────────────────────────
 
 const unifi = new Unifi.Controller({
-  host: UNIFI_IP,
-  port: UNIFI_PORT,
-  sslverify: false
+    host: config.unifi_ip,
+    port: config.unifi_port,
+    sslverify: false,
 });
 
-// This handler catches non-fatal background errors from the wrapper,
-// like the WebSocket dropping unexpectedly.
-ha.onError((err) => {
-    if (err.type === 'background' && err.message.includes('WebSocket')) {
-        ha.warn(`[Freifunk Counter] A background WebSocket error occurred: ${err.message}`);
-        ha.warn(`[Freifunk Counter] The script continues to run, but the connection may be unstable and will try to reconnect.`);
-        // Optional: You could implement a counter here to restart the script after multiple errors.
-    }
+ha.register('sensor.freifunk_clients', {
+    name: 'Freifunk Clients',
+    icon: 'mdi:account-group',
+    unit_of_measurement: 'Clients',
+    state_class: 'measurement',
 });
+
+// ─── Logic ────────────────────────────────────────────────────────────────────
 
 let lastCount = -1;
 let debounceTimer;
-ha.register('sensor.freifunk_clients', {
-    name: 'Number of Freifunk Clients',
-    icon: 'mdi:account-group',
-    unit_of_measurement: 'Clients',
-    area_id: 'REG77',
-    labels: ['System']
-});
 
-// Function to query and log/save
 async function updateClientCount() {
-  try {
-    const clients = await unifi.getClientDevices();
-    const freifunkClients = clients.filter(client => client.essid === TARGET_SSID);
-    const count = freifunkClients.length;
-    // Only log if the count has changed to avoid flooding the log
-    if (count !== lastCount) {
-      ha.debug(`Client count in "${TARGET_SSID}": ${count}`);
-      ha.update('sensor.freifunk_clients', count);
-      lastCount = count;
+    try {
+        const clients = await unifi.getClientDevices();
+        const count = clients.filter(c => c.essid === config.target_ssid).length;
+        if (count !== lastCount) {
+            ha.debug(`Client count on "${config.target_ssid}": ${count}`);
+            ha.update('sensor.freifunk_clients', count);
+            lastCount = count;
+        }
+    } catch (err) {
+        ha.error(`Error retrieving clients: ${err.message}`);
     }
-  } catch (err) {
-    ha.error('Error retrieving clients:', err.message);
-  }
 }
 
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+ha.onError((err) => {
+    if (err.type === 'background' && err.message.includes('WebSocket')) {
+        ha.warn(`Background WebSocket error: ${err.message}`);
+    }
+});
+
+ha.onStop(async () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    await unifi.removeAllListeners();
+    ha.update('sensor.freifunk_clients', null);
+    await unifi.logout();
+    ha.log('Script stopped.');
+});
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
 (async () => {
-  try {
-    await unifi.login(UNIFI_USER, UNIFI_PASS);
-    await updateClientCount();
+    try {
+        await unifi.login(config.unifi_user, config.unifi_password);
+        await updateClientCount();
+        await unifi.listen();
+        ha.log('UniFi WebSocket listener started.');
 
-    await unifi.listen();
-    ha.log('UniFi WebSocket Listener started.');
-
-    unifi.on('event', (event, data) => {
-      if (event === 'events.evt_wg_connected' || event === 'events.evt_wg_disconnected') {
-          ha.debug(`Event '${event}' detected. Updating client count...`);
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => updateClientCount(), 1000);
-      }
-    });
-
-    // Cleanup on script stop
-    ha.onStop(async () => {
-      ha.log('Script is stopping, performing logout...');
-      if (debounceTimer) clearTimeout(debounceTimer);
-      await unifi.removeAllListeners();
-      ha.updateState('sensor.freifunk_clients', null);
-      await unifi.logout();
-    });
-
-  } catch (err) {
-    ha.error(`[Freifunk Counter] Critical error during initialization: ${err.message}`);
-    ha.error('[Freifunk Counter] The script will stop. Please check your UniFi connection details (IP, User) and ensure the password is correctly set in the global store via `ha.store.set(\'unifi_localadmin_pw\', \'YOUR_PASSWORD\')`.');
-    ha.error('Full error details:', err);
-  }
+        unifi.on('event', (event) => {
+            if (event === 'events.evt_wg_connected' || event === 'events.evt_wg_disconnected') {
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(updateClientCount, 1000);
+            }
+        });
+    } catch (err) {
+        ha.error(`Initialization failed: ${err.message}`);
+        ha.error(`Check UniFi connection settings in 'freifunk_config' (JSA Store) and ensure the password is set.`);
+    }
 })();

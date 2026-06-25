@@ -1,51 +1,48 @@
 /**
  * @name Switch Manager
  * @icon mdi:toggle-switch
- * @description Verarbeitet Tastendrücke und Schalteraktionen
- * @label System
+ * @description Routes button/remote event actions to target entities.
+ *              Supports toggle, turn_on, turn_off, and any other HA service.
+ * @label Example
  * @loglevel debug
  */
 
-ha.log('Skript gestartet...');
+ha.log('Script started.');
 
+// Map event entity IDs to their action → target definitions.
+// Replace the entity IDs and actions with your actual device values.
+// Action strings depend on the integration (Z2M, deCONZ, ZHA, etc.).
 const buttonMappings = {
-    // OppleHZ
-    'event.opple_hz_action': {
-        'button_2_single': { entity: 'switch.3fachleiste_l1', service: 'toggle' },  
-        'button_3_single': { entity: 'switch.schaltaktor_wandlampen_gerat_wandlampen', service: 'toggle' },
-        'button_4_single': { entity: 'switch.3fachleiste_l3', service: 'toggle' },
-        'button_6_single': { entity: 'light.deckenfluter_hz', service: 'toggle', data: { brightness_pct: 50 } }
+    'event.living_room_remote': {
+        'button_1_single': { entity: 'light.living_room',  service: 'toggle' },
+        'button_2_single': { entity: 'switch.fan',         service: 'toggle' },
+        'button_3_single': { entity: 'light.kitchen',      service: 'toggle' },
+        'button_4_single': { entity: 'light.floor_lamp',   service: 'turn_on', data: { brightness_pct: 50 } },
+    },
+    'event.bedroom_switch': {
+        'single':  { entity: 'light.bedroom', service: 'toggle' },
+        'double':  { entity: 'light.bedroom', service: 'turn_on', data: { brightness_pct: 10 } },
+        'long':    { entity: 'light.bedroom', service: 'turn_off' },
     },
 };
 
-// Hilfsfunktion: Führt die Aktion aus, wenn sie im Mapping existiert
 function executeAction(entityId, actionState) {
-    const switchMapping = buttonMappings[entityId];
-    if (!switchMapping) return;
+    const mapping = buttonMappings[entityId];
+    if (!mapping) return;
 
-    const actionDef = switchMapping[actionState];
-    if (actionDef) {
-        const targetEntity = actionDef.entity;
-        const targetService = actionDef.service || 'toggle';
-        const domain = targetEntity.split('.')[0];
+    const def = mapping[actionState];
+    if (!def) return;
 
-        const serviceData = { 
-            entity_id: targetEntity, 
-            ...(actionDef.data || {}) 
-        };
+    const domain = def.entity.split('.')[0];
+    const serviceData = { entity_id: def.entity, ...(def.data || {}) };
 
-        ha.debug(`Aktion ausgeführt: ${entityId} -> ${actionState} => ${domain}.${targetService}`);
-        ha.callService(domain, targetService, serviceData);
-    }
+    ha.debug(`${entityId} → ${actionState} → ${domain}.${def.service}`);
+    ha.callService(domain, def.service || 'toggle', serviceData);
 }
 
-const allTriggers = Object.keys(buttonMappings);
-ha.on(allTriggers, (e) => {
-    // FIX: Bei Event-Entitäten ist der State ein Zeitstempel. Die Aktion steht in attributes.event_type.
-    // Wir prüfen event_type (HA Standard) und action (Z2M Legacy)
-    const attrs = e.attributes || {};
-    const action = attrs.event_type || attrs.action || e.state;
-    
-    ha.debug(`Event empfangen: ${e.entity_id} -> ${action}`);
+ha.on(Object.keys(buttonMappings), (e) => {
+    // Event entities: action is in attributes (event_type for HA standard, action for Z2M legacy)
+    const action = e.attributes?.event_type || e.attributes?.action || e.state;
+    ha.debug(`Event received: ${e.entity_id} → ${action}`);
     executeAction(e.entity_id, action);
 });

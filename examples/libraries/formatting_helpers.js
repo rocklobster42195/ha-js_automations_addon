@@ -2,9 +2,7 @@
  * @name Formatting Helpers
  * @icon mdi:ruler
  * @description A collection of useful formatting and conversion functions.
- * @area 
- * @label 
- * @loglevel info
+ * @label Example
  */
 
 /**

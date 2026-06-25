@@ -1,7 +1,7 @@
 /**
  * @name ask-test
  * @icon mdi:garage-alert
- * @label Spielwiese
+ * @label Example
  */
 
 let snoozeTimeout: ReturnType<typeof setTimeout> | null = null;

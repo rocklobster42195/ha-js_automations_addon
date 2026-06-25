@@ -37,7 +37,6 @@ scripts
 docs/Youtube
 docs/ideas
 .release-notes.tmp
-examples
 
 # --- AI stuff
 .claude
