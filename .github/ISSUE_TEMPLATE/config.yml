@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Ideas
+    url: https://github.com/rocklobster42195/ha-js_automations_addon/discussions
+    about: For questions and general discussion, please use GitHub Discussions.
+  - name: Documentation
+    url: https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/README.md
+    about: Check the README and API Reference before opening an issue.
