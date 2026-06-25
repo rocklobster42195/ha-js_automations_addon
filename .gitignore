@@ -45,3 +45,5 @@ CLAUDE.md
 
 # --- Local docs (not for repo)
 RELEASE_PIPELINE.md
+docs/github-issues-workflow.md
+docs/create-labels.sh
