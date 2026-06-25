@@ -9,7 +9,7 @@ let snoozeTimeout: ReturnType<typeof setTimeout> | null = null;
 const SNOOZE_DURATION_SECONDS = 20;
 
 ha.onError((error) => {
-    ha.error(`Ein unbehandelter Fehler ist aufgetreten: ${error.message}`);
+    ha.error(`Unhandled error: ${error.message}`);
     ha.error(error.stack);
     setTimeout(() => ha.restart(), 10000);
 });
@@ -17,9 +17,9 @@ ha.onError((error) => {
 ha.onStop(() => {
     if (snoozeTimeout) {
         clearTimeout(snoozeTimeout);
-        ha.log('Gestoppt und ausstehende Erinnerung gelöscht.');
+        ha.log('Stopped — pending reminder cleared.');
     } else {
-        ha.log('Gestoppt.');
+        ha.log('Stopped.');
     }
 });
 
