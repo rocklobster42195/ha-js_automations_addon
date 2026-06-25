@@ -21,8 +21,6 @@ body:
         - Scripts API (ha.*)
         - Add-on UI (dashboard / editor)
         - Add-on configuration / options
-        - HA Integration
-        - MQTT (ha.mqtt)
         - History helpers (ha.history)
         - Other
     validations:
