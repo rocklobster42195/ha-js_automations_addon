@@ -42,6 +42,11 @@ docs/ideas
 .claude
 CLAUDE.md
 
+# --- Local tools (not for repo)
+tools/downloads.js
+tools/track-stats.js
+.stats-history.json
+
 # --- Local docs (not for repo)
 RELEASE_PIPELINE.md
 docs/github-issues-workflow.md
