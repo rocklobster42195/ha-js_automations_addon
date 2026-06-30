@@ -4,6 +4,7 @@
 ![Version](https://img.shields.io/badge/version-2.56.2-darkgreen)
 ![Status](https://img.shields.io/badge/status-beta-red)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+[![Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rocklobster42195)
 
 <p align="center">
   <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/images/ui.png" width="800" alt="Web UI des Add-ons">
