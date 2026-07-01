@@ -48,7 +48,7 @@ class TypeDefinitionGenerator {
             };
 
             let content = `/** Automatically generated entity definitions **/\n\n`;
-            content += `export interface HAEntities {\n`;
+            content += `interface HAEntities {\n`;
 
             for (const id of entityIds) {
                 const friendlyName = states[id].attributes?.friendly_name || '';

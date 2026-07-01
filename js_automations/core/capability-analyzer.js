@@ -5,7 +5,7 @@
 // these would not be caught by scanning their own require('http') calls
 // since those are buried inside the package's node_modules.
 const NETWORK_PATTERNS = [
-    /\bha\.http\.[a-z]+\s*\(/,
+    /\bha\.http\b/,
     /\bfetch\s*\(/,
     /require\s*\(\s*['"]https?['"]\s*\)/,
     /require\s*\(\s*['"]node-fetch['"]\s*\)/,
