@@ -2,6 +2,20 @@
 
 ---
 
+## [2.56.3] - 2026-07-01
+
+### Fix You
+
+**Editor**
+- Fixed: `ha` and `schedule` globals intermittently disappearing in Monaco editor — `entities.d.ts` was generated with `export interface`, making it a TypeScript module instead of an ambient file; globals are now reliably available after reconnect
+- Fixed: `@permission network` incorrectly shown as "not needed" for scripts referencing `ha.http` via destructuring or stored variables
+
+**Runtime**
+- Fixed: Memory leak — `ha.onEvent()` subscriptions for stopped scripts were never removed from the internal subscription map
+- Fixed: Memory leak — active entity tracking (`activeRunEntities`) was not cleared on worker exit
+
+---
+
 ## [2.56.2] - 2026-06-24
 
 ---
