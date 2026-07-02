@@ -9,7 +9,7 @@
 - Merge branch 'main' of https://github.com/rocklobster42195/ha-js_automations_addon
 - fix: correctly persist script state on self-stop via ha.stop()
 - Update README to remove status badge and note
-- feat: add Webhook API (`ha.onWebhook`) documentation
+- docs: outline concept for a future Webhook API (`ha.onWebhook`) — not implemented yet
 
 ---
 
