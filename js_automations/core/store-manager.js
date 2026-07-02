@@ -38,7 +38,7 @@ class StoreManager extends EventEmitter {
             accessed: new Date().toISOString()
         };
         this.save();
-        this.emit('changed', { key, value });
+        this.emit('changed', { key, item: this.data[key] });
     }
 
     get(key) {
@@ -68,6 +68,7 @@ class StoreManager extends EventEmitter {
     clear() {
         this.data = {};
         this.save();
+        this.emit('changed', { cleared: true });
     }
 
     /** Deletes all variables created by a specific script. */

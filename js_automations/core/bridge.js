@@ -107,6 +107,9 @@ class Bridge {
             this.io.emit('watch_clear', data);
         });
 
+        // Store changes (ha.store / Store Explorer) → all connected clients
+        this.kernel.storeManager?.on('changed', (data) => this.io.emit('store_changed', data));
+
         // MQTT traffic → ring buffer + subscribed MQTT Monitor clients only
         this.kernel.on('mqtt_traffic', (data) => {
             mqttMessageCache.push(data);

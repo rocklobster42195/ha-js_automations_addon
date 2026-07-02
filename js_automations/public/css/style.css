@@ -951,6 +951,15 @@ input#search-input:focus { border-color: var(--accent) !important; }
     border-radius: 4px;
     white-space: pre-wrap;
 }
+
+/* Subtle highlight when a store value is updated live via socket */
+.store-val-cell.store-cell-flash {
+    animation: store-cell-flash 1s ease-out;
+}
+@keyframes store-cell-flash {
+    from { background-color: rgba(3, 169, 244, 0.25); }
+    to { background-color: transparent; }
+}
 .btn-danger:hover { color: var(--danger) !important; background: rgba(244, 67, 54, 0.1) !important; }
 
 /* --- CONNECTION OVERLAY --- */

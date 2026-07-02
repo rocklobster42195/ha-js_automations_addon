@@ -86,6 +86,12 @@ function initSocket() {
         // Re-fetch log history on every (re)connect to catch logs emitted before
         // the socket was established (e.g. during addon startup ingress delay).
         if (typeof initLogs === 'function') initLogs();
+        // store_changed events aren't replayed on reconnect, so force a full reload
+        // if the Store Explorer is the currently open tab to avoid a stale view.
+        if (typeof activeTabFilename !== 'undefined' && typeof STORE_TAB_ID !== 'undefined' &&
+            activeTabFilename === STORE_TAB_ID && typeof loadStoreData === 'function') {
+            loadStoreData();
+        }
     };
 
     window.socket.on('connect', () => {
@@ -107,6 +113,7 @@ function initSocket() {
     window.socket.on('inspect_snapshot', d => { if(typeof onInspectSnapshot === 'function') onInspectSnapshot(d); });
     window.socket.on('watch_clear', d => { if(typeof onWatchClear === 'function') onWatchClear(d); });
     window.socket.on('mqtt_message_stream', d => { if(typeof onMqttMessage === 'function') onMqttMessage(d); });
+    window.socket.on('store_changed', d => { if(typeof onStoreChanged === 'function') onStoreChanged(d); });
     
     window.socket.on('system_stats', (data) => {
         const hb = document.getElementById('heartbeat-icon');

@@ -482,16 +482,32 @@ class Kernel extends EventEmitter {
     
     /**
      * Handles the auto-reconnection logic for Home Assistant.
+     *
+     * Called on a fixed poll interval (see server.js). During a longer HA/HAOS
+     * restart this can fire many times before the connection comes back, so
+     * "lost"/"failed" are only logged on the first attempt and then every
+     * RECONNECT_LOG_EVERY attempts, instead of once per tick, to avoid
+     * flooding the System log with identical lines.
      */
     async handleReconnection() {
+        const RECONNECT_LOG_EVERY = 6; // ~30s at the current 5s poll interval
+
         if (!this.haConnector.isReady) {
-            console.log("⚠️ HA Connection lost. Attempting to reconnect...");
-            this.logManager.add('warn', 'System', 'HA Connection lost. Attempting to reconnect...');
+            if (!this._reconnectState) {
+                this._reconnectState = { attempts: 0, startedAt: Date.now() };
+                console.log("⚠️ HA Connection lost. Attempting to reconnect...");
+                this.logManager.add('warn', 'System', 'HA Connection lost. Attempting to reconnect...');
+            }
+            const state = this._reconnectState;
+            state.attempts++;
+
             try {
                 await this.haConnector.connect();
-                console.log("✅ HA Reconnected!");
-                this.logManager.add('info', 'System', 'HA Reconnected!');
-                
+                const downtimeSec = Math.round((Date.now() - state.startedAt) / 1000);
+                console.log(`✅ HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
+                this.logManager.add('info', 'System', `HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
+                this._reconnectState = null;
+
                 // Update System Language
                 const haConfig = await this.haConnector.getHAConfig();
                 if (haConfig && haConfig.language) {
@@ -504,9 +520,16 @@ class Kernel extends EventEmitter {
 
                 await this.entityManager.createExposedEntities(true);
                 await this.workerManager.republishNativeEntities(false);
+
+                // Defense-in-depth: a HAOS/HA-core restart is also the window where the
+                // MQTT broker can be briefly down, which can leave the one-shot connect()
+                // from kernel.start() stuck. Force a fresh MQTT attempt if still not connected.
+                if (this.mqttManager) this.mqttManager.ensureConnected();
             } catch (e) {
-                console.error("❌ Reconnection failed:", e.message);
-                this.logManager.add('error', 'System', `Reconnection failed: ${e.message}`);
+                console.error(`❌ Reconnection failed (attempt ${state.attempts}):`, e.message);
+                if (state.attempts === 1 || state.attempts % RECONNECT_LOG_EVERY === 0) {
+                    this.logManager.add('error', 'System', `Reconnection failed (attempt ${state.attempts}): ${e.message}`);
+                }
             }
         }
     }

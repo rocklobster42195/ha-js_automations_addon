@@ -241,6 +241,10 @@ class MqttManager extends EventEmitter {
                     this.isConnected = false;
                     this.emit('status_change', { connected: false, error: 'Offline' });
                 }
+                // Not just 'error': a clean broker-side disconnect (e.g. co-located
+                // Mosquitto restarting during a HAOS update) goes straight to 'offline'
+                // without an 'error' event, so the stuck-client fallback must arm here too.
+                this._scheduleReconnectFallback();
             });
 
             this.client.on('close', () => {
@@ -250,6 +254,9 @@ class MqttManager extends EventEmitter {
                     this.emit('status_change', { connected: false });
                 }
                 this._stopHealthCheck();
+                // Only arm the fallback for unexpected closes; disconnect() nulls
+                // this.client before end(true), so a deliberate shutdown is a no-op here.
+                if (this.client) this._scheduleReconnectFallback();
             });
         } catch (e) {
             this.logManager.add('error', 'System', `[MQTT] Initialization failed: ${e.message}`);
@@ -278,7 +285,10 @@ class MqttManager extends EventEmitter {
     }
 
     /**
-     * Evaluates the current connection health.
+     * Evaluates the current connection health. Corrective, not just observational:
+     * covers the edge case where the socket dies without emitting 'close'/'offline'
+     * (e.g. a silent network partition), which would otherwise leave the client
+     * stuck forever since nothing else would arm the reconnect fallback.
      * @private
      */
     _performHealthCheck() {
@@ -289,6 +299,31 @@ class MqttManager extends EventEmitter {
             this.isConnected = false;
             this.emit('status_change', { connected: false, error: 'Unresponsive' });
         }
+
+        if (!this.client.connected) {
+            this._scheduleReconnectFallback();
+        }
+    }
+
+    /**
+     * Defense-in-depth check, meant to be called after Home Assistant reconnects.
+     * A HAOS/HA-core restart is exactly the window where the MQTT broker (often the
+     * co-located Mosquitto addon) can also be briefly unavailable, which can leave
+     * the very first connect() attempt in a state mqtt.js's own reconnectPeriod
+     * timer never recovers from. Forces a fresh connection attempt if MQTT is
+     * enabled but not currently connected; a no-op otherwise.
+     */
+    ensureConnected() {
+        const settings = this.settingsManager.getSettings().mqtt;
+        if (!settings || !settings.enabled || this.isConnected) return;
+
+        this.logManager.add('warn', 'System', '[MQTT] Still not connected after HA reconnect. Forcing fresh connection attempt...');
+        if (this.client) {
+            this.client.end(true);
+            this.client = null;
+        }
+        this._clearReconnectFallback();
+        this._connectToBroker(this._lastConfig || settings);
     }
 
     /**

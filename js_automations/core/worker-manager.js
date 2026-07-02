@@ -1133,6 +1133,72 @@ class WorkerManager extends EventEmitter {
                 if (msg.type === 'update_state') {
                     this.emit('update_entity_state', { entityId: msg.entityId, state: msg.state, attributes: msg.attributes });
                 }
+                if (msg.type === 'store_set' && this.storeManager) {
+                    this.storeManager.set(msg.key, msg.value, 'REPL', msg.isSecret);
+                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value });
+                }
+                if (msg.type === 'store_delete' && this.storeManager) {
+                    this.storeManager.delete(msg.key);
+                    this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined });
+                }
+
+                // ha.history.get() and the computed history helpers built on it
+                if (msg.type === 'get_history') {
+                    (this.haConnector
+                        ? this.haConnector.getHistory(msg.entityId, {
+                            start: msg.start ? new Date(msg.start) : undefined,
+                            end: msg.end ? new Date(msg.end) : undefined,
+                            minimalResponse: msg.minimalResponse,
+                            noAttributes: msg.noAttributes,
+                        })
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_history_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_history_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.getStatistics()
+                if (msg.type === 'get_statistics') {
+                    (this.haConnector
+                        ? this.haConnector.getStatistics(msg.statId, {
+                            start: msg.start ? new Date(msg.start) : undefined,
+                            end: msg.end ? new Date(msg.end) : undefined,
+                            period: msg.period,
+                            types: msg.types,
+                        })
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_statistics_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_statistics_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.renderTemplate()
+                if (msg.type === 'render_template') {
+                    (this.haConnector
+                        ? this.haConnector.renderTemplate(msg.template)
+                        : Promise.resolve(null)
+                    ).then(result => worker.postMessage({ type: 'render_template_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'render_template_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.getCalendarEvents()
+                if (msg.type === 'get_calendar_events') {
+                    (this.haConnector
+                        ? this.haConnector.getCalendarEvents(msg.entityId, {
+                            start: msg.start ? new Date(msg.start) : undefined,
+                            end: msg.end ? new Date(msg.end) : undefined,
+                        })
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_calendar_events_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_calendar_events_response', callId: msg.callId, error: err.message }));
+                }
+
+                // ha.getTodoItems()
+                if (msg.type === 'get_todo_items') {
+                    (this.haConnector
+                        ? this.haConnector.getTodoItems(msg.entityId)
+                        : Promise.resolve([])
+                    ).then(result => worker.postMessage({ type: 'get_todo_items_response', callId: msg.callId, result }))
+                     .catch(err  => worker.postMessage({ type: 'get_todo_items_response', callId: msg.callId, error: err.message }));
+                }
             });
             worker.on('exit', () => finish());
             worker.on('error', (err) => finish(err.message));

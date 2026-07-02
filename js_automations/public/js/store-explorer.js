@@ -8,6 +8,54 @@ let storeCache = {}; // Lokaler Cache für schnelles Filtern
 let dirtyKeys = new Set(); // Keys mit ungespeicherten ha.persistent()-Änderungen
 let currentSort = { column: 'key', direction: 'asc' };
 
+// Generates a DOM-safe, stable id fragment from a store key (used for row-local element ids).
+function safeStoreId(key) {
+    return 'k' + String(key).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+// Shared comparator so live-patched inserts land at the same position a full sort would produce.
+function compareStoreEntries(a, b) {
+    const itemA = storeCache[a];
+    const itemB = storeCache[b];
+    const getVal = (item) => (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const getMeta = (item) => (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: 0, accessed: 0 };
+
+    let valA, valB;
+    if (currentSort.column === 'key') {
+        valA = a.toLowerCase(); valB = b.toLowerCase();
+    } else if (currentSort.column === 'value') {
+        valA = getVal(itemA); valB = getVal(itemB);
+        if (typeof valA === 'object') valA = JSON.stringify(valA);
+        if (typeof valB === 'object') valB = JSON.stringify(valB);
+        valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase();
+    } else if (currentSort.column === 'owner') {
+        valA = (getMeta(itemA).owner || '').toLowerCase(); valB = (getMeta(itemB).owner || '').toLowerCase();
+    } else if (currentSort.column === 'updated') {
+        valA = getMeta(itemA).updated || 0; valB = getMeta(itemB).updated || 0;
+    } else if (currentSort.column === 'accessed') {
+        valA = getMeta(itemA).accessed || 0; valB = getMeta(itemB).accessed || 0;
+    }
+
+    if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+    return 0;
+}
+
+// Whether a key/item currently matches the search box filter.
+function matchesStoreFilter(key, item) {
+    const filterInput = document.getElementById('store-search');
+    const filter = filterInput ? filterInput.value.toLowerCase() : '';
+    if (!filter) return true;
+
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const meta = (item && typeof item === 'object' && 'owner' in item) ? item : {};
+    const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+    const searchInVal = meta.isSecret ? '' : valStr.toLowerCase();
+    const owner = (meta.owner || '').toLowerCase();
+
+    return key.toLowerCase().includes(filter) || searchInVal.includes(filter) || owner.includes(filter);
+}
+
 function sortStore(col) {
     if (currentSort.column === col) {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -104,33 +152,7 @@ function renderStoreTable() {
     });
 
     // 2. Sort Keys
-    const keys = Object.keys(data).sort((a, b) => {
-        const itemA = data[a];
-        const itemB = data[b];
-        
-        const getVal = (item) => (item && typeof item === 'object' && 'value' in item) ? item.value : item;
-        const getMeta = (item) => (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: 0, accessed: 0 };
-
-        let valA, valB;
-        if (currentSort.column === 'key') {
-            valA = a.toLowerCase(); valB = b.toLowerCase();
-        } else if (currentSort.column === 'value') {
-            valA = getVal(itemA); valB = getVal(itemB);
-            if (typeof valA === 'object') valA = JSON.stringify(valA);
-            if (typeof valB === 'object') valB = JSON.stringify(valB);
-            valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase();
-        } else if (currentSort.column === 'owner') {
-            valA = (getMeta(itemA).owner || '').toLowerCase(); valB = (getMeta(itemB).owner || '').toLowerCase();
-        } else if (currentSort.column === 'updated') {
-            valA = getMeta(itemA).updated || 0; valB = getMeta(itemB).updated || 0;
-        } else if (currentSort.column === 'accessed') {
-            valA = getMeta(itemA).accessed || 0; valB = getMeta(itemB).accessed || 0;
-        }
-
-        if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
-        return 0;
-    });
+    const keys = Object.keys(data).sort(compareStoreEntries);
 
     if (keys.length === 0) {
         container.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">${i18next.t('store.empty')}</td></tr>`;
@@ -140,92 +162,191 @@ function renderStoreTable() {
     let count = 0;
     keys.forEach(key => {
         const item = data[key];
-        // Fallback, falls Datenstruktur mal abweicht (z.B. Legacy)
-        const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
-        const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: null, isSecret: false };
-        
-        const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
-
-        // Filterung
-        // Filter erweitert auf 'owner'
-        const searchInVal = meta.isSecret ? '' : valStr.toLowerCase();
-        const owner = (meta.owner || '').toLowerCase();
-        
-        if (filter && !key.toLowerCase().includes(filter) && !searchInVal.includes(filter) && !owner.includes(filter)) {
-            return;
-        }
+        if (!matchesStoreFilter(key, item)) return;
         count++;
-
-        // Type Badge ermitteln
-        let type = typeof val;
-        if (val === null) type = 'null';
-        else if (Array.isArray(val)) type = 'array';
-        const typeLabel = i18next.t(`store.types.${type}`, { defaultValue: type.toUpperCase().substr(0, 3) });
 
         const isDirty = dirtyKeys.has(key);
         const row = document.createElement('tr');
+        row.dataset.key = key;
         if (isDirty) row.title = i18next.t('store.dirty_tooltip', { defaultValue: 'Unsaved in-memory changes (ha.persistent)' });
-        
-        // Value-Darstellung
-        let valueHtml = '';
-        let iconHtml = '';
-
-        if (meta.isSecret) {
-            const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            valueHtml = `
-                <div style="display:flex; align-items:center; justify-content:space-between;">
-                    <span id="secret-val-${count}" class="store-value-masked">••••••••</span>
-                    <button class="btn-row" onclick="toggleSecretDisplay('${safeKey}', 'secret-val-${count}', this)" title="${i18next.t('store.actions.show_hide')}">
-                        <i class="mdi mdi-eye"></i>
-                    </button>
-                </div>`;
-        } else if (typeof val === 'object') {
-            const lines = valStr.split('\n');
-            if (lines.length > 5) {
-                const preview = escapeHtml(lines.slice(0, 5).join('\n') + '\n…');
-                const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                valueHtml = `
-                    <pre class="store-json" id="store-json-${count}" data-collapsed="true">${preview}</pre>
-                    <button class="btn-row store-json-toggle" onclick="toggleStoreJson('store-json-${count}', '${safeKey}')" title="Expand" style="margin-top:4px;font-size:.75em;opacity:.7;display:flex;align-items:center;gap:3px;">
-                        <i class="mdi mdi-chevron-down"></i><span>${lines.length} lines</span>
-                    </button>`;
-            } else {
-                valueHtml = `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
-            }
-        } else {
-            valueHtml = `<div class="store-value">${escapeHtml(valStr)}</div>`;
-        }
-
-        row.innerHTML = `
-            <td class="store-key">
-                <div class="key-cell-wrapper">
-                    <i class="mdi mdi-content-copy copy-btn-inline" data-key="${escapeHtml(key)}" onclick="copyText(this.dataset.key, this)" title="${i18next.t('store.actions.copy_key')}"></i>
-                    ${iconHtml}${escapeHtml(key)}
-                    <span class="store-type-badge" title="${i18next.t('store.types.type_label')}: ${type}">${typeLabel}</span>
-                    ${isDirty ? `<i class="mdi mdi-circle-medium" style="color:var(--warning, #f59e0b); font-size:1rem;" title="${i18next.t('store.dirty_tooltip')}"></i>` : ''}
-                </div>
-            </td>
-            <td class="store-val-cell">${valueHtml}</td>
-            <td class="store-owner">${escapeHtml(meta.owner || i18next.t('store.system_owner', { defaultValue: 'System' }))}</td>
-            <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString() : '-'}</td>
-            <td class="store-accessed">${meta.accessed ? new Date(meta.accessed).toLocaleString() : '-'}</td>
-            <td class="store-actions">
-                <button onclick="copyStoreItemValue('${key}', this)" title="${i18next.t('store.actions.copy')}">
-                    <i class="mdi mdi-content-copy"></i>
-                </button>
-                <button onclick="editStoreItem('${key}')" title="${i18next.t('store.actions.edit')}">
-                    <i class="mdi mdi-pencil"></i>
-                </button>
-                <button onclick="deleteStoreItem('${key}')" title="${i18next.t('store.actions.delete')}" class="btn-danger">
-                    <i class="mdi mdi-delete-forever"></i>
-                </button>
-            </td>
-        `;
+        row.innerHTML = buildStoreRowInnerHtml(key, item, isDirty, true);
         container.appendChild(row);
     });
 
     if (count === 0) {
         container.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">${i18next.t('store.no_results')}</td></tr>`;
+    }
+}
+
+// Builds the inner <td> markup for one store row. `collapsed` controls whether
+// an object/array value starts (or stays, on a live patch) collapsed.
+function buildStoreRowInnerHtml(key, item, isDirty, collapsed) {
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: null, isSecret: false };
+
+    let type = typeof val;
+    if (val === null) type = 'null';
+    else if (Array.isArray(val)) type = 'array';
+    const typeLabel = i18next.t(`store.types.${type}`, { defaultValue: type.toUpperCase().substr(0, 3) });
+
+    const valueHtml = buildStoreValueHtml(key, item, collapsed);
+
+    return `
+        <td class="store-key">
+            <div class="key-cell-wrapper">
+                <i class="mdi mdi-content-copy copy-btn-inline" data-key="${escapeHtml(key)}" onclick="copyText(this.dataset.key, this)" title="${i18next.t('store.actions.copy_key')}"></i>
+                ${escapeHtml(key)}
+                <span class="store-type-badge" title="${i18next.t('store.types.type_label')}: ${type}">${typeLabel}</span>
+                ${isDirty ? `<i class="mdi mdi-circle-medium" style="color:var(--warning, #f59e0b); font-size:1rem;" title="${i18next.t('store.dirty_tooltip')}"></i>` : ''}
+            </div>
+        </td>
+        <td class="store-val-cell">${valueHtml}</td>
+        <td class="store-owner">${escapeHtml(meta.owner || i18next.t('store.system_owner', { defaultValue: 'System' }))}</td>
+        <td class="store-updated">${meta.updated ? new Date(meta.updated).toLocaleString(i18next.language) : '-'}</td>
+        <td class="store-accessed">${meta.accessed ? new Date(meta.accessed).toLocaleString(i18next.language) : '-'}</td>
+        <td class="store-actions">
+            <button onclick="copyStoreItemValue('${key}', this)" title="${i18next.t('store.actions.copy')}">
+                <i class="mdi mdi-content-copy"></i>
+            </button>
+            <button onclick="editStoreItem('${key}')" title="${i18next.t('store.actions.edit')}">
+                <i class="mdi mdi-pencil"></i>
+            </button>
+            <button onclick="deleteStoreItem('${key}')" title="${i18next.t('store.actions.delete')}" class="btn-danger">
+                <i class="mdi mdi-delete-forever"></i>
+            </button>
+        </td>
+    `;
+}
+
+// Builds the value cell content. `collapsed` preserves the JSON expand/collapse
+// state across live patches instead of always resetting to collapsed.
+function buildStoreValueHtml(key, item, collapsed) {
+    const val = (item && typeof item === 'object' && 'value' in item) ? item.value : item;
+    const meta = (item && typeof item === 'object' && 'owner' in item) ? item : { owner: i18next.t('store.system_owner', { defaultValue: 'System' }), updated: null, isSecret: false };
+    const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+    const id = safeStoreId(key);
+
+    if (meta.isSecret) {
+        const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span id="secret-val-${id}" class="store-value-masked">••••••••</span>
+                <button class="btn-row" onclick="toggleSecretDisplay('${safeKey}', 'secret-val-${id}', this)" title="${i18next.t('store.actions.show_hide')}">
+                    <i class="mdi mdi-eye"></i>
+                </button>
+            </div>`;
+    } else if (typeof val === 'object') {
+        const lines = valStr.split('\n');
+        if (lines.length > 5) {
+            const safeKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const content = collapsed ? escapeHtml(lines.slice(0, 5).join('\n') + '\n…') : escapeHtml(valStr);
+            return `
+                <pre class="store-json" id="store-json-${id}" data-collapsed="${collapsed}">${content}</pre>
+                <button class="btn-row store-json-toggle" onclick="toggleStoreJson('store-json-${id}', '${safeKey}')" title="Expand" style="margin-top:4px;font-size:.75em;opacity:.7;display:flex;align-items:center;gap:3px;">
+                    <i class="mdi mdi-chevron-${collapsed ? 'down' : 'up'}"></i><span>${lines.length} lines</span>
+                </button>`;
+        }
+        return `<pre class="store-json">${escapeHtml(valStr)}</pre>`;
+    }
+    return `<div class="store-value">${escapeHtml(valStr)}</div>`;
+}
+
+function findStoreRowEl(key) {
+    const container = document.getElementById('store-table-body');
+    if (!container) return null;
+    return Array.from(container.children).find(tr => tr.dataset.key === key) || null;
+}
+
+// Removes a row; if the table ends up empty, defers to renderStoreTable() so the
+// correct empty/no-results placeholder is shown.
+function removeStoreRow(key) {
+    const row = findStoreRowEl(key);
+    if (row) row.remove();
+
+    const container = document.getElementById('store-table-body');
+    if (container && !container.querySelector('tr[data-key]')) renderStoreTable();
+}
+
+// Inserts a freshly created row at the position a full sort would place it,
+// without touching any of the surrounding rows (keeps scroll position stable).
+function insertStoreRowSorted(row, key) {
+    const container = document.getElementById('store-table-body');
+    if (!container) return;
+
+    // Drop placeholder rows (empty/no-results messages have no data-key).
+    Array.from(container.children).forEach(tr => { if (!tr.dataset.key) tr.remove(); });
+
+    const before = Array.from(container.children).find(tr => compareStoreEntries(key, tr.dataset.key) < 0);
+    if (before) container.insertBefore(row, before);
+    else container.appendChild(row);
+}
+
+// Applies a single key's change in place: updates an existing row (preserving its
+// JSON expand/collapse state) or inserts a new one at the correct sort position.
+// Flashes only the value cell so the rest of the table stays visually calm.
+function patchStoreRow(key) {
+    const item = storeCache[key];
+    if (!item) return;
+
+    const shouldShow = matchesStoreFilter(key, item);
+    let row = findStoreRowEl(key);
+
+    if (!shouldShow) {
+        if (row) removeStoreRow(key);
+        return;
+    }
+
+    const isDirty = dirtyKeys.has(key);
+    const dirtyTitle = i18next.t('store.dirty_tooltip', { defaultValue: 'Unsaved in-memory changes (ha.persistent)' });
+
+    if (row) {
+        const existingPre = row.querySelector('.store-json[data-collapsed]');
+        const collapsed = existingPre ? existingPre.dataset.collapsed !== 'false' : true;
+
+        row.innerHTML = buildStoreRowInnerHtml(key, item, isDirty, collapsed);
+        row.title = isDirty ? dirtyTitle : '';
+
+        const valCell = row.querySelector('.store-val-cell');
+        if (valCell) {
+            // Restart the CSS animation even if a flash from a prior rapid update is still running.
+            valCell.classList.remove('store-cell-flash');
+            void valCell.offsetWidth;
+            valCell.classList.add('store-cell-flash');
+        }
+    } else {
+        row = document.createElement('tr');
+        row.dataset.key = key;
+        if (isDirty) row.title = dirtyTitle;
+        row.innerHTML = buildStoreRowInnerHtml(key, item, isDirty, true);
+        insertStoreRowSorted(row, key);
+
+        const valCell = row.querySelector('.store-val-cell');
+        if (valCell) valCell.classList.add('store-cell-flash');
+    }
+}
+
+// Socket handler for 'store_changed'. Only patches the DOM while the Store tab is
+// actually open — while it's in the background we simply do nothing and let the
+// next tab activation trigger a normal full reload via loadStoreData().
+function onStoreChanged(data) {
+    if (!data || typeof activeTabFilename === 'undefined' || activeTabFilename !== STORE_TAB_ID) return;
+    if (!document.getElementById('store-table-body')) return;
+
+    if (data.cleared) {
+        storeCache = {};
+        renderStoreTable();
+        return;
+    }
+
+    if (data.deleted) {
+        delete storeCache[data.key];
+        removeStoreRow(data.key);
+        return;
+    }
+
+    if (data.key) {
+        storeCache[data.key] = data.item;
+        patchStoreRow(data.key);
     }
 }
 
@@ -477,7 +598,9 @@ async function saveStoreItemFromModal() {
             body: JSON.stringify({ key, value, isSecret })
         });
         closeStoreModal();
-        loadStoreData();
+        // The server echoes this write back via the 'store_changed' socket event, which
+        // patches the row in place. Only fall back to a full reload if that channel is down.
+        refreshStoreIfSocketDown();
     } catch (e) { alert(i18next.t('store.messages.save_error', { error: e.message })); }
 }
 
@@ -486,7 +609,7 @@ async function deleteStoreItem(key) {
 
     try {
         await apiFetch(`api/store/${key}`, { method: 'DELETE' });
-        loadStoreData(); // Refresh
+        refreshStoreIfSocketDown();
     } catch (e) {
         alert(i18next.t('store.messages.delete_error', { error: e.message }));
     }
@@ -494,13 +617,18 @@ async function deleteStoreItem(key) {
 
 async function clearStore() {
     if (!confirm(i18next.t('store.messages.confirm_clear'))) return;
-    
+
     try {
         await apiFetch('api/store', { method: 'DELETE' });
-        loadStoreData();
+        refreshStoreIfSocketDown();
     } catch (e) {
         alert(i18next.t('store.messages.generic_error', { error: e.message }));
     }
+}
+
+// Fallback for when the live 'store_changed' socket event can't be relied on.
+function refreshStoreIfSocketDown() {
+    if (!window.socket || !window.socket.connected) loadStoreData();
 }
 
 function clearStoreSearch() {
@@ -653,6 +781,7 @@ function escapeHtml(text) {
 }
 
 // Make globally available
+window.onStoreChanged = onStoreChanged;
 window.openStoreTab = openStoreTab;
 window.loadStoreData = loadStoreData;
 window.deleteStoreItem = deleteStoreItem;
