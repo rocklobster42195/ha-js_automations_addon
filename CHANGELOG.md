@@ -2,6 +2,17 @@
 
 ---
 
+## [2.56.4] - 2026-07-02
+
+- fix: correct package.json version to match released v2.56.3
+- fix: reduce HA reconnect log spam and make MQTT recovery robust
+- Merge branch 'main' of https://github.com/rocklobster42195/ha-js_automations_addon
+- fix: correctly persist script state on self-stop via ha.stop()
+- Update README to remove status badge and note
+- feat: add Webhook API (`ha.onWebhook`) documentation
+
+---
+
 ## [2.56.3] - 2026-07-01
 
 ### Fix You
