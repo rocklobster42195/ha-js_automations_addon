@@ -459,7 +459,12 @@ class Kernel extends EventEmitter {
 
     _onScriptExit(d) {
         if (!d.meta || d.meta.expose !== 'button') {
-            const isPermanentStop = d.type === 'error' || d.reason === 'finished' || d.reason === 'by user' || d.reason.includes('stopped by user');
+            // Any exit is a permanent stop (removes the script from autostart on next boot),
+            // except reasons that are inherently transient: the script keeps running under a
+            // new worker (restart/hot-reload/rename/dependency update) or the whole addon is
+            // going down and should resume the script on its next start.
+            const transientReasons = ['restarting', 'restarted by script', 'hot-reload', 'renaming/moving', 'library update', 'system shutdown'];
+            const isPermanentStop = !transientReasons.includes(d.reason);
             if (isPermanentStop) {
                 this.stateManager.saveScriptStopped(d.filename);
             }
