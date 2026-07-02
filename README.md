@@ -2,7 +2,6 @@
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
 ![Version](https://img.shields.io/badge/version-2.56.3-darkgreen)
-![Status](https://img.shields.io/badge/status-beta-red)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 [![Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rocklobster42195)
 
@@ -11,10 +10,6 @@
 </p>
 
 **JS Automations** is a Home Assistant **add-on** for developers ready to leave YAML behind. Write automations in **Node.js** or **TypeScript**, run them in a secure, isolated environment, and control your home through a developer-grade `ha` API — complete with a built-in Web IDE.
-
-> [!IMPORTANT]
-> **Project Status: Pre-release**
-> This project is functional and used in production environments, but please expect frequent updates and potential breaking changes as we move towards a stable release.
 
 > [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/API_REFERENCE.md)
