@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [2.57.0] - 2026-07-03
+
 ### Return to Sender
 
 `ha.onWebhook()` turns any script into a webhook receiver — external services (GitHub, Stripe, Ko-fi, IFTTT, ...) can push data into a running script and get a real HTTP response back. Unlike HA's built-in webhook automations, which always return an empty `200 OK` immediately and run asynchronously afterward, JSA webhooks are fully bidirectional: your handler receives the complete request and returns any status code and body.
