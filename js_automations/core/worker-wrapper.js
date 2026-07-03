@@ -580,6 +580,45 @@ function ensureMessageListener() {
             return;
         }
 
+        // ha.onWebhook() registration failed on the main process (e.g. id conflict)
+        if (msg.type === 'webhook_register_error') {
+            _webhookHandlers.delete(msg.id);
+            _releaseRef();
+            ha.error(`ha.onWebhook('${msg.id}'): ${msg.error}`);
+            return;
+        }
+
+        // Incoming HTTP request for a registered ha.onWebhook() handler
+        if (msg.type === 'webhook_request') {
+            const handler = _webhookHandlers.get(msg.id);
+            if (!handler) return;
+
+            let responded = false;
+            let statusCode = 200;
+            const respond = (body, isJson) => {
+                if (responded) return;
+                responded = true;
+                parentPort.postMessage({ type: 'webhook_response', correlationId: msg.correlationId, response: { status: statusCode, body, isJson } });
+            };
+            const res = {
+                status(code) { statusCode = code; return this; },
+                json(data) { respond(data, true); },
+                send(text) { respond(text, false); },
+            };
+
+            try {
+                await handler(msg.req, res);
+                if (!responded) respond(undefined, false);
+            } catch (e) {
+                ha.error(`ha.onWebhook('${msg.id}') handler error: ${e.message}\n${e.stack}`);
+                if (!responded) {
+                    responded = true;
+                    parentPort.postMessage({ type: 'webhook_response', correlationId: msg.correlationId, response: { error: e.message } });
+                }
+            }
+            return;
+        }
+
         // Handle master request to stop gracefully
         if (msg.type === 'stop_request') {
             for (const cb of stopCallbacks) {
@@ -1375,6 +1414,42 @@ let _mqttSubCounter = 0;
         publish(topic, payload, options = {}) {
             parentPort.postMessage({ type: 'mqtt_publish', topic, payload, options });
         }
+    };
+}
+
+// --- 4e. WEBHOOK API ---
+const _webhookHandlers = new Map(); // id -> handler function
+{
+    const _webhookPermissions = new Set(workerData.permissions || []);
+    const _checkWebhookPermission = () => {
+        if (workerData.capabilityEnforcement && !_webhookPermissions.has('webhook')) {
+            throw new Error('PermissionDeniedError: ha.onWebhook requires @permission webhook in your script header.');
+        }
+    };
+
+    /**
+     * Registers a webhook endpoint at :<webhook_port>/webhook/<id>. See ha-api.d.ts for details.
+     */
+    ha.onWebhook = (id, optionsOrHandler, maybeHandler) => {
+        _checkWebhookPermission();
+        const handler = typeof optionsOrHandler === 'function' ? optionsOrHandler : maybeHandler;
+        const options = typeof optionsOrHandler === 'function' ? {} : (optionsOrHandler || {});
+        if (typeof handler !== 'function') {
+            throw new Error('ha.onWebhook requires a handler function.');
+        }
+        if (_webhookHandlers.has(id)) {
+            throw new Error(`ha.onWebhook: webhook id "${id}" is already registered in this script.`);
+        }
+
+        ensureMessageListener();
+        _addRef(); // Keep the worker alive to handle future requests, like ha.onEvent()
+        _webhookHandlers.set(id, handler);
+        parentPort.postMessage({
+            type: 'webhook_register',
+            id,
+            method: (options.method || 'POST').toUpperCase(),
+            noAuth: !!options.noAuth,
+        });
     };
 }
 

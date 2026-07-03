@@ -275,6 +275,7 @@ function getCapabilityBadgesHTML(caps) {
         { token: 'fs:write', icon: 'mdi-file-edit-outline', tipKey: 'cap_tip_fs_write', warnKey: 'cap_tip_fs_write_warn'  },
         { token: 'fs:read',  icon: 'mdi-file-eye-outline',  tipKey: 'cap_tip_fs_read',  warnKey: 'cap_tip_fs_read_warn'   },
         { token: 'exec',     icon: 'mdi-console',           tipKey: 'cap_tip_exec',     warnKey: 'cap_tip_exec_warn'      },
+        { token: 'webhook',  icon: 'mdi-webhook',           tipKey: 'cap_tip_webhook',  warnKey: 'cap_tip_webhook_warn'   },
     ];
 
     return BADGES.map(({ token, icon, tipKey, warnKey }) => {

@@ -1785,6 +1785,69 @@ input#search-input:focus { border-color: var(--accent) !important; }
     overflow-y: auto;
 }
 
+/* ── Developer Tools — Webhook Panel ────────────────────────────────────── */
+.wh-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 8px;
+    font-family: monospace;
+    font-size: 0.78rem;
+}
+.wh-hint {
+    padding: 16px 12px;
+    color: #777;
+    font-family: inherit;
+    font-size: 0.8rem;
+}
+.wh-entry {
+    border: 1px solid #222;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+}
+.wh-row-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    overflow: hidden;
+}
+.wh-row-header { margin-bottom: 2px; }
+.wh-id { color: #4fc3f7; font-weight: 700; }
+.wh-script { margin-left: auto; color: #777; font-size: 0.72rem; }
+.wh-label { color: #777; flex-shrink: 0; white-space: nowrap; }
+.wh-url, .wh-token {
+    color: #ccc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+.wh-badge {
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 700;
+}
+.wh-badge-active { background: #0d2233; color: #4fc3f7; }
+.wh-badge-inactive { background: #2a2a2a; color: #888; }
+.wh-badge-public { background: #2a2000; color: #ffa726; }
+.wh-icon-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+.wh-icon-btn:hover { color: #ccc; background: #222; }
+.wh-icon-btn-danger:hover { color: #e57373; background: #1a0a0a; }
+.wh-row-last { color: #777; }
+
 /* Preview toggle button — only visible when a card tab is active */
 #btn-card-menu { display: none; }
 body.card-tab-active #btn-card-menu { display: flex; }

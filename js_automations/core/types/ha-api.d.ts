@@ -1090,6 +1090,48 @@ interface HA {
     };
 
     /**
+     * Registers a webhook endpoint at `:<webhook_port>/webhook/<id>`. External services can POST
+     * (or GET, depending on `options.method`) data to this URL and your handler returns a real
+     * HTTP response — unlike HA's built-in webhook automations, which always return an empty `200 OK`
+     * immediately. Requires `@permission webhook` in the script header.
+     *
+     * A secret token is auto-generated and managed by JSA (shown in the Webhook Panel) and verified
+     * automatically via the `X-Webhook-Secret` header — no code needed in the handler, unless `noAuth: true`.
+     *
+     * One ID always maps to exactly one fixed path and one HTTP method; JSA does not support
+     * arbitrary custom routing.
+     *
+     * @example
+     * // @permission webhook
+     * ha.onWebhook('github-push', async (req, res) => {
+     *   // Token already verified — handler only called if valid
+     *   const { ref, repository } = req.body;
+     *   await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+     *   res.json({ received: true });
+     * });
+     *
+     * @example
+     * // Public endpoint — service embeds its own token in the body (e.g. Ko-fi)
+     * // @permission webhook
+     * ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
+     *   const data = JSON.parse(req.body.data);
+     *   if (data.verification_token !== 'your-ko-fi-token') {
+     *     return res.status(401).json({ error: 'unauthorized' });
+     *   }
+     *   res.json({ status: 'ok' });
+     * });
+     *
+     * @example
+     * // GET webhook, e.g. for a simple status/polling check
+     * // @permission webhook
+     * ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
+     *   res.json({ ok: true });
+     * });
+     */
+    onWebhook(id: string, handler: WebhookHandler): void;
+    onWebhook(id: string, options: WebhookOptions, handler: WebhookHandler): void;
+
+    /**
      * Filesystem API — available when the `filesystem_enabled` setting is on.
      * Uses virtual paths: `internal://`, `shared://`, `media://`.
      * Requires `@permission fs:read` and/or `@permission fs:write` in the script header
@@ -1097,6 +1139,41 @@ interface HA {
      */
     readonly fs?: HaFs;
 }
+
+/** Options for {@link HA.onWebhook}. */
+interface WebhookOptions {
+    /** HTTP method this webhook accepts. One method per ID. @default 'POST' */
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    /** Skip automatic `X-Webhook-Secret` verification — the endpoint becomes fully public. @default false */
+    noAuth?: boolean;
+}
+
+/** Incoming request passed to a {@link HA.onWebhook} handler. */
+interface WebhookRequest {
+    /** HTTP method of the request (matches the registered `method`). */
+    method: string;
+    /** Request headers. */
+    headers: Record<string, string>;
+    /** Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. */
+    body: any;
+    /** URL query parameters. */
+    query: Record<string, string>;
+    /** Caller IP. Only reflects the real client IP if `webhook_trust_proxy` is enabled behind a trusted reverse proxy. */
+    ip: string;
+}
+
+/** Response builder passed to a {@link HA.onWebhook} handler. */
+interface WebhookResponse {
+    /** Sets the HTTP status code. Chainable. */
+    status(code: number): WebhookResponse;
+    /** Sends a JSON response. */
+    json(data: any): void;
+    /** Sends a plain-text response. */
+    send(text: string): void;
+}
+
+/** Handler function for {@link HA.onWebhook}. */
+type WebhookHandler = (req: WebhookRequest, res: WebhookResponse) => void | Promise<void>;
 
 /** Virtual path roots: internal://, shared://, media:// */
 type VirtualPath = `internal://${string}` | `shared://${string}` | `media://${string}`;

@@ -1115,6 +1115,108 @@ ha.mqtt.subscribe('diy/led/set', (topic, payload) => {
 
 ---
 
+## Webhook API (`ha.onWebhook`)
+
+`ha.onWebhook` turns your script into a webhook receiver — external services can call a dedicated URL and get a real HTTP response back. Unlike HA's built-in webhook automations (which always return an empty `200 OK` immediately and run the automation asynchronously afterwards), JSA webhooks are fully bidirectional: your handler receives the complete request and returns any status code and body.
+
+> **When to use this vs. HA native webhooks:** If you only need a trigger with no response (e.g. "run this automation when GitHub pushes"), use HA's built-in webhook automation trigger — no extra port needed, works through Nabu Casa. Use `ha.onWebhook()` when the caller expects a real response (GitHub expects `200`, Stripe expects specific JSON, Ko-fi expects a confirmation).
+
+| Need | Use |
+|---|---|
+| Simple trigger → HA action, no response needed | HA Automation Webhook |
+| Custom response body / status code | `ha.onWebhook()` |
+| Complex logic, access to the full `ha.*` API | `ha.onWebhook()` |
+| Nabu Casa / HA Cloud, no port forwarding | HA Automation Webhook |
+| Services that require a real response (GitHub, Stripe, Ko-fi) | `ha.onWebhook()` |
+
+> **Requires:** a port set in **Settings → Webhooks** (default `3001`), reachable from the internet (router port forwarding or reverse proxy). Does **not** work through the Nabu Casa tunnel. A dedicated **Webhook Panel** in Developer Tools (Expert Mode) lists all active endpoints with copy-ready URLs and token management (reveal / rotate).
+
+### `ha.onWebhook(id, handler)` / `ha.onWebhook(id, options, handler)`
+
+Registers a webhook endpoint at `:<port>/webhook/<id>`. Default method is `POST`; set `options.method` for `GET`/`PUT`/`DELETE`/`PATCH`. Each ID maps to exactly one fixed path and one method — arbitrary custom routing is intentionally out of scope.
+
+A secret token is auto-generated and managed by JSA per webhook ID — never in script code, stable across reloads and restarts, verified automatically via the `X-Webhook-Secret` request header.
+
+**Standard — JSA-managed token, auto-verified:**
+
+```javascript
+// @permission webhook
+
+ha.onWebhook('github-push', async (req, res) => {
+    // Token is verified automatically via X-Webhook-Secret — handler only runs if valid
+    const { ref, repository } = req.body;
+    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+    res.json({ received: true });
+});
+```
+
+**Without automatic verification (`noAuth: true`):**
+
+For services that embed their own token in the body (e.g. Ko-fi sends `data.verification_token`). This endpoint is fully public — anyone with the URL can call it — so verify the token yourself:
+
+```javascript
+// @permission webhook
+
+ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
+    const data = JSON.parse(req.body.data);
+    if (data.verification_token !== 'your-ko-fi-token') {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    if (data.type === 'Donation') {
+        await ha.notify('mobile_app_phone', `☕ ${data.from_name} donated €${data.amount}!`);
+    }
+    res.json({ status: 'ok' });
+});
+```
+
+**GET webhook (e.g. a simple status/polling check):**
+
+```javascript
+// @permission webhook
+
+ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
+    res.json({ ok: true, uptime: process.uptime() });
+});
+```
+
+**`req` object**
+
+| Field | Type | Description |
+|---|---|---|
+| `method` | `string` | HTTP method (matches the registered `method`) |
+| `headers` | `Record<string, string>` | Request headers |
+| `body` | `any` | Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. |
+| `query` | `Record<string, string>` | URL query parameters |
+| `ip` | `string` | Caller IP. Only reflects the real client IP if **Settings → Webhooks → Trust Reverse Proxy** is enabled behind a trusted proxy. |
+
+**`res` object**
+
+| Method | Description |
+|---|---|
+| `res.json(data)` | Send a JSON response (default status `200`) |
+| `res.send(text)` | Send a plain-text response |
+| `res.status(code)` | Set the status code, chainable: `res.status(404).json({...})` |
+
+Handler timeout: **10 seconds** — if the handler doesn't respond in time, the caller receives `504 Gateway Timeout` and any late response from the script is discarded.
+
+### Security
+
+- Requests are rate-limited per webhook ID/IP (60/min); excessive requests receive `429`.
+- Token verification uses a constant-time comparison — timing cannot be used to guess the token.
+- Internal handler errors (thrown exceptions) return a generic `500` to the caller; details go to the script log only, never to the response body.
+- `noAuth: true` webhooks are shown with a "public / unprotected" badge in the Webhook Panel.
+- A webhook ID already owned by a different running script cannot be re-registered — this stops one script from silently hijacking another script's endpoint/token.
+
+### Settings
+
+| Key | Default | Description |
+|---|---|---|
+| Port | `3001` | Port the webhook server listens on. Only active while at least one script has a registered webhook. |
+| External URL | _(empty)_ | Base URL shown in the Webhook Panel for copying (e.g. `https://myha.example.com`). Only needed behind a reverse proxy. |
+| Trust Reverse Proxy | `false` | Reads the real caller IP from `X-Forwarded-For`. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP. |
+
+---
+
 ## Filesystem API (`ha.fs`)
 
 `ha.fs` provides sandboxed file access. It is only available when **Settings → Danger Zone → Enable Filesystem Access** is turned on.

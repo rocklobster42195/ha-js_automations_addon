@@ -272,6 +272,34 @@ module.exports = [
         ]
     },
     {
+        id: 'webhook',
+        label: 'settings.sections.webhook',
+        icon: 'mdi:webhook',
+        items: [
+            {
+                key: 'port',
+                label: 'settings.webhook.port',
+                description: 'settings.webhook.port_desc',
+                type: 'number',
+                default: 3001
+            },
+            {
+                key: 'external_url',
+                label: 'settings.webhook.external_url',
+                description: 'settings.webhook.external_url_desc',
+                type: 'text',
+                default: ''
+            },
+            {
+                key: 'trust_proxy',
+                label: 'settings.webhook.trust_proxy',
+                description: 'settings.webhook.trust_proxy_desc',
+                type: 'boolean',
+                default: false
+            }
+        ]
+    },
+    {
         id: 'system',
         label: 'settings.sections.system',
         icon: 'mdi:server',

@@ -115,6 +115,7 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
 
         workerManager.stopScript(filename, 'deleted');
         fs.unlinkSync(fullPath);
+        workerManager.purgeWebhooksForScript(filename);
         if (cardManager) cardManager.removeCard(fullPath);
         await depManager.prune();
         io.emit('status_update');

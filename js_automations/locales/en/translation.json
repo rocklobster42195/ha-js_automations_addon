@@ -140,7 +140,8 @@
       "editor": "Editor",
       "statusbar": "Status Bar",
       "danger": "Danger Zone",
-      "mqtt": "MQTT Broker"
+      "mqtt": "MQTT Broker",
+      "webhook": "Webhooks"
     },
     "general": {
       "language": "Language",
@@ -195,6 +196,14 @@
       "mqtt_autodetect_password_hint": "Host and port have been imported. Please enter your password manually.",
       "mqtt_autodetect_fallback": "No MQTT configuration found in HA – core-mosquitto suggested as default. Please enter your credentials manually.",
       "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>."
+    },
+    "webhook": {
+      "port": "Port",
+      "port_desc": "Port the webhook server listens on. Only active while at least one script has an active ha.onWebhook() registration.",
+      "external_url": "External URL",
+      "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy.",
+      "trust_proxy": "Trust Reverse Proxy",
+      "trust_proxy_desc": "Reads the real caller IP from X-Forwarded-For. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP."
     },
     "system": {
       "title": "System Settings",
@@ -305,6 +314,7 @@
   "cap_fs_read":                   "File read access",
   "cap_fs_write":                  "File write access",
   "cap_exec":                      "Shell execution",
+  "cap_webhook":                   "Webhook receiver",
   "cap_preview_loading":           "Analyzing script…",
   "cap_preview_none":              "No special capabilities detected.",
   "cap_preview_capabilities":      "Capabilities detected:",
@@ -315,10 +325,12 @@
   "cap_tip_fs_read":        "File read access (declared)",
   "cap_tip_fs_write":       "File write access (declared)",
   "cap_tip_exec":           "Shell execution (declared)",
+  "cap_tip_webhook":        "Webhook receiver (declared)",
   "cap_tip_network_warn":   "Network access detected — add @permission network to your header",
   "cap_tip_fs_read_warn":   "File read access detected — add @permission fs:read to your header",
   "cap_tip_fs_write_warn":  "File write access detected — add @permission fs:write to your header",
   "cap_tip_exec_warn":      "Shell execution detected — add @permission exec to your header",
+  "cap_tip_webhook_warn":   "Webhook receiver detected — add @permission webhook to your header",
   "cap_tip_unused":         "Declared in @permission but not detected in source",
   "devtools": {
     "event_inspector_hint": "Click Play to start the live event stream.",
@@ -344,6 +356,19 @@
     "mqtt_paused_hint": "Stream paused — new messages are buffered",
     "mqtt_clear": "Clear",
     "mqtt_hint": "Waiting for MQTT messages...",
-    "mqtt_no_filter": "Enter a topic in the filter field, e.g. jsa/# or shellies/+/status"
+    "mqtt_no_filter": "Enter a topic in the filter field, e.g. jsa/# or shellies/+/status",
+    "webhook_no_webhooks": "No webhooks registered. Call ha.onWebhook() in a script to see it here.",
+    "webhook_never": "never",
+    "webhook_inactive": "inactive",
+    "webhook_public": "public / unprotected",
+    "webhook_token": "Token",
+    "webhook_reveal": "Reveal",
+    "webhook_copy": "Copy",
+    "webhook_rotate": "Rotate",
+    "webhook_url": "URL",
+    "webhook_last": "Last",
+    "webhook_rotate_confirm": "Rotate the token for \"{{id}}\"? External services using the old token must be updated.",
+    "webhook_delete": "Delete",
+    "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone."
   }
 }

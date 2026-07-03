@@ -141,7 +141,8 @@
       "editor": "Editor",
       "statusbar": "Statusleiste",
       "danger": "Gefahrenzone",
-      "mqtt": "MQTT Broker"
+      "mqtt": "MQTT Broker",
+      "webhook": "Webhooks"
     },
     "general": {
       "language": "Sprache",
@@ -199,6 +200,14 @@
       "mqtt_autodetect_password_hint": "Host und Port wurden übernommen. Bitte trage dein Passwort manuell ein.",
       "mqtt_autodetect_fallback": "Keine MQTT-Konfiguration in HA gefunden – core-mosquitto wurde als Vorschlag eingetragen. Bitte Zugangsdaten manuell eingeben.",
       "mosquitto_hint": "<b>Mosquitto-Addon (HA):</b> Verwende <code>core-mosquitto</code> als Host.<br>Der Broker erwartet einen echten Home-Assistant-Benutzer als Zugangsdaten.<br>Empfehlung: Lege einen dedizierten MQTT-Nutzer an unter <b>Einstellungen → Personen → Benutzer hinzufügen</b>."
+    },
+    "webhook": {
+      "port": "Port",
+      "port_desc": "Port, auf dem der Webhook-Server lauscht. Nur aktiv, solange mindestens ein Skript eine aktive ha.onWebhook()-Registrierung hat.",
+      "external_url": "Externe URL",
+      "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig.",
+      "trust_proxy": "Reverse Proxy vertrauen",
+      "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem Webhook-Port steht — sonst können Aufrufer ihre IP fälschen."
     },
     "system": {
       "title": "System-Einstellungen",
@@ -316,6 +325,7 @@
   "cap_fs_read":                   "Dateizugriff (lesen)",
   "cap_fs_write":                  "Dateizugriff (schreiben)",
   "cap_exec":                      "Shell-Ausführung",
+  "cap_webhook":                   "Webhook-Empfänger",
   "cap_preview_loading":           "Skript wird analysiert…",
   "cap_preview_none":              "Keine besonderen Berechtigungen erkannt.",
   "cap_preview_capabilities":      "Erkannte Berechtigungen:",
@@ -326,10 +336,12 @@
   "cap_tip_fs_read":        "Lesezugriff auf Dateien (deklariert)",
   "cap_tip_fs_write":       "Schreibzugriff auf Dateien (deklariert)",
   "cap_tip_exec":           "Shell-Ausführung (deklariert)",
+  "cap_tip_webhook":        "Webhook-Empfänger (deklariert)",
   "cap_tip_network_warn":   "Netzwerkzugriff erkannt — @permission network im Header ergänzen",
   "cap_tip_fs_read_warn":   "Lesezugriff erkannt — @permission fs:read im Header ergänzen",
   "cap_tip_fs_write_warn":  "Schreibzugriff erkannt — @permission fs:write im Header ergänzen",
   "cap_tip_exec_warn":      "Shell-Ausführung erkannt — @permission exec im Header ergänzen",
+  "cap_tip_webhook_warn":   "Webhook-Empfänger erkannt — @permission webhook im Header ergänzen",
   "cap_tip_unused":         "In @permission deklariert, aber im Quellcode nicht erkannt",
   "devtools": {
     "event_inspector_hint": "Play drücken, um den Event-Stream zu starten.",
@@ -355,6 +367,19 @@
     "mqtt_paused_hint": "Stream pausiert — neue Nachrichten werden gepuffert",
     "mqtt_clear": "Leeren",
     "mqtt_hint": "Warte auf MQTT-Nachrichten...",
-    "mqtt_no_filter": "Topic im Filter-Feld eingeben, z.B. jsa/# oder shellies/+/status"
+    "mqtt_no_filter": "Topic im Filter-Feld eingeben, z.B. jsa/# oder shellies/+/status",
+    "webhook_no_webhooks": "Keine Webhooks registriert. ha.onWebhook() in einem Skript aufrufen, um es hier zu sehen.",
+    "webhook_never": "nie",
+    "webhook_inactive": "inaktiv",
+    "webhook_public": "öffentlich / ungeschützt",
+    "webhook_token": "Token",
+    "webhook_reveal": "Anzeigen",
+    "webhook_copy": "Kopieren",
+    "webhook_rotate": "Erneuern",
+    "webhook_url": "URL",
+    "webhook_last": "Zuletzt",
+    "webhook_rotate_confirm": "Token für \"{{id}}\" erneuern? Externe Dienste, die den alten Token verwenden, müssen aktualisiert werden.",
+    "webhook_delete": "Löschen",
+    "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden."
   }
 }

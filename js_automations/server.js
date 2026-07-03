@@ -112,11 +112,13 @@ const storeRouter = require('./routes/store-route')(storeManagerUiWrapper, worke
 const systemRouter = require('./routes/system-route')(haConnector, logManager, () => kernel.systemOptions, config.SCRIPTS_DIR, systemService, kernel.getSystemStatus.bind(kernel), kernel.mqttManager, workerManager);
 const settingsRouter = require('./routes/settings-route');
 const haRouter = require('./routes/ha-routes')(haConnector);
+const webhookRouter = require('./routes/webhook-route')(kernel.webhookManager);
 
 app.use('/api/scripts', scriptsRouter);
 app.use('/api/store', storeRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/ha', haRouter);
+app.use('/api/webhooks', webhookRouter);
 
 // System Restart Route
 app.post('/api/system/restart-ha', async (req, res) => {

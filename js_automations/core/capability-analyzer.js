@@ -24,6 +24,11 @@ const NETWORK_PATTERNS = [
     /require\s*\(\s*['"]node-ical['"]\s*\)/,
 ];
 
+// Patterns that indicate ha.onWebhook() usage
+const WEBHOOK_PATTERNS = [
+    /\bha\.onWebhook\s*\(/,
+];
+
 // Patterns that indicate ha.fs read operations
 const FS_READ_PATTERNS = [
     /\bha\.fs\.read\s*\(/,
@@ -75,6 +80,7 @@ class CapabilityAnalyzer {
         const detected = [];
 
         if (NETWORK_PATTERNS.some(p => p.test(s))) detected.push('network');
+        if (WEBHOOK_PATTERNS.some(p => p.test(s))) detected.push('webhook');
         if (FS_WRITE_PATTERNS.some(p => p.test(s))) detected.push('fs:write');
         // Only add fs:read if not already implying it via fs:write
         else if (FS_READ_PATTERNS.some(p => p.test(s))) detected.push('fs:read');

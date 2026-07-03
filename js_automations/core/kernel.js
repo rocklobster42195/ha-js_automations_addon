@@ -22,6 +22,7 @@ const LogManager = require('./log-manager');
 const SettingsManager = require('./settings-manager'); // Static-like module
 const workerManager = require('./worker-manager'); // Singleton module
 const MqttManager = require('./mqtt-manager');
+const WebhookManager = require('./webhook-manager');
 const EntityManager = require('./entity-manager');
 const CompilerManager = require('./compiler-manager');
 const CardManager = require('./card-manager');
@@ -49,6 +50,7 @@ class Kernel extends EventEmitter {
         this.workerManager = null;
         this.entityManager = null;
         this.mqttManager = null;
+        this.webhookManager = null;
         this.compilerManager = null;
         this.bridge = null;
         this.systemService = null;
@@ -98,6 +100,7 @@ class Kernel extends EventEmitter {
             this.storeManager = new StoreManager(STORAGE_DIR);
             this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
             this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
+            this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
             this.workerManager = workerManager;
 
             // Initialize WorkerManager paths immediately so other managers can use them.
@@ -105,6 +108,7 @@ class Kernel extends EventEmitter {
             this.workerManager.setScriptsDir(SCRIPTS_DIR);
             this.workerManager.setStore(this.storeManager);
             this.workerManager.setMqttManager(this.mqttManager);
+            this.workerManager.setWebhookManager(this.webhookManager);
 
             // CardManager — handles Script Pack card installation
             this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
@@ -231,6 +235,14 @@ class Kernel extends EventEmitter {
                 }
             }
             if (status.connected) this._mqttEverConnected = true;
+        });
+
+        // Forward webhook registry/call events to the UI (Webhook Panel)
+        this.webhookManager.on('registry_changed', () => {
+            if (this.io) this.io.emit('webhook_registry_changed', this.webhookManager.listWebhooks());
+        });
+        this.webhookManager.on('call_logged', (data) => {
+            if (this.io) this.io.emit('webhook_call_logged', data);
         });
     }
 

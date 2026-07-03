@@ -101,6 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             initWatch();
             initRepl();
             initMqttMonitor();
+            initWebhookPanel();
         });
     }
 

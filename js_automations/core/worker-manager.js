@@ -24,6 +24,7 @@ class WorkerManager extends EventEmitter {
         this.dirtyStore = new Map();
         this.haConnector = null;
         this.mqttManager = null;
+        this.webhookManager = null;
         this.storeManager = null;
         this.settings = {
             restart_protection_count: 5,
@@ -183,6 +184,32 @@ class WorkerManager extends EventEmitter {
 
     setMqttManager(manager) {
         this.mqttManager = manager;
+    }
+
+    /**
+     * Permanently purges a script's ha.onWebhook() registrations (token included).
+     * Called when the script *file* is deleted — must work regardless of whether
+     * the script currently has a running worker (stopScript() is a no-op if not).
+     */
+    purgeWebhooksForScript(filename) {
+        if (this.webhookManager) this.webhookManager.purgeAllForScript(filename);
+    }
+
+    /**
+     * Wires up the WebhookManager and starts routing incoming webhook requests to the
+     * owning script's worker. The manager itself holds the Express server, registry,
+     * token persistence, and the pending-request/`res` map; this only bridges IPC.
+     */
+    setWebhookManager(manager) {
+        this.webhookManager = manager;
+        manager.on('request', ({ scriptFilename, id, correlationId, req }) => {
+            const worker = this.workers.get(scriptFilename);
+            if (!worker) {
+                manager.rejectRequest(correlationId, 'Script not running');
+                return;
+            }
+            worker.postMessage({ type: 'webhook_request', id, correlationId, req });
+        });
     }
 
     /**
@@ -938,6 +965,26 @@ class WorkerManager extends EventEmitter {
                     }
                 }
 
+                // ha.onWebhook() — register a webhook endpoint owned by this script
+                if (msg.type === 'webhook_register') {
+                    if (!this.webhookManager) {
+                        this.emit('log', { source: name, level: 'warn',
+                            message: `[Webhook] ha.onWebhook('${msg.id}'): webhook manager not available.` });
+                    } else {
+                        try {
+                            this.webhookManager.register(msg.id, { method: msg.method, noAuth: msg.noAuth, scriptFilename: scriptMeta.filename });
+                        } catch (e) {
+                            this.emit('log', { source: name, level: 'error', message: `[Webhook] ${e.message}` });
+                            worker.postMessage({ type: 'webhook_register_error', id: msg.id, error: e.message });
+                        }
+                    }
+                }
+
+                // ha.onWebhook() handler response (res.json()/res.send())
+                if (msg.type === 'webhook_response' && this.webhookManager) {
+                    this.webhookManager.resolveResponse(msg.correlationId, msg.response);
+                }
+
                 // 6. Lifecycle Control (ha.restart / ha.stop)
                 if (msg.type === 'script_lifecycle') {
                     const reason = msg.reason || (msg.action === 'restart' ? 'restarted by script' : 'stopped by script');
@@ -988,9 +1035,18 @@ class WorkerManager extends EventEmitter {
                 if (this.mqttManager) {
                     this.mqttManager.unsubscribeAllRawByScript(scriptMeta.filename);
                 }
-                
+
                 let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
                 const type = (code !== 0 && !this.stopReasons.has(scriptMeta.filename)) ? 'error' : 'success';
+
+                // Deactivate (not delete) this script's ha.onWebhook() registrations —
+                // the token stays persisted so a reload/restart keeps the same secret.
+                // Permanent deletion is triggered separately from the DELETE /api/scripts
+                // route (purgeWebhooksForScript), since a script can be deleted while it
+                // isn't even running — this exit handler would never fire in that case.
+                if (this.webhookManager) {
+                    this.webhookManager.unregisterAllForScript(scriptMeta.filename);
+                }
 
                 // Warn if the script had unsaved ha.persistent() state at exit time.
                 const dirtyKeys = this.dirtyStore.get(scriptMeta.filename);
