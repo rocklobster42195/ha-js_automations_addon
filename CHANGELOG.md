@@ -1,5 +1,19 @@
 <!-- NEXT -->
 
+### Return to Sender
+
+`ha.onWebhook()` turns any script into a webhook receiver — external services (GitHub, Stripe, Ko-fi, IFTTT, ...) can push data into a running script and get a real HTTP response back. Unlike HA's built-in webhook automations, which always return an empty `200 OK` immediately and run asynchronously afterward, JSA webhooks are fully bidirectional: your handler receives the complete request and returns any status code and body.
+
+**What's new**
+- `ha.onWebhook(id, handler)` / `ha.onWebhook(id, options, handler)` — registers an endpoint at `:<port>/webhook/<id>`
+- `GET` / `POST` / `PUT` / `DELETE` / `PATCH` support via `options.method` (default `POST`)
+- `{ noAuth: true }` for services that verify themselves (e.g. Ko-fi)
+- Tokens are auto-generated and managed by JSA — never in script code, stable across reloads/restarts, rotatable from the UI
+- New **Webhook Panel** in Developer Tools — active endpoints, copy-ready URLs, token reveal/rotate/delete, last-call status
+- Rate limiting, constant-time token verification, and generic error responses (no internals leaked) built in
+- New `@permission webhook` capability
+- New Settings → Webhooks section: port, external URL, trust reverse proxy
+
 ---
 
 ## [2.56.4] - 2026-07-02
