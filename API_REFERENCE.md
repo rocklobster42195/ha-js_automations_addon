@@ -246,6 +246,21 @@ ha.call('notify.mobile_app_phone', {
 });
 ```
 
+#### Reading a service's response data
+
+Some services return data instead of (or in addition to) performing an action — e.g. `weather.get_forecasts` or `calendar.list_events`. Pass `{ returnResponse: true }` as a third argument to await that payload:
+
+```javascript
+const result = await ha.call('weather.get_forecasts',
+    { entity_id: 'weather.home', type: 'daily' },
+    { returnResponse: true }
+);
+const forecast = result['weather.home'].forecast;
+ha.log(`Tomorrow: ${forecast[1].condition}, ${forecast[1].temperature}°C`);
+```
+
+The response is keyed by target entity_id, matching Home Assistant's own `response_variable` shape. Without `{ returnResponse: true }`, `ha.call()` remains fire-and-forget as shown above.
+
 ### 7.1. Sending Notifications (`ha.notify`)
 
 A convenient shortcut for sending notifications via Home Assistant's `notify` domain. Defaults to `notify.notify`, which broadcasts to all configured notifiers (e.g., all registered mobile apps).

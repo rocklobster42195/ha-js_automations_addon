@@ -69,8 +69,13 @@ class TypeDefinitionGenerator {
             }
             content += `}\n\n`;
 
+            // Write atomically (temp file + rename) so a crash or restart mid-write can
+            // never leave a truncated, syntactically broken entities.d.ts on disk — that
+            // would break Monaco's whole type-checking program via ha-api.d.ts's reference.
             const filePath = path.join(this.workerManager.storageDir, 'entities.d.ts');
-            fs.writeFileSync(filePath, content, 'utf8');
+            const tmpPath = `${filePath}.tmp`;
+            fs.writeFileSync(tmpPath, content, 'utf8');
+            fs.renameSync(tmpPath, filePath);
 
             this.workerManager.emit('typings_generated');
             this.workerManager.emit('log', {

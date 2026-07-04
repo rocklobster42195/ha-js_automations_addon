@@ -42,6 +42,22 @@ class CompilerManager extends EventEmitter {
             fs.copyFileSync(sourceApi, targetApi);
         }
 
+        // 1b. ha-api.d.ts references entities.d.ts and services.d.ts via triple-slash
+        // directives. Those are only (re)generated once HA is reachable — if the add-on
+        // starts (or reconnects) before that first sync, a missing reference target can
+        // break Monaco's whole type-checking program, making even `ha` show as unknown.
+        // Guarantee both exist as valid (if empty) ambient declarations from the start.
+        const placeholders = {
+            'entities.d.ts': 'interface HAEntities {}\ninterface GlobalStoreSchema {}\n',
+            'services.d.ts': 'interface ServiceMap {}\n',
+        };
+        for (const [file, placeholder] of Object.entries(placeholders)) {
+            const target = path.join(this.storageDir, file);
+            if (!fs.existsSync(target)) {
+                fs.writeFileSync(target, placeholder, 'utf8');
+            }
+        }
+
         // 2. Create/Update tsconfig.json
         if (!fs.existsSync(this.tsconfigPath)) {
             const config = {

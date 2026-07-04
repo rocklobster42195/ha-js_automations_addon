@@ -737,12 +737,14 @@ const ha = {
     /**
      * Global helper function for Home Assistant service calls.
      * Format: ha.call('domain.service', { data })
+     * Pass { returnResponse: true } to await the service's response payload
+     * (e.g. weather.get_forecasts) instead of firing-and-forgetting.
      */
-    call: (serviceId, data = {}) => {
+    call: (serviceId, data = {}, options = {}) => {
         const [domain, service] = (serviceId || '').split('.');
         if (!domain || !service) {
             ha.error(`Invalid service ID format: "${serviceId}". Expected "domain.service"`);
-            return;
+            return options.returnResponse ? Promise.resolve(undefined) : undefined;
         }
 
         // Synchronous check against the local cache
@@ -756,7 +758,31 @@ const ha = {
             }
         }
 
-        ha.callService(domain, service, data);
+        if (!options.returnResponse) {
+            ha.callService(domain, service, data);
+            return;
+        }
+
+        // Awaitable path: mirrors the ha.entity() callId/service_response dance,
+        // but resolves with the actual response payload instead of a chainable proxy.
+        ensureMessageListener();
+        const callId = ++serviceCallCounter;
+        _addRef();
+        return new Promise((resolve, reject) => {
+            pendingServiceCalls.set(callId, {
+                resolve: (result) => { _releaseRef(); resolve(result?.response ?? result); },
+                reject: (err) => { _releaseRef(); reject(err); }
+            });
+            parentPort.postMessage({ type: 'call_service', domain, service, data, callId, returnResponse: true });
+
+            setTimeout(() => {
+                const pending = pendingServiceCalls.get(callId);
+                if (pending) {
+                    pendingServiceCalls.delete(callId);
+                    pending.reject(new Error(`Service call ${serviceId} timed out.`));
+                }
+            }, 10000);
+        });
     },
 
     /**

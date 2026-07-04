@@ -222,20 +222,28 @@ class WorkerManager extends EventEmitter {
             this.emit('log', { source: 'System', message: 'Syncing HA services...', level: 'debug' });
             const services = await this.haConnector.getServices() || {};
             
+            // Escapes a value for safe interpolation into a double-quoted TS string literal
+            // or a `//` line comment — HA service/field descriptions and names are free-text
+            // from integrations and can otherwise break the generated file's syntax (e.g. a
+            // stray `"` or newline), which would break Monaco's whole type-checking program
+            // via ha-api.d.ts's reference to this file.
+            const escStr = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const escComment = (s) => String(s).replace(/\*\//g, '* /').replace(/[\r\n]+/g, ' ');
+
             let dts = "/** AUTO-GENERATED - DO NOT EDIT **/\n\ninterface ServiceMap {\n";
-            
+
             for (const [domain, domainServices] of Object.entries(services)) {
-                dts += `  "${domain}": {\n`;
+                dts += `  "${escStr(domain)}": {\n`;
                 for (const [service, details] of Object.entries(domainServices)) {
-                    const cleanDesc = (details.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                    const cleanDesc = escComment((details.description || '').replace(/\*/g, ''));
                     dts += `    /** ${cleanDesc} */\n`;
-                    dts += `    "${service}": {\n`;
+                    dts += `    "${escStr(service)}": {\n`;
                     if (details.fields) {
                         for (const [field, fDetails] of Object.entries(details.fields)) {
                             const type = this._mapHaTypeToTs(fDetails);
-                            const fieldDesc = (fDetails.description || '').replace(/\*/g, '').replace(/\n/g, ' ');
+                            const fieldDesc = escComment((fDetails.description || '').replace(/\*/g, ''));
                             const isOptional = fDetails.required ? '' : '?';
-                            dts += `      "${field}"${isOptional}: ${type}; // ${fieldDesc}\n`;
+                            dts += `      "${escStr(field)}"${isOptional}: ${type}; // ${fieldDesc}\n`;
                         }
                     }
                     dts += `    };\n`;
@@ -244,8 +252,11 @@ class WorkerManager extends EventEmitter {
             }
             dts += "}\n";
 
+            // Atomic write (temp file + rename) — see entities.d.ts generator for why.
             const targetPath = path.join(this.storageDir, 'services.d.ts');
-            fs.writeFileSync(targetPath, dts);
+            const tmpPath = `${targetPath}.tmp`;
+            fs.writeFileSync(tmpPath, dts);
+            fs.renameSync(tmpPath, targetPath);
             
             this.emit('log', { source: 'System', message: `ServiceMap generated: ${Object.keys(services).length} domains mapped.`, level: 'debug' });
         } catch (e) {
@@ -258,7 +269,13 @@ class WorkerManager extends EventEmitter {
         if (field.selector?.number !== undefined) return 'number';
         if (field.selector?.select !== undefined) {
             const options = field.selector.select.options;
-            if (Array.isArray(options)) return options.map(o => `'${o.value || o}'`).join(' | ');
+            if (Array.isArray(options)) {
+                // Escaped the same way as the interface body above — an option value
+                // containing a stray `'` would otherwise break the generated union type.
+                return options
+                    .map(o => `'${String(o.value ?? o).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+                    .join(' | ');
+            }
             return 'string';
         }
         if (field.selector?.text !== undefined) return 'string';
@@ -738,7 +755,7 @@ class WorkerManager extends EventEmitter {
                 // 2. Home Assistant Actions
                 if (msg.type === 'call_service' && this.haConnector) {
                     try {
-                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
                     } catch (err) {
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
@@ -1111,8 +1128,15 @@ class WorkerManager extends EventEmitter {
         const tmpFile = path.join(os.tmpdir(), `jsa_repl_${Date.now()}.js`);
         const logs = [];
 
+        // Wrapped in an async IIFE so snippets can use top-level `await` (e.g. `await ha.call(...)`)
+        // without making the file an ES module — a synchronous require() can't load ESM with
+        // top-level await (ERR_REQUIRE_ASYNC_MODULE). A rejection is re-thrown on nextTick so it
+        // surfaces as a worker 'error' event (→ finish(err.message)) instead of a silent
+        // "Unhandled Rejection" log followed by the 5s timeout.
+        const wrapped = '(async () => {\n' + code + '\n})().catch((e) => { process.nextTick(() => { throw e; }); });';
+
         return new Promise((resolve) => {
-            try { fs.writeFileSync(tmpFile, code, 'utf8'); }
+            try { fs.writeFileSync(tmpFile, wrapped, 'utf8'); }
             catch (e) { return resolve({ logs: [], error: `Write error: ${e.message}` }); }
 
             const initialStoreValues = {};
@@ -1180,7 +1204,7 @@ class WorkerManager extends EventEmitter {
                 }
                 if (msg.type === 'call_service' && this.haConnector) {
                     try {
-                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data);
+                        const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
                     } catch (err) {
                         if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });

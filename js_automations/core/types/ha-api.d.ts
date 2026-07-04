@@ -342,6 +342,27 @@ interface HA {
         serviceId: T,
         data?: T extends AllServiceIds ? ServiceData<T> : Record<string, any>
     ): void;
+    /**
+     * Calls a Home Assistant service and awaits its response payload.
+     * Use this for "response-only" or "response-optional" services such as
+     * `weather.get_forecasts` or `calendar.list_events` that return data instead
+     * of (or in addition to) performing an action.
+     * @param serviceId The service to call (e.g., 'weather.get_forecasts').
+     * @param data Optional service data payload.
+     * @param options Pass `{ returnResponse: true }` to await the response.
+     * @returns The service's `response` payload, keyed by target entity_id.
+     * @example
+     * const result = await ha.call('weather.get_forecasts',
+     *   { entity_id: 'weather.openweathermap', type: 'daily' },
+     *   { returnResponse: true }
+     * );
+     * const forecast = result['weather.openweathermap'].forecast;
+     */
+    call<T extends AllServiceIds | (string & {})>(
+        serviceId: T,
+        data: T extends AllServiceIds ? ServiceData<T> : Record<string, any>,
+        options: { returnResponse: true }
+    ): Promise<Record<string, any>>;
 
     /**
      * Sends an actionable notification and waits for the user's response.

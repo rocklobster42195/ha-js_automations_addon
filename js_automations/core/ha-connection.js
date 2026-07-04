@@ -464,7 +464,14 @@ class HAConnector {
         if (!this.isReady) return Promise.reject(new Error("WebSocket not connected"));
         const id = this.msgId++;
         const msg = { id, type: 'call_service', domain, service, service_data: data };
-        if (expectResponse) msg.return_response = true;
+        if (expectResponse) {
+            msg.return_response = true;
+            // Response-required calls attribute results per matched entity using the
+            // dedicated `target` selector — entity_id folded into service_data alone
+            // (fine for regular actions) resolves to zero matched entities here and
+            // HA replies "did not match any entities" regardless of a valid entity_id.
+            if (data && data.entity_id) msg.target = { entity_id: data.entity_id };
+        }
         this.send(msg);
         
         return new Promise((resolve, reject) => {
