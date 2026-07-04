@@ -130,26 +130,49 @@ class BlocklyCompiler {
 
 ### Shared Generator Registration
 
-Block code generators are defined once and registered on whichever generator instance is passed in — works in both Node.js (compiler) and browser (Show Code panel):
+**Superseded during M2 implementation** — the ES-`import` version below doesn't work in this
+project (no bundler, plain `<script>` tags; see the M2 checklist's "Architecture correction"
+note for the full reasoning). Kept here only so the "why" isn't lost. The actual mechanism:
+
+Both the block shape definitions and the generator registration function live under
+`public/js/` (not `core/`), each wrapped in a tiny UMD shim (`module.exports` if present, else
+a `window` global) so the *same file* is `require()`-able from Node and loadable via a plain
+`<script>` tag in the browser — no bundler, no duplication:
 
 ```js
-// core/blockly-blocks-shared.js  (platform-agnostic)
-module.exports = function registerHaBlocks(generator) {
-  generator.forBlock['ha_call_service'] = (block, gen) => { ... };
-  generator.forBlock['ha_trigger_on']   = (block, gen) => { ... };
-  // ... all blocks
-};
+// public/js/blockly-blocks-shared.js
+(function (global, factory) {
+    if (typeof module === 'object' && module.exports) module.exports = factory();
+    else global.registerHaBlocks = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+    return function registerHaBlocks(generator) {
+        generator.forBlock['ha_call_service'] = (block) => { ... };
+        generator.forBlock['ha_trigger_on']   = (block, gen) => { ... };
+        // ... all blocks
+    };
+});
 ```
 
+```js
+// Node.js (BlocklyCompiler) — reaches across the core/public boundary with a relative path
+const { javascriptGenerator } = require('blockly/javascript');
+Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
+require('../public/js/blockly-blocks-shared')(javascriptGenerator);
+
+// Browser (index.html) — plain script tags, no bundler
+// <script src="js/blockly-blocks.js"></script>
+// <script src="js/blockly-blocks-shared.js"></script>
+// then, once Blockly itself is loaded:
+Blockly.common.defineBlocksWithJsonArray(HA_BLOCK_DEFINITIONS);
+window.registerHaBlocks(Blockly.JavaScript);
+```
+
+~~Original (incorrect) plan:~~
 ```js
 // Browser
 import { javascriptGenerator } from 'blockly/javascript';
 import registerHaBlocks from './blockly-blocks-shared.js';
 registerHaBlocks(javascriptGenerator);
-
-// Node.js (BlocklyCompiler)
-const { javascriptGenerator } = require('blockly/javascript');
-require('./blockly-blocks-shared')(javascriptGenerator);
 ```
 
 ---
@@ -346,15 +369,20 @@ Deliverable: Creating, saving, enabling, and deleting a `.blocks` file works end
 
 Deliverable: A real automation (state change → service call → notification) can be built entirely in the Blockly editor.
 
-- [ ] `public/js/blockly-editor.js` — workspace init, save/load, toolbar actions
-- [ ] `public/js/blockly-blocks.js` — block definitions for all M2 blocks (shapes, inputs, fields)
-- [ ] `public/js/blockly-generator.js` — JS code generators for M2 blocks (browser, for Show Code)
-- [ ] `core/blockly-blocks-shared.js` — implement generators for all M2 blocks
-- [ ] `public/js/blockly-toolbox.json` — toolbox config: Triggers, Actions, State, Script, Standard categories. Category colors follow ioBroker's Blockly color scheme (per-category, not the JS/TS/Blocks language-badge color — that stays visually distinct from TS's blue, see the M1 `BLK` badge)
-- [ ] `public/index.html` — load Blockly library (CDN or bundled)
-- [ ] `public/js/tab-manager.js` — route `.blocks` files to Blockly editor instead of Monaco
-- [ ] Dynamic entity & service dropdowns from HA
-- [ ] i18n: category names and block labels
+**Architecture correction made while implementing step 1** (trigger → log → call, the priority order from "Implementation Approach" below): the original plan had `core/blockly-blocks-shared.js` reused in the browser via ES `import`, plus a *separate* `public/js/blockly-generator.js` for the browser side. This project has no frontend bundler (Monaco/socket.io/i18next are all loaded as plain CDN `<script>` tags, no ESM) — `import` doesn't work here, and Node's `core/` directory isn't web-served anyway. Fix: both `blockly-blocks-shared.js` (generators) and `blockly-blocks.js` (block shape definitions) physically live under `public/js/`, wrapped in a small UMD shim (`module.exports` if present, else a `window` global). Node's `blockly-compiler.js` reaches across the directory boundary with a relative `require('../public/js/...')`, the browser loads the identical file via `<script src="js/...">`. One file, two runtimes, no duplication, no `blockly-generator.js`.
+
+- [x] `public/js/blockly-editor.js` — lazy `Blockly.inject()`, load/save workspace state, dirty-change hook (`onBlocklyWorkspaceChanged`), `ResizeObserver` for `Blockly.svgResize()`
+- [x] `public/js/blockly-blocks.js` — UMD, JSON shape definitions for `ha_trigger_on` / `ha_call_service` / `ha_log` only so far (the M2 blocks table's full list is still open — see below)
+- [x] `public/js/blockly-blocks-shared.js` — UMD, generators for the same 3 blocks
+- [x] `public/js/blockly-toolbox.json` — static JSON toolbox: Triggers/Actions/Script (the 3 custom blocks) + Logic/Text/Math (Blockly built-ins, useful immediately). Category names are plain English for now — i18n and the ioBroker color scheme are still open (see below)
+- [x] `public/index.html` — Blockly loaded via CDN (`cdn.jsdelivr.net/npm/blockly@11.2.2/blockly.min.js`, matches the pinned npm version), consistent with how Monaco/socket.io/i18next are already loaded in this project
+- [x] `public/js/tab-manager.js` — `.blocks` files open a `type: 'blockly'` tab. Unlike Monaco (one editor, one persistent model per tab), there's a single shared Blockly workspace; each tab holds its own serialized JSON state, swapped into the workspace on switch. Trade-off: undo history doesn't survive switching away from a tab and back — accepted for now
+- [x] `public/js/creation-wizard.js` — the existing "refresh open tab after metadata edit" fix (Monaco: re-fetch + `model.setValue()`) needed a Blockly-tab equivalent: re-fetch and update `tab.jsa` only, without touching `tab.blocksState` (which may hold unsaved visual edits the metadata save didn't touch)
+- [ ] Dynamic entity & service dropdowns from HA (still plain text fields on `ha_trigger_on`/`ha_call_service` for now)
+- [ ] i18n: category names and block labels (toolbox and block tooltips are still hardcoded English strings)
+- [ ] Remaining M2 blocks table entries beyond the first 3 (filtered/debounced trigger, `schedule()`, `ha.entity().service()`, `ha.notify()`, `ha.getState()`, `ha.getStateValue()`, `ha.getAttr()`, `ha.entityExists()`, `sleep()`, `ha.debug/warn/error()`, `ha.stop()`)
+- [ ] Pre-compile "no trigger block" warning (listed under Error Handling / M2 verification)
+- [ ] Not yet verified in an actual browser — implemented and unit-verified only at the compiler level (see below); needs a manual pass in the running app
 
 **M2 blocks covered**: `ha.on()` (3 variants), `schedule()`, `ha.call()`, `ha.entity().service()`, `ha.notify()`, `ha.getState()`, `ha.getStateValue()`, `ha.getAttr()`, `ha.entityExists()`, `sleep()`, `ha.log/debug/warn/error()`, `ha.stop()`
 
@@ -394,7 +422,7 @@ Deliverable: The Blockly editor feels native to the addon.
 - [ ] "Show Code" panel — read-only Monaco synced to compiled JS output
 - [ ] "Convert to JavaScript" — warning dialog + one-way conversion, `.blocks` file deleted
 - [ ] Block-level error visualization — highlight the block that caused a runtime error (requires error position metadata from compiler)
-- [ ] Blockly theme aligned to addon's visual style (colors, fonts, shadows)
+- [x] Blockly dark theme (`Blockly.Theme.defineTheme('ha_dark', ...)` in `blockly-editor.js`) — pulled forward into M2 because the default light theme was unusable next to the rest of the (dark-only, no light mode anywhere) UI. Still open for M5: fonts/shadows polish, and the toolbox category colors (currently placeholder hues, not yet the ioBroker scheme)
 - [ ] i18n: all remaining keys (`blockly_show_code`, `blockly_convert_warning`, `blockly_category_*`, error messages)
 
 ---
@@ -429,10 +457,9 @@ Build in this order: trigger (`ha.on`) → log → service call (`ha.call`) → 
 | File | Purpose |
 |---|---|
 | `js_automations/core/blockly-compiler.js` | Server-side `.blocks` → JS compilation |
-| `js_automations/core/blockly-blocks-shared.js` | Shared generator registration (Node.js + browser) |
-| `js_automations/public/js/blockly-editor.js` | Blockly workspace UI & lifecycle |
-| `js_automations/public/js/blockly-blocks.js` | Custom block definitions (all milestones) |
-| `js_automations/public/js/blockly-generator.js` | JS code generators for browser Show Code panel |
+| `js_automations/public/js/blockly-blocks-shared.js` | Generator registration — UMD, required by both Node (`blockly-compiler.js`) and the browser (`<script>` tag). Physically under `public/js/`, not `core/` — see the M2 "Architecture correction" note |
+| `js_automations/public/js/blockly-blocks.js` | Custom block shape definitions — same UMD/cross-boundary setup as above |
+| `js_automations/public/js/blockly-editor.js` | Blockly workspace UI & lifecycle (browser-only, no Node counterpart) |
 | `js_automations/public/js/blockly-toolbox.json` | Toolbox category/block configuration |
 
 ## Files to Modify
@@ -446,12 +473,12 @@ Build in this order: trigger (`ha.on`) → log → service call (`ha.call`) → 
 | `js_automations/core/entity-manager.js` | Thread `blocklyCompiler` through to `ScriptWatcher` |
 | `js_automations/core/worker-manager.js` | `getScripts()` + `startScript()` `.blocks` branch (found during M1 implementation — see M1 checklist) |
 | `js_automations/routes/scripts-routes.js` | `.blocks`-aware default content on create; everything else already extension-agnostic |
-| `js_automations/public/index.html` | Load Blockly library |
-| `js_automations/public/js/creation-wizard.js` | Add "Visual (.blocks)" option; fix `initialExt`/create-payload extension handling |
+| `js_automations/public/index.html` | Load Blockly via CDN (`blockly@11.2.2/blockly.min.js`); `#blockly-container`; new `<script>` tags |
+| `js_automations/public/js/creation-wizard.js` | Add "Visual (.blocks)" option; fix `initialExt`/create-payload extension handling; refresh open Blockly tabs' `jsa` after a metadata edit |
 | `js_automations/public/js/app.js` | `.blocks` branch in `getLanguageByFilename()`/`getLanguageBadge()` (found during M1 implementation) |
 | `js_automations/public/js/script-list.js` | `.blocks` branch in the script tooltip's language label |
-| `js_automations/public/css/style.css` | `.lang-badge-blocks` color |
-| `js_automations/public/js/tab-manager.js` | Route `.blocks` files to Blockly editor (M2) |
+| `js_automations/public/css/style.css` | `.lang-badge-blocks` color, `#blockly-container` sizing |
+| `js_automations/public/js/tab-manager.js` | `type: 'blockly'` tab branch throughout open/switch/save/close (M2) |
 | `js_automations/locales/en/translation.json` | New i18n keys |
 | `js_automations/locales/de/translation.json` | New i18n keys |
 

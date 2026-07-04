@@ -14,6 +14,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next-http-backend/2.5.0/i18nextHttpBackend.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <!-- Monaco's AMD loader defines a global define() with .amd set. Blockly's UMD wrapper checks
+         that first and would register itself as an anonymous AMD module instead of setting
+         window.Blockly if we don't hide it here. -->
+    <script>window._jsaAmdDefine = window.define; window.define = undefined;</script>
+    <script src="https://cdn.jsdelivr.net/npm/blockly@11.2.2/blockly.min.js"></script>
+    <script>window.define = window._jsaAmdDefine; delete window._jsaAmdDefine;</script>
 </head>
 
 <body>
@@ -89,6 +95,7 @@
                         </div>
                     </div>
                     <div id="monaco-container"></div>
+                    <div id="blockly-container" class="hidden"></div>
                 </div>
 
                 <!-- STORE VIEW -->
@@ -237,6 +244,9 @@
     <script src="js/editor-config.js"></script>
     <script src="js/editor-snippets.js"></script>
     <script src="js/i18n.js"></script>
+    <script src="js/blockly-blocks.js"></script>
+    <script src="js/blockly-blocks-shared.js"></script>
+    <script src="js/blockly-editor.js"></script>
     <script src="js/tab-manager.js"></script>
     <script src="js/card-preview.js"></script>
     <script src="js/script-list.js"></script>

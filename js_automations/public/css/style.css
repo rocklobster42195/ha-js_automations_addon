@@ -388,6 +388,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     min-height: 90px; /* Tab-Bar (45px) + Toolbar (45px) */
 }
 #monaco-container { flex: 1; width: 100%; min-height: 0; }
+#blockly-container { flex: 1; width: 100%; min-height: 0; background: #1e1e1e; }
 
 .editor-toolbar { 
     background: #111; height: 45px; padding: 0 10px; 

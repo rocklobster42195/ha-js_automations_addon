@@ -8,7 +8,10 @@ const EventEmitter = require('events');
 const Blockly = require('blockly');
 const { javascriptGenerator } = require('blockly/javascript');
 
-require('./blockly-blocks-shared')(javascriptGenerator);
+// Both physically under public/js/ so the browser can also load them via plain <script> tags
+// (no bundler in this project) — see blockly-blocks-shared.js's header comment for why.
+Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
+require('../public/js/blockly-blocks-shared')(javascriptGenerator);
 
 class BlocklyCompiler extends EventEmitter {
     constructor(scriptsDir, distDir) {

@@ -746,6 +746,19 @@ async function executeWizardAction() {
                             tab.originalContent = cData.content;
                             tab.isDirty = false;
                         }
+                    } else if (tab && tab.type === 'blockly') {
+                        // Metadata edits only touch the file's `jsa` key server-side — pull that in
+                        // without clobbering unsaved visual edits sitting in tab.blocksState.
+                        const cRes = await apiFetch(`api/scripts/${newFilename}/content?_t=${Date.now()}`);
+                        if (cRes.ok) {
+                            const cData = await cRes.json();
+                            try {
+                                tab.jsa = (JSON.parse(cData.content || '{}')).jsa || {};
+                            } catch (e) { /* keep existing jsa on parse failure */ }
+                            if (activeTabFilename === newFilename && window.loadBlocklyWorkspace) {
+                                window.loadBlocklyWorkspace({ jsa: tab.jsa, blocks: tab.blocksState });
+                            }
+                        }
                     }
                 }
             } else {

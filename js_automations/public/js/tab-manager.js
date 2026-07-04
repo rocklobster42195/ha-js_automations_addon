@@ -9,6 +9,21 @@ var activeTabFilename = null;
 // Suffix used to identify card tabs (not real files — virtual view of __JSA_CARD__ block)
 const CARD_TAB_SUFFIX = '[card]';
 
+// Ctrl+S for Monaco tabs is handled by editor.addCommand() in app.js, which only fires while
+// Monaco itself has focus. Blockly tabs have no Monaco focus target (the workspace is an SVG
+// canvas), so that binding never sees the keypress — without this, the browser's native
+// "Save Page As" dialog opens instead. Scoped to Blockly tabs only so Monaco's own handling
+// (and its focus-aware behavior) is untouched for .js/.ts tabs.
+document.addEventListener('keydown', (e) => {
+    const isSaveShortcut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
+    if (!isSaveShortcut) return;
+    const activeTab = openTabs.find(t => t.filename === activeTabFilename);
+    if (activeTab && activeTab.type === 'blockly') {
+        e.preventDefault();
+        saveActiveTab();
+    }
+});
+
 function renderTabs() {
     const tabBar = document.getElementById('tab-bar');
     if (!tabBar) return;
@@ -106,9 +121,14 @@ async function openOrSwitchToTab(filename, icon) {
         const res = await apiFetch(`api/scripts/${filename}/content`);
         const data = await res.json();
 
+        if (filename.endsWith('.blocks')) {
+            await openBlocklyTab(filename, icon, data.content);
+            return;
+        }
+
         const language = window.getLanguageByFilename ? window.getLanguageByFilename(filename) : 'javascript';
         const uri = monaco.Uri.parse(`file:///${filename}`);
-        
+
         const newTab = {
             filename: filename,
             icon: icon,
@@ -143,6 +163,53 @@ async function openOrSwitchToTab(filename, icon) {
         document.getElementById('editor-section').classList.add('hidden');
     }
 }
+
+/**
+ * Opens a `.blocks` file in the Blockly editor. Unlike Monaco tabs, there is no persistent
+ * per-tab model — the tab keeps its own serialized state (jsa + blocks JSON) and the single
+ * shared workspace is loaded/saved from it on every switch. See blockly-editor.js.
+ */
+async function openBlocklyTab(filename, icon, rawContent) {
+    await window.ensureBlocklyReady();
+
+    let parsed;
+    try {
+        parsed = JSON.parse(rawContent || '{}');
+    } catch (e) {
+        parsed = {};
+    }
+    const blocksState = parsed.blocks || { languageVersion: 0, blocks: [] };
+
+    const newTab = {
+        filename,
+        icon,
+        type: 'blockly',
+        jsa: parsed.jsa || {},
+        blocksState,
+        isDirty: false,
+        originalBlocksJson: JSON.stringify(blocksState),
+        viewState: null,
+    };
+
+    openTabs.push(newTab);
+    switchToTab(filename);
+}
+
+/**
+ * Called by blockly-editor.js's workspace change listener. Marks the active Blockly tab dirty
+ * when the workspace differs from its last-saved state (ignores UI-only events like selection).
+ */
+function onBlocklyWorkspaceChanged() {
+    const tab = openTabs.find(t => t.filename === activeTabFilename);
+    if (!tab || tab.type !== 'blockly') return;
+    const current = JSON.stringify(window.getBlocklyWorkspaceState());
+    const isNowDirty = current !== tab.originalBlocksJson;
+    if (tab.isDirty !== isNowDirty) {
+        tab.isDirty = isNowDirty;
+        setDirtyUI(tab.filename, isNowDirty);
+    }
+}
+window.onBlocklyWorkspaceChanged = onBlocklyWorkspaceChanged;
 
 /**
  * Opens a virtual card tab for a Script Pack script.
@@ -210,9 +277,13 @@ async function openCardTab(scriptFilename) {
 }
 
 function switchToTab(filename) {
-    if (activeTabFilename && editor) {
+    if (activeTabFilename) {
         const oldTab = openTabs.find(t => t.filename === activeTabFilename);
-        if (oldTab && oldTab.type !== 'store') {
+        if (oldTab && oldTab.type === 'blockly') {
+            // No persistent Monaco-style model for Blockly — snapshot the live workspace into
+            // the tab before swapping it out, so in-progress edits survive the tab switch.
+            if (window.getBlocklyWorkspaceState) oldTab.blocksState = window.getBlocklyWorkspaceState();
+        } else if (oldTab && oldTab.type !== 'store' && editor) {
             oldTab.viewState = editor.saveViewState();
         }
     }
@@ -233,12 +304,25 @@ function switchToTab(filename) {
         const settingsWrapper = document.getElementById('settings-wrapper');
         if (settingsWrapper) settingsWrapper.classList.remove('hidden');
         if (typeof window.loadSettingsData === 'function') window.loadSettingsData();
+    } else if (newTab.type === 'blockly') {
+        document.getElementById('store-wrapper').classList.add('hidden');
+        const settingsWrapper = document.getElementById('settings-wrapper');
+        if (settingsWrapper) settingsWrapper.classList.add('hidden');
+        document.getElementById('editor-wrapper').classList.remove('hidden');
+        document.getElementById('monaco-container').classList.add('hidden');
+        document.getElementById('blockly-container').classList.remove('hidden');
+
+        if (window.isBlocklyReady && window.isBlocklyReady()) {
+            window.loadBlocklyWorkspace({ jsa: newTab.jsa, blocks: newTab.blocksState });
+        }
     } else {
         document.getElementById('store-wrapper').classList.add('hidden');
         const settingsWrapper = document.getElementById('settings-wrapper');
         if (settingsWrapper) settingsWrapper.classList.add('hidden');
         document.getElementById('editor-wrapper').classList.remove('hidden');
-        
+        document.getElementById('blockly-container').classList.add('hidden');
+        document.getElementById('monaco-container').classList.remove('hidden');
+
         if (editor) {
             editor.setModel(newTab.model);
             if (newTab.viewState) {
@@ -540,6 +624,23 @@ async function saveActiveTab() {
     if (!activeTabFilename) return;
     const activeTab = openTabs.find(t => t.filename === activeTabFilename);
     if (!activeTab || !activeTab.isDirty) return;
+
+    if (activeTab.type === 'blockly') {
+        const blocksState = window.getBlocklyWorkspaceState();
+        activeTab.blocksState = blocksState;
+        const content = JSON.stringify({ jsa: activeTab.jsa, blocks: blocksState }, null, 2);
+
+        await apiFetch(`api/scripts/${activeTabFilename}/content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+
+        activeTab.originalBlocksJson = JSON.stringify(blocksState);
+        setDirtyUI(activeTabFilename, false);
+        if (typeof loadScripts === 'function') await loadScripts();
+        return;
+    }
 
     const content = activeTab.model.getValue();
 

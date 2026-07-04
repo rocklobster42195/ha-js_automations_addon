@@ -1,0 +1,58 @@
+{
+    "kind": "categoryToolbox",
+    "contents": [
+        {
+            "kind": "category",
+            "name": "Triggers",
+            "colour": "210",
+            "contents": [
+                { "kind": "block", "type": "ha_trigger_on" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Actions",
+            "colour": "20",
+            "contents": [
+                { "kind": "block", "type": "ha_call_service" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Script",
+            "colour": "120",
+            "contents": [
+                { "kind": "block", "type": "ha_log" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Logic",
+            "colour": "%{BKY_LOGIC_HUE}",
+            "contents": [
+                { "kind": "block", "type": "controls_if" },
+                { "kind": "block", "type": "logic_compare" },
+                { "kind": "block", "type": "logic_operation" },
+                { "kind": "block", "type": "logic_boolean" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Text",
+            "colour": "%{BKY_TEXTS_HUE}",
+            "contents": [
+                { "kind": "block", "type": "text" },
+                { "kind": "block", "type": "text_join" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Math",
+            "colour": "%{BKY_MATH_HUE}",
+            "contents": [
+                { "kind": "block", "type": "math_number" },
+                { "kind": "block", "type": "math_arithmetic" }
+            ]
+        }
+    ]
+}
