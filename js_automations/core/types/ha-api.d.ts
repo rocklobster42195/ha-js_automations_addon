@@ -1111,11 +1111,13 @@ interface HA {
      * });
      *
      * @example
-     * // Public endpoint — service embeds its own token in the body (e.g. Ko-fi)
+     * // Public endpoint — service embeds its own token in the body (e.g. Ko-fi).
+     * // Store the externally-issued token in ha.store (flagged as Secret), not hardcoded.
      * // @permission webhook
+     * const config = ha.persistent('kofi_config', {}); // { verification_token: '...' }
      * ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
      *   const data = JSON.parse(req.body.data);
-     *   if (data.verification_token !== 'your-ko-fi-token') {
+     *   if (data.verification_token !== config.verification_token) {
      *     return res.status(401).json({ error: 'unauthorized' });
      *   }
      *   res.json({ status: 'ok' });
@@ -1127,9 +1129,50 @@ interface HA {
      * ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
      *   res.json({ ok: true });
      * });
+     *
+     * @example
+     * // IP allowlist as a second layer on top of the token — GitHub's published webhook range
+     * // @permission webhook
+     * ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
+     *   res.json({ received: true });
+     * });
      */
     onWebhook(id: string, handler: WebhookHandler): void;
     onWebhook(id: string, options: WebhookOptions, handler: WebhookHandler): void;
+
+    /**
+     * Verifies an HMAC signature of the form providers like GitHub/Stripe send alongside
+     * a webhook payload (e.g. GitHub's `X-Hub-Signature-256: sha256=<hex>`). Unlike
+     * `noAuth` + a static token (Ko-fi-style), here the secret is one *you* choose when
+     * configuring the webhook in the external service's UI — the service signs the raw
+     * payload with it instead of sending the secret itself.
+     *
+     * Always verify against `req.rawBody`, not `req.body` — the parsed-and-re-serialized
+     * JSON is not guaranteed to be byte-identical to what the sender actually signed.
+     *
+     * @param payload The raw request body as received (`req.rawBody`) — not the parsed `req.body`.
+     * @param signature The signature header value sent by the provider.
+     * @param secret The shared secret you configured in the external service's webhook settings.
+     * @param options.algorithm HMAC algorithm. @default 'sha256'
+     * @param options.encoding Digest encoding. @default 'hex'
+     * @param options.prefix Prefix expected before the digest (GitHub uses `'sha256='`). Set `''` to disable. @default '<algorithm>='
+     *
+     * @example
+     * // @permission webhook
+     * const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, as Secret
+     * ha.onWebhook('github-push', async (req, res) => {
+     *   const sig = req.headers['x-hub-signature-256'];
+     *   if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
+     *     return res.status(401).json({ error: 'invalid signature' });
+     *   }
+     *   res.json({ received: true });
+     * });
+     */
+    verifyWebhookSignature(payload: string, signature: string, secret: string, options?: {
+        algorithm?: string;
+        encoding?: 'hex' | 'base64';
+        prefix?: string;
+    }): boolean;
 
     /**
      * Filesystem API — available when the `filesystem_enabled` setting is on.
@@ -1146,6 +1189,14 @@ interface WebhookOptions {
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
     /** Skip automatic `X-Webhook-Secret` verification — the endpoint becomes fully public. @default false */
     noAuth?: boolean;
+    /**
+     * Restrict callers to specific IPs/ranges — useful for providers that publish static
+     * IP ranges (GitHub, Stripe). A second layer of defense on top of the token, not a
+     * replacement for one. Entries are either an exact IP or an IPv4 CIDR range
+     * (e.g. `'192.30.252.0/22'`). IPv6 CIDR ranges are not supported — only exact IPv6
+     * addresses match.
+     */
+    allowlist?: string[];
 }
 
 /** Incoming request passed to a {@link HA.onWebhook} handler. */
@@ -1156,6 +1207,13 @@ interface WebhookRequest {
     headers: Record<string, string>;
     /** Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. */
     body: any;
+    /**
+     * The exact, unparsed request body as received. Use this — not `body` — when
+     * verifying an HMAC signature with {@link HA.verifyWebhookSignature}, since the
+     * parsed-and-re-serialized JSON is not guaranteed to be byte-identical to what the
+     * sender signed.
+     */
+    rawBody: string;
     /** URL query parameters. */
     query: Record<string, string>;
     /** Caller IP. Only reflects the real client IP if `webhook_trust_proxy` is enabled behind a trusted reverse proxy. */

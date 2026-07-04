@@ -972,7 +972,7 @@ class WorkerManager extends EventEmitter {
                             message: `[Webhook] ha.onWebhook('${msg.id}'): webhook manager not available.` });
                     } else {
                         try {
-                            this.webhookManager.register(msg.id, { method: msg.method, noAuth: msg.noAuth, scriptFilename: scriptMeta.filename });
+                            this.webhookManager.register(msg.id, { method: msg.method, noAuth: msg.noAuth, allowlist: msg.allowlist, scriptFilename: scriptMeta.filename });
                         } catch (e) {
                             this.emit('log', { source: name, level: 'error', message: `[Webhook] ${e.message}` });
                             worker.postMessage({ type: 'webhook_register_error', id: msg.id, error: e.message });

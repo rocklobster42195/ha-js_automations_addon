@@ -1152,14 +1152,16 @@ ha.onWebhook('github-push', async (req, res) => {
 
 **Without automatic verification (`noAuth: true`):**
 
-For services that embed their own token in the body (e.g. Ko-fi sends `data.verification_token`). This endpoint is fully public — anyone with the URL can call it — so verify the token yourself:
+For services that embed their own token in the body (e.g. Ko-fi sends `data.verification_token`). This endpoint is fully public — anyone with the URL can call it — so verify the token yourself. Store the externally-issued token in `ha.store` (flagged as Secret in the Store Explorer) rather than hardcoding it — it isn't JSA-managed, but it's still a real secret:
 
 ```javascript
 // @permission webhook
 
+const config = ha.persistent('kofi_config', {}); // { verification_token: '...' } — set via Store Explorer
+
 ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
     const data = JSON.parse(req.body.data);
-    if (data.verification_token !== 'your-ko-fi-token') {
+    if (data.verification_token !== config.verification_token) {
         return res.status(401).json({ error: 'unauthorized' });
     }
     if (data.type === 'Donation') {
@@ -1179,6 +1181,40 @@ ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
 });
 ```
 
+**IP allowlist (`allowlist`) — second layer beyond the token:**
+
+For providers that publish static IP ranges (GitHub, Stripe). Checked *before* the token — a request from outside the allowlist gets `403` even with a valid token. Entries are an exact IP or an IPv4 CIDR range; IPv6 supports exact addresses only:
+
+```javascript
+// @permission webhook
+
+ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
+    res.json({ received: true });
+});
+```
+
+**HMAC signature verification (`ha.verifyWebhookSignature()`):**
+
+For providers that sign the payload with a secret **you** choose in their webhook settings (GitHub, Stripe), instead of sending a static token. Always verify against `req.rawBody`, not `req.body` — the parsed-and-re-serialized JSON is not guaranteed to be byte-identical to what the sender actually signed:
+
+```javascript
+// @permission webhook
+
+const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, flagged as Secret
+
+ha.onWebhook('github-push', async (req, res) => {
+    const sig = req.headers['x-hub-signature-256'];
+    if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
+        return res.status(401).json({ error: 'invalid signature' });
+    }
+    const { ref, repository } = req.body;
+    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+    res.json({ received: true });
+});
+```
+
+`ha.verifyWebhookSignature(payload, signature, secret, options?)` — `options.algorithm` (default `'sha256'`), `options.encoding` (`'hex'` default or `'base64'`), `options.prefix` (default `'<algorithm>='`, matching GitHub's `sha256=<hex>` format; set `''` to disable).
+
 **`req` object**
 
 | Field | Type | Description |
@@ -1186,6 +1222,7 @@ ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
 | `method` | `string` | HTTP method (matches the registered `method`) |
 | `headers` | `Record<string, string>` | Request headers |
 | `body` | `any` | Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. |
+| `rawBody` | `string` | Exact unparsed request body — use this, not `body`, with `ha.verifyWebhookSignature()` |
 | `query` | `Record<string, string>` | URL query parameters |
 | `ip` | `string` | Caller IP. Only reflects the real client IP if **Settings → Webhooks → Trust Reverse Proxy** is enabled behind a trusted proxy. |
 
@@ -1202,10 +1239,12 @@ Handler timeout: **10 seconds** — if the handler doesn't respond in time, the 
 ### Security
 
 - Requests are rate-limited per webhook ID/IP (60/min); excessive requests receive `429`.
+- After 5 failed token attempts from the same IP against the same webhook ID within 10 minutes, that IP is locked out from *any* further attempt against that ID — even a subsequently correct token — for 10 minutes.
 - Token verification uses a constant-time comparison — timing cannot be used to guess the token.
 - Internal handler errors (thrown exceptions) return a generic `500` to the caller; details go to the script log only, never to the response body.
 - `noAuth: true` webhooks are shown with a "public / unprotected" badge in the Webhook Panel.
 - A webhook ID already owned by a different running script cannot be re-registered — this stops one script from silently hijacking another script's endpoint/token.
+- **No TLS termination:** the webhook server speaks plain HTTP only. Exposing it directly to the internet (no reverse proxy) means all traffic, including the token, travels unencrypted. Put a TLS-terminating reverse proxy in front for anything beyond local testing.
 
 ### Settings
 

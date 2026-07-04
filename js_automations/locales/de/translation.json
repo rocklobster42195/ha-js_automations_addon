@@ -380,6 +380,7 @@
     "webhook_last": "Zuletzt",
     "webhook_rotate_confirm": "Token für \"{{id}}\" erneuern? Externe Dienste, die den alten Token verwenden, müssen aktualisiert werden.",
     "webhook_delete": "Löschen",
-    "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden."
+    "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "webhook_ip_filtered": "IP-gefiltert"
   }
 }

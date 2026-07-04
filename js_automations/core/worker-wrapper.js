@@ -6,6 +6,7 @@ const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
+const crypto = require('crypto');
 const historyHelpers = require('./ha-history-helpers');
 const Module = require('module');
 
@@ -1449,7 +1450,31 @@ const _webhookHandlers = new Map(); // id -> handler function
             id,
             method: (options.method || 'POST').toUpperCase(),
             noAuth: !!options.noAuth,
+            allowlist: Array.isArray(options.allowlist) ? options.allowlist : undefined,
         });
+    };
+
+    /**
+     * Verifies an HMAC signature of the form providers like GitHub/Stripe send
+     * (e.g. GitHub's `X-Hub-Signature-256: sha256=<hex>`). Always verify against
+     * `req.rawBody`, not `req.body` — the parsed/re-serialized JSON is not guaranteed
+     * to be byte-identical to what the sender actually signed.
+     */
+    ha.verifyWebhookSignature = (payload, signature, secret, options = {}) => {
+        const algorithm = options.algorithm || 'sha256';
+        const encoding = options.encoding || 'hex';
+        const prefix = options.prefix !== undefined ? options.prefix : `${algorithm}=`;
+
+        const digest = crypto.createHmac(algorithm, secret).update(String(payload), 'utf8').digest(encoding);
+        const expected = prefix ? `${prefix}${digest}` : digest;
+
+        const a = Buffer.from(String(signature || ''));
+        const b = Buffer.from(expected);
+        if (a.length !== b.length) {
+            crypto.timingSafeEqual(b, b); // keep timing roughly consistent
+            return false;
+        }
+        return crypto.timingSafeEqual(a, b);
     };
 }
 

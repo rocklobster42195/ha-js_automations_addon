@@ -369,6 +369,7 @@
     "webhook_last": "Last",
     "webhook_rotate_confirm": "Rotate the token for \"{{id}}\"? External services using the old token must be updated.",
     "webhook_delete": "Delete",
-    "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone."
+    "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone.",
+    "webhook_ip_filtered": "IP-filtered"
   }
 }

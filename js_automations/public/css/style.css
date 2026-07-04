@@ -1833,6 +1833,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .wh-badge-active { background: #0d2233; color: #4fc3f7; }
 .wh-badge-inactive { background: #2a2a2a; color: #888; }
 .wh-badge-public { background: #2a2000; color: #ffa726; }
+.wh-badge-allowlist { background: #0a2a0a; color: #66bb6a; cursor: help; }
 .wh-icon-btn {
     flex-shrink: 0;
     background: none;

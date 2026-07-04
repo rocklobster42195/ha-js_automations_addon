@@ -132,13 +132,11 @@ The webhook server is reachable from the public internet (that's the point), so 
 | Generic `500` body to the caller on internal errors | Stack traces / internals must never leak externally — details go to the script log only |
 | `noAuth: true` webhooks show a clear "public / unprotected" badge in the panel | Anyone with the URL can call them with zero verification — must be obvious, not just documented |
 | 10-second handler timeout (already specified above) | Also protects against slow-loris-style resource exhaustion, not just correctness |
+| IP allowlist per webhook (`WebhookOptions.allowlist`) | Second layer beyond the token for providers that publish static IP ranges (GitHub, Stripe). Exact IPs or IPv4 CIDR ranges; IPv6 supports exact addresses only. Checked before token verification — a request from outside the allowlist gets `403` regardless of whether it has a valid token. |
+| HMAC signature helper (`ha.verifyWebhookSignature()`) | For providers that sign the payload with a secret *you* choose (GitHub `X-Hub-Signature-256`, Stripe) instead of sending a static token. Verifies against `req.rawBody` — the exact bytes received — since `JSON.stringify(JSON.parse(raw))` is not guaranteed byte-identical to what the sender signed. Uses `crypto.timingSafeEqual` internally, same as the built-in token check. |
+| Auth-failure backoff | After 5 failed token attempts from the same IP against the same webhook ID within 10 minutes, that IP is locked out from *any* further attempt against that ID (even a correct token) for 10 minutes. Independent of the general rate limiter, which caps total request volume regardless of validity. |
 
-### Optional / later
-
-- IP allowlist per webhook (GitHub, Stripe, etc. publish static IP ranges) as a second layer beyond the token
-- HMAC signature verification helper (`ha.verifyWebhookSignature()`) for providers that sign payloads (GitHub `X-Hub-Signature-256`, Stripe) instead of relying purely on a static header token
-- Backoff/temporary block after repeated auth failures from the same IP
-- Explicit documentation that the webhook server does **not** terminate TLS itself — exposing it directly to the internet without a reverse proxy means traffic (including the token) travels unencrypted over HTTP
+> **No TLS termination.** The webhook server speaks plain HTTP only — it does not terminate TLS itself. Exposing it directly to the internet (direct port-forwarding, no reverse proxy) means all traffic, including the `X-Webhook-Secret` token, travels **unencrypted**. Put a reverse proxy with TLS in front for anything beyond local testing (see Reverse Proxy Setup below).
 
 ---
 
@@ -159,16 +157,18 @@ ha.onWebhook('github-push', async (req, res) => {
 
 ### Public / no auth (`noAuth: true`)
 
-For services that embed their own token in the request body (e.g. Ko-fi) and where the JSA header check is not applicable:
+For services that embed their own token in the request body (e.g. Ko-fi) and where the JSA header check is not applicable. Store the externally-issued token in `ha.store` (flagged as Secret) rather than hardcoding it in the script — it's not JSA-managed, but it's still a real secret:
 
 ```js
 // @permission webhook
 
+const config = ha.persistent('kofi_config', {}); // { verification_token: '...' } — set via Store Explorer, flagged as Secret
+
 ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
     const data = JSON.parse(req.body.data);
 
-    // Verify Ko-fi's own token manually
-    if (data.verification_token !== 'your-ko-fi-token') {
+    // Verify Ko-fi's own token manually — read from the store, never hardcoded in the script
+    if (data.verification_token !== config.verification_token) {
         return res.status(401).json({ error: 'unauthorized' });
     }
 
@@ -195,6 +195,41 @@ ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
 });
 ```
 
+### IP Allowlist (`allowlist`)
+
+A second layer of defense on top of the token, for providers that publish static IP ranges. Checked *before* token verification — a request from outside the allowlist gets `403` even with a valid token:
+
+```js
+// @permission webhook
+
+// GitHub's published webhook IP ranges (see https://api.github.com/meta)
+ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
+    res.json({ received: true });
+});
+```
+
+Entries are an exact IP or an IPv4 CIDR range. IPv6 supports exact addresses only (no CIDR prefix matching).
+
+### HMAC Signature Verification (`ha.verifyWebhookSignature()`)
+
+For providers that sign the payload with a secret **you** choose when configuring the webhook in their UI (GitHub, Stripe), instead of sending a static token. Verify against `req.rawBody` — the exact bytes received — not `req.body`, since re-serialized JSON is not guaranteed byte-identical to what the sender signed:
+
+```js
+// @permission webhook
+
+const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, flagged as Secret
+
+ha.onWebhook('github-push', async (req, res) => {
+    const sig = req.headers['x-hub-signature-256'];
+    if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
+        return res.status(401).json({ error: 'invalid signature' });
+    }
+    const { ref, repository } = req.body;
+    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+    res.json({ received: true });
+});
+```
+
 ### Signature
 
 ```ts
@@ -204,9 +239,16 @@ ha.onWebhook(id: string, options: WebhookOptions, handler: WebhookHandler): void
 interface WebhookOptions {
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'   // default: 'POST'
     noAuth?: boolean                                        // skip automatic token verification (default: false)
+    allowlist?: string[]                                    // exact IPs or IPv4 CIDR ranges — second layer beyond the token
 }
 
 type WebhookHandler = (req: WebhookRequest, res: WebhookResponse) => void | Promise<void>
+
+// Verifies an HMAC signature (e.g. GitHub's X-Hub-Signature-256) against req.rawBody.
+function verifyWebhookSignature(
+    payload: string, signature: string, secret: string,
+    options?: { algorithm?: string; encoding?: 'hex' | 'base64'; prefix?: string }
+): boolean
 ```
 
 Deliberately **not** supported: multiple methods per ID, custom/arbitrary paths, or static file serving. Each webhook is one fixed endpoint (`/webhook/<id>`) with one method — JSA is an automation scripting environment, not a general web-app hosting platform. This boundary was discussed and confirmed; widening it is out of scope unless revisited explicitly.
@@ -218,6 +260,7 @@ Deliberately **not** supported: multiple methods per ID, custom/arbitrary paths,
 | `method` | `string` | HTTP method (`POST`, `GET`, …) |
 | `headers` | `Record<string, string>` | Request headers |
 | `body` | `any` | Parsed JSON body, or raw string |
+| `rawBody` | `string` | Exact unparsed request body — use this, not `body`, for `ha.verifyWebhookSignature()` |
 | `query` | `Record<string, string>` | URL query parameters |
 | `ip` | `string` | Caller IP (real IP if behind a trusted proxy) |
 
@@ -462,9 +505,11 @@ For services that embed their own token in the body (e.g. Ko-fi sends `data.veri
 ```js
 // @permission webhook
 
+const config = ha.persistent('kofi_config', {}); // { verification_token: '...' } — set via Store Explorer, flagged as Secret
+
 ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
     const data = JSON.parse(req.body.data);
-    if (data.verification_token !== 'your-ko-fi-token') {
+    if (data.verification_token !== config.verification_token) {
         return res.status(401).json({ error: 'unauthorized' });
     }
     if (data.type === 'Donation') {

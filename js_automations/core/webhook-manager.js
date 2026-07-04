@@ -2,6 +2,7 @@
 const express = require('express');
 const http = require('http');
 const crypto = require('crypto');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
@@ -10,6 +11,35 @@ const RATE_LIMIT_WINDOW_MS = 60000;
 const RATE_LIMIT_MAX = 60; // requests per IP per webhook id per window
 const REQUEST_TIMEOUT_MS = 10000;
 const BODY_LIMIT = '100kb';
+
+const AUTH_BACKOFF_THRESHOLD = 5;   // failed token attempts before lockout
+const AUTH_BACKOFF_WINDOW_MS = 10 * 60 * 1000;   // window in which failures accumulate
+const AUTH_BACKOFF_LOCKOUT_MS = 10 * 60 * 1000;   // lockout duration once tripped
+
+const MAP_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // periodic cleanup of expired rate-limit/backoff entries
+
+/**
+ * Checks whether `ip` matches an allowlist entry — either an exact address or an
+ * IPv4 CIDR range (e.g. '192.30.252.0/22'). IPv6 CIDR ranges are not supported
+ * (correct IPv6 prefix math needs full address expansion); only exact IPv6
+ * addresses match. IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are normalized
+ * to plain IPv4 before comparison.
+ */
+function ipMatchesAllowlistEntry(ip, entry) {
+    const normalized = (typeof ip === 'string' && ip.startsWith('::ffff:') && net.isIPv4(ip.slice(7)))
+        ? ip.slice(7)
+        : ip;
+
+    if (entry.includes('/')) {
+        const [range, bitsStr] = entry.split('/');
+        if (!net.isIPv4(range) || !net.isIPv4(normalized)) return false;
+        const bits = parseInt(bitsStr, 10);
+        const toInt = (addr) => addr.split('.').reduce((acc, octet) => (acc << 8) + Number(octet), 0) >>> 0;
+        const mask = bits <= 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+        return (toInt(normalized) & mask) === (toInt(range) & mask);
+    }
+    return normalized === entry || ip === entry;
+}
 
 /**
  * WebhookManager runs a dedicated Express server that lets user scripts receive
@@ -36,6 +66,11 @@ class WebhookManager extends EventEmitter {
 
         // `${ip}:${id}` -> { count, resetAt }
         this._rateLimits = new Map();
+
+        // `${ip}:${id}` -> { count, windowResetAt, lockedUntil } — tracks failed token
+        // verification attempts, independent of the general rate limiter above.
+        this._authFailures = new Map();
+
         this._correlationCounter = 0;
 
         this.app = null;
@@ -47,6 +82,21 @@ class WebhookManager extends EventEmitter {
         this.settingsManager.on('settings_updated', (settings) => {
             if (settings.webhook) this._handleSettingsUpdate(settings.webhook);
         });
+
+        // Periodically drop expired entries from the per-IP maps so they don't grow
+        // unbounded for as long as the addon runs.
+        this._sweepTimer = setInterval(() => this._sweepExpiredEntries(), MAP_SWEEP_INTERVAL_MS);
+        this._sweepTimer.unref?.();
+    }
+
+    _sweepExpiredEntries() {
+        const now = Date.now();
+        for (const [key, rl] of this._rateLimits.entries()) {
+            if (rl.resetAt <= now) this._rateLimits.delete(key);
+        }
+        for (const [key, af] of this._authFailures.entries()) {
+            if (af.windowResetAt <= now && af.lockedUntil <= now) this._authFailures.delete(key);
+        }
     }
 
     _loadRegistry() {
@@ -69,7 +119,7 @@ class WebhookManager extends EventEmitter {
         try {
             const out = {};
             for (const [id, entry] of this.registry.entries()) {
-                out[id] = { token: entry.token, method: entry.method, noAuth: entry.noAuth, owner: entry.owner, created: entry.created, rotated: entry.rotated };
+                out[id] = { token: entry.token, method: entry.method, noAuth: entry.noAuth, allowlist: entry.allowlist || null, owner: entry.owner, created: entry.created, rotated: entry.rotated };
             }
             fs.writeFileSync(this.storageFile, JSON.stringify(out, null, 2));
         } catch (e) {
@@ -87,7 +137,7 @@ class WebhookManager extends EventEmitter {
      * Throws if the ID is already owned by a *different, currently running* script — this stops
      * one script from silently hijacking another script's endpoint/token.
      */
-    register(id, { method = 'POST', noAuth = false, scriptFilename }) {
+    register(id, { method = 'POST', noAuth = false, allowlist, scriptFilename }) {
         const existing = this.registry.get(id);
         if (existing && existing.active && existing.owner !== scriptFilename) {
             throw new Error(`Webhook id "${id}" is already registered by "${existing.owner}".`);
@@ -102,6 +152,7 @@ class WebhookManager extends EventEmitter {
             token,
             method: upperMethod,
             noAuth: !!noAuth,
+            allowlist: Array.isArray(allowlist) && allowlist.length ? allowlist : null,
             owner: scriptFilename,
             active: true,
             created: existing?.created || new Date().toISOString(),
@@ -196,6 +247,10 @@ class WebhookManager extends EventEmitter {
             this.app = null;
             oldServer.close(() => this._ensureServer());
         }
+
+        // Tell any open Webhook Panel to refresh port/external URL — without this it only
+        // ever reflects whatever was current when the page first loaded.
+        this.emit('config_changed', { port: newPort, externalUrl: webhookSettings.external_url || '' });
     }
 
     /**
@@ -224,6 +279,39 @@ class WebhookManager extends EventEmitter {
         return rl.count <= RATE_LIMIT_MAX;
     }
 
+    /**
+     * Returns true if `ip` is currently locked out from authenticating against `id`
+     * after too many failed token attempts.
+     */
+    _isAuthLocked(ip, id) {
+        const entry = this._authFailures.get(`${ip}:${id}`);
+        return !!(entry && entry.lockedUntil > Date.now());
+    }
+
+    /**
+     * Records a failed token verification attempt. Trips a lockout once the
+     * threshold is reached within the accumulation window.
+     */
+    _recordAuthFailure(ip, id) {
+        const key = `${ip}:${id}`;
+        const now = Date.now();
+        let entry = this._authFailures.get(key);
+        if (!entry || entry.windowResetAt <= now) {
+            entry = { count: 0, windowResetAt: now + AUTH_BACKOFF_WINDOW_MS, lockedUntil: 0 };
+        }
+        entry.count++;
+        if (entry.count >= AUTH_BACKOFF_THRESHOLD) {
+            entry.lockedUntil = now + AUTH_BACKOFF_LOCKOUT_MS;
+            this.logManager.add('warn', 'System', `[Webhook] "${id}": ${entry.count} failed token attempts from ${ip} — locked out for ${AUTH_BACKOFF_LOCKOUT_MS / 60000} min`);
+        }
+        this._authFailures.set(key, entry);
+    }
+
+    /** Resets the failure counter after a successful, legitimate call. */
+    _clearAuthFailures(ip, id) {
+        this._authFailures.delete(`${ip}:${id}`);
+    }
+
     _handleRequest(req, res) {
         const id = req.params.id;
         const entry = this.registry.get(id);
@@ -233,18 +321,28 @@ class WebhookManager extends EventEmitter {
         if (req.method !== entry.method) return res.status(405).json({ error: `Method not allowed, expected ${entry.method}` });
         if (!this._checkRateLimit(req.ip, id)) return res.status(429).json({ error: 'Too many requests' });
 
+        if (entry.allowlist && !entry.allowlist.some(e => ipMatchesAllowlistEntry(req.ip, e))) {
+            this.logManager.add('warn', 'System', `[Webhook] "${id}": rejected request from ${req.ip} — not in allowlist`);
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
         if (!entry.noAuth) {
+            if (this._isAuthLocked(req.ip, id)) {
+                return res.status(429).json({ error: 'Too many failed attempts — temporarily blocked' });
+            }
             const provided = req.get('X-Webhook-Secret');
             if (!this._tokensMatch(provided, entry.token)) {
+                this._recordAuthFailure(req.ip, id);
                 this.logManager.add('warn', 'System', `[Webhook] "${id}": rejected request with invalid/missing token from ${req.ip}`);
                 return res.status(401).json({ error: 'Unauthorized' });
             }
+            this._clearAuthFailures(req.ip, id);
         }
 
         let body;
-        if (Buffer.isBuffer(req.body) && req.body.length) {
-            const raw = req.body.toString('utf8');
-            try { body = JSON.parse(raw); } catch { body = raw; }
+        const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+        if (rawBody) {
+            try { body = JSON.parse(rawBody); } catch { body = rawBody; }
         } else {
             body = req.method === 'GET' ? undefined : null;
         }
@@ -266,6 +364,7 @@ class WebhookManager extends EventEmitter {
                 method: req.method,
                 headers: req.headers,
                 body,
+                rawBody,
                 query: req.query,
                 ip: req.ip,
             },
@@ -336,6 +435,7 @@ class WebhookManager extends EventEmitter {
             rotated: e.rotated,
             lastCall: e.lastCall,
             hasToken: !!e.token,
+            allowlist: e.allowlist || null,
         }));
     }
 

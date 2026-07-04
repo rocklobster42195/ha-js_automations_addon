@@ -27,6 +27,11 @@ function initWebhookPanel() {
             _whRender();
         }
     });
+    window.socket?.on('webhook_config_changed', ({ port, externalUrl }) => {
+        _whPort = port;
+        _whExternalUrl = externalUrl;
+        _whRender();
+    });
 }
 
 async function _whLoad() {
@@ -75,6 +80,10 @@ function _whRenderEntry(w) {
         ? `<span class="wh-badge wh-badge-public">${_t('devtools.webhook_public', 'public / unprotected')}</span>`
         : '';
 
+    const allowlistBadge = (w.allowlist && w.allowlist.length)
+        ? `<span class="wh-badge wh-badge-allowlist" title="${_whEsc(w.allowlist.join(', '))}">${_t('devtools.webhook_ip_filtered', 'IP-filtered')}</span>`
+        : '';
+
     const tokenRow = w.hasToken ? `
         <div class="wh-row-line">
             <span class="wh-label">${_t('devtools.webhook_token', 'Token')}:</span>
@@ -96,6 +105,7 @@ function _whRenderEntry(w) {
                 <span class="wh-id">${_whEsc(w.id)}</span>
                 ${activeBadge}
                 ${noAuthBadge}
+                ${allowlistBadge}
                 <span class="wh-script">${_whEsc(w.scriptFilename || '—')}</span>
                 ${deleteBtn}
             </div>

@@ -244,6 +244,9 @@ class Kernel extends EventEmitter {
         this.webhookManager.on('call_logged', (data) => {
             if (this.io) this.io.emit('webhook_call_logged', data);
         });
+        this.webhookManager.on('config_changed', (config) => {
+            if (this.io) this.io.emit('webhook_config_changed', config);
+        });
     }
 
     /**
