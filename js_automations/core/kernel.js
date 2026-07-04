@@ -25,6 +25,7 @@ const MqttManager = require('./mqtt-manager');
 const WebhookManager = require('./webhook-manager');
 const EntityManager = require('./entity-manager');
 const CompilerManager = require('./compiler-manager');
+const BlocklyCompiler = require('./blockly-compiler');
 const CardManager = require('./card-manager');
 const Bridge = require('./bridge');
 const SystemService = require('../services/system-service');
@@ -99,6 +100,7 @@ class Kernel extends EventEmitter {
             this.stateManager = new StateManager(STORAGE_DIR);
             this.storeManager = new StoreManager(STORAGE_DIR);
             this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
+            this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
             this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
             this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
             this.workerManager = workerManager;
@@ -124,7 +126,8 @@ class Kernel extends EventEmitter {
                 this.depManager,
                 this.systemService,
                 this.mqttManager,
-                this.compilerManager
+                this.compilerManager,
+                this.blocklyCompiler
             );
         } catch (err) {
             console.error('❌ Critical error during Kernel boot:', err);
@@ -216,6 +219,14 @@ class Kernel extends EventEmitter {
             if (this.io) this.io.emit('compiler_signal', data);
         });
 
+        // Same forwarding for the Blockly compiler
+        this.blocklyCompiler.on('log', ({ level, message }) => {
+            this.logManager.add(level, 'System', message);
+        });
+        this.blocklyCompiler.on('compiler_signal', (data) => {
+            if (this.io) this.io.emit('compiler_signal', data);
+        });
+
         // Forward MQTT status to UI
         this.mqttManager.on('status_change', async (status) => {
             if (this.io) {
@@ -287,6 +298,25 @@ class Kernel extends EventEmitter {
             scanForTs(SCRIPTS_DIR);
             for (const tsFile of tsFiles) { await this.compilerManager.transpile(tsFile); }
             if (tsFiles.length > 0) this.logManager.add('debug', 'System', `Initial compilation pass completed. Checked ${tsFiles.length} files.`);
+
+            // Same initial pass for .blocks files, so dist/*.js exists for enabled Blockly
+            // scripts after a restart, not just after the next save.
+            const blocksFiles = [];
+            const scanForBlocks = (dir) => {
+                if (!fs.existsSync(dir)) return;
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        if (entry.name !== '.storage' && entry.name !== 'node_modules') scanForBlocks(fullPath);
+                    } else if (entry.name.endsWith('.blocks')) {
+                        blocksFiles.push(fullPath);
+                    }
+                }
+            };
+            scanForBlocks(SCRIPTS_DIR);
+            for (const blocksFile of blocksFiles) { await this.blocklyCompiler.compile(blocksFile); }
+            if (blocksFiles.length > 0) this.logManager.add('debug', 'System', `Initial Blockly compilation pass completed. Checked ${blocksFiles.length} files.`);
 
             if (this.systemService.isSafeMode) {
                 this.logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');

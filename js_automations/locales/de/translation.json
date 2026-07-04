@@ -99,6 +99,7 @@
   "wizard_label_language": "Sprache",
   "wizard_option_javascript": "JavaScript (.js)",
   "wizard_option_typescript": "TypeScript (.ts)",
+  "wizard_option_blockly": "Visuell (.blocks)",
   "wizard_type_tooltip": "Bestimmt, wie das Skript in Home Assistant erscheint. Dies steuert den @expose Header im Code.\n\n- 'Schalter': Erstellt eine Entität mit an/aus Zustand (@expose: switch).\n- 'Button': Erstellt einen Taster zum Ausführen des Skripts (@expose: button).\n- 'Hintergrund': Keine sichtbare Entität in HA (kein @expose).\n- 'Bibliothek': Wiederverwendbarer Code für andere Skripte (no @expose).",
   "wizard_label_template": "Vorlage",
   "template_empty": "Leeres Skript",

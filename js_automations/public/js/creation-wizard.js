@@ -97,6 +97,7 @@ function injectCreationWizard() {
         .lang-card.active { color: #fff; }
         .lang-card.active#lang-card-js { border-color: #f7df1e; color: #f7df1e; background: rgba(247, 223, 30, 0.1); }
         .lang-card.active#lang-card-ts { border-color: #3178c6; color: #3178c6; background: rgba(49, 120, 198, 0.1); }
+        .lang-card.active#lang-card-blocks { border-color: #4caf50; color: #4caf50; background: rgba(76, 175, 80, 0.1); }
 
         /* Capability Preview Panel */
         .cap-preview-panel { margin-top: 14px; padding: 10px 12px; background: rgba(255,255,255,0.04); border: 1px solid #333; border-radius: 6px; font-size: 0.85rem; }
@@ -152,6 +153,7 @@ function injectCreationWizard() {
                         <div class="lang-selection-container">
                             <div class="lang-card active" onclick="selectWizardLanguage('.js')" id="lang-card-js">JS</div>
                             <div class="lang-card" onclick="selectWizardLanguage('.ts')" id="lang-card-ts">TS</div>
+                            <div class="lang-card" onclick="selectWizardLanguage('.blocks')" id="lang-card-blocks" data-i18n="wizard_option_blockly" data-i18n-title title="Visual">BLK</div>
                         </div>
                         <input type="hidden" id="wizard-language" value=".js">
                     </div>
@@ -303,8 +305,12 @@ async function openCreationWizard(mode = 'create', data = null) {
     // Reset fields
     document.getElementById('wizard-name').value = '';
 
-    // Fix: Detect extension from existing data if editing or duplicating to preserve TS status
-    const initialExt = (data && data.filename && data.filename.endsWith('.ts')) ? '.ts' : '.js';
+    // Fix: Detect extension from existing data if editing or duplicating to preserve TS/Blockly status
+    let initialExt = '.js';
+    if (data && data.filename) {
+        if (data.filename.endsWith('.ts')) initialExt = '.ts';
+        else if (data.filename.endsWith('.blocks')) initialExt = '.blocks';
+    }
     selectWizardLanguage(initialExt);
 
     document.getElementById('wizard-icon').value = '';
@@ -744,7 +750,15 @@ async function executeWizardAction() {
                 }
             } else {
                 // CREATE or DUPLICATE
-                payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '');
+                if (wizardMode === 'duplicate' && wizardDuplicateCode) {
+                    payload.code = wizardDuplicateCode;
+                } else if (extension === '.blocks') {
+                    // Let the backend write its own minimal empty-workspace default —
+                    // the JS templates below don't apply to a JSON block file.
+                    payload.code = '';
+                } else {
+                    payload.code = SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '';
+                }
                 
                 const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_create_failed', { defaultValue: 'Creation failed' })); }

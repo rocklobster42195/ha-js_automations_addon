@@ -421,7 +421,7 @@ class WorkerManager extends EventEmitter {
         const results = [];
         
         // 1. Automations (Root)
-        const files = fs.readdirSync(this.scriptsDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
+        const files = fs.readdirSync(this.scriptsDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.blocks')) && !f.endsWith('.d.ts'));
         
         // Prioritize TS over JS for same-named files to avoid duplicates
         const tsBasenames = new Set(files.filter(f => f.endsWith('.ts')).map(f => path.basename(f, '.ts')));
@@ -437,7 +437,7 @@ class WorkerManager extends EventEmitter {
         // 2. Libraries (Subfolder)
         const libDir = path.join(this.scriptsDir, 'libraries');
         if (fs.existsSync(libDir)) {
-            const libs = fs.readdirSync(libDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
+            const libs = fs.readdirSync(libDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.blocks')) && !f.endsWith('.d.ts'));
             const libTsBasenames = new Set(libs.filter(f => f.endsWith('.ts')).map(f => path.basename(f, '.ts')));
             const filteredLibs = libs.filter(f => {
                 if (f.endsWith('.js')) return !libTsBasenames.has(path.basename(f, '.js'));
@@ -609,6 +609,7 @@ class WorkerManager extends EventEmitter {
     startScript(filename) {
         let fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
         const isTypeScript = fullPath.endsWith('.ts');
+        const isBlockly = fullPath.endsWith('.blocks');
         let executionPath = fullPath;
 
         if (!fs.existsSync(fullPath)) {
@@ -616,13 +617,14 @@ class WorkerManager extends EventEmitter {
             return;
         }
 
-        if (isTypeScript) {
+        if (isTypeScript || isBlockly) {
+            const sourceExt = isTypeScript ? '.ts' : '.blocks';
             const relativePath = path.relative(this.scriptsDir, fullPath);
-            const compiledPath = path.join(this.distDir, relativePath.replace(/\.ts$/, '.js'));
-            
+            const compiledPath = path.join(this.distDir, relativePath.slice(0, -sourceExt.length) + '.js');
+
             if (!fs.existsSync(compiledPath)) {
                 const displayFile = path.basename(filename);
-                this.emit('log', { source: 'System', message: `Compiled version for ${displayFile} not found in dist. Was it transpiled? Check logs for Compiler errors.`, level: 'error' });
+                this.emit('log', { source: 'System', message: `Compiled version for ${displayFile} not found in dist. Was it transpiled/compiled? Check logs for Compiler errors.`, level: 'error' });
                 return;
             }
             executionPath = compiledPath;

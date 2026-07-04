@@ -757,9 +757,12 @@ module.exports = (workerManager, depManager, stateManager, io, SCRIPTS_DIR, STOR
         const fullPath = path.join(targetDir, filename);
         
         // 1. Create file with initial code
-        fs.writeFileSync(fullPath, code || 'ha.log("Ready.");\n', 'utf8');
-        
-        // 2. Use the central parser to write the metadata header
+        const defaultCode = ext === '.blocks'
+            ? JSON.stringify({ jsa: {}, blocks: { languageVersion: 0, blocks: [] } }, null, 2)
+            : 'ha.log("Ready.");\n';
+        fs.writeFileSync(fullPath, code || defaultCode, 'utf8');
+
+        // 2. Use the central parser to write the metadata header (or, for .blocks, the `jsa` JSON key)
         ScriptHeaderParser.updateMetadata(fullPath, req.body);
 
         res.json({ filename });

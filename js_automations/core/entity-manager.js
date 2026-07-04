@@ -20,8 +20,9 @@ class EntityManager {
      * @param {object} systemService - The system monitoring service.
      * @param {object} mqttManager - The MQTT communication manager.
      * @param {object} compilerManager - The TypeScript compiler manager.
+     * @param {object} blocklyCompiler - The Blockly (.blocks) compiler.
      */
-    constructor(haConnection, workerManager, stateManager, depManager, systemService, mqttManager, compilerManager) {
+    constructor(haConnection, workerManager, stateManager, depManager, systemService, mqttManager, compilerManager, blocklyCompiler) {
         this.haConnection = haConnection;
         this.workerManager = workerManager;
         this.stateManager = stateManager;
@@ -29,6 +30,7 @@ class EntityManager {
         this.systemService = systemService;
         this.mqttManager = mqttManager;
         this.compilerManager = compilerManager;
+        this.blocklyCompiler = blocklyCompiler;
         this.warnedEntities = new Set(); // Tracks entities that already triggered a device_class warning
         this.typings = new TypeDefinitionGenerator(haConnection, workerManager);
 
@@ -63,7 +65,7 @@ class EntityManager {
         }
 
         this.watcher = new ScriptWatcher(
-            workerManager, stateManager, mqttManager, haConnection, compilerManager,
+            workerManager, stateManager, mqttManager, haConnection, compilerManager, blocklyCompiler,
             {
                 resolveId:          this.resolveId.bind(this),
                 checkDeviceCleanup: this.checkDeviceCleanup.bind(this),

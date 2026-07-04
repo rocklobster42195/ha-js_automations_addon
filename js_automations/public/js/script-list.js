@@ -303,7 +303,7 @@ function getCapabilityBadgesHTML(caps) {
 }
 
 function buildScriptTooltip(s) {
-    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
+    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : (s.filename.endsWith('.blocks') ? 'Blockly' : 'JavaScript');
     const lines = [`File: ${s.filename} (${lang})`];
     lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
 

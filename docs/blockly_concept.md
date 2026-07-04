@@ -67,7 +67,11 @@ Blockly 11 uses JSON as its primary serialization format (XML is legacy). JSA me
 }
 ```
 
-`ScriptHeaderParser` gets a `.blocks` branch that reads metadata from the `jsa` key instead of JSDoc comments.
+`ScriptHeaderParser` gets a `.blocks` branch on both sides:
+- `parse()` reads metadata from the `jsa` key instead of parsing a JSDoc comment
+- `updateMetadata()` writes fields back into the `jsa` key (JSON.stringify) instead of prepending a `/** ... */` header — prepending a comment onto a `.blocks` file would corrupt its JSON
+
+This reuses the existing "Edit Info" metadata modal (name/icon/description/area/label/loglevel/expose) unchanged for all three editing modes — no separate UI needed for `.blocks`.
 
 **Why no TypeScript as intermediate?**
 Visually generated code gains nothing from TypeScript — type safety comes from block connection rules enforced in the editor. Compiling directly to JS keeps the pipeline simpler and removes an unnecessary step.
@@ -79,7 +83,8 @@ Visually generated code gains nothing from TypeScript — type safety comes from
 ```
 User edits in Blockly editor (browser)
   ↓
-PUT /api/scripts/script.blocks   (saves JSON workspace)
+POST /api/scripts/script.blocks/content   { content: JSON.stringify(workspace) }
+  (existing endpoint, extension-agnostic — no route change needed for saving)
   ↓
 BlocklyCompiler (server-side, Node.js `blockly/node` package)
   → deserializes workspace
@@ -98,7 +103,10 @@ WorkerManager → Worker Thread   (identical pipeline to TS today)
 
 ```js
 // core/blockly-compiler.js
-const { Blockly } = require('blockly/node');
+// Verified against the installed blockly@11.2.2 package: there is no './node' subpath export
+// (ERR_PACKAGE_PATH_NOT_EXPORTED) — the root entry point is already the Node/CJS build and
+// comes with all built-in blocks pre-registered, no separate 'blockly/blocks' require needed.
+const Blockly = require('blockly');
 const { javascriptGenerator } = require('blockly/javascript');
 
 require('./blockly-blocks-shared')(javascriptGenerator);
@@ -107,7 +115,10 @@ class BlocklyCompiler {
   async compile(blocksPath) {
     const parsed = JSON.parse(await fs.readFile(blocksPath, 'utf8'));
     const workspace = new Blockly.Workspace();
-    Blockly.serialization.workspaces.load(parsed.blocks, workspace);
+    // Pass the whole parsed file, not parsed.blocks — Blockly.serialization.workspaces.load()
+    // reads its own top-level `blocks` key internally; passing parsed.blocks directly throws
+    // "a is not iterable" (verified). Unrelated top-level keys like `jsa` are ignored.
+    Blockly.serialization.workspaces.load(parsed, workspace);
     const code = javascriptGenerator.workspaceToCode(workspace);
     workspace.dispose();
     const distPath = this._getDistPath(blocksPath);
@@ -157,6 +168,7 @@ Categorized by milestone. All generated code targets the current `ha.*` API surf
 | On cron schedule | `schedule('0 * * * *', async () => { ... })` | M2 |
 | On HA event | `ha.onEvent('event_type', async e => { ... })` | M3 |
 | On MQTT message | `ha.mqtt.subscribe('topic/path', async msg => { ... })` | M3 |
+| On webhook (basic) | `ha.onWebhook('id', async (req, res) => { ... })` | M4 |
 
 ### Actions
 
@@ -263,11 +275,28 @@ Dropdowns use Blockly's `FieldDropdown` with dynamic option callbacks.
 
 ---
 
+## Permissions
+
+`@permission` (network, webhook, exec, fs:read, fs:write) is enforced at runtime — `worker-wrapper.js` blocks `ha.http.*`/`fetch` without `network`, `ha.onWebhook()` without `webhook`, etc. It's not just a UI warning. For `.js`/`.ts` the user declares it by hand-editing the JSDoc `@permission` tag; `.blocks` has no editable raw-source surface for that (Show Code is read-only, generated *from* the blocks, not editable back into them).
+
+Instead of a manual declaration step, `BlocklyCompiler` derives permissions automatically from a static block-type → permission map and writes the result into `jsa.permission` on every compile:
+
+| Block type | Permission |
+|---|---|
+| `ha_http_get` / `ha_http_post` | `network` |
+| `ha_on_webhook` | `webhook` |
+
+This is safe specifically *because* it's Blockly: every capability-using construct is one of our own known block types, so "declared" can always be computed exactly from "used" — unlike free-form JS/TS, there's no way to reach a capability through an untracked code path. As a result `CapabilityAnalyzer`'s declared/undeclared/unused diff is trivially satisfied for `.blocks` scripts and needs no special-casing.
+
+`@card` is not supported for `.blocks` — it requires hand-written companion card JS unrelated to automation logic, same reasoning as the `npm`/`include` exclusions below. Scripts needing a card use "Convert to JavaScript".
+
+---
+
 ## UI Flow
 
 1. **Create**: Wizard → select "Visual (.blocks)" → Blockly workspace opens with starter trigger block
 2. **Edit**: Click script in sidebar → Blockly editor mounts; entity/service dropdowns populated from HA
-3. **Save** (Ctrl+S or toolbar): Frontend sends JSON workspace to `PUT /api/scripts/script.blocks` → server compiles → worker restarts
+3. **Save** (Ctrl+S or toolbar): Frontend sends JSON workspace as `content` to the existing `POST /:filename/content` endpoint → server compiles → worker restarts
 4. **Show Code**: Toolbar button → read-only Monaco panel showing the compiled JS output (reuses existing Monaco instance)
 5. **Convert to JavaScript**: "Edit as JavaScript" → warning dialog ("The visual editor will no longer be available for this script") → on confirm: compiled JS opens in Monaco as `.js`, `.blocks` file is deleted
 
@@ -284,10 +313,10 @@ Dropdowns use Blockly's `FieldDropdown` with dynamic option callbacks.
 ## NPM Dependency
 
 ```json
-"blockly": "^11.x"
+"blockly": "^11.2.2"
 ```
 
-Blockly 11 supports Node.js natively via the `blockly/node` entry point. Package size: ~10–12 MB including dependencies (comparable to `typescript` + `ts-node`).
+Verified against the installed package: Blockly 11's root entry point (`require('blockly')`) is already the Node/CJS build with all built-in blocks pre-registered — there is no separate `blockly/node` subpath (attempting to require it throws `ERR_PACKAGE_PATH_NOT_EXPORTED`). Package size: ~10–12 MB including dependencies (comparable to `typescript` + `ts-node`).
 
 ---
 
@@ -298,16 +327,19 @@ Blockly 11 supports Node.js natively via the `blockly/node` entry point. Package
 
 Deliverable: Creating, saving, enabling, and deleting a `.blocks` file works end-to-end.
 
-- [ ] Add `blockly` npm package (v11+)
-- [ ] `core/blockly-compiler.js` — deserialize workspace JSON → generate JS via `blockly/node`
-- [ ] `core/blockly-blocks-shared.js` — shared generator registration scaffold (empty initially)
-- [ ] `core/script-watcher.js` — watch `.blocks` extension, trigger BlocklyCompiler on save
-- [ ] `core/script-header-parser.js` — parse `jsa` JSON metadata from `.blocks` files
-- [ ] `core/compiler-manager.js` — `pruneDist()` covers `.blocks` sources; DELETE removes both `.blocks` and compiled output
-- [ ] `core/kernel.js` — instantiate BlocklyCompiler
-- [ ] `routes/scripts-routes.js` — accept `.blocks` in CRUD endpoints; handle JSON body vs. text body
-- [ ] `public/js/creation-wizard.js` — add "Visual (.blocks)" as third language option
-- [ ] i18n: `wizard_option_blockly`
+- [x] Add `blockly` npm package (v11+)
+- [x] `core/blockly-compiler.js` — deserialize workspace JSON → generate JS via `require('blockly')` (root entry point; no `/node` subpath — see NPM Dependency section)
+- [x] `core/blockly-blocks-shared.js` — shared generator registration scaffold (empty initially)
+- [x] `core/script-watcher.js` — watch `.blocks` extension, trigger BlocklyCompiler on save/delete
+- [x] `core/script-header-parser.js` — `.blocks` branch in both `parse()` and `updateMetadata()` (jsa key, not JSDoc)
+- [x] `core/compiler-manager.js` — `pruneDist()` also checks for a `.blocks` source before deleting an orphaned dist file
+- [x] `core/kernel.js` — instantiate `BlocklyCompiler`, forward its `log`/`compiler_signal` events, initial compile pass over `.blocks` files at startup (mirrors the existing TS pass)
+- [x] `core/entity-manager.js` — thread `blocklyCompiler` through to `ScriptWatcher` (constructor param)
+- [x] `core/worker-manager.js` — **not in the original plan, found while implementing.** `getScripts()` only listed `.js`/`.ts`; `startScript()` hardcoded `.ts` → dist-path redirection. Both needed a `.blocks` branch or a `.blocks` script would never be picked up or ever executed (it would try to `require()` the `.blocks` JSON file directly).
+- [x] `routes/scripts-routes.js` — create route (`POST /`) writes a minimal valid `{jsa:{}, blocks:{...}}` default when no `code` is given for `.blocks`, instead of the JS default `ha.log(...)`. Save/content/delete routes needed no change — already extension-agnostic; `CapabilityAnalyzer` needed no special-casing either (see Permissions section — declared/detected is trivially in sync for `.blocks` once M4's auto-derivation lands).
+- [x] `public/js/creation-wizard.js` — third "Blocks" language card; fixed `initialExt` detection (was `.ts`-only, would've silently renamed a `.blocks` file to `.js` on metadata edit) and the create-payload default code
+- [x] `public/js/app.js` / `script-list.js` — **not in the original plan.** `getLanguageByFilename()`/`getLanguageBadge()` and the script-list tooltip hardcoded a `.ts`-or-`.js` choice; `.blocks` fell through to "JavaScript". Added a `.blocks` branch (Monaco falls back to the `json` language mode — no dedicated editor until M2) and a `BLK` badge.
+- [x] i18n: `wizard_option_blockly`
 
 ### M2 — Core Block Library
 **Goal**: Enough blocks to build 80% of typical automations visually.
@@ -318,7 +350,7 @@ Deliverable: A real automation (state change → service call → notification) 
 - [ ] `public/js/blockly-blocks.js` — block definitions for all M2 blocks (shapes, inputs, fields)
 - [ ] `public/js/blockly-generator.js` — JS code generators for M2 blocks (browser, for Show Code)
 - [ ] `core/blockly-blocks-shared.js` — implement generators for all M2 blocks
-- [ ] `public/js/blockly-toolbox.json` — toolbox config: Triggers, Actions, State, Script, Standard categories
+- [ ] `public/js/blockly-toolbox.json` — toolbox config: Triggers, Actions, State, Script, Standard categories. Category colors follow ioBroker's Blockly color scheme (per-category, not the JS/TS/Blocks language-badge color — that stays visually distinct from TS's blue, see the M1 `BLK` badge)
 - [ ] `public/index.html` — load Blockly library (CDN or bundled)
 - [ ] `public/js/tab-manager.js` — route `.blocks` files to Blockly editor instead of Monaco
 - [ ] Dynamic entity & service dropdowns from HA
@@ -345,12 +377,14 @@ Deliverable: Every `ha.*` API method has a corresponding block.
 
 - [ ] Area/Label/Floor blocks
 - [ ] HTTP blocks: `ha.http.get/post`
+- [ ] Webhook block: `ha.onWebhook()` (basic, default auth — see Out of Scope)
 - [ ] Register/Update blocks (MQTT Discovery)
 - [ ] Calendar/Todo blocks
 - [ ] History/Statistics/Template blocks
 - [ ] Lifecycle blocks: `ha.onStop()`, `ha.onError()`, `ha.action()`, `ha.restart()`
 - [ ] `ha.getHeader()` block
 - [ ] `ha.localize()` block
+- [ ] `BlocklyCompiler`: block-type → permission map (`network`, `webhook`) — write derived permissions into `jsa.permission` on compile (see Permissions section)
 
 ### M5 — UX Polish
 **Goal**: Production-quality editing experience.
@@ -405,14 +439,19 @@ Build in this order: trigger (`ha.on`) → log → service call (`ha.call`) → 
 
 | File | Change |
 |---|---|
-| `js_automations/core/script-watcher.js` | Watch `.blocks` extension, trigger BlocklyCompiler |
-| `js_automations/core/script-header-parser.js` | Parse `jsa` JSON metadata from `.blocks` files |
-| `js_automations/core/compiler-manager.js` | `pruneDist()` + delete for `.blocks` artifacts |
-| `js_automations/core/kernel.js` | Instantiate and wire BlocklyCompiler |
-| `js_automations/routes/scripts-routes.js` | Accept `.blocks` extension, JSON body in PUT/POST |
+| `js_automations/core/script-watcher.js` | Watch `.blocks` extension, trigger BlocklyCompiler on save/delete |
+| `js_automations/core/script-header-parser.js` | `.blocks` branch in `parse()`/`updateMetadata()` (jsa key, not JSDoc) |
+| `js_automations/core/compiler-manager.js` | `pruneDist()` also recognizes a `.blocks` source |
+| `js_automations/core/kernel.js` | Instantiate `BlocklyCompiler`, forward events, initial compile pass |
+| `js_automations/core/entity-manager.js` | Thread `blocklyCompiler` through to `ScriptWatcher` |
+| `js_automations/core/worker-manager.js` | `getScripts()` + `startScript()` `.blocks` branch (found during M1 implementation — see M1 checklist) |
+| `js_automations/routes/scripts-routes.js` | `.blocks`-aware default content on create; everything else already extension-agnostic |
 | `js_automations/public/index.html` | Load Blockly library |
-| `js_automations/public/js/creation-wizard.js` | Add "Visual (.blocks)" option |
-| `js_automations/public/js/tab-manager.js` | Route `.blocks` files to Blockly editor |
+| `js_automations/public/js/creation-wizard.js` | Add "Visual (.blocks)" option; fix `initialExt`/create-payload extension handling |
+| `js_automations/public/js/app.js` | `.blocks` branch in `getLanguageByFilename()`/`getLanguageBadge()` (found during M1 implementation) |
+| `js_automations/public/js/script-list.js` | `.blocks` branch in the script tooltip's language label |
+| `js_automations/public/css/style.css` | `.lang-badge-blocks` color |
+| `js_automations/public/js/tab-manager.js` | Route `.blocks` files to Blockly editor (M2) |
 | `js_automations/locales/en/translation.json` | New i18n keys |
 | `js_automations/locales/de/translation.json` | New i18n keys |
 
@@ -470,3 +509,5 @@ blockly_no_trigger_warning
 - Sharing or importing custom block libraries
 - NPM package blocks (complex dependency model, would require capability analyzer integration)
 - Filesystem (`ha.fs.*`) blocks — rarely needed in visual automations
+- Advanced `ha.onWebhook()` options (`noAuth`, `allowlist`, method override, HMAC signature verification) — the M4 block covers the default-auth POST case only; scripts needing the rest use "Edit as JavaScript"
+- `@card` companion Lovelace cards for `.blocks` scripts — requires hand-written JS unrelated to block logic; use "Convert to JavaScript" instead

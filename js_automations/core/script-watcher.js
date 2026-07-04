@@ -15,15 +15,17 @@ class ScriptWatcher {
      * @param {object} mqttManager
      * @param {object} haConnection
      * @param {object} compilerManager
+     * @param {object} blocklyCompiler
      * @param {object} callbacks - EntityManager methods needed for entity sync:
      *   resolveId, checkDeviceCleanup, warnIconConflict, onTypingsNeeded
      */
-    constructor(workerManager, stateManager, mqttManager, haConnection, compilerManager, callbacks) {
+    constructor(workerManager, stateManager, mqttManager, haConnection, compilerManager, blocklyCompiler, callbacks) {
         this.workerManager = workerManager;
         this.stateManager = stateManager;
         this.mqttManager = mqttManager;
         this.haConnection = haConnection;
         this.compilerManager = compilerManager;
+        this.blocklyCompiler = blocklyCompiler;
         this.callbacks = callbacks;
     }
 
@@ -33,7 +35,7 @@ class ScriptWatcher {
         const debounceTimers = new Map();
 
         const onWatch = (dir, eventType, filename) => {
-            if (filename && (filename.endsWith('.js') || filename.endsWith('.ts'))) {
+            if (filename && (filename.endsWith('.js') || filename.endsWith('.ts') || filename.endsWith('.blocks'))) {
                 const fullPath = path.join(dir, filename);
                 if (debounceTimers.has(fullPath)) clearTimeout(debounceTimers.get(fullPath));
 
@@ -73,6 +75,8 @@ class ScriptWatcher {
 
             if (extension === '.ts') {
                 this.compilerManager.cleanup(scriptPath);
+            } else if (extension === '.blocks') {
+                this.blocklyCompiler.cleanup(scriptPath);
             }
 
             this.callbacks.onTypingsNeeded();
@@ -82,6 +86,9 @@ class ScriptWatcher {
         try {
             if (extension === '.ts') {
                 const success = await this.compilerManager.transpile(scriptPath);
+                if (!success) return;
+            } else if (extension === '.blocks') {
+                const success = await this.blocklyCompiler.compile(scriptPath);
                 if (!success) return;
             }
 

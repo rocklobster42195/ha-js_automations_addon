@@ -3,13 +3,6 @@ const path = require('path');
 
 class ScriptHeaderParser {
     static parse(filePath) {
-        let content = '';
-        try {
-            content = fs.readFileSync(filePath, 'utf8');
-            // Standard BOM removal
-            content = content.replace(/^\uFEFF/, '');
-        } catch (e) { return {}; }
-
         const metadata = {
             filename: path.basename(filePath),
             path: filePath,
@@ -25,6 +18,27 @@ class ScriptHeaderParser {
             permissions: [],
             card: null,   // null | true | 'dev'
         };
+
+        if (filePath.endsWith('.blocks')) {
+            const jsa = this._readBlocksFile(filePath)?.jsa || {};
+            for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel', 'expose']) {
+                if (jsa[key] !== undefined) metadata[key] = jsa[key];
+            }
+            // `permission`/`card` mirror the JSDoc `@permission`/`@card` tag names in the jsa
+            // key, but the returned metadata object uses `permissions` (plural) like the
+            // JSDoc-based path — keep both in sync so callers don't need a .blocks special case.
+            if (jsa.permission !== undefined) metadata.permissions = jsa.permission;
+            if (jsa.card !== undefined) metadata.card = jsa.card;
+            if (!metadata.name) metadata.name = metadata.filename;
+            return metadata;
+        }
+
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+            // Standard BOM removal
+            content = content.replace(/^\uFEFF/, '');
+        } catch (e) { return {}; }
 
         // Strip leading TypeScript triple-slash directives (/// <reference .../>) before
         // matching the JSDoc block — they appear before /** in .ts files and would break
@@ -96,8 +110,42 @@ class ScriptHeaderParser {
         }
     }
 
+    // Reads and JSON.parses a .blocks file. Returns null on missing/invalid file.
+    static _readBlocksFile(filePath) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '');
+            return JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    }
+
     static updateMetadata(filePath, meta) {
         if (!fs.existsSync(filePath)) {
+            return;
+        }
+
+        if (filePath.endsWith('.blocks')) {
+            // Metadata lives in the `jsa` JSON key, not a JSDoc header — prepending a comment
+            // would corrupt the file's JSON.
+            const parsed = this._readBlocksFile(filePath) || { jsa: {}, blocks: { languageVersion: 0, blocks: [] } };
+            parsed.jsa = parsed.jsa || {};
+            for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel']) {
+                if (meta[key] !== undefined) parsed.jsa[key] = meta[key];
+            }
+            if (meta.expose !== undefined) {
+                parsed.jsa.expose = meta.expose ? (meta.expose === 'button' ? 'button' : 'switch') : '';
+            }
+            // permission/card are not user-editable via the metadata form for .blocks (see docs/blockly_concept.md
+            // "Permissions" section) — only overwrite them if the caller explicitly passes them through.
+            if (meta.permissions !== undefined) parsed.jsa.permission = meta.permissions;
+            if (meta.card !== undefined) parsed.jsa.card = meta.card;
+
+            try {
+                fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf8');
+            } catch (e) {
+                console.error(`[Parser] Could not write to file "${filePath}".`, e);
+            }
             return;
         }
 

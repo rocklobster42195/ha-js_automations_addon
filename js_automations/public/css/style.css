@@ -319,6 +319,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
 }
 .lang-badge-js { background-color: #f7df1e; color: #000; }
 .lang-badge-ts { background-color: #3178c6; color: #fff; }
+.lang-badge-blocks { background-color: #4caf50; color: #fff; }
 /* Card icon badges — replace old text badges */
 .card-badge-icon          { font-size: 0.9rem; vertical-align: middle; margin-right: 4px; cursor: default; }
 .card-badge-icon-dev      { color: #f0a500; }       /* @card dev — not installed, preview only */
