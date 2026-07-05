@@ -6,7 +6,8 @@
             "name": "Triggers",
             "colour": "210",
             "contents": [
-                { "kind": "block", "type": "ha_trigger_on" }
+                { "kind": "block", "type": "ha_trigger_on" },
+                { "kind": "block", "type": "ha_trigger_on_state" }
             ]
         },
         {
@@ -14,15 +15,42 @@
             "name": "Actions",
             "colour": "20",
             "contents": [
-                { "kind": "block", "type": "ha_call_service" }
+                { "kind": "block", "type": "ha_call_service" },
+                { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } }
             ]
         },
         {
             "kind": "category",
-            "name": "Script",
-            "colour": "120",
+            "name": "State",
+            "colour": "45",
             "contents": [
-                { "kind": "block", "type": "ha_log" }
+                { "kind": "block", "type": "ha_get_state" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Wait",
+            "colour": "300",
+            "contents": [
+                { "kind": "block", "type": "ha_wait" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Register/Update",
+            "colour": "65",
+            "contents": [
+                { "kind": "block", "type": "ha_register" },
+                { "kind": "block", "type": "ha_update", "inputs": { "STATE": { "shadow": { "type": "text", "fields": { "TEXT": "value" } } } } }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Script Utilities",
+            "colour": "0",
+            "contents": [
+                { "kind": "block", "type": "ha_log", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "message" } } } } },
+                { "kind": "block", "type": "ha_stop" }
             ]
         },
         {
