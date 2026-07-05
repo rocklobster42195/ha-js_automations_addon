@@ -29,10 +29,45 @@
             return `ha.on(${JSON.stringify(entityId)}, e => e.state === ${JSON.stringify(toState)}, async (e) => {\n${body}});\n`;
         };
 
-        generator.forBlock['ha_call_service'] = function (block) {
+        generator.forBlock['ha_schedule_interval'] = function (block, gen) {
+            const n = block.getFieldValue('N');
+            const unit = block.getFieldValue('UNIT');
+            const body = gen.statementToCode(block, 'DO');
+            return `schedule(${JSON.stringify(`every ${n} ${unit}`)}, async () => {\n${body}});\n`;
+        };
+
+        generator.forBlock['ha_schedule_daily'] = function (block, gen) {
+            const hour = block.getFieldValue('HOUR');
+            // Zero-pad the minute only ("every day at 7:5" is ambiguous/wrong; "7:05" isn't).
+            const minute = String(block.getFieldValue('MINUTE')).padStart(2, '0');
+            const body = gen.statementToCode(block, 'DO');
+            return `schedule(${JSON.stringify(`every day at ${hour}:${minute}`)}, async () => {\n${body}});\n`;
+        };
+
+        generator.forBlock['ha_schedule_cron'] = function (block, gen) {
+            const cron = block.getFieldValue('CRON');
+            const body = gen.statementToCode(block, 'DO');
+            return `schedule(${JSON.stringify(cron)}, async () => {\n${body}});\n`;
+        };
+
+        generator.forBlock['ha_call_service'] = function (block, gen) {
             const service = block.getFieldValue('SERVICE');
             const entityId = block.getFieldValue('ENTITY_ID');
-            return `await ha.call(${JSON.stringify(service)}, { entity_id: ${JSON.stringify(entityId)} });\n`;
+            const dataParts = [`entity_id: ${JSON.stringify(entityId)}`];
+
+            // Mutator-added extra fields (see blockly-mutators.js) — itemCount_ is set by
+            // loadExtraState()/updateShape_() when the workspace is deserialized, so this is
+            // populated correctly by the time code generation runs, not just interactively.
+            const itemCount = block.itemCount_ || 0;
+            for (let i = 0; i < itemCount; i++) {
+                const nameField = block.getField('NAME' + i);
+                const name = nameField ? nameField.getValue() : '';
+                if (!name) continue; // unnamed slot — skip rather than emit an invalid key
+                const value = gen.valueToCode(block, 'ADD' + i, gen.ORDER_NONE) || 'null';
+                dataParts.push(`${JSON.stringify(name)}: ${value}`);
+            }
+
+            return `await ha.call(${JSON.stringify(service)}, { ${dataParts.join(', ')} });\n`;
         };
 
         generator.forBlock['ha_log'] = function (block, gen) {

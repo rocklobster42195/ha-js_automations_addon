@@ -12,6 +12,10 @@ const { javascriptGenerator } = require('blockly/javascript');
 // (no bundler in this project) — see blockly-blocks-shared.js's header comment for why.
 Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
 require('../public/js/blockly-blocks-shared')(javascriptGenerator);
+// Registers ha_call_service's mutator (see blockly-mutators.js). Only its saveExtraState/
+// loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
+// still needs those to reconstruct a saved workspace's dynamic ADD0/ADD1/... inputs.
+require('../public/js/blockly-mutators')(Blockly);
 
 class BlocklyCompiler extends EventEmitter {
     constructor(scriptsDir, distDir) {

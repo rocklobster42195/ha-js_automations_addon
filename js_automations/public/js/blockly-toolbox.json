@@ -7,7 +7,10 @@
             "colour": "210",
             "contents": [
                 { "kind": "block", "type": "ha_trigger_on" },
-                { "kind": "block", "type": "ha_trigger_on_state" }
+                { "kind": "block", "type": "ha_trigger_on_state" },
+                { "kind": "block", "type": "ha_schedule_interval" },
+                { "kind": "block", "type": "ha_schedule_daily" },
+                { "kind": "block", "type": "ha_schedule_cron" }
             ]
         },
         {

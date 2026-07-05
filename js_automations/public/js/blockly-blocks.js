@@ -45,6 +45,50 @@
             "helpUrl": ""
         },
         {
+            "type": "ha_schedule_interval",
+            "message0": "every %1 %2",
+            "args0": [
+                { "type": "field_number", "name": "N", "value": 15, "min": 1 },
+                { "type": "field_dropdown", "name": "UNIT", "options": [["minutes", "minutes"], ["hours", "hours"]] }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 210,
+            "tooltip": "Runs the attached actions repeatedly, on a fixed interval.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_schedule_daily",
+            "message0": "every day at %1 : %2",
+            "args0": [
+                { "type": "field_number", "name": "HOUR", "value": 7, "min": 0, "max": 23, "precision": 1 },
+                { "type": "field_number", "name": "MINUTE", "value": 0, "min": 0, "max": 59, "precision": 1 }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 210,
+            "tooltip": "Runs the attached actions once a day, at this time (24h clock).",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_schedule_cron",
+            "message0": "on schedule %1",
+            "args0": [
+                { "type": "field_input", "name": "CRON", "text": "every day at 7:30" }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 210,
+            "tooltip": "Advanced: enter a cron expression (e.g. \"0 8 * * *\") or shorthand (\"every 15m\", \"every weekday at 6:00\", \"every monday at 9:00\"). An online cron expression generator can help build the raw form.",
+            "helpUrl": ""
+        },
+        {
             "type": "ha_call_service",
             "message0": "call service %1 for %2",
             "args0": [
@@ -54,7 +98,8 @@
             "previousStatement": null,
             "nextStatement": null,
             "colour": 20,
-            "tooltip": "Calls a Home Assistant service for the given entity.",
+            "mutator": "ha_call_service_data_mutator",
+            "tooltip": "Calls a Home Assistant service for the given entity. Click the gear icon to add extra data (brightness, temperature, ...); rename each field directly on the block.",
             "helpUrl": ""
         },
         {

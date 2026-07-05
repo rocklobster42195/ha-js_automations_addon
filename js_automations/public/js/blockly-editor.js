@@ -28,6 +28,9 @@ function initBlocklyEditor() {
     if (typeof window.registerHaBlocks === 'function') {
         window.registerHaBlocks(Blockly.JavaScript);
     }
+    if (typeof window.registerHaMutators === 'function') {
+        window.registerHaMutators(Blockly);
+    }
 
     const container = document.getElementById('blockly-container');
     if (!container) return;
