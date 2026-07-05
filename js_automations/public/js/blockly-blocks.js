@@ -19,7 +19,7 @@
             "type": "ha_trigger_on",
             "message0": "when %1 changes",
             "args0": [
-                { "type": "field_input", "name": "ENTITY_ID", "text": "sensor.example" }
+                { "type": "input_value", "name": "ENTITY" }
             ],
             "message1": "do %1",
             "args1": [
@@ -33,7 +33,7 @@
             "type": "ha_trigger_on_state",
             "message0": "when %1 changes to %2",
             "args0": [
-                { "type": "field_input", "name": "ENTITY_ID", "text": "sensor.example" },
+                { "type": "input_value", "name": "ENTITY" },
                 { "type": "field_input", "name": "TO_STATE", "text": "on" }
             ],
             "message1": "do %1",
@@ -93,8 +93,9 @@
             "message0": "call service %1 for %2",
             "args0": [
                 { "type": "field_input", "name": "SERVICE", "text": "light.turn_on" },
-                { "type": "field_input", "name": "ENTITY_ID", "text": "light.example" }
+                { "type": "input_value", "name": "ENTITY" }
             ],
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 20,
@@ -130,14 +131,37 @@
             "helpUrl": ""
         },
         {
-            "type": "ha_get_state",
-            "message0": "state of %1",
+            "type": "ha_entity",
+            "message0": "entity %1",
             "args0": [
                 { "type": "field_input", "name": "ENTITY_ID", "text": "sensor.example" }
             ],
             "output": null,
             "colour": 45,
+            "tooltip": "An entity ID, reusable in any of the sockets below. A future version will let you pick from a live list from Home Assistant instead of typing it.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_state",
+            "message0": "state of %1",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" }
+            ],
+            "output": null,
+            "colour": 45,
             "tooltip": "The current state of an entity, as text (e.g. \"on\", \"off\", \"21.5\"). Plug this into a comparison or another block.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_attribute",
+            "message0": "attribute %1 of %2",
+            "args0": [
+                { "type": "field_input", "name": "ATTR_NAME", "text": "temperature" },
+                { "type": "input_value", "name": "ENTITY" }
+            ],
+            "output": null,
+            "colour": 45,
+            "tooltip": "A specific attribute of an entity (e.g. \"temperature\" on a climate entity, \"brightness\" on a light).",
             "helpUrl": ""
         },
         {

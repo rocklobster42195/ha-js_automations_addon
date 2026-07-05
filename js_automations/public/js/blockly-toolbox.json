@@ -6,8 +6,8 @@
             "name": "Triggers",
             "colour": "210",
             "contents": [
-                { "kind": "block", "type": "ha_trigger_on" },
-                { "kind": "block", "type": "ha_trigger_on_state" },
+                { "kind": "block", "type": "ha_trigger_on", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
+                { "kind": "block", "type": "ha_trigger_on_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
                 { "kind": "block", "type": "ha_schedule_interval" },
                 { "kind": "block", "type": "ha_schedule_daily" },
                 { "kind": "block", "type": "ha_schedule_cron" }
@@ -18,7 +18,7 @@
             "name": "Actions",
             "colour": "20",
             "contents": [
-                { "kind": "block", "type": "ha_call_service" },
+                { "kind": "block", "type": "ha_call_service", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "light.example" } } } } },
                 { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } }
             ]
         },
@@ -27,7 +27,9 @@
             "name": "State",
             "colour": "45",
             "contents": [
-                { "kind": "block", "type": "ha_get_state" }
+                { "kind": "block", "type": "ha_entity" },
+                { "kind": "block", "type": "ha_get_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
+                { "kind": "block", "type": "ha_get_attribute", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "climate.living_room" } } } } }
             ]
         },
         {

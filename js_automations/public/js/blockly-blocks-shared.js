@@ -17,16 +17,18 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     return function registerHaBlocks(generator) {
         generator.forBlock['ha_trigger_on'] = function (block, gen) {
-            const entityId = block.getFieldValue('ENTITY_ID');
+            // valueToCode() returns already-quoted code (e.g. `"sensor.temp"` from ha_entity's
+            // own JSON.stringify), so it's used as-is here, not re-wrapped in JSON.stringify.
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
             const body = gen.statementToCode(block, 'DO');
-            return `ha.on(${JSON.stringify(entityId)}, async (e) => {\n${body}});\n`;
+            return `ha.on(${entityCode}, async (e) => {\n${body}});\n`;
         };
 
         generator.forBlock['ha_trigger_on_state'] = function (block, gen) {
-            const entityId = block.getFieldValue('ENTITY_ID');
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
             const toState = block.getFieldValue('TO_STATE');
             const body = gen.statementToCode(block, 'DO');
-            return `ha.on(${JSON.stringify(entityId)}, e => e.state === ${JSON.stringify(toState)}, async (e) => {\n${body}});\n`;
+            return `ha.on(${entityCode}, e => e.state === ${JSON.stringify(toState)}, async (e) => {\n${body}});\n`;
         };
 
         generator.forBlock['ha_schedule_interval'] = function (block, gen) {
@@ -52,8 +54,8 @@
 
         generator.forBlock['ha_call_service'] = function (block, gen) {
             const service = block.getFieldValue('SERVICE');
-            const entityId = block.getFieldValue('ENTITY_ID');
-            const dataParts = [`entity_id: ${JSON.stringify(entityId)}`];
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            const dataParts = [`entity_id: ${entityCode}`];
 
             // Mutator-added extra fields (see blockly-mutators.js) — itemCount_ is set by
             // loadExtraState()/updateShape_() when the workspace is deserialized, so this is
@@ -83,14 +85,29 @@
             return reason ? `ha.stop(${JSON.stringify(reason)});\n` : `ha.stop();\n`;
         };
 
-        generator.forBlock['ha_get_state'] = function (block, gen) {
+        generator.forBlock['ha_entity'] = function (block, gen) {
             const entityId = block.getFieldValue('ENTITY_ID');
+            // Deliberately NOT ha.entity(id) — that fluent handle's .state getter returns the
+            // raw, unconverted state string, which would reopen the "on"/"off" is-always-truthy
+            // footgun that ha.getStateValue() was specifically chosen to avoid (see ha_get_state
+            // below). This block is just a reusable, pluggable carrier for the entity ID string.
+            return [JSON.stringify(entityId), gen.ORDER_ATOMIC];
+        };
+
+        generator.forBlock['ha_get_state'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
             // ha.getStateValue() (not ha.getState()) — returns the converted primitive
             // ("off", 21.5, true) matching what this block's "state of X" tooltip promises.
             // ha.getState() returns the full state object (entity_id/attributes/context/...),
             // which is correct API behavior but a confusing default for the target beginner
             // audience — logging "state of X" should print "off", not a JSON dump.
-            return [`ha.getStateValue(${JSON.stringify(entityId)})`, gen.ORDER_NONE];
+            return [`ha.getStateValue(${entityCode})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_attribute'] = function (block, gen) {
+            const attrName = block.getFieldValue('ATTR_NAME');
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            return [`ha.getAttr(${entityCode}, ${JSON.stringify(attrName)})`, gen.ORDER_NONE];
         };
 
         generator.forBlock['ha_wait'] = function (block) {

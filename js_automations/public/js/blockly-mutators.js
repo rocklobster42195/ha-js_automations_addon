@@ -124,6 +124,13 @@
 
             updateShape_: function (targetCount) {
                 while (this.itemCount_ < targetCount) {
+                    // ha_call_service is inputsInline:true so its base "call service X for Y"
+                    // row stays compact — but that also pulls these mutator-added fields onto
+                    // the same row by default. appendEndRowInput() forces the *next* input onto
+                    // a fresh row regardless of inputsInline (verified against the renderer's
+                    // shouldStartNewRow_() in the compiled Blockly bundle: EndRowInput always
+                    // breaks, plain value inputs only break when inputsInline is false).
+                    this.appendEndRowInput('BREAK' + this.itemCount_);
                     // Default text is deliberately longer than "name" — FieldTextInput sizes
                     // itself to its initial content, and a 4-character placeholder rendered
                     // narrow enough to look like a checkbox rather than a text field.
@@ -135,6 +142,7 @@
                 while (this.itemCount_ > targetCount) {
                     this.itemCount_--;
                     this.removeInput('ADD' + this.itemCount_);
+                    this.removeInput('BREAK' + this.itemCount_);
                 }
             }
         };
