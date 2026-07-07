@@ -2,6 +2,13 @@
 
 ---
 
+## [2.57.2] - 2026-07-07
+
+- fix: keep worker alive when ha.action() handlers are registered
+- docs: note that the add-on is production-ready but still actively evolving
+
+---
+
 ## [2.57.1] - 2026-07-04
 
 - fix: harden Webhook API — IP allowlist (`WebhookOptions.allowlist`), HMAC signature verification (`ha.verifyWebhookSignature()`) for GitHub/Stripe-style signed payloads, and a lockout after repeated failed token attempts
