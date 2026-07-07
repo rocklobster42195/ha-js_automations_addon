@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [2.57.4] - 2026-07-07
+
 - fix: Webhook Panel showed no entries (and a stale external URL) on every page load when running behind Ingress — it used raw `fetch('/api/webhooks...')` instead of the Ingress-aware `apiFetch()` helper, so the request never reached the add-on
 
 ---
