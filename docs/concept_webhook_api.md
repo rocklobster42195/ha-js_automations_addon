@@ -79,7 +79,7 @@ Port 8099 (Ingress)  →  Addon UI          (authenticated, via HA Supervisor pr
 Port 3001 (direct)   →  Webhook receiver  (own auth via auto-managed token per webhook)
 ```
 
-The webhook port is configurable and optional — the server only starts when at least one script has registered a webhook handler, and shuts down when no webhooks remain active.
+The webhook port is fixed at `3001` (not user-configurable — it must match the port published in the add-on's `config.yaml`, which Docker only reads at image build/install time, not at runtime). It's optional in the sense that the server only starts when at least one script has registered a webhook handler, and shuts down when no webhooks remain active.
 
 ---
 
@@ -310,9 +310,10 @@ When `ha.onWebhook()` is called, a line is written to the script log:
 
 ## Settings
 
+The webhook server always listens on port **3001** — fixed, not a setting, since it must match the port published in `config.yaml`.
+
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `webhook_port` | number | `3001` | Port the webhook server listens on. Only active when at least one webhook is registered. |
 | `webhook_external_url` | string | _(empty)_ | Base URL shown in the panel for copy (e.g. `https://myha.example.com`). Optional — only needed when behind a reverse proxy. |
 | `webhook_trust_proxy` | boolean | `false` | Trust `X-Forwarded-For` for `req.ip`. Only enable when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP. |
 
@@ -444,6 +445,8 @@ Token is regenerated only on explicit user action (↺ in panel), not on script 
 ---
 
 ## Documentation Plan
+
+> **Historical draft, already applied.** The texts below were copied into README.md and API_REFERENCE.md when the feature shipped. Those files are the current source of truth (e.g. the webhook port is now fixed at `3001`, not a `webhook_port` setting) — treat any mismatch here as this draft being outdated, not the other way around.
 
 The following texts are ready to copy into README.md and API_REFERENCE.md once the feature is implemented.
 

@@ -277,13 +277,6 @@ module.exports = [
         icon: 'mdi:webhook',
         items: [
             {
-                key: 'port',
-                label: 'settings.webhook.port',
-                description: 'settings.webhook.port_desc',
-                type: 'number',
-                default: 3001
-            },
-            {
                 key: 'external_url',
                 label: 'settings.webhook.external_url',
                 description: 'settings.webhook.external_url_desc',

@@ -1,5 +1,8 @@
 <!-- NEXT -->
 
+- fix: webhook server was never reachable from outside the container — `config.yaml` was missing the Docker `ports:` publish entry for the webhook port, so Supervisor never exposed it to the host
+- fix: webhook port is now fixed at `3001` instead of a `Settings → Webhooks → Port` option — it must match the port published in `config.yaml`, so making it user-configurable was misleading (changing it had no real effect)
+
 ---
 
 ## [2.57.2] - 2026-07-07

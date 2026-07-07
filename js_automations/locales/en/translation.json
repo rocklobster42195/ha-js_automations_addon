@@ -198,10 +198,8 @@
       "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>."
     },
     "webhook": {
-      "port": "Port",
-      "port_desc": "Port the webhook server listens on. Only active while at least one script has an active ha.onWebhook() registration.",
       "external_url": "External URL",
-      "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy.",
+      "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy. The webhook server always listens on port 3001 (fixed, see add-on network configuration).",
       "trust_proxy": "Trust Reverse Proxy",
       "trust_proxy_desc": "Reads the real caller IP from X-Forwarded-For. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP."
     },

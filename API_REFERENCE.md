@@ -1144,11 +1144,11 @@ ha.mqtt.subscribe('diy/led/set', (topic, payload) => {
 | Nabu Casa / HA Cloud, no port forwarding | HA Automation Webhook |
 | Services that require a real response (GitHub, Stripe, Ko-fi) | `ha.onWebhook()` |
 
-> **Requires:** a port set in **Settings → Webhooks** (default `3001`), reachable from the internet (router port forwarding or reverse proxy). Does **not** work through the Nabu Casa tunnel. A dedicated **Webhook Panel** in Developer Tools (Expert Mode) lists all active endpoints with copy-ready URLs and token management (reveal / rotate).
+> **Requires:** the add-on's webhook port `3001` (fixed) reachable from the internet (router port forwarding or reverse proxy). Does **not** work through the Nabu Casa tunnel. A dedicated **Webhook Panel** in Developer Tools (Expert Mode) lists all active endpoints with copy-ready URLs and token management (reveal / rotate).
 
 ### `ha.onWebhook(id, handler)` / `ha.onWebhook(id, options, handler)`
 
-Registers a webhook endpoint at `:<port>/webhook/<id>`. Default method is `POST`; set `options.method` for `GET`/`PUT`/`DELETE`/`PATCH`. Each ID maps to exactly one fixed path and one method — arbitrary custom routing is intentionally out of scope.
+Registers a webhook endpoint at `:3001/webhook/<id>`. Default method is `POST`; set `options.method` for `GET`/`PUT`/`DELETE`/`PATCH`. Each ID maps to exactly one fixed path and one method — arbitrary custom routing is intentionally out of scope.
 
 A secret token is auto-generated and managed by JSA per webhook ID — never in script code, stable across reloads and restarts, verified automatically via the `X-Webhook-Secret` request header.
 
@@ -1263,9 +1263,10 @@ Handler timeout: **10 seconds** — if the handler doesn't respond in time, the 
 
 ### Settings
 
+The webhook server always listens on port **3001** (fixed — not configurable in Settings). The add-on's `config.yaml` publishes this port to the host so it's reachable from outside the container; only active while at least one script has a registered webhook.
+
 | Key | Default | Description |
 |---|---|---|
-| Port | `3001` | Port the webhook server listens on. Only active while at least one script has a registered webhook. |
 | External URL | _(empty)_ | Base URL shown in the Webhook Panel for copying (e.g. `https://myha.example.com`). Only needed behind a reverse proxy. |
 | Trust Reverse Proxy | `false` | Reads the real caller IP from `X-Forwarded-For`. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP. |
 

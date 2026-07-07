@@ -1456,7 +1456,7 @@ const _webhookHandlers = new Map(); // id -> handler function
     };
 
     /**
-     * Registers a webhook endpoint at :<webhook_port>/webhook/<id>. See ha-api.d.ts for details.
+     * Registers a webhook endpoint at :3001/webhook/<id> (fixed port). See ha-api.d.ts for details.
      */
     ha.onWebhook = (id, optionsOrHandler, maybeHandler) => {
         _checkWebhookPermission();

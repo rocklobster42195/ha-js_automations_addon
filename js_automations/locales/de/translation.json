@@ -202,10 +202,8 @@
       "mosquitto_hint": "<b>Mosquitto-Addon (HA):</b> Verwende <code>core-mosquitto</code> als Host.<br>Der Broker erwartet einen echten Home-Assistant-Benutzer als Zugangsdaten.<br>Empfehlung: Lege einen dedizierten MQTT-Nutzer an unter <b>Einstellungen → Personen → Benutzer hinzufügen</b>."
     },
     "webhook": {
-      "port": "Port",
-      "port_desc": "Port, auf dem der Webhook-Server lauscht. Nur aktiv, solange mindestens ein Skript eine aktive ha.onWebhook()-Registrierung hat.",
       "external_url": "Externe URL",
-      "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig.",
+      "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig. Der Webhook-Server lauscht immer auf Port 3001 (fix, siehe Netzwerk-Konfiguration des Add-ons).",
       "trust_proxy": "Reverse Proxy vertrauen",
       "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem Webhook-Port steht — sonst können Aufrufer ihre IP fälschen."
     },

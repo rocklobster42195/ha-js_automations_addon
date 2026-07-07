@@ -7,6 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 
+// Fixed, not user-configurable: the container only publishes this port to the
+// host (see config.yaml `ports:`), so letting the internal listener move to a
+// different port would silently break external reachability.
+const WEBHOOK_PORT = 3001;
+
 const RATE_LIMIT_WINDOW_MS = 60000;
 const RATE_LIMIT_MAX = 60; // requests per IP per webhook id per window
 const REQUEST_TIMEOUT_MS = 10000;
@@ -212,7 +217,7 @@ class WebhookManager extends EventEmitter {
         if (this.server) return;
 
         const settings = this._getSettings();
-        this.port = settings.port || 3001;
+        this.port = WEBHOOK_PORT;
         this.app = express();
         this.app.set('trust proxy', !!settings.trust_proxy);
         this.app.all('/webhook/:id', express.raw({ type: '*/*', limit: BODY_LIMIT }), (req, res) => this._handleRequest(req, res));
@@ -239,18 +244,9 @@ class WebhookManager extends EventEmitter {
     _handleSettingsUpdate(webhookSettings) {
         if (this.app) this.app.set('trust proxy', !!webhookSettings.trust_proxy);
 
-        const newPort = webhookSettings.port || 3001;
-        if (this.server && newPort !== this.port) {
-            this.logManager.add('debug', 'System', `[Webhook] Port changed to ${newPort}. Restarting server...`);
-            const oldServer = this.server;
-            this.server = null;
-            this.app = null;
-            oldServer.close(() => this._ensureServer());
-        }
-
-        // Tell any open Webhook Panel to refresh port/external URL — without this it only
+        // Tell any open Webhook Panel to refresh its external URL — without this it only
         // ever reflects whatever was current when the page first loaded.
-        this.emit('config_changed', { port: newPort, externalUrl: webhookSettings.external_url || '' });
+        this.emit('config_changed', { port: WEBHOOK_PORT, externalUrl: webhookSettings.external_url || '' });
     }
 
     /**
@@ -440,7 +436,7 @@ class WebhookManager extends EventEmitter {
     }
 
     getPort() {
-        return this.port || this._getSettings().port || 3001;
+        return WEBHOOK_PORT;
     }
 
     getExternalUrl() {

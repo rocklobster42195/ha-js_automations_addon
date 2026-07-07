@@ -1111,7 +1111,7 @@ interface HA {
     };
 
     /**
-     * Registers a webhook endpoint at `:<webhook_port>/webhook/<id>`. External services can POST
+     * Registers a webhook endpoint at `:3001/webhook/<id>` (fixed port). External services can POST
      * (or GET, depending on `options.method`) data to this URL and your handler returns a real
      * HTTP response — unlike HA's built-in webhook automations, which always return an empty `200 OK`
      * immediately. Requires `@permission webhook` in the script header.
