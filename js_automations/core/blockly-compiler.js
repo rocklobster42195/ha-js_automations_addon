@@ -16,6 +16,9 @@ require('../public/js/blockly-blocks-shared')(javascriptGenerator);
 // loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
 // still needs those to reconstruct a saved workspace's dynamic ADD0/ADD1/... inputs.
 require('../public/js/blockly-mutators')(Blockly);
+// Registers the entity/service dropdown fields (see blockly-fields.js). Node has no live HA
+// data to populate the menu with — it only needs to read back whatever value was serialized.
+require('../public/js/blockly-fields')(Blockly);
 
 class BlocklyCompiler extends EventEmitter {
     constructor(scriptsDir, distDir) {

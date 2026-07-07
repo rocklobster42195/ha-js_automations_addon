@@ -92,7 +92,7 @@
             "type": "ha_call_service",
             "message0": "call service %1 for %2",
             "args0": [
-                { "type": "field_input", "name": "SERVICE", "text": "light.turn_on" },
+                { "type": "field_service_dropdown", "name": "SERVICE", "service": "light.turn_on" },
                 { "type": "input_value", "name": "ENTITY" }
             ],
             "inputsInline": true,
@@ -134,11 +134,11 @@
             "type": "ha_entity",
             "message0": "entity %1",
             "args0": [
-                { "type": "field_input", "name": "ENTITY_ID", "text": "sensor.example" }
+                { "type": "field_entity_dropdown", "name": "ENTITY_ID", "entityId": "sensor.example" }
             ],
             "output": null,
             "colour": 45,
-            "tooltip": "An entity ID, reusable in any of the sockets below. A future version will let you pick from a live list from Home Assistant instead of typing it.",
+            "tooltip": "An entity ID, reusable in any of the sockets below. Picks from a live list of entities from Home Assistant.",
             "helpUrl": ""
         },
         {

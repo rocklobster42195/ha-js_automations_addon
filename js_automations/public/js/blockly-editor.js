@@ -31,6 +31,9 @@ function initBlocklyEditor() {
     if (typeof window.registerHaMutators === 'function') {
         window.registerHaMutators(Blockly);
     }
+    if (typeof window.registerHaFields === 'function') {
+        window.registerHaFields(Blockly);
+    }
 
     const container = document.getElementById('blockly-container');
     if (!container) return;

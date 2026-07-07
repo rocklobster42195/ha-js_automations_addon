@@ -42,21 +42,20 @@ Blockly 11 uses JSON as its primary serialization format (XML is legacy). JSA me
     "languageVersion": 0,
     "blocks": [
       {
-        "type": "ha_trigger_on",
+        "type": "ha_trigger_on_state",
         "id": "abc123",
         "x": 20,
         "y": 20,
-        "fields": {
-          "ENTITY_ID": "binary_sensor.presence",
-          "TO_STATE": "off"
-        },
-        "statements": {
+        "fields": { "TO_STATE": "off" },
+        "inputs": {
+          "ENTITY": { "block": { "type": "ha_entity", "id": "e1", "fields": { "ENTITY_ID": "binary_sensor.presence" } } },
           "DO": {
             "block": {
               "type": "ha_call_service",
-              "fields": {
-                "SERVICE": "light.turn_off",
-                "ENTITY_ID": "light.living_room"
+              "id": "c1",
+              "fields": { "SERVICE": "light.turn_off" },
+              "inputs": {
+                "ENTITY": { "block": { "type": "ha_entity", "id": "e2", "fields": { "ENTITY_ID": "light.living_room" } } }
               }
             }
           }
@@ -66,6 +65,8 @@ Blockly 11 uses JSON as its primary serialization format (XML is legacy). JSA me
   }
 }
 ```
+
+Note: statement-connected blocks (like `DO` above) live under the same `inputs` key as value inputs — verified against `Blockly.serialization.workspaces.save()`'s actual output, not a separate `statements` key as an earlier draft of this doc showed.
 
 `ScriptHeaderParser` gets a `.blocks` branch on both sides:
 - `parse()` reads metadata from the `jsa` key instead of parsing a JSDoc comment
@@ -378,7 +379,12 @@ Deliverable: A real automation (state change → service call → notification) 
 - [x] `public/index.html` — Blockly loaded via CDN (`cdn.jsdelivr.net/npm/blockly@11.2.2/blockly.min.js`, matches the pinned npm version), consistent with how Monaco/socket.io/i18next are already loaded in this project
 - [x] `public/js/tab-manager.js` — `.blocks` files open a `type: 'blockly'` tab. Unlike Monaco (one editor, one persistent model per tab), there's a single shared Blockly workspace; each tab holds its own serialized JSON state, swapped into the workspace on switch. Trade-off: undo history doesn't survive switching away from a tab and back — accepted for now
 - [x] `public/js/creation-wizard.js` — the existing "refresh open tab after metadata edit" fix (Monaco: re-fetch + `model.setValue()`) needed a Blockly-tab equivalent: re-fetch and update `tab.jsa` only, without touching `tab.blocksState` (which may hold unsaved visual edits the metadata save didn't touch)
-- [ ] Dynamic entity & service dropdowns from HA (still plain text fields on `ha_trigger_on`/`ha_call_service` for now) — design direction decided, see "Autocomplete / entity picker value block" under Open Questions below
+- [x] Dynamic entity & service dropdowns from HA (2026-07-07) — `public/js/blockly-fields.js` (new, same UMD cross-environment pattern as `blockly-blocks-shared.js`/`blockly-mutators.js`): `FieldEntityDropdown` (backs `ha_entity`'s `ENTITY_ID`, sourced from `allEntities` — the same global Monaco's own entity autocomplete already uses, no new endpoint needed) and `FieldServiceDropdown` (backs `ha_call_service`'s `SERVICE`, sourced from `haData.services`, flattened to sorted `domain.service` pairs). Because `ha_trigger_on`/`ha_trigger_on_state`/`ha_get_state`/`ha_get_attribute`/`ha_call_service`'s entity slot all already plug an `ha_entity` block into their socket, fixing `ha_entity`'s own field alone gives every one of them a live entity picker.
+  - **Combobox, not a plain dropdown (2026-07-07)** — a click-to-scroll menu doesn't hold up with a large entity count (installations with 1000+ entities were the concern raised). Rebuilt on `Blockly.FieldTextInput` instead of `Blockly.FieldDropdown`: `widgetCreate_` calls `super.widgetCreate_()` to get Blockly's normal editor `<input>` unchanged, then attaches a filter-as-you-type suggestion list.
+  - **First attempt (native `<datalist>`) broke visually — verified live in the browser, not assumed**: the suggestion popup rendered offset from the field, with leftover overlapping text after picking a value. Root cause: Blockly pans/zooms its workspace via a CSS `transform` on an SVG ancestor, and a `transform` anywhere in an element's ancestor chain changes the containing block for natively-positioned popups (`<select>`/`<datalist>`, `position: fixed`) to that ancestor instead of the viewport — a well-known browser quirk that no CSS on the popup itself can fix.
+  - **Fix**: a plain `<div>` suggestion list appended directly to `document.body` (not inside the transformed workspace), positioned every render via `input.getBoundingClientRect()` math instead of relying on native popup positioning — the same technique floating-UI libraries (Popper, Floating UI) use to render over transformed/canvas containers. Filters by substring on the input's `input` event, capped at 50 matches (cheap to filter, keeps the list scrollable rather than dumping 1000+ rows into the DOM). Selecting an item sets `input.value` and dispatches a synthetic `input` event so Blockly's own value-commit logic runs unchanged — `mousedown` (not `click`) with `preventDefault()` so selecting an item doesn't blur the field first. `widgetDispose_` removes the list element when the editor closes.
+  - This turned out to also be the *safer* choice than `FieldDropdown`, not just better UX: an earlier `FieldDropdown`-based version needed a custom `doClassValidation_`/`getText_` workaround because `FieldDropdown` silently discards a saved value that isn't in its current menu (verified against `blockly@11.2.2`, not assumed) and its constructor throws on an empty menu array. `FieldTextInput` has neither problem — its default validation already accepts any string, and an empty suggestion list (no live data yet, e.g. in Node) is simply an unfiltered free-text input, no placeholder-value workaround needed.
+  - Non-breaking for already-saved `.blocks` files — same-shape field swap (`field_input`/former `field_entity_dropdown` → combobox, all plain strings), no re-plugging needed unlike the earlier `input_value` conversion.
 - [ ] i18n: category names and block labels (toolbox and block tooltips are still hardcoded English strings)
 - [x] `ha_trigger_on_state` (filtered trigger), `ha_get_state` (value block — plugs into other blocks' sockets, e.g. Logic/Text), `ha_wait` (`sleep()`, exposed as **seconds** not milliseconds — beginner-friendlier unit, generator multiplies by 1000), `ha_notify`. Target audience is non-programmers (see Overview) — went with two separate, self-explanatory trigger blocks ("when X changes" / "when X changes to Y") instead of one block with an optional "leave blank for any state" field, since an implicit blank-means-something convention is a worse fit for that audience than two clearly-labeled blocks
 - [x] `ha_log`/`ha_notify` MESSAGE changed from `field_input` (plain text only) to `input_value` with a text shadow block as the toolbox default — found immediately when trying to plug `ha_get_state` into `ha_log` and discovering there was no socket to plug it into. Generator uses `gen.valueToCode(block, 'MESSAGE', gen.ORDER_NONE) || '""'` instead of reading the field directly, so any value block (text, `ha_get_state`, `text_join`, ...) works, not just literal text
@@ -442,10 +448,9 @@ New file `public/js/blockly-mutators.js` (UMD, same cross-environment reasoning 
 Still open (implementation questions, not blocked on the above):
 
 - **Category assignment**: for every block in the M2/M3/M4 tables above, which toolbox category does it land in? Mechanical once the category list is fixed (it now is) — just needs doing as each block is built.
-- **Block appearance & editability**: which fields stay plain text input (current state: `ENTITY_ID`/`SERVICE`/`MESSAGE` are all `field_input`) vs. become dropdowns, checkboxes, or mutator-driven (e.g. the filtered/debounced trigger variants from the M2 table need extra fields — mutator icon to add them, or three separate block types?).
-- **Autocomplete / "entity picker" value block (design decided 2026-07-05, not yet built)**: rather than giving every block its own dynamic dropdown field (the cross-environment problem below, solved once per field), build **one** reusable value block — e.g. `ha_entity` — with a dropdown populated live from `haData.services`/entity data (the same source Monaco's existing IntelliSense already uses, see `public/js/api.js`'s `loadHAServices()`). Plug it into any socket that wants an entity/target: `ha_notify`'s new `TARGET` socket, `ha_log`/`ha_notify`'s `MESSAGE`, a future `ha_get_state` input, etc. Users who don't want the dropdown can still plug in a plain text block instead — the socket doesn't care which. This came out of trying to make `ha_notify`'s `TARGET` pluggable and wanting a proper entity picker rather than free text.
-  - **Cross-environment field problem**: a dynamic dropdown field needs live browser data (`haData`) to render its options, which doesn't exist in Node — `BlocklyCompiler` only needs to *read* whatever value got serialized, never render the picker UI. A field registered the same way in both places (`Blockly.fieldRegistry.register(...)`) needs a menu-generator function that's meaningless in Node; if `FieldDropdown`'s value validation checks the (empty/placeholder) menu list against the stored value during `workspaces.load()`, deserialization could reject a value that's perfectly valid in the browser. Needs verifying against the actual Blockly 11 field validation behavior before building it, not assuming.
-- **Domain awareness**: once the entity picker exists, its dropdown could filter to the domain implied by context (e.g. only `light.*` entities when plugged into `ha_call_service` and `SERVICE` is `light.turn_on`) — a refinement on top of the picker, not a separate mechanism.
+- **Block appearance & editability**: `ENTITY_ID` (`ha_entity`) and `SERVICE` (`ha_call_service`) are now live dropdowns (see "Dynamic entity & service dropdowns" above); `MESSAGE` stays `input_value` (plain text or any pluggable value block). Still open: checkboxes/mutator-driven fields for the filtered/debounced trigger variants from the M2 table — extra fields via mutator icon, or three separate block types?
+- ~~**Autocomplete / "entity picker" value block**~~ — done, see "Dynamic entity & service dropdowns" above. Built as two dedicated fields (`FieldEntityDropdown`/`FieldServiceDropdown`, both extending the shared `FieldHaCombobox`) directly on `ha_entity`/`ha_call_service` rather than a single generic reusable field, since only those two blocks currently need it; the cross-environment problem flagged here was real (confirmed against `blockly@11.2.2`) but ended up resolved by basing the field on `FieldTextInput` + a native `<datalist>` rather than `FieldDropdown`, sidestepping the validation issue rather than working around it.
+- **Domain awareness**: now that the entity picker exists, its dropdown could filter to the domain implied by context (e.g. only `light.*` entities when plugged into `ha_call_service` and `SERVICE` is `light.turn_on`) — a refinement on top of the picker, not a separate mechanism. Not built yet.
 
 ### M3 — Advanced Blocks
 **Goal**: Async flows, persistent state, MQTT, and event bus.
@@ -522,6 +527,7 @@ Build in this order: trigger (`ha.on`) → log → service call (`ha.call`) → 
 | `js_automations/public/js/blockly-blocks-shared.js` | Generator registration — UMD, required by both Node (`blockly-compiler.js`) and the browser (`<script>` tag). Physically under `public/js/`, not `core/` — see the M2 "Architecture correction" note |
 | `js_automations/public/js/blockly-blocks.js` | Custom block shape definitions — same UMD/cross-boundary setup as above |
 | `js_automations/public/js/blockly-mutators.js` | `ha_call_service`'s extra-data-fields mutator — same UMD/cross-boundary setup; only `saveExtraState`/`loadExtraState`/`updateShape_` matter in Node, `decompose`/`compose` are browser-only |
+| `js_automations/public/js/blockly-fields.js` | `FieldEntityDropdown`/`FieldServiceDropdown` — live entity/service dropdowns backed by `allEntities`/`haData.services`; same UMD/cross-boundary setup, Node only reads serialized values, never renders the picker |
 | `js_automations/public/js/blockly-editor.js` | Blockly workspace UI & lifecycle (browser-only, no Node counterpart) |
 | `js_automations/public/js/blockly-toolbox.json` | Toolbox category/block configuration |
 
