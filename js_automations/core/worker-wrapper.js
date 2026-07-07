@@ -1325,6 +1325,7 @@ const ha = {
      */
     action: (name, handler) => {
         ensureMessageListener();
+        _addRef(); // Keep alive — must come after ensureMessageListener() which may call unref()
         actionHandlers.set(name, handler);
     },
 
