@@ -393,7 +393,11 @@ class EntityManager {
 
         // Stagger to avoid thundering herd when many entities register simultaneously.
         const stagger = Math.floor(Math.random() * 500);
-        const MAX_ATTEMPTS = 20;
+        // 40 attempts @ 500ms = ~20s. A cold boot with many scripts registering
+        // entities simultaneously can leave HA's MQTT/registry pipeline backed up
+        // well past the previous 10s budget, silently skipping area/label assignment
+        // for every entity still unconfirmed at that point.
+        const MAX_ATTEMPTS = 40;
         const POLL_INTERVAL = 500;
 
         const applyPostRegistration = async (haEntry) => {

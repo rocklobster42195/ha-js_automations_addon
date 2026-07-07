@@ -331,13 +331,19 @@ class Kernel extends EventEmitter {
             // Autostart scripts
             if (!this.systemService.isSafeMode) {
                 const enabled = this.stateManager.getEnabledScripts();
+                // Stagger starts: with many scripts, firing every ha.register() (MQTT
+                // discovery) and HA service call in the same tick can overwhelm HA's own
+                // boot, causing ACK timeouts and "Service Call Timeout" errors across the
+                // board. A small gap spreads the burst out instead of front-loading it all.
+                const AUTOSTART_STAGGER_MS = 300;
                 for (const file of enabled) {
                     let fullPath = path.join(SCRIPTS_DIR, file);
-                    
+
                     if (fs.existsSync(fullPath)) {
                         const meta = ScriptHeaderParser.parse(fullPath);
                         if (meta.dependencies.length > 0) await this.depManager.install(meta.dependencies, false);
                         this.workerManager.startScript(file);
+                        await new Promise(r => setTimeout(r, AUTOSTART_STAGGER_MS));
                     }
                 }
             }
