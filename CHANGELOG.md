@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [2.57.5] - 2026-07-07
+
 - fix: ease startup congestion when many scripts autostart at once — staggered script starts (300ms apart), extended the entity registration ACK poll window (20→40 attempts), and fixed the HA metadata retry guard to check areas/labels readiness independently instead of requiring both to be empty
 
 ---
