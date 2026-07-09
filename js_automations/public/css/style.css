@@ -1379,6 +1379,10 @@ input#search-input:focus { border-color: var(--accent) !important; }
 .preview-empty-hint { color: #444; font-size: 0.77rem; padding: 4px 0; }
 
 /* ── Event Inspector ─────────────────────────────────────────────────────── */
+#dev-tab-events {
+    padding: 0;
+    overflow: hidden;
+}
 .ei-toolbar {
     display: flex;
     align-items: center;
@@ -1786,6 +1790,10 @@ input#search-input:focus { border-color: var(--accent) !important; }
 }
 
 /* ── Developer Tools — Webhook Panel ────────────────────────────────────── */
+#dev-tab-webhooks {
+    padding: 0;
+    overflow: hidden;
+}
 .wh-list {
     flex: 1;
     overflow-y: auto;
