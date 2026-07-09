@@ -25,6 +25,10 @@ const statusBar = {
         slot3: new Array(10).fill(null)
     },
 
+    // Longer rolling window of app RAM samples (~60s at the 2s stats interval),
+    // used only for trend detection - the sparkline above stays at 10 points.
+    ramTrendHistory: [],
+
     fetchPromise: null,
 
     // Entity IDs configured as header action buttons (null = slot empty)
@@ -234,19 +238,45 @@ const statusBar = {
                 hist.push(data.app_ram);
                 if (hist.length > 10) hist.shift();
 
+                this.ramTrendHistory.push(data.app_ram);
+                if (this.ramTrendHistory.length > 30) this.ramTrendHistory.shift();
+
                 const valEl = el.querySelector('.val');
                 // Pad value to prevent UI jumping.
                 valEl.innerText = `${Math.round(data.app_ram).toString().padStart(4, '\u00A0')}\u00A0MB`;
-                // Warning at 400MB (assuming 512MB default limit).
-                if (data.app_ram >= 400) valEl.style.color = '#ffb86c';
-                else valEl.style.color = '';
-                
+
+                // Two independent warning signals instead of one fixed MB threshold:
+                // 1) real memory pressure - only meaningful when we know an actual ceiling
+                //    (a container/cgroup limit). Without one, host-wide "used %" reflects
+                //    every other process on the machine (browser, IDE, ...), not this app,
+                //    so it must never drive the color - shown as info only in the tooltip.
+                // 2) a sustained upward trend in our own RSS (possible leak), regardless of absolute value
+                const pct = data.ram_used_pct || 0;
+                const pressureLevel = data.container_mem_limit ? (pct >= 90 ? 2 : (pct >= 80 ? 1 : 0)) : 0;
+                const trendLevel = this.detectRamTrend(this.ramTrendHistory);
+                const level = Math.max(pressureLevel, trendLevel);
+
+                const levelColor = level >= 2 ? '#ff5555' : (level >= 1 ? '#ffb86c' : '');
+                valEl.style.color = levelColor;
+
                 // Restore tooltip with detailed memory info.
                 const sysUsed = data.ram_used > 1024 ? (data.ram_used / 1024).toFixed(1) + ' GB' : data.ram_used + ' MB';
                 const sysTotal = data.ram_total > 1024 ? (data.ram_total / 1024).toFixed(1) + ' GB' : data.ram_total + ' MB';
-                el.title = `Node Heap: ${data.app_heap} MB (Scripts)\nNode RSS: ${data.app_ram} MB (Total)\nSystem: ${sysUsed} / ${sysTotal}`;
-                
-                this.drawSparkline(el.querySelector('canvas'), hist, { max: 512, thresholds: [256, 400, 480] });
+                let title = `${i18next.t('settings.statusbar.tooltip_heap', { value: data.app_heap })}\n`;
+                title += `${i18next.t('settings.statusbar.tooltip_rss', { value: data.app_ram })}\n`;
+                title += i18next.t('settings.statusbar.tooltip_system', { used: sysUsed, total: sysTotal, pct });
+                title += `\n${i18next.t('settings.statusbar.tooltip_scripts', { count: data.worker_count ?? 0 })}`;
+                if (data.container_mem_limit) {
+                    title += `\n${i18next.t('settings.statusbar.tooltip_limit', { value: data.container_mem_limit })}`;
+                }
+                if (trendLevel > 0) {
+                    title += `\n${i18next.t('settings.statusbar.tooltip_leak_warning')}`;
+                } else if (pressureLevel > 0) {
+                    title += `\n${i18next.t('settings.statusbar.tooltip_pressure_warning')}`;
+                }
+                el.title = title;
+
+                this.drawSparkline(el.querySelector('canvas'), hist, { color: levelColor || '#888' });
             } else if (el.dataset.type === 'custom') {
                 // Periodic update: use the last known cached value
                 const val = this.currentValues[slotId];
@@ -373,6 +403,27 @@ const statusBar = {
             const barH = Math.max(2, normalized * h); // Minimum 2px height.
             ctx.fillRect(i * barW, h - barH, barW, barH);
         });
+    },
+
+    /**
+     * Heuristic leak detector: flags a sustained upward trend in RAM usage rather than
+     * a single high snapshot. Needs at least ~30s of samples, requires the second half of
+     * the window to clearly exceed the first half (not just a brief spike), and requires a
+     * minimum absolute growth to ignore normal GC jitter.
+     * @param {number[]} samples - Rolling window of app_ram values (MB), oldest first.
+     * @returns {number} 0 = no trend, 1 = notable growth, 2 = strong sustained growth.
+     */
+    detectRamTrend(samples) {
+        const valid = samples.filter(v => v !== null && !isNaN(v));
+        if (valid.length < 15) return 0;
+
+        const mid = Math.floor(valid.length / 2);
+        const firstHalfAvg = valid.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
+        const secondHalfAvg = valid.slice(mid).reduce((a, b) => a + b, 0) / (valid.length - mid);
+        const delta = secondHalfAvg - firstHalfAvg;
+
+        if (delta < 40) return 0;
+        return delta >= 100 ? 2 : 1;
     },
 
     async fetchInitialState(entityId) {

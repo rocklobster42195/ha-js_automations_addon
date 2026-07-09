@@ -22,6 +22,35 @@ class SystemService extends EventEmitter {
 
         this.statsInterval = null;
         this.cpuStartTick = null;
+        this.containerMemLimitMb = this._detectContainerMemLimit();
+    }
+
+    /**
+     * Detects a cgroup memory limit (Docker/Home Assistant container), if any.
+     * Returns null on hosts without cgroups (e.g. Windows dev machines) or when unlimited,
+     * so callers can fall back to host-wide memory stats.
+     * @returns {number|null} Limit in MB, or null if not detected.
+     */
+    _detectContainerMemLimit() {
+        try {
+            // cgroup v2
+            const raw = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+            if (raw && raw !== 'max') {
+                const bytes = parseInt(raw, 10);
+                if (Number.isFinite(bytes) && bytes > 0) return Math.round(bytes / 1024 / 1024);
+            }
+        } catch (e) { /* not cgroup v2 */ }
+
+        try {
+            // cgroup v1 - unlimited is reported as a huge sentinel value, so ignore anything absurd.
+            const raw = fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8').trim();
+            const bytes = parseInt(raw, 10);
+            if (Number.isFinite(bytes) && bytes > 0 && bytes < 64 * 1024 * 1024 * 1024) {
+                return Math.round(bytes / 1024 / 1024);
+            }
+        } catch (e) { /* not cgroup v1 */ }
+
+        return null;
     }
 
     /**
@@ -103,7 +132,15 @@ class SystemService extends EventEmitter {
         const freeMem = Math.round(os.freemem() / 1024 / 1024);
         const appMem = Math.round(process.memoryUsage().rss / 1024 / 1024);
         const appHeap = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-        
+        const workerCount = this.workerManager.workers.size;
+
+        // Memory pressure, relative to whatever ceiling actually matters:
+        // inside a memory-limited container, our own RSS vs. the cgroup limit is what
+        // can trigger an OOM-kill; on an unconstrained host, host-wide usage is the signal.
+        const ramUsedPct = this.containerMemLimitMb
+            ? Math.round((appMem / this.containerMemLimitMb) * 100)
+            : (totalMem > 0 ? Math.round(((totalMem - freeMem) / totalMem) * 100) : 0);
+
         // Also include script stats
         const scriptStats = {};
         this.workerManager.stats.forEach((v, k) => scriptStats[k] = v);
@@ -112,8 +149,11 @@ class SystemService extends EventEmitter {
             cpu: cpuPercent,
             ram_used: totalMem - freeMem,
             ram_total: totalMem,
+            ram_used_pct: ramUsedPct,
+            container_mem_limit: this.containerMemLimitMb,
             app_ram: appMem,
             app_heap: appHeap,
+            worker_count: workerCount,
             script_stats: scriptStats
         };
 

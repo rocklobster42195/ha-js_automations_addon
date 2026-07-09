@@ -182,7 +182,14 @@
       "header_action_1": "Header-Aktion 1",
       "header_action_2": "Header-Aktion 2",
       "header_action_3": "Header-Aktion 3",
-      "header_action_desc": "HA-Entity als Schnellzugriff-Button im Sidebar-Header (switch oder button)."
+      "header_action_desc": "HA-Entity als Schnellzugriff-Button im Sidebar-Header (switch oder button).",
+      "tooltip_heap": "Node Heap: {{value}} MB (Skripte)",
+      "tooltip_rss": "Node RSS: {{value}} MB (Gesamt)",
+      "tooltip_system": "System: {{used}} / {{total}} ({{pct}}%)",
+      "tooltip_scripts": "Aktive Skripte: {{count}}",
+      "tooltip_limit": "Container-Limit: {{value}} MB",
+      "tooltip_leak_warning": "⚠ Steigender Speichertrend (möglicher Leak)",
+      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck"
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",
