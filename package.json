@@ -10,7 +10,8 @@
     "release": "node tools/release.js",
     "ship:patch": "npm version patch && npm run release",
     "ship:minor": "npm version minor && npm run release",
-    "ship:major": "npm version major && npm run release"
+    "ship:major": "npm version major && npm run release",
+    "ship:beta": "npm version prerelease --preid=beta && npm run release"
   },
   "keywords": [],
   "author": "",
