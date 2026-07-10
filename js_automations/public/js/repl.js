@@ -82,7 +82,7 @@ function _initReplEditor() {
     _replEditorInit = true;
     if (typeof monaco === 'undefined') return;
     _replEditor = monaco.editor.create(document.getElementById('repl-editor-container'), {
-        value: '// ha.log(ha.getState(\'sensor.my_sensor\'));\n',
+        value: '// ha.log(ha.getState(\'sun.sun\'));\n',
         language: 'javascript',
         theme: 'vs-dark',
         minimap: { enabled: false },

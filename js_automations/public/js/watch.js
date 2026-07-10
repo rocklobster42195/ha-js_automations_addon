@@ -37,6 +37,53 @@ const _DOMAIN_ICONS = {
     humidifier:     () => 'mdi:air-humidifier',
 };
 
+// HA's own entity_component icon translations (domain → device_class|"_" → {default, state, range}),
+// fetched once from /api/ha/icons. Used instead of guessing icons for device_class entities.
+let _haIcons = null;
+let _haIconsLoadPromise = null;
+
+function _loadHAIcons() {
+    if (_haIcons || _haIconsLoadPromise) return _haIconsLoadPromise;
+    _haIconsLoadPromise = apiFetch('api/ha/icons')
+        .then(res => res.ok ? res.json() : {})
+        .then(data => { _haIcons = data || {}; _refreshWatchIcons(); })
+        .catch(() => { _haIcons = {}; });
+    return _haIconsLoadPromise;
+}
+
+// Re-renders icons for already-visible watch rows once the HA icon catalog arrives late.
+function _refreshWatchIcons() {
+    for (const e of _watchRows.values()) {
+        if (!e.iconEl || e.lastValue === undefined) continue;
+        e.iconEl.className = _mdiClass(_getEntityIcon(e.lastValue));
+        e.iconEl.style.color = _iconColor(e.lastValue);
+    }
+}
+
+// Resolves an icon from HA's icon translations, mirroring the frontend's own precedence:
+// exact state match > numeric range (highest threshold <= value) > domain/device_class default.
+function _lookupHAIcon(domain, deviceClass, state) {
+    if (!_haIcons) return null;
+    const domainIcons = _haIcons[domain];
+    if (!domainIcons) return null;
+    const entry = (deviceClass && domainIcons[deviceClass]) || domainIcons._;
+    if (!entry) return null;
+    if (entry.state && Object.prototype.hasOwnProperty.call(entry.state, state)) {
+        return entry.state[state];
+    }
+    if (entry.range) {
+        const num = Number(state);
+        if (!isNaN(num)) {
+            const best = Object.keys(entry.range)
+                .map(Number)
+                .filter(t => t <= num)
+                .sort((a, b) => b - a)[0];
+            if (best !== undefined) return entry.range[String(best)];
+        }
+    }
+    return entry.default || null;
+}
+
 function _isStateObject(v) {
     return v !== null && typeof v === 'object' && typeof v.entity_id === 'string' && 'state' in v;
 }
@@ -45,6 +92,10 @@ function _getEntityIcon(v) {
     if (!_isStateObject(v)) return null;
     if (v.attributes?.icon) return v.attributes.icon;
     const domain = v.entity_id.split('.')[0];
+    const deviceClass = v.attributes?.device_class;
+    const haIcon = _lookupHAIcon(domain, deviceClass, v.state);
+    if (haIcon) return haIcon;
+    // Fallback while the HA icon catalog is still loading (or unreachable).
     const fn = _DOMAIN_ICONS[domain];
     return fn ? fn(v.state) : null;
 }
@@ -90,6 +141,7 @@ function initWatch() {
     _inspectList = document.getElementById('watch-inspect-list');
     _watchTable  = null;
     _watchRows.clear();
+    _loadHAIcons();
 }
 
 function onWatchUpdate(data) {
@@ -103,6 +155,7 @@ function onWatchUpdate(data) {
 
     if (_watchRows.has(label)) {
         const e = _watchRows.get(label);
+        e.lastValue = value;
         e.valueEl.textContent = valText;
         e.valueEl.className = valClass;
         if (e.iconEl) {
@@ -168,7 +221,7 @@ function onWatchUpdate(data) {
         });
     }
 
-    _watchRows.set(label, { mainTr, attrsTr, valueEl: tdValue, iconEl, chevronEl, filename });
+    _watchRows.set(label, { mainTr, attrsTr, valueEl: tdValue, iconEl, chevronEl, filename, lastValue: value });
 }
 
 function onWatchClear(data) {

@@ -28,6 +28,7 @@ class HAConnector {
 
     connect() {
         this._subscribed = false; // reset per-connection subscription guard
+        this._iconsCache = null; // re-fetch icon translations in case HA core was updated
         return new Promise((resolve, reject) => {
             console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
             this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
@@ -388,6 +389,24 @@ class HAConnector {
      */
     fireEvent(eventType, eventData = {}) {
         return this.sendCommand('fire_event', { event_type: eventType, event_data: eventData });
+    }
+
+    /**
+     * Fetches HA's own entity_component icon translations (domain → device_class → {default, state, range}).
+     * Used by the WATCH tab to mirror HA's real device_class icons instead of guessing them.
+     * Cached per connection since these only change on an HA core update/restart.
+     */
+    async getIcons() {
+        if (!this.isReady) return {};
+        if (this._iconsCache) return this._iconsCache;
+        if (this._iconsInFlight) return this._iconsInFlight;
+        this._iconsInFlight = this.sendCommand('frontend/get_icons', { category: 'entity_component' })
+            .then(result => {
+                this._iconsCache = (result && result.resources) || {};
+                return this._iconsCache;
+            })
+            .finally(() => { this._iconsInFlight = null; });
+        return this._iconsInFlight;
     }
 
     /**

@@ -39,6 +39,20 @@ module.exports = (haConnector) => {
     });
 
     /**
+     * @route GET /api/ha/icons
+     * @group Home Assistant - HA Data
+     * @returns {object} 200 - HA's entity_component icon translations (domain -> device_class -> {default, state, range}).
+     * @returns {Error}  500 - Internal Server Error
+     */
+    router.get('/icons', async (req, res) => {
+        try {
+            res.json(await haConnector.getIcons());
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    /**
      * @route POST /api/ha/call-service
      * @group Home Assistant - HA Actions
      * @param {string} domain - HA service domain (e.g. 'switch', 'button')
