@@ -157,6 +157,29 @@ function startApp() {
 }
 
 
+// --- Graceful shutdown ---
+// Node drops its default SIGTERM/SIGINT termination as soon as any handler is
+// registered (log-manager and settings-manager add flush/save hooks), so
+// without an explicit exit the process keeps running until the Supervisor
+// SIGKILLs it after its stop timeout (exit code 137). This handler shuts the
+// kernel down and exits well within the Supervisor's grace window.
+let shuttingDown = false;
+function gracefulExit(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`📴 Received ${signal} — shutting down...`);
+    try {
+        kernel.shutdown();
+    } catch (e) {
+        console.error('Shutdown error:', e.message);
+    }
+    server.close();
+    // Give workers a moment to stop cleanly, then end the process.
+    setTimeout(() => process.exit(0), 3000);
+}
+process.on('SIGTERM', () => gracefulExit('SIGTERM'));
+process.on('SIGINT', () => gracefulExit('SIGINT'));
+
 /**
  * Main application entry point.
  */
@@ -179,15 +202,19 @@ async function main() {
         // Wire up the full application (kernel boot, routes, sockets)
         startApp();
 
-        // Start the kernel's main logic
-        await kernel.start();
-
-        // Start the web server (skip if already listening from blocked mode)
+        // Listen right away (unless already listening from blocked mode) so
+        // ingress reaches the UI while the kernel is still starting — HA
+        // connect, initial TS compilation, and script autostart can take a
+        // while, and the Supervisor logs ingress errors for every hit until
+        // the port is open.
         if (!server.listening) {
             server.listen(config.PORT, '0.0.0.0', () => {
                 console.log(`🌍 Dashboard is running on http://localhost:${config.PORT}`);
             });
         }
+
+        // Start the kernel's main logic
+        await kernel.start();
 
         // Start the HA auto-reconnection loop
         let isReconnecting = false;
