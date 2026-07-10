@@ -1,3 +1,9 @@
+## [2.57.8-beta.1] - 2026-07-10
+
+- fix: WATCH tab tiles missing until script restart (replay race vs. late DOM init)
+
+---
+
 ## [2.57.8-beta.0] - 2026-07-10
 
 - fix: resolve WATCH tab icons from HA's own device_class icon translations
