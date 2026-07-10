@@ -1,5 +1,5 @@
 name: "JSA Beta"
-version: "2.57.6-beta.3"
+version: "2.57.6-beta.4"
 slug: "js_automations_beta"
 description: "JavaScript Automations-Engine — Beta channel for testing pre-releases"
 image: "ghcr.io/rocklobster42195/ha-js_automations_addon/{arch}"
