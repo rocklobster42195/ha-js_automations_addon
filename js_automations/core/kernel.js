@@ -345,21 +345,6 @@ class Kernel extends EventEmitter {
 
             this._setupSystemEventListeners();
 
-            // Card startup cleanup: remove orphaned Lovelace resources and card files
-            // for scripts that no longer exist or no longer carry a @card header.
-            try {
-                const knownCardNames = this.workerManager.getScripts()
-                    .map(p => {
-                        const meta = ScriptHeaderParser.parse(p);
-                        if (!meta.card) return null;
-                        return path.basename(p, path.extname(p)) + '-card';
-                    })
-                    .filter(Boolean);
-                await this.cardManager.performStartupCleanup(knownCardNames);
-            } catch (e) {
-                console.warn('[Kernel] Card startup cleanup failed:', e.message);
-            }
-
             // Autostart scripts
             if (!this.systemService.isSafeMode) {
                 const enabled = this.stateManager.getEnabledScripts();
@@ -388,6 +373,25 @@ class Kernel extends EventEmitter {
             // Start periodic cleanup (every hour)
             setInterval(() => this.performGlobalCleanup(), 3600000);
             this.logManager.add('debug', 'System', 'Kernel background maintenance loops started.');
+
+            // Card startup cleanup: remove orphaned Lovelace resources and card files
+            // for scripts that no longer exist or no longer carry a @card header.
+            // Deliberately not awaited and delayed a few seconds — this is pure
+            // housekeeping, not required for scripts to run. Awaiting it inline used to
+            // block script autostart behind slow Lovelace WebSocket round-trips (up to
+            // their full 15s timeout) during the busiest window of the boot, when the
+            // event loop is also handling the initial state flood and MQTT discovery.
+            setTimeout(() => {
+                const knownCardNames = this.workerManager.getScripts()
+                    .map(p => {
+                        const meta = ScriptHeaderParser.parse(p);
+                        if (!meta.card) return null;
+                        return path.basename(p, path.extname(p)) + '-card';
+                    })
+                    .filter(Boolean);
+                this.cardManager.performStartupCleanup(knownCardNames)
+                    .catch(e => console.warn('[Kernel] Card startup cleanup failed:', e.message));
+            }, 10000);
         } catch (err) {
             console.error(err);
             this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
