@@ -4,6 +4,21 @@
 
 ## [2.57.6] - 2026-07-10
 
+- fix: don't block script autostart behind Lovelace card cleanup during boot
+- fix: prevent stacked concurrent loadHAMetadata retry chains (thundering herd on MQTT flapping)
+- fix: close HA websocket on shutdown (disconnect() never existed); reload HA metadata once connection is up
+- fix: complete deferred startup (autostart, events, MQTT) after failed initial HA connection
+- ci: update actions to Node 24 majors (checkout v7, docker actions v4/v6/v7)
+- feat: maintain beta addon CHANGELOG.md; skip beta bump commits in release notes
+- feat: compact beta version badge, JSA BETA header title, shorter beta addon name
+- fix: exit on SIGTERM instead of waiting for SIGKILL; open web server before kernel start
+- docs: document expected Supervisor port conflict when starting beta while stable runs
+- feat: add ship:beta:minor and ship:beta:major variants
+- feat: add ship:beta npm script (lost in previous commit)
+- feat: add beta release channel (beta addon, sibling guard, ship:beta pipeline)
+- fix: align dev panel tab spacing across all five tabs
+- fix: replace fixed RAM warning threshold with pressure/trend based signal
+
 ---
 
 ## [2.57.5] - 2026-07-07
