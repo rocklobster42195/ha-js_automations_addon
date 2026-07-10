@@ -408,9 +408,24 @@ class CardManager {
     /**
      * Removes orphaned card JS files and Lovelace resources that no longer correspond
      * to a known script with a @card header. Safe to call at startup and after installs.
+     *
+     * Guarded against overlapping runs: this is triggered both once at boot (kernel.js,
+     * deferred) and again after every successful card install (worker-manager.js). During
+     * autostart with multiple card scripts, without this guard each install would kick off
+     * its own concurrent `lovelace/resources` scan (up to 15s each), piling more HA
+     * WebSocket traffic onto the busiest window of the boot instead of settling it.
      * @param {string[]} knownCardNames  e.g. ['openligadb-card', 'weather-card']
      */
     async performStartupCleanup(knownCardNames) {
+        if (this._cleanupInFlight) {
+            return this._cleanupInFlight;
+        }
+        this._cleanupInFlight = this._performStartupCleanup(knownCardNames)
+            .finally(() => { this._cleanupInFlight = null; });
+        return this._cleanupInFlight;
+    }
+
+    async _performStartupCleanup(knownCardNames) {
         const known = new Set(knownCardNames);
 
         // 1. Remove orphaned JS files from www/jsa-cards/
