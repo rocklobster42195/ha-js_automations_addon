@@ -454,7 +454,22 @@ async function loadVersion() {
         const res = await apiFetch('api/status');
         if (res.ok) {
             const data = await res.json();
-            if (data.version) el.textContent = `v${data.version}`;
+            if (data.version) {
+                // Beta builds: compact version chip (v2.57.6-b1 instead of
+                // v2.57.6-beta.1, which wraps) and a distinct header title.
+                const beta = data.version.match(/^(.+)-beta\.(\d+)$/);
+                if (beta) {
+                    el.textContent = `v${beta[1]}-b${beta[2]}`;
+                    const title = document.querySelector('[data-i18n="header_title"]');
+                    if (title) {
+                        title.textContent = 'JSA BETA';
+                        // Detach from i18n so a language switch doesn't revert it
+                        title.removeAttribute('data-i18n');
+                    }
+                } else {
+                    el.textContent = `v${data.version}`;
+                }
+            }
         }
     } catch (e) { console.debug("Version check failed", e); }
 }
