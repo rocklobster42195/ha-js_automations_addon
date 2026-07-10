@@ -1,3 +1,9 @@
+## [2.57.6-beta.8] - 2026-07-10
+
+- fix: don't block script autostart behind Lovelace card cleanup during boot
+
+---
+
 ## [2.57.6-beta.7] - 2026-07-10
 
 - fix: prevent stacked concurrent loadHAMetadata retry chains (thundering herd on MQTT flapping)
