@@ -169,7 +169,14 @@ if (fs.existsSync(readmePath)) {
 
 // --- 3. CHANGELOG.md ---
 if (fs.existsSync(changelogPath)) {
-    let content = fs.readFileSync(changelogPath, 'utf8');
+    // Normalize CRLF → LF: on Windows with core.autocrlf=true, the working-tree
+    // copy is fully CRLF-normalized after checkout. The PLACEHOLDER/SEP markers
+    // below are pure-LF patterns, so "\n\n" (needed to find the boundary) never
+    // occurs in a fully-CRLF file — sepIdx silently comes back -1, body swallows
+    // the *entire* rest of the file, and the intended entry ends up malformed.
+    // Writing plain LF back out is safe — git re-normalizes to CRLF on the next
+    // checkout via core.autocrlf, same as it always has.
+    let content = fs.readFileSync(changelogPath, 'utf8').replace(/\r\n/g, '\n');
     const dateStr = today();
     const PLACEHOLDER = '<!-- NEXT -->';
     const SEP = '\n\n---\n';
