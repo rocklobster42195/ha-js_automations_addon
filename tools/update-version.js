@@ -28,6 +28,22 @@ const readmePath  = path.join(rootDir, 'README.md');
 const changelogPath = path.join(rootDir, 'CHANGELOG.md');
 const packagePath = path.join(rootDir, 'package.json');
 
+/**
+ * Finds the most recent git tag reachable from HEAD, optionally excluding
+ * beta tags (x.y.z-beta.n). Filtering is done in JS rather than via
+ * `git describe --exclude="<glob>"` — the shell-quoted glob is fragile across
+ * shells (this previously produced an empty/wrong result on Windows, silently
+ * swallowed by the surrounding try/catch, leaving release notes empty).
+ * @param {boolean} excludeBeta
+ * @returns {string|null} tag name, or null if none found
+ */
+function findPreviousTag(excludeBeta) {
+    const tags = execSync('git for-each-ref --sort=-creatordate --format=%(refname:short) refs/tags/v*', { stdio: 'pipe' })
+        .toString().trim().split('\n').filter(Boolean);
+    const match = tags.find(t => !excludeBeta || !t.includes('-beta.'));
+    return match || null;
+}
+
 // --- Helpers ---
 
 function assertContains(filePath, needle, label) {
@@ -172,8 +188,8 @@ if (fs.existsSync(changelogPath)) {
         if (!body) {
             try {
                 // Exclude beta tags: a stable release covers everything since the last stable
-                const prevTag = execSync('git describe --tags --abbrev=0 --exclude="*-beta.*"', { stdio: 'pipe' }).toString().trim();
-                const log     = execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+                const prevTag = findPreviousTag(true);
+                const log     = prevTag ? execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim() : '';
                 if (log) {
                     const lines = log.split('\n')
                         .map(l => l.replace(/^[a-f0-9]+ /, ''))

@@ -37,6 +37,22 @@ const isBeta  = version.includes('-beta.');
 
 console.log(`\n🚀 Releasing ${tag}${isBeta ? ' (beta channel → GitHub pre-release)' : ''}...\n`);
 
+/**
+ * Finds the most recent git tag before `tag`, optionally excluding beta tags.
+ * Filtering is done in JS rather than via `git describe --exclude="<glob>"` —
+ * the shell-quoted glob is fragile across shells and previously produced an
+ * empty/wrong result, silently swallowed by the surrounding try/catch and
+ * leaving release notes empty.
+ * @param {boolean} excludeBeta
+ * @returns {string|null}
+ */
+function findPreviousTag(excludeBeta) {
+    const tags = execSync('git for-each-ref --sort=-creatordate --format=%(refname:short) refs/tags/v*', { stdio: 'pipe' })
+        .toString().trim().split('\n').filter(Boolean);
+    const match = tags.find(t => t !== tag && (!excludeBeta || !t.includes('-beta.')));
+    return match || null;
+}
+
 // --- 1. Verify local tag exists ---
 try {
     execSync(`git rev-parse ${tag}`, { stdio: 'pipe' });
@@ -85,7 +101,11 @@ let releaseNotes = '';
 let releaseName  = tag;
 
 if (!isBeta && fs.existsSync(changelogPath)) {
-    const content = fs.readFileSync(changelogPath, 'utf8');
+    // Normalize CRLF → LF: on Windows, git can check this file out with CRLF
+    // line endings, which silently breaks the LF-only lookaheads below (the
+    // capture then swallows a stray "\r\n---\r\n" as "content", producing a
+    // release body of just "---").
+    const content = fs.readFileSync(changelogPath, 'utf8').replace(/\r\n/g, '\n');
     const m = content.match(
         new RegExp(`##\\s*\\[${version.replace(/\./g, '\\.')}\\][^\n]*\n([\\s\\S]*?)(?=\n---\n\n## |\\n## |$)`)
     );
@@ -110,9 +130,8 @@ if (titleMatch) {
 // stable release; beta releases include them (notes since the previous beta).
 if (!releaseNotes) {
     try {
-        const excludeArg = isBeta ? '' : '--exclude="*-beta.*" ';
-        const prevTag = execSync(`git describe --tags --abbrev=0 ${excludeArg}${tag}~1`, { stdio: 'pipe' }).toString().trim();
-        const log     = execSync(`git log ${prevTag}..${tag} --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+        const prevTag = findPreviousTag(!isBeta);
+        const log     = prevTag ? execSync(`git log ${prevTag}..${tag} --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim() : '';
         if (log) {
             const lines  = log.split('\n')
                 .map(l => l.replace(/^[a-f0-9]+ /, ''))
@@ -201,7 +220,7 @@ async function cleanupBetaArtifacts() {
     // 3. Delete beta image versions from GHCR (one package per architecture).
     // Requires the token to have the read:packages + delete:packages scopes;
     // without them this step warns and the images simply remain.
-    const archs = ['amd64', 'aarch64', 'armv7'];
+    const archs = ['amd64', 'aarch64'];
     for (const arch of archs) {
         const pkgName = encodeURIComponent(`${repo}/${arch}`);
         try {
