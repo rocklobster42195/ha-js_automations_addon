@@ -162,8 +162,13 @@ function initSocket() {
 
         // HA (re)connected but areas/labels never arrived — e.g. the page was
         // opened while HA was still booting and loadHAMetadata() exhausted its
-        // retries against an empty registry. Retrigger it once HA is reachable.
-        if (data?.is_connected && typeof loadHAMetadata === 'function'
+        // retries against an empty registry. Retrigger only on the transition
+        // into "connected" (not on every broadcast — MQTT reconnect attempts
+        // alone can emit this every few seconds) — loadHAMetadata() itself also
+        // guards against overlapping retry chains as a second safety net.
+        const wasConnected = window._haWasConnected;
+        window._haWasConnected = !!data?.is_connected;
+        if (data?.is_connected && !wasConnected && typeof loadHAMetadata === 'function'
             && haData.areas.length === 0 && haData.labels.length === 0) {
             loadHAMetadata();
         }

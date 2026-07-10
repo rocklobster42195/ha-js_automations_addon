@@ -20,7 +20,18 @@ async function apiFetch(endpoint, options = {}) {
     return fetch(url, options);
 }
 
+// Guards against overlapping retry chains: integration_status can broadcast
+// repeatedly (e.g. MQTT reconnecting every 5s) while areas/labels are still
+// empty. Without this, each broadcast would spawn its own independent
+// 20-attempt/3s retry chain, stacking dozens of concurrent chains within a
+// minute of flapping.
+let _metadataLoadInFlight = false;
+
 async function loadHAMetadata(retryCount = 0) {
+    if (retryCount === 0) {
+        if (_metadataLoadInFlight) return;
+        _metadataLoadInFlight = true;
+    }
     try {
         const res = await apiFetch('api/ha/metadata');
         if (res.ok) {
@@ -44,14 +55,17 @@ async function loadHAMetadata(retryCount = 0) {
             if (typeof allScripts !== 'undefined' && allScripts.length > 0 && typeof renderScripts === 'function') {
                 renderScripts(allScripts, false);
             }
+            _metadataLoadInFlight = false;
         } else {
             throw new Error(`Status ${res.status}`);
         }
-    } catch (e) { 
+    } catch (e) {
         console.warn("HA Metadata failed", e);
         if (retryCount < 20) { // Retry for ~1 minute
             console.log(`⏳ Metadata load failed. Retrying in 3s... (${retryCount + 1}/20)`);
             setTimeout(() => loadHAMetadata(retryCount + 1), 3000);
+        } else {
+            _metadataLoadInFlight = false;
         }
     }
 }
