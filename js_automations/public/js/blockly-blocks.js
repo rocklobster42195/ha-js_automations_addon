@@ -99,7 +99,7 @@
             "previousStatement": null,
             "nextStatement": null,
             "colour": 20,
-            "mutator": "ha_call_service_data_mutator",
+            "mutator": "ha_extra_data_mutator",
             "tooltip": "Calls a Home Assistant service for the given entity. Click the gear icon to add extra data (brightness, temperature, ...); rename each field directly on the block.",
             "helpUrl": ""
         },
@@ -212,7 +212,8 @@
             "previousStatement": null,
             "nextStatement": null,
             "colour": 65,
-            "tooltip": "Creates a new Home Assistant entity (or updates its config if it already exists). More options (unit, device class, area, ...) coming later.",
+            "mutator": "ha_register_options_mutator",
+            "tooltip": "Creates a new Home Assistant entity (or updates its config if it already exists). Click the gear icon to add more options (unit, device class, area, ...).",
             "helpUrl": ""
         },
         {
@@ -225,7 +226,8 @@
             "previousStatement": null,
             "nextStatement": null,
             "colour": 65,
-            "tooltip": "Updates the state of an entity previously created with \"register entity\".",
+            "mutator": "ha_extra_data_mutator",
+            "tooltip": "Updates the state of an entity previously created with \"register entity\". Click the gear icon to also set extra attributes.",
             "helpUrl": ""
         }
     ];

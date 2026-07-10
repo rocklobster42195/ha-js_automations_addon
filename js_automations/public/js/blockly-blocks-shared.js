@@ -138,17 +138,66 @@
 
         generator.forBlock['ha_register'] = function (block) {
             const entityId = block.getFieldValue('ENTITY_ID');
-            const name = block.getFieldValue('NAME');
-            const icon = block.getFieldValue('ICON');
+            const configParts = [
+                `name: ${JSON.stringify(block.getFieldValue('NAME'))}`,
+                `icon: ${JSON.stringify(block.getFieldValue('ICON'))}`,
+            ];
+
+            // Mutator-added optional fields (see blockly-mutators.js's ha_register_options_mutator)
+            // — only present on the block when their checkbox was ticked, so a plain getField()
+            // presence check doubles as "was this option enabled". For free-text fields, a
+            // ticked-but-never-filled-in box (blank field) is treated as "not set" rather than
+            // emitting an empty string — skipEmpty avoids e.g. `unit: ""` on every entity that
+            // only ticked the box out of curiosity. Not applied to MIN/MAX/STEP/ENABLED_BY_DEFAULT,
+            // where a falsy value (0/false) is meaningful, or STATE_CLASS, whose dropdown always
+            // has a real selected value.
+            const push = (fieldName, key, transform, opts) => {
+                const f = block.getField(fieldName);
+                if (!f) return;
+                const value = f.getValue();
+                if (opts && opts.skipEmpty && (typeof value !== 'string' || value.trim() === '')) return;
+                configParts.push(`${key}: ${transform(value)}`);
+            };
+            push('UNIT', 'unit', (v) => JSON.stringify(v), { skipEmpty: true });
+            push('DEVICE_CLASS', 'device_class', (v) => JSON.stringify(v), { skipEmpty: true });
+            push('STATE_CLASS', 'state_class', (v) => JSON.stringify(v));
+            push('AREA', 'area', (v) => JSON.stringify(v), { skipEmpty: true });
+            push('LABELS', 'labels', (v) => JSON.stringify(v.split(',').map((s) => s.trim()).filter(Boolean)));
+            // FieldNumber.getValue() is already a number — verified against field_number.d.ts
+            // (extends FieldInput<number>), no JSON.stringify needed (that would re-quote it).
+            push('MIN', 'min', (v) => v);
+            push('MAX', 'max', (v) => v);
+            push('STEP', 'step', (v) => v);
+            push('EXPIRE_AFTER', 'expire_after', (v) => v);
+            // field_checkbox reports its value as the string 'TRUE'/'FALSE', not a JS boolean —
+            // same gotcha already handled for ha_notify's PERSISTENT field above.
+            push('ENABLED_BY_DEFAULT', 'enabled_by_default', (v) => v === 'TRUE');
+
             // ha.register() is synchronous (returns void) — no await needed.
-            return `ha.register(${JSON.stringify(entityId)}, { name: ${JSON.stringify(name)}, icon: ${JSON.stringify(icon)} });\n`;
+            return `ha.register(${JSON.stringify(entityId)}, { ${configParts.join(', ')} });\n`;
         };
 
         generator.forBlock['ha_update'] = function (block, gen) {
             const entityId = block.getFieldValue('ENTITY_ID');
             const state = gen.valueToCode(block, 'STATE', gen.ORDER_NONE) || '""';
+
+            // Mutator-added extra attribute fields (see blockly-mutators.js's
+            // ha_extra_data_mutator, shared with ha_call_service) — itemCount_ is set by
+            // loadExtraState()/updateShape_() when the workspace is deserialized, so this is
+            // populated correctly by the time code generation runs, not just interactively.
+            const itemCount = block.itemCount_ || 0;
+            const dataParts = [];
+            for (let i = 0; i < itemCount; i++) {
+                const nameField = block.getField('NAME' + i);
+                const name = nameField ? nameField.getValue() : '';
+                if (!name) continue; // unnamed slot — skip rather than emit an invalid key
+                const value = gen.valueToCode(block, 'ADD' + i, gen.ORDER_NONE) || 'null';
+                dataParts.push(`${JSON.stringify(name)}: ${value}`);
+            }
+            const attrsArg = dataParts.length > 0 ? `, { ${dataParts.join(', ')} }` : '';
+
             // ha.update() is synchronous (returns void) — no await needed.
-            return `ha.update(${JSON.stringify(entityId)}, ${state});\n`;
+            return `ha.update(${JSON.stringify(entityId)}, ${state}${attrsArg});\n`;
         };
     };
 });
