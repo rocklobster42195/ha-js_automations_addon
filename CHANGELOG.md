@@ -2,6 +2,10 @@
 
 ---
 
+## [2.57.7] - 2026-07-10
+
+---
+
 ## [2.57.6] - 2026-07-10
 
 - fix: don't block script autostart behind Lovelace card cleanup during boot
