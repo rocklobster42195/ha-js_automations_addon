@@ -1,3 +1,9 @@
+## [2.57.6-beta.5] - 2026-07-10
+
+- fix: complete deferred startup (autostart, events, MQTT) after failed initial HA connection
+
+---
+
 ## [2.57.6-beta.4] - 2026-07-10
 
 - ci: update actions to Node 24 majors (checkout v7, docker actions v4/v6/v7)
