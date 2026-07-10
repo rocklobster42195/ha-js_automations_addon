@@ -4,6 +4,11 @@
 
 ## [2.57.7] - 2026-07-10
 
+- fix: coalesce concurrent getEntityRegistry() calls to stop self-inflicted registry-poll flood
+- fix: guard performStartupCleanup against overlapping concurrent runs
+- fix: re-sync beta CHANGELOG mirror after correcting v2.57.6 stable entry
+- fix: retroactively correct v2.57.6 release notes (CRLF regex + fragile git describe --exclude); drop deprecated armv7 build target
+
 ---
 
 ## [2.57.6] - 2026-07-10
