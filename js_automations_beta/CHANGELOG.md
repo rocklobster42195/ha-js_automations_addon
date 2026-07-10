@@ -1,3 +1,9 @@
+## [2.57.6-beta.7] - 2026-07-10
+
+- fix: prevent stacked concurrent loadHAMetadata retry chains (thundering herd on MQTT flapping)
+
+---
+
 ## [2.57.6-beta.6] - 2026-07-10
 
 - fix: close HA websocket on shutdown (disconnect() never existed); reload HA metadata once connection is up
