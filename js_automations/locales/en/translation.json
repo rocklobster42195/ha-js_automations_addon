@@ -123,6 +123,10 @@
   "safe_mode_btn": "Exit Safe Mode",
   "safe_mode_deactivated": "Safe Mode deactivated. You can now start scripts manually.",
   "safe_mode_failed": "Failed to resolve Safe Mode.",
+  "sibling_guard_title": "Waiting for sibling add-on",
+  "sibling_guard_msg": "\"{{sibling}}\" is currently running. Both add-ons share the same scripts, data, and webhook port, so they must never run at the same time.",
+  "sibling_guard_hint": "Stop \"{{sibling}}\" in the add-on view — this add-on will then activate automatically (checked every 15 seconds).",
+  "sibling_guard_waiting": "Waiting…",
   "settings_title": "Settings",
   "settings": {
     "categories": {

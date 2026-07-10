@@ -1,0 +1,24 @@
+name: "JS Automations (Beta)"
+version: "2.57.5"
+slug: "js_automations_beta"
+description: "JavaScript Automations-Engine — Beta channel for testing pre-releases"
+image: "ghcr.io/rocklobster42195/ha-js_automations_addon/{arch}"
+arch:
+  - aarch64
+  - amd64
+startup: "services"
+boot: "manual"
+ingress: true
+ingress_port: 3000
+ports:
+  3001/tcp: 3001
+ports_description:
+  3001/tcp: "Webhook receiver (ha.onWebhook)"
+panel_icon: "mdi:flask-outline"
+homeassistant_api: true
+hassio_api: true
+hassio_role: manager
+map:
+  - config:rw
+options: {}
+schema: {}

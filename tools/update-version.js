@@ -22,6 +22,7 @@ const { execSync } = require('child_process');
 
 const rootDir     = path.resolve(__dirname, '..');
 const configPath  = path.join(rootDir, 'config.yaml');
+const betaConfigPath = path.join(rootDir, 'js_automations_beta', 'config.yaml');
 const readmePath  = path.join(rootDir, 'README.md');
 const changelogPath = path.join(rootDir, 'CHANGELOG.md');
 const packagePath = path.join(rootDir, 'package.json');
@@ -45,8 +46,31 @@ function today() {
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const newVersion = pkg.version;
 const license    = pkg.license || 'MIT';
+const isBeta     = newVersion.includes('-beta.');
 
-console.log(`\n🔄 Synchronizing version ${newVersion}...\n`);
+console.log(`\n🔄 Synchronizing version ${newVersion}${isBeta ? ' (beta channel)' : ''}...\n`);
+
+// --- 0. Beta release: only bump the beta addon's config.yaml ---
+// The stable config.yaml, README badge, and CHANGELOG (incl. the <!-- NEXT -->
+// release gate) stay untouched so the pending release notes survive until the
+// version is promoted to stable.
+if (isBeta) {
+    let content = fs.readFileSync(betaConfigPath, 'utf8');
+    content = content.replace(/^version:.*$/m, `version: "${newVersion}"`);
+    fs.writeFileSync(betaConfigPath, content);
+    assertContains(betaConfigPath, newVersion, 'js_automations_beta/config.yaml');
+    console.log(`  ✅ beta config.yaml   → ${newVersion}`);
+
+    try {
+        execSync(`git add "${betaConfigPath}" "${packagePath}"`);
+        console.log(`  ➕ Staged: js_automations_beta/config.yaml, package.json`);
+    } catch (e) {
+        console.error(`  ⚠️  git add failed: ${e.message}`);
+    }
+
+    console.log(`\n✔  Beta version ${newVersion} ready. Run "npm run release" to publish.\n`);
+    process.exit(0);
+}
 
 // --- 1. config.yaml ---
 let archs = [];
@@ -68,6 +92,18 @@ if (fs.existsSync(configPath)) {
     fs.writeFileSync(configPath, content);
     assertContains(configPath, newVersion, 'config.yaml');
     console.log(`  ✅ config.yaml        → ${newVersion}`);
+}
+
+// --- 1b. Beta config.yaml: sync to the stable version ---
+// After a stable release all beta images of the previous cycle are deleted
+// (see tools/release.js), so the beta addon must point at the stable image
+// until the next beta cycle starts.
+if (fs.existsSync(betaConfigPath)) {
+    let content = fs.readFileSync(betaConfigPath, 'utf8');
+    content = content.replace(/^version:.*$/m, `version: "${newVersion}"`);
+    fs.writeFileSync(betaConfigPath, content);
+    assertContains(betaConfigPath, newVersion, 'js_automations_beta/config.yaml');
+    console.log(`  ✅ beta config.yaml   → ${newVersion} (synced to stable)`);
 }
 
 // --- 2. README.md ---
@@ -107,7 +143,8 @@ if (fs.existsSync(changelogPath)) {
         // Auto-collect commits if body is empty (patch with no written notes)
         if (!body) {
             try {
-                const prevTag = execSync('git describe --tags --abbrev=0', { stdio: 'pipe' }).toString().trim();
+                // Exclude beta tags: a stable release covers everything since the last stable
+                const prevTag = execSync('git describe --tags --abbrev=0 --exclude="*-beta.*"', { stdio: 'pipe' }).toString().trim();
                 const log     = execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
                 if (log) {
                     const lines = log.split('\n')
@@ -142,12 +179,12 @@ if (fs.existsSync(changelogPath)) {
 // npm will create the commit + tag after this script exits.
 // All staged files are included in that single commit automatically.
 try {
-    const filesToStage = [configPath, readmePath, changelogPath, packagePath]
+    const filesToStage = [configPath, betaConfigPath, readmePath, changelogPath, packagePath]
         .filter(fs.existsSync)
         .map(f => `"${f}"`)
         .join(' ');
     execSync(`git add ${filesToStage}`);
-    console.log(`  ➕ Staged: config.yaml, README.md, CHANGELOG.md, package.json`);
+    console.log(`  ➕ Staged: config.yaml, beta config.yaml, README.md, CHANGELOG.md, package.json`);
 } catch (e) {
     console.error(`  ⚠️  git add failed: ${e.message}`);
 }

@@ -224,6 +224,16 @@ class WebhookManager extends EventEmitter {
 
         this.server = http.createServer(this.app);
         this.server.on('error', (e) => {
+            if (e.code === 'EADDRINUSE') {
+                // Safety net: the sibling addon (stable ↔ beta) may still hold
+                // port 3001 in a race the startup guard missed. Retry instead
+                // of leaving webhooks silently dead for the rest of the run.
+                this.logManager.add('warn', 'System', `[Webhook] Port ${this.port} is in use (sibling addon still running?) — retrying in 15s.`);
+                setTimeout(() => {
+                    if (this.server) this.server.listen(this.port, '0.0.0.0');
+                }, 15000);
+                return;
+            }
             this.logManager.add('error', 'System', `[Webhook] Server error: ${e.message}`);
         });
         this.server.listen(this.port, '0.0.0.0', () => {

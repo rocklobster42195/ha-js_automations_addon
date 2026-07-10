@@ -123,6 +123,10 @@
   "safe_mode_btn": "Abgesicherten Modus verlassen",
   "safe_mode_deactivated": "Abgesicherter Modus deaktiviert. Du kannst Skripte nun wieder manuell starten.",
   "safe_mode_failed": "Fehler beim Verlassen des Abgesicherten Modus.",
+  "sibling_guard_title": "Warte auf Geschwister-Add-on",
+  "sibling_guard_msg": "\"{{sibling}}\" läuft gerade. Beide Add-ons teilen sich dieselben Skripte, Daten und den Webhook-Port und dürfen daher nie gleichzeitig laufen.",
+  "sibling_guard_hint": "Stoppe \"{{sibling}}\" in der Add-on-Ansicht — dieses Add-on aktiviert sich dann automatisch (Prüfung alle 15 Sekunden).",
+  "sibling_guard_waiting": "Warte…",
   "settings_title": "Einstellungen",
   "banner_close_tooltip": "Schließen",
   "settings": {
