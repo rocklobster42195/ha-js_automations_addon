@@ -142,6 +142,13 @@ function initWatch() {
     _watchTable  = null;
     _watchRows.clear();
     _loadHAIcons();
+
+    // Ask the backend to replay cached watch tiles / inspect snapshots now that the DOM
+    // is ready. A blind replay at socket-connect time can fire before initWatch() runs
+    // (e.g. while Monaco is still loading), silently dropping it since _watchList was
+    // still null — leaving tiles missing until the owning script is restarted.
+    if (window.socket?.connected) window.socket.emit('subscribe_watch');
+    window.socket?.on('connect', () => window.socket.emit('subscribe_watch'));
 }
 
 function onWatchUpdate(data) {
