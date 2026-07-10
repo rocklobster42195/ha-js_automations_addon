@@ -603,7 +603,10 @@ class Kernel extends EventEmitter {
     shutdown() {
         console.log('🛑 Kernel shutting down...');
         if (this.workerManager) this.workerManager.shutdown();
-        if (this.haConnector) this.haConnector.disconnect();
+        // HAConnector has no disconnect() method — close the raw WebSocket
+        if (this.haConnector?.ws) {
+            try { this.haConnector.ws.close(); } catch { /* already closed */ }
+        }
         this.emit('shutdown');
     }
 }

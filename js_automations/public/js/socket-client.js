@@ -159,6 +159,14 @@ function initSocket() {
         if (typeof window.updateSystemNotifications === 'function') {
             window.updateSystemNotifications();
         }
+
+        // HA (re)connected but areas/labels never arrived — e.g. the page was
+        // opened while HA was still booting and loadHAMetadata() exhausted its
+        // retries against an empty registry. Retrigger it once HA is reachable.
+        if (data?.is_connected && typeof loadHAMetadata === 'function'
+            && haData.areas.length === 0 && haData.labels.length === 0) {
+            loadHAMetadata();
+        }
     });
 
     /**
