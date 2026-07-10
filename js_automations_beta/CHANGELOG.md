@@ -1,3 +1,9 @@
+## [2.57.6-beta.6] - 2026-07-10
+
+- fix: close HA websocket on shutdown (disconnect() never existed); reload HA metadata once connection is up
+
+---
+
 ## [2.57.6-beta.5] - 2026-07-10
 
 - fix: complete deferred startup (autostart, events, MQTT) after failed initial HA connection
