@@ -81,12 +81,21 @@ class HAConnector {
 
     /**
      * Fetches the complete entity registry from Home Assistant.
+     *
+     * Coalesced: EntityManager's post-registration ACK poll calls this once per
+     * entity every 500ms while confirming it appeared in HA. With many entities
+     * registering at boot (e.g. ~30 across a dozen scripts), that used to mean
+     * dozens of full-registry-list round-trips per second — a self-inflicted
+     * flood that visibly overwhelmed both HA and this addon for minutes at a
+     * time. Concurrent callers now share a single in-flight request instead of
+     * each firing their own.
      */
     async getEntityRegistry() {
         if (!this.isReady) return [];
+        if (this._entityRegistryInFlight) return this._entityRegistryInFlight;
         const id = this.msgId++;
         this.send({ id, type: 'config/entity_registry/list' });
-        return new Promise((resolve) => {
+        this._entityRegistryInFlight = new Promise((resolve) => {
             const handler = (data) => {
                 const msg = JSON.parse(data);
                 if (msg.id === id) {
@@ -96,7 +105,8 @@ class HAConnector {
             };
             this.ws.on('message', handler);
             setTimeout(() => { this.ws.removeListener('message', handler); resolve([]); }, 5000);
-        });
+        }).finally(() => { this._entityRegistryInFlight = null; });
+        return this._entityRegistryInFlight;
     }
 
     /**
