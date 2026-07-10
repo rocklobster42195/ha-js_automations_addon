@@ -116,7 +116,7 @@ if (!releaseNotes) {
         if (log) {
             const lines  = log.split('\n')
                 .map(l => l.replace(/^[a-f0-9]+ /, ''))
-                .filter(l => !/^\d+\.\d+\.\d+$/.test(l))
+                .filter(l => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(l)) // skip version bump commits (incl. beta)
                 .map(l => `- ${l}`);
             releaseNotes = lines.join('\n');
             console.log(`  ✅ Auto-collected ${lines.length} commit(s) from ${prevTag}..${tag}`);
