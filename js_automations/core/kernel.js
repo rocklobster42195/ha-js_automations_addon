@@ -57,6 +57,7 @@ class Kernel extends EventEmitter {
         this.cardManager = null;
         this.lastStats = null; // Cache for the latest system metrics
         this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
+        this._startupCompleted = false; // Post-connect startup (autostart etc.) has run
     }
 
     /**
@@ -292,7 +293,38 @@ class Kernel extends EventEmitter {
                 this.logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');
             }
 
-            await this.haConnector.connect();
+            // If HA is not reachable yet (e.g. the addon boots alongside HA and
+            // the Supervisor proxy answers 502), don't abort the whole startup —
+            // the reconnect loop calls _finishStartup() once HA comes up, so
+            // event subscriptions and script autostart still happen.
+            try {
+                await this.haConnector.connect();
+            } catch (err) {
+                console.error('⚠️ Initial HA connection failed:', err.message);
+                this.logManager.add('warn', 'System', `Initial HA connection failed: ${err.message} — startup will complete once HA is reachable.`);
+                return;
+            }
+
+            await this._finishStartup();
+        } catch (err) {
+            console.error(err);
+            this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
+        }
+    }
+
+    /**
+     * Completes the startup once a HA connection exists: MQTT, entities, event
+     * listeners, and script autostart. Runs exactly once — either directly from
+     * start(), or from handleReconnection() if the initial connect failed.
+     * @private
+     */
+    async _finishStartup() {
+        if (this._startupCompleted) return;
+        this._startupCompleted = true;
+
+        const { SCRIPTS_DIR } = config;
+
+        try {
             await this.mqttManager.connect();
 
             // Update System Language from HA Config
@@ -310,7 +342,7 @@ class Kernel extends EventEmitter {
             this._updateWorkerManagerSettings(currentSettings);
 
             await this.entityManager.createExposedEntities();
-            
+
             this._setupSystemEventListeners();
 
             // Card startup cleanup: remove orphaned Lovelace resources and card files
@@ -528,6 +560,16 @@ class Kernel extends EventEmitter {
                 console.log(`✅ HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this.logManager.add('info', 'System', `HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this._reconnectState = null;
+
+                // If the initial connect during start() failed, the whole
+                // post-connect startup (event subscriptions, autostart, MQTT)
+                // is still pending — run it now instead of the plain
+                // reconnect refresh below.
+                if (!this._startupCompleted) {
+                    this.logManager.add('info', 'System', 'Completing deferred startup after first successful HA connection...');
+                    await this._finishStartup();
+                    return;
+                }
 
                 // Update System Language
                 const haConfig = await this.haConnector.getHAConfig();
