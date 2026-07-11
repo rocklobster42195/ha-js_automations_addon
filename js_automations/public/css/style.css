@@ -1729,9 +1729,9 @@ input#search-input:focus { border-color: var(--accent) !important; }
     white-space: nowrap;
     overflow: hidden;
     position: relative;
+    cursor: pointer;
 }
 .mm-row:hover { background: #111; }
-.mm-row:hover .mm-remove-btn { opacity: 1; }
 
 .mm-time { color: #777; flex-shrink: 0; }
 .mm-dir {
@@ -1756,24 +1756,7 @@ input#search-input:focus { border-color: var(--accent) !important; }
     color: #666;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
 }
-.mm-payload:hover { color: #999; }
-
-.mm-remove-btn {
-    opacity: 0;
-    flex-shrink: 0;
-    background: none !important;
-    border: none !important;
-    color: #555 !important;
-    cursor: pointer;
-    padding: 0 2px !important;
-    font-size: 0.8rem;
-    line-height: 1;
-    border-radius: 2px !important;
-    transition: opacity 0.1s;
-}
-.mm-remove-btn:hover { color: #e57373 !important; background: #1a0a0a !important; }
 
 .mm-raw {
     background: #0a0a0a;
