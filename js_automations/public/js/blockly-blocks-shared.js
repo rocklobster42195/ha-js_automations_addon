@@ -199,5 +199,54 @@
             // ha.update() is synchronous (returns void) — no await needed.
             return `ha.update(${JSON.stringify(entityId)}, ${state}${attrsArg});\n`;
         };
+
+        generator.forBlock['ha_store_get'] = function (block, gen) {
+            const key = block.getFieldValue('KEY');
+            return [`ha.store.get(${JSON.stringify(key)})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_store_set'] = function (block, gen) {
+            const key = block.getFieldValue('KEY');
+            const value = gen.valueToCode(block, 'VALUE', gen.ORDER_NONE) || 'undefined';
+            const secret = block.getFieldValue('SECRET') === 'TRUE';
+            const secretArg = secret ? ', true' : '';
+            return `ha.store.set(${JSON.stringify(key)}, ${value}${secretArg});\n`;
+        };
+
+        generator.forBlock['ha_store_delete'] = function (block) {
+            const key = block.getFieldValue('KEY');
+            return `ha.store.delete(${JSON.stringify(key)});\n`;
+        };
+
+        generator.forBlock['ha_store_on'] = function (block, gen) {
+            const key = block.getFieldValue('KEY');
+            const body = gen.statementToCode(block, 'DO');
+            // async, matching ha_trigger_on/ha_trigger_on_state above — DO can contain awaiting
+            // blocks (ha_notify, ha_wait, ha_call_service, ...), a plain arrow function would
+            // make those `await`s a syntax error in the compiled output.
+            return `ha.store.on(${JSON.stringify(key)}, async (newValue, oldValue) => {\n${body}});\n`;
+        };
+
+        generator.forBlock['ha_mqtt_subscribe'] = function (block, gen) {
+            const topic = block.getFieldValue('TOPIC');
+            const body = gen.statementToCode(block, 'DO');
+            // async — see ha_store_on above for why.
+            return `ha.mqtt.subscribe(${JSON.stringify(topic)}, async (topic, payload) => {\n${body}});\n`;
+        };
+
+        // Only meaningful nested inside ha_mqtt_subscribe's DO stack, where the generated
+        // callback's own `payload` parameter (see above) is in scope — mirrors ha_trigger_on's
+        // callback parameter `e`, which similarly has no matching value block today.
+        generator.forBlock['ha_mqtt_payload'] = function (block, gen) {
+            return ['payload', gen.ORDER_ATOMIC];
+        };
+
+        generator.forBlock['ha_mqtt_publish'] = function (block, gen) {
+            const topic = block.getFieldValue('TOPIC');
+            const payload = gen.valueToCode(block, 'PAYLOAD', gen.ORDER_NONE) || '""';
+            const retain = block.getFieldValue('RETAIN') === 'TRUE';
+            const optsArg = retain ? ', { retain: true }' : '';
+            return `ha.mqtt.publish(${JSON.stringify(topic)}, ${payload}${optsArg});\n`;
+        };
     };
 });

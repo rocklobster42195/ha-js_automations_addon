@@ -10,7 +10,8 @@
                 { "kind": "block", "type": "ha_trigger_on_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
                 { "kind": "block", "type": "ha_schedule_interval" },
                 { "kind": "block", "type": "ha_schedule_daily" },
-                { "kind": "block", "type": "ha_schedule_cron" }
+                { "kind": "block", "type": "ha_schedule_cron" },
+                { "kind": "block", "type": "ha_mqtt_subscribe" }
             ]
         },
         {
@@ -19,7 +20,9 @@
             "colour": "20",
             "contents": [
                 { "kind": "block", "type": "ha_call_service", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "light.example" } } } } },
-                { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } }
+                { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } },
+                { "kind": "block", "type": "ha_mqtt_publish", "inputs": { "PAYLOAD": { "shadow": { "type": "text", "fields": { "TEXT": "value" } } } } },
+                { "kind": "block", "type": "ha_mqtt_payload" }
             ]
         },
         {
@@ -51,6 +54,17 @@
         },
         {
             "kind": "category",
+            "name": "Store",
+            "colour": "260",
+            "contents": [
+                { "kind": "block", "type": "ha_store_get" },
+                { "kind": "block", "type": "ha_store_set", "inputs": { "VALUE": { "shadow": { "type": "text", "fields": { "TEXT": "value" } } } } },
+                { "kind": "block", "type": "ha_store_delete" },
+                { "kind": "block", "type": "ha_store_on" }
+            ]
+        },
+        {
+            "kind": "category",
             "name": "Script Utilities",
             "colour": "0",
             "contents": [
@@ -66,7 +80,26 @@
                 { "kind": "block", "type": "controls_if" },
                 { "kind": "block", "type": "logic_compare" },
                 { "kind": "block", "type": "logic_operation" },
-                { "kind": "block", "type": "logic_boolean" }
+                { "kind": "block", "type": "logic_negate" },
+                { "kind": "block", "type": "logic_boolean" },
+                { "kind": "block", "type": "logic_null" },
+                { "kind": "block", "type": "logic_ternary" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Loops",
+            "colour": "%{BKY_LOOPS_HUE}",
+            "contents": [
+                { "kind": "block", "type": "controls_repeat_ext", "inputs": { "TIMES": { "shadow": { "type": "math_number", "fields": { "NUM": 10 } } } } },
+                { "kind": "block", "type": "controls_whileUntil" },
+                { "kind": "block", "type": "controls_for", "inputs": {
+                    "FROM": { "shadow": { "type": "math_number", "fields": { "NUM": 1 } } },
+                    "TO": { "shadow": { "type": "math_number", "fields": { "NUM": 10 } } },
+                    "BY": { "shadow": { "type": "math_number", "fields": { "NUM": 1 } } }
+                } },
+                { "kind": "block", "type": "controls_forEach" },
+                { "kind": "block", "type": "controls_flow_statements" }
             ]
         },
         {
@@ -75,7 +108,14 @@
             "colour": "%{BKY_TEXTS_HUE}",
             "contents": [
                 { "kind": "block", "type": "text" },
-                { "kind": "block", "type": "text_join" }
+                { "kind": "block", "type": "text_join" },
+                { "kind": "block", "type": "text_length" },
+                { "kind": "block", "type": "text_isEmpty" },
+                { "kind": "block", "type": "text_indexOf" },
+                { "kind": "block", "type": "text_charAt" },
+                { "kind": "block", "type": "text_getSubstring" },
+                { "kind": "block", "type": "text_changeCase" },
+                { "kind": "block", "type": "text_trim" }
             ]
         },
         {
@@ -84,8 +124,37 @@
             "colour": "%{BKY_MATH_HUE}",
             "contents": [
                 { "kind": "block", "type": "math_number" },
-                { "kind": "block", "type": "math_arithmetic" }
+                { "kind": "block", "type": "math_arithmetic" },
+                { "kind": "block", "type": "math_single" },
+                { "kind": "block", "type": "math_round" },
+                { "kind": "block", "type": "math_modulo" },
+                { "kind": "block", "type": "math_random_int", "inputs": {
+                    "FROM": { "shadow": { "type": "math_number", "fields": { "NUM": 1 } } },
+                    "TO": { "shadow": { "type": "math_number", "fields": { "NUM": 100 } } }
+                } }
             ]
+        },
+        {
+            "kind": "category",
+            "name": "Lists",
+            "colour": "%{BKY_LISTS_HUE}",
+            "contents": [
+                { "kind": "block", "type": "lists_create_with" },
+                { "kind": "block", "type": "lists_repeat", "inputs": { "NUM": { "shadow": { "type": "math_number", "fields": { "NUM": 5 } } } } },
+                { "kind": "block", "type": "lists_length" },
+                { "kind": "block", "type": "lists_isEmpty" },
+                { "kind": "block", "type": "lists_indexOf" },
+                { "kind": "block", "type": "lists_getIndex" },
+                { "kind": "block", "type": "lists_setIndex" },
+                { "kind": "block", "type": "lists_getSublist" },
+                { "kind": "block", "type": "lists_sort" }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Variables",
+            "colour": "%{BKY_VARIABLES_HUE}",
+            "custom": "VARIABLE"
         }
     ]
 }

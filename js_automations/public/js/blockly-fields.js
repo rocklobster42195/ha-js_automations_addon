@@ -131,11 +131,37 @@
 
         class FieldEntityDropdown extends FieldHaCombobox {
             constructor(value) {
-                super(value, () => {
-                    if (typeof allEntities === 'undefined' || !allEntities || allEntities.length === 0) return null;
-                    return allEntities.map(id => [id, id]);
-                });
+                super(value, () => this.getFilteredEntities_());
             }
+
+            // Domain awareness: an `ha_entity` block plugged into `ha_call_service`'s ENTITY
+            // socket can infer a domain filter from that same block's SERVICE field (e.g.
+            // "light.turn_on" implies light.* entities) — no separate mechanism needed, just a
+            // refinement on top of the existing picker (per the concept doc's open item). Only
+            // wired up for `ha_call_service` since it's the only block where both the domain hint
+            // (SERVICE) and the entity picker live on the same parent block; other sockets
+            // (ha_trigger_on, ha_get_state, ...) have no such hint and fall through to the
+            // unfiltered list below.
+            getFilteredEntities_() {
+                if (typeof allEntities === 'undefined' || !allEntities || allEntities.length === 0) return null;
+                const domain = this.inferDomainFromContext_();
+                if (!domain) return allEntities.map(id => [id, id]);
+                const filtered = allEntities.filter(id => id.startsWith(domain + '.'));
+                // Falls back to the unfiltered list rather than an empty suggestion list when the
+                // guess doesn't pan out (e.g. a cross-domain service like homeassistant.turn_on).
+                const list = filtered.length > 0 ? filtered : allEntities;
+                return list.map(id => [id, id]);
+            }
+
+            inferDomainFromContext_() {
+                const sourceBlock = this.getSourceBlock && this.getSourceBlock();
+                const parentConn = sourceBlock && sourceBlock.outputConnection && sourceBlock.outputConnection.targetConnection;
+                const parentBlock = parentConn && parentConn.getSourceBlock();
+                if (!parentBlock || parentBlock.type !== 'ha_call_service') return null;
+                const service = parentBlock.getFieldValue('SERVICE');
+                return service && service.includes('.') ? service.split('.')[0] : null;
+            }
+
             static fromJson(options) {
                 return new FieldEntityDropdown(options['entityId']);
             }

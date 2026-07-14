@@ -229,6 +229,99 @@
             "mutator": "ha_extra_data_mutator",
             "tooltip": "Updates the state of an entity previously created with \"register entity\". Click the gear icon to also set extra attributes.",
             "helpUrl": ""
+        },
+        {
+            "type": "ha_store_get",
+            "message0": "store get %1",
+            "args0": [
+                { "type": "field_input", "name": "KEY", "text": "my_key" }
+            ],
+            "output": null,
+            "colour": 260,
+            "tooltip": "Reads a value from the global store (persists across restarts and is shared between scripts). Returns nothing (undefined) if the key was never set.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_store_set",
+            "message0": "store set %1 to %2",
+            "args0": [
+                { "type": "field_input", "name": "KEY", "text": "my_key" },
+                { "type": "input_value", "name": "VALUE" }
+            ],
+            "message1": "secret (mask in UI) %1",
+            "args1": [
+                { "type": "field_checkbox", "name": "SECRET", "checked": false }
+            ],
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 260,
+            "tooltip": "Writes a value to the global store. Persists across script/addon restarts and is visible to other scripts under the same key. Check \"secret\" to mask the value in the Store Explorer UI.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_store_delete",
+            "message0": "store delete %1",
+            "args0": [
+                { "type": "field_input", "name": "KEY", "text": "my_key" }
+            ],
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 260,
+            "tooltip": "Removes a key from the global store.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_store_on",
+            "message0": "when store %1 changes",
+            "args0": [
+                { "type": "field_input", "name": "KEY", "text": "my_key" }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 260,
+            "tooltip": "Runs the attached actions whenever this store key's value changes — useful for reacting to a value another script wrote.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_mqtt_subscribe",
+            "message0": "when MQTT message on %1",
+            "args0": [
+                { "type": "field_input", "name": "TOPIC", "text": "my/topic" }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 210,
+            "tooltip": "Runs the attached actions whenever a message arrives on this MQTT topic. Wildcards + (single level) and # (multi-level, must be last) are supported. The message payload is available as \"MQTT payload\" inside this block.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_mqtt_payload",
+            "message0": "MQTT payload",
+            "output": null,
+            "colour": 210,
+            "tooltip": "The payload of the MQTT message that triggered this block — only valid inside a \"when MQTT message\" block. Automatically parsed as JSON when possible, otherwise a plain string.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_mqtt_publish",
+            "message0": "publish MQTT %1 to %2",
+            "args0": [
+                { "type": "input_value", "name": "PAYLOAD" },
+                { "type": "field_input", "name": "TOPIC", "text": "my/topic" }
+            ],
+            "message1": "retain %1",
+            "args1": [
+                { "type": "field_checkbox", "name": "RETAIN", "checked": false }
+            ],
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 20,
+            "tooltip": "Publishes a message to an MQTT topic. Objects are automatically sent as JSON. Check \"retain\" so new subscribers immediately get the last published value.",
+            "helpUrl": ""
         }
     ];
 });

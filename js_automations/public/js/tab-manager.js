@@ -9,6 +9,17 @@ var activeTabFilename = null;
 // Suffix used to identify card tabs (not real files — virtual view of __JSA_CARD__ block)
 const CARD_TAB_SUFFIX = '[card]';
 
+// "Hat" block types (no previous/next connection) that start a run — a workspace with none of
+// these compiles to valid but inert code (nothing ever calls into it). Kept in sync by hand
+// with blockly-blocks.js's trigger block definitions; there's no single source of truth to
+// derive this list from without also loading Blockly itself in this file.
+const BLOCKLY_TRIGGER_TYPES = ['ha_trigger_on', 'ha_trigger_on_state', 'ha_schedule_interval', 'ha_schedule_daily', 'ha_schedule_cron', 'ha_store_on', 'ha_mqtt_subscribe'];
+
+function blocklyWorkspaceHasTrigger(blocksState) {
+    const topBlocks = (blocksState && blocksState.blocks && blocksState.blocks.blocks) || [];
+    return topBlocks.some(b => BLOCKLY_TRIGGER_TYPES.includes(b.type));
+}
+
 // Ctrl+S for Monaco tabs is handled by editor.addCommand() in app.js, which only fires while
 // Monaco itself has focus. Blockly tabs have no Monaco focus target (the workspace is an SVG
 // canvas), so that binding never sees the keypress — without this, the browser's native
@@ -178,7 +189,13 @@ async function openBlocklyTab(filename, icon, rawContent) {
     } catch (e) {
         parsed = {};
     }
-    const blocksState = parsed.blocks || { languageVersion: 0, blocks: [] };
+    // { blocks, variables } — see blockly-editor.js's getBlocklyWorkspaceState() for why both
+    // top-level keys are needed (a variable block only serializes its ID into `blocks`; the
+    // name lives in `variables`).
+    const blocksState = {
+        blocks: parsed.blocks || { languageVersion: 0, blocks: [] },
+        variables: parsed.variables || [],
+    };
 
     const newTab = {
         filename,
@@ -313,7 +330,7 @@ function switchToTab(filename) {
         document.getElementById('blockly-container').classList.remove('hidden');
 
         if (window.isBlocklyReady && window.isBlocklyReady()) {
-            window.loadBlocklyWorkspace({ jsa: newTab.jsa, blocks: newTab.blocksState });
+            window.loadBlocklyWorkspace({ jsa: newTab.jsa, blocks: newTab.blocksState.blocks, variables: newTab.blocksState.variables });
         }
     } else {
         document.getElementById('store-wrapper').classList.add('hidden');
@@ -336,12 +353,24 @@ function switchToTab(filename) {
     updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
     updateEditorMode(newTab.filename);
 
-    // Rebuild snippet toolbar to match context (script vs. card)
+    // Rebuild snippet toolbar to match context (script vs. card). Blockly tabs get neither —
+    // JS/TS code snippets make no sense on a block canvas (there's no text cursor to insert
+    // at). A "Show Code" toggle belongs in this slot instead once that panel exists (M5);
+    // until then, just hide it rather than show a JS-snippet menu with nothing to act on.
     const toolbarSnippets = document.getElementById('toolbar-snippets');
-    if (toolbarSnippets && typeof buildSnippetToolbar === 'function') {
-        const snippetMode = newTab.type === 'card' ? 'card' : 'script';
-        buildSnippetToolbar(toolbarSnippets, snippetMode);
+    const isBlocklyTab = newTab.type === 'blockly';
+    if (toolbarSnippets) {
+        if (isBlocklyTab) {
+            toolbarSnippets.innerHTML = '';
+        } else if (typeof buildSnippetToolbar === 'function') {
+            const snippetMode = newTab.type === 'card' ? 'card' : 'script';
+            buildSnippetToolbar(toolbarSnippets, snippetMode);
+        }
     }
+
+    // Word wrap is a Monaco text-editor concept — meaningless on a Blockly canvas.
+    const wordWrapBtn = document.getElementById('btn-word-wrap');
+    if (wordWrapBtn) wordWrapBtn.classList.toggle('hidden', isBlocklyTab);
 
     // Show preview button for card tabs AND for script tabs that have a @card header
     const isCardTab = newTab.type === 'card';
@@ -627,8 +656,17 @@ async function saveActiveTab() {
 
     if (activeTab.type === 'blockly') {
         const blocksState = window.getBlocklyWorkspaceState();
+        // A script exposed as a switch/button (@expose) is legitimately trigger-less — toggling
+        // it in HA calls startScript() directly, running the top-level blocks once. Only warn
+        // when there's neither a trigger block nor any other way for the script to ever run.
+        const isExposed = !!(activeTab.jsa && activeTab.jsa.expose);
+        if (!blocklyWorkspaceHasTrigger(blocksState) && !isExposed) {
+            const proceed = confirm(i18next.t('blockly_no_trigger_warning',
+                { defaultValue: 'This script has no trigger block, so it will never actually run when enabled. Save anyway?' }));
+            if (!proceed) return;
+        }
         activeTab.blocksState = blocksState;
-        const content = JSON.stringify({ jsa: activeTab.jsa, blocks: blocksState }, null, 2);
+        const content = JSON.stringify({ jsa: activeTab.jsa, blocks: blocksState.blocks, variables: blocksState.variables }, null, 2);
 
         await apiFetch(`api/scripts/${activeTabFilename}/content`, {
             method: 'POST',

@@ -756,7 +756,7 @@ async function executeWizardAction() {
                                 tab.jsa = (JSON.parse(cData.content || '{}')).jsa || {};
                             } catch (e) { /* keep existing jsa on parse failure */ }
                             if (activeTabFilename === newFilename && window.loadBlocklyWorkspace) {
-                                window.loadBlocklyWorkspace({ jsa: tab.jsa, blocks: tab.blocksState });
+                                window.loadBlocklyWorkspace({ jsa: tab.jsa, blocks: tab.blocksState.blocks, variables: tab.blocksState.variables });
                             }
                         }
                     }
