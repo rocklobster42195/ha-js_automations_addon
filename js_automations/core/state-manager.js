@@ -51,6 +51,15 @@ class StateManager {
     }
 
     /**
+     * Removes a single entity's live state and script mapping.
+     * @param {string} entityId - The entity ID to remove.
+     */
+    unregisterEntity(entityId) {
+        this.liveStates.delete(entityId);
+        this.entityScriptMap.delete(entityId);
+    }
+
+    /**
      * Removes all entity mappings associated with a specific script path.
      * @param {string} scriptPath - The full path of the script to unregister.
      */

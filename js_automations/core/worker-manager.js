@@ -414,6 +414,9 @@ class WorkerManager extends EventEmitter {
         this.saveRegistry();
         const scriptName = path.basename(filename, path.extname(filename));
         this.emit('request_device_cleanup', scriptName);
+
+        // Notify EntityManager to also remove from HA's WebSocket entity registry.
+        this.emit('sweep_entity_removed', entityId);
     }
 
     getScripts() {
@@ -783,6 +786,16 @@ class WorkerManager extends EventEmitter {
 
                     if (this.activeRunEntities.has(scriptMeta.filename)) {
                         this.activeRunEntities.get(scriptMeta.filename).add(msg.entityId);
+                    }
+                }
+
+                if (msg.type === 'remove_entity') {
+                    if (this.protectedEntities.get(scriptMeta.filename)?.has(msg.entityId)) {
+                        this.emit('log', { source: 'System', message: `[WorkerManager] Ignoring ha.unregister('${msg.entityId}') — entity is declared via @expose and is managed automatically.`, level: 'warn' });
+                    } else {
+                        this.emit('log', { source: 'System', message: `[WorkerManager] Received ha.unregister for '${msg.entityId}' from ${name}`, level: 'debug' });
+                        this.activeRunEntities.get(scriptMeta.filename)?.delete(msg.entityId);
+                        this.unregisterEntity(scriptMeta.filename, msg.entityId);
                     }
                 }
 
@@ -1212,6 +1225,19 @@ class WorkerManager extends EventEmitter {
                 }
                 if (msg.type === 'update_state') {
                     this.emit('update_entity_state', { entityId: msg.entityId, state: msg.state, attributes: msg.attributes });
+                }
+                if (msg.type === 'remove_entity') {
+                    // The REPL doesn't own any entities itself — resolve the real owning script
+                    // so the @expose protection check below applies regardless of who created it.
+                    let ownerFilename = 'repl';
+                    for (const [file, ids] of this.scriptEntityMap.entries()) {
+                        if (ids.has(msg.entityId)) { ownerFilename = file; break; }
+                    }
+                    if (this.protectedEntities.get(ownerFilename)?.has(msg.entityId)) {
+                        logs.push({ level: 'warn', message: `Ignoring ha.unregister('${msg.entityId}') — entity is declared via @expose and is managed automatically.` });
+                    } else {
+                        this.unregisterEntity(ownerFilename, msg.entityId);
+                    }
                 }
                 if (msg.type === 'store_set' && this.storeManager) {
                     this.storeManager.set(msg.key, msg.value, 'REPL', msg.isSecret);

@@ -522,6 +522,13 @@ interface HA {
         enabled_by_default?: boolean;
         /** Seconds after the last state update before HA marks the entity as `unavailable`. */
         expire_after?: number;
+        /**
+         * When `true`, this entity stays available (showing its last value) when the parent
+         * script stops — only tied to the addon's global status, not the per-script one.
+         * Pair with `expire_after` if the value should eventually be flagged stale anyway.
+         * Default: `false` (entity goes `unavailable` while its script is stopped).
+         */
+        stale_ok?: boolean;
         /** Initial state value set when the entity is first created. */
         initial_state?: string | number | boolean;
         /** Initial attributes (merged with the state on first publish). */
@@ -572,6 +579,20 @@ interface HA {
         /** Allow any additional HA discovery config fields. */
         [key: string]: any;
     }): void;
+
+    /**
+     * Permanently removes a dynamically-created entity from Home Assistant (discovery teardown +
+     * cleared retained state), without restarting the script. Use this when a script manages
+     * entities for a changing set of items (e.g. one per discovered device) and an item goes
+     * away at runtime — the automatic Mark-and-Sweep cleanup only runs on script restart.
+     * Entities declared via the `@expose` header are managed automatically and cannot be unregistered.
+     *
+     * @example
+     * ha.unregister('sensor.device_123_battery');
+     *
+     * @param entityId The entity ID to remove (as passed to `ha.register()`).
+     */
+    unregister(entityId: string): void;
 
     /** A live cache of all Home Assistant entity states. */
     readonly states: HAEntities;

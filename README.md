@@ -27,7 +27,7 @@
 
 - **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys. Updated automatically as your home changes.
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
-- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
+- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped, unless opted out via `stale_ok`. Remove one at runtime with `ha.unregister()`. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
 - **Direct MQTT Access (`ha.mqtt`)** — Subscribe to any broker topic and publish messages directly — no HA entity required. Supports `+` and `#` wildcards. Payloads are auto-parsed as JSON. Ideal for raw Tasmota/Shelly/Zigbee2MQTT events, inter-script messaging, and building custom HA devices with complex domains.
 - **Webhook Receiver (`ha.onWebhook`)** — Let external services push data into your scripts and get a real response back. Unlike HA's built-in webhook automations (fire-and-forget, always an empty `200 OK`), JSA webhooks are fully bidirectional: your handler receives the complete request and returns any HTTP status code and body. Tokens are auto-generated and managed by JSA, never in script code. A dedicated Webhook Panel (Developer Tools) shows all active endpoints with copy-ready URLs and token management (reveal / rotate). Requires a dedicated port; does not work through the Nabu Casa tunnel.
 - **Fluent & Awaitable API** — Interact with entities naturally: `await ha.entity('light.kitchen').turn_on({ brightness: 200 })`. Chain commands, wait for confirmations, build readable sequential logic.
@@ -208,6 +208,31 @@ Supported device fields: `name`, `manufacturer`, `model`, `sw_version`, `hw_vers
 > **Entity ID note:** When `device` is set, HA generates the entity_id from the device and entity name slugs, ignoring the path you specified. Omit `device` for exact entity_id control.
 
 > **Mark-and-Sweep:** Entities that are no longer registered by a script are automatically removed from Home Assistant when the script runs again.
+
+### Staying Available While Stopped
+
+By default, an entity becomes `unavailable` in HA the moment its script stops. For values that are still meaningful after the script exits (a last measured temperature, a counter), set `stale_ok: true` to keep the entity available — tied only to the addon's global status instead of the per-script one:
+
+```javascript
+ha.register('sensor.outside_temp', {
+    name: 'Outside Temperature',
+    unit: '°C',
+    stale_ok: true,
+    expire_after: 3600, // fall back to unavailable after 1h without an update
+});
+```
+
+Combine with `expire_after` if the value should eventually be flagged stale on its own.
+
+### Removing Entities at Runtime (`ha.unregister`)
+
+Mark-and-Sweep only cleans up on script restart. For scripts that manage a changing set of dynamically-created entities (e.g. one per discovered device), remove a single one immediately with:
+
+```javascript
+ha.unregister('sensor.device_123_battery');
+```
+
+This tears down the entity's MQTT Discovery config and clears its retained state, without restarting the script. Entities declared via the `@expose` header are managed automatically and can't be unregistered this way.
 
 ---
 

@@ -226,7 +226,12 @@ ha.update('sensor.energy_total', 1251.0);
 
 // Update only the icon (keeps current value)
 ha.update('sensor.energy_total', { icon: 'mdi:flash-alert' });
+
+// Remove a dynamically-registered entity at runtime (e.g. its underlying device is gone)
+ha.unregister('sensor.energy_total');
 ```
+
+By default, an entity goes `unavailable` the instant its script stops. Pass `stale_ok: true` in `ha.register()` to keep it available (showing its last value) across script stop/restart — tied only to the addon's global status instead of the per-script one. See the [README](README.md#staying-available-while-stopped) for details.
 
 ### 7. Calling Services (`ha.call`)
 Trigger any action in Home Assistant.

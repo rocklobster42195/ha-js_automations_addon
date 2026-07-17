@@ -193,6 +193,15 @@ const SNIPPET_REGISTRY = [
         minimal: "ha.update('${1:entity_id}', '${2:value}');\n$0",
     },
     {
+        id: 'unregister',
+        icon: 'mdi-delete-outline',
+        labelKey: 'snippet_unregister',
+        toolbarGroup: 'entity',
+        contextMenu: { group: '91_snippets_state', order: 3 },
+        triggers: ['ha.unregister'],
+        minimal: "ha.unregister('${1:entity_id}');\n$0",
+    },
+    {
         id: 'state',
         icon: 'mdi-export',
         labelKey: 'snippet_state',

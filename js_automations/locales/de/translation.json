@@ -60,6 +60,7 @@
   "snippet_state": "Zustand lesen ha.getState()",
   "snippet_update_state": "Entität aktualisieren ha.update()",
   "snippet_register": "Entität registrieren ha.register()",
+  "snippet_unregister": "Entität entfernen ha.unregister()",
   "snippet_select": "Mehrfachauswahl ha.select()",
   "snippet_store_set": "Store: Wert speichern ha.store.set()",
   "snippet_store_get": "Store: Wert lesen ha.store.get()",

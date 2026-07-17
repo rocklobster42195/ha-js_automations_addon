@@ -993,7 +993,20 @@ const ha = {
         // Send the intent to the main process, which handles the registration via MQTT.
         parentPort.postMessage({ type: 'create_entity', entityId, config });
     },
-    
+
+    /**
+     * Permanently removes a dynamically-created entity from Home Assistant, without
+     * restarting the script. Entities declared via the `@expose` header are managed
+     * automatically and cannot be unregistered this way.
+     * @param {string} entityId - The entity ID to remove.
+     */
+    unregister: (entityId) => {
+        delete states[entityId];
+        nativeEntityIds.delete(entityId);
+        entityActionMap.delete(entityId);
+        parentPort.postMessage({ type: 'remove_entity', entityId });
+    },
+
     // Frontend / Lovelace
     frontend: {
         /**
