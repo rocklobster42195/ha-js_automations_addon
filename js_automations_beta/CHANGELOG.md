@@ -1,3 +1,11 @@
+## [2.57.8-beta.2] - 2026-07-17
+
+- feat: add stale_ok availability option and ha.unregister() runtime API
+- docs: replace Angular migration RFC with LIT migration plan
+- fix: MQTT monitor rows expand full detail on click, drop remove button
+
+---
+
 ## [2.57.8-beta.1] - 2026-07-10
 
 - fix: WATCH tab tiles missing until script restart (replay race vs. late DOM init)
