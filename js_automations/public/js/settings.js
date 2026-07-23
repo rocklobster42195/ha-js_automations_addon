@@ -45,8 +45,13 @@ async function openSettingsTab(targetId = null) {
 
 /**
  * Loads schema and values from the API.
+ * @param {boolean} isBackgroundRefresh - true when called from a socket reconnect rather
+ *   than a deliberate tab open (see socket-client.js). Data still refreshes either way, but
+ *   the destructive DOM rebuild below is skipped while the user is actively on the Settings
+ *   tab, so a reconnect can't silently wipe out in-progress unsaved edits. The next
+ *   deliberate open (switchToTab -> loadSettingsData()) always re-renders fresh.
  */
-async function loadSettingsData() {
+async function loadSettingsData(isBackgroundRefresh = false) {
     try {
         const [schemaRes, settingsRes] = await Promise.all([
             apiFetch('api/settings/schema'),
@@ -62,7 +67,11 @@ async function loadSettingsData() {
         window.currentSettings = await settingsRes.json();
         applyExpertMode(window.currentSettings?.general?.expert_mode);
         window.dispatchEvent(new CustomEvent('settings-changed', { detail: window.currentSettings }));
-        
+
+        if (isBackgroundRefresh && typeof activeTabFilename !== 'undefined' && activeTabFilename === SETTINGS_TAB_ID) {
+            return;
+        }
+
         renderSettingsCategories();
         renderAllSettings();
         initScrollSpy();

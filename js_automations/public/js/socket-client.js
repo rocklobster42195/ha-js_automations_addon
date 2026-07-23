@@ -83,6 +83,15 @@ function initSocket() {
         // Request latest status explicitly to avoid race conditions.
         requestIntegrationStatus();
         if (typeof loadScripts === 'function') loadScripts();
+        // Header version badge is otherwise only fetched once at page load — stays on the
+        // old number forever if the tab is open across an addon update.
+        if (typeof loadVersion === 'function') loadVersion();
+        // settings-changed only fires from this call — without it, anything that only
+        // renders on that event (e.g. the status bar) stays stuck on whatever it looked
+        // like before the reconnect if the tab was open across an addon restart.
+        // isBackgroundRefresh=true so this can't blow away an in-progress edit if the
+        // user happens to be sitting on the Settings tab when the reconnect fires.
+        if (typeof loadSettingsData === 'function') loadSettingsData(true);
         // Re-fetch log history on every (re)connect to catch logs emitted before
         // the socket was established (e.g. during addon startup ingress delay).
         if (typeof initLogs === 'function') initLogs();
