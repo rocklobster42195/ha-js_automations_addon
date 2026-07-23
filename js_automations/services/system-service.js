@@ -104,6 +104,18 @@ class SystemService extends EventEmitter {
     }
 
     /**
+     * Marks the current shutdown as graceful (SIGTERM/SIGINT) by discarding the crash
+     * counter, so this stop isn't counted toward the bootloop window on next boot.
+     * Without this, any 3 restarts within 60s — including ordinary ones triggered by
+     * an HA/Supervisor update — trip Safe Mode indistinguishably from a real crash loop.
+     */
+    markCleanShutdown() {
+        try {
+            if (fs.existsSync(this.CRASH_FILE)) fs.unlinkSync(this.CRASH_FILE);
+        } catch (e) { /* best effort — a stale counter just means one extra restart counted */ }
+    }
+
+    /**
      * Resolves the safe mode status by deleting the crash file and emitting an event.
      * @returns {boolean} True if successful, false otherwise.
      */

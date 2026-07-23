@@ -79,7 +79,10 @@ class Kernel extends EventEmitter {
             is_connected: isConnected,
             display_version: config.VERSION,
             mqtt: mqttStatus,
-            stats: this.lastStats // Include stats for immediate status bar population
+            stats: this.lastStats, // Include stats for immediate status bar population
+            // Lets clients that (re)connect after the boot-time 'safe_mode' event fired
+            // still learn the current state, instead of only reacting to that one broadcast.
+            safe_mode: this.systemService?.isSafeMode || false
         };
     }
 
@@ -606,6 +609,9 @@ class Kernel extends EventEmitter {
      */
     shutdown() {
         console.log('🛑 Kernel shutting down...');
+        // A graceful shutdown (SIGTERM/SIGINT) shouldn't count toward the bootloop
+        // window — only unexpected crashes/kills should be able to trip Safe Mode.
+        if (this.systemService) this.systemService.markCleanShutdown();
         if (this.workerManager) this.workerManager.shutdown();
         // HAConnector has no disconnect() method — close the raw WebSocket
         if (this.haConnector?.ws) {

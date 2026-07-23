@@ -21,6 +21,7 @@ class LogManager extends EventEmitter {
         this.flushIntervalMs = 60000; // Flush every 60s
         this.isDirty = false;
         this.systemLogLevel = 'info'; // Global log level for system messages
+        this.urgentFlushTimer = null; // Debounce timer for error/warn entries
 
         // Load existing logs on startup
         this.load();
@@ -84,7 +85,27 @@ class LogManager extends EventEmitter {
 
         this.isDirty = true;
         this.emit('log_added', entry);
+
+        // error/warn entries are often the last thing logged before a crash or a hard
+        // container kill (e.g. mid HA-Supervisor-update). Waiting for the regular 60s
+        // flush would lose them, so get them to disk promptly instead. Debounced briefly
+        // to coalesce bursts (e.g. an exception storm) into a single write.
+        if (lvl === 'error' || lvl === 'warn') this._scheduleUrgentFlush();
+
         return entry;
+    }
+
+    /**
+     * Schedules a near-immediate flush for critical log entries, debounced to avoid
+     * hammering disk during a burst of errors/warnings.
+     * @private
+     */
+    _scheduleUrgentFlush() {
+        if (this.urgentFlushTimer) return;
+        this.urgentFlushTimer = setTimeout(() => {
+            this.urgentFlushTimer = null;
+            this.flush();
+        }, 200);
     }
 
     /**
