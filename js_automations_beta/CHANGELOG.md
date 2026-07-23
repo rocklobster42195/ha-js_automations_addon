@@ -1,3 +1,9 @@
+## [2.57.9-beta.1] - 2026-07-23
+
+- fix: status bar and header version badge stuck stale after a socket reconnect
+
+---
+
 ## [2.57.9-beta.0] - 2026-07-23
 
 - fix: Webhook Panel could stay stuck on pre-restart state after an addon restart
