@@ -20,6 +20,13 @@ function initWebhookPanel() {
         _whWebhooks = webhooks;
         _whRender();
     });
+    // 'webhook_registry_changed' is only broadcast at the moment a script (re-)registers.
+    // If that happens while this client's socket is still reconnecting after an addon
+    // restart, the broadcast is missed and the panel is stuck showing pre-restart state
+    // until a full page reload. Re-fetch on every (re)connect as a fallback.
+    window.socket?.on('connect', () => {
+        _whLoad();
+    });
     window.socket?.on('webhook_call_logged', ({ id, ts, status }) => {
         const entry = _whWebhooks.find(w => w.id === id);
         if (entry) {
