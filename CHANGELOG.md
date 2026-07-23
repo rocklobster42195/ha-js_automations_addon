@@ -2,6 +2,19 @@
 
 ---
 
+## [2.57.8] - 2026-07-23
+
+- fix: false-positive Safe Mode on ordinary addon restarts silently blocked script autostart
+- feat: add stale_ok availability option and ha.unregister() runtime API
+- docs: replace Angular migration RFC with LIT migration plan
+- fix: MQTT monitor rows expand full detail on click, drop remove button
+- fix: WATCH tab tiles missing until script restart (replay race vs. late DOM init)
+- fix: resolve WATCH tab icons from HA's own device_class icon translations
+- fix: retroactively correct v2.57.7 CHANGELOG entry (CRLF boundary-matching bug)
+- fix: normalize CRLF before matching CHANGELOG <!-- NEXT --> boundary (Windows core.autocrlf breaks pure-LF sepIdx search)
+
+---
+
 ## [2.57.7] - 2026-07-10
 
 - fix: coalesce concurrent getEntityRegistry() calls to stop self-inflicted registry-poll flood
