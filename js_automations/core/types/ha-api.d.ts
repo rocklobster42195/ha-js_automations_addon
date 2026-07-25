@@ -259,6 +259,11 @@ interface HA {
     /** Registers a callback to be executed when an unhandled error occurs. */
     onError(callback: (error: BackgroundErrorData) => void): void;
 
+    /** Returns whether the addon currently has a live HA WebSocket connection. */
+    isConnected(): boolean;
+    /** Registers a callback invoked whenever the HA WebSocket connection is lost or restored. */
+    onConnectionChange(callback: (connected: boolean) => void): void;
+
     /**
      * Registers a named action handler that can be triggered from multiple sources:
      * - A Lovelace card via `__jsa__.callAction('name', payload)`

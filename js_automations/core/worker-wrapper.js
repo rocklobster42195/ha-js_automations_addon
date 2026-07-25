@@ -206,7 +206,12 @@ const subscriptionCallbacks = [];
 const eventTypeCallbacks = []; // for ha.onEvent()
 const stopCallbacks = [];
 const errorCallbacks = [];
+const connectionCallbacks = []; // for ha.onConnectionChange()
 let isListening = false;
+
+// Tracks the HA WebSocket connection as last reported by the main process, kept in
+// sync via 'ha_connection_changed' messages so ha.isConnected() is a cheap sync read.
+let _haConnected = workerData.initialConnected !== false;
 
 // Native entity tracking: entity IDs registered via ha.register().
 // ha_events for these are always HA echoes of the script's own MQTT publishes
@@ -439,6 +444,16 @@ function ensureMessageListener() {
                     }
                 });
             }
+        }
+
+        // HA WebSocket connection lost/restored (forwarded from kernel.handleReconnection())
+        if (msg.type === 'ha_connection_changed') {
+            _haConnected = !!msg.connected;
+            connectionCallbacks.forEach(cb => {
+                try { cb(_haConnected); }
+                catch (e) { ha.error(`Error in ha.onConnectionChange callback: ${e.message}\n${e.stack}`); }
+            });
+            return;
         }
 
         // Handle ha.on() triggers
@@ -1346,6 +1361,18 @@ const ha = {
         if (typeof cb === 'function') {
             errorCallbacks.push(cb);
             _addRef(); // Keep process alive if an error handler is used
+        }
+    },
+
+    /** Returns whether the addon currently has a live HA WebSocket connection. */
+    isConnected: () => _haConnected,
+
+    /** Registers a callback invoked whenever the HA WebSocket connection is lost or restored. */
+    onConnectionChange: (cb) => {
+        if (typeof cb === 'function') {
+            ensureMessageListener(); // must be listening to receive 'ha_connection_changed'
+            connectionCallbacks.push(cb);
+            _addRef(); // Keep process alive if a connection handler is used
         }
     },
 

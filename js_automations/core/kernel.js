@@ -524,8 +524,19 @@ class Kernel extends EventEmitter {
             // new worker (restart/hot-reload/rename/dependency update) or the whole addon is
             // going down and should resume the script on its next start.
             const transientReasons = ['restarting', 'restarted by script', 'hot-reload', 'renaming/moving', 'library update', 'system shutdown'];
-            const isPermanentStop = !transientReasons.includes(d.reason);
-            if (isPermanentStop) {
+
+            if (d.type === 'error') {
+                // Crashed (uncaught exception), not an explicit stop — most crashes are
+                // transient (e.g. an unhandled HA call failure during a HA/Supervisor
+                // restart), so try to recover automatically instead of giving up right
+                // away. startScript()'s own restart-rate safeguard (Settings > Danger
+                // Zone) caps how many times this can happen in a row, so a script that's
+                // actually broken still ends up stopped instead of looping forever.
+                const restarted = this.workerManager.startScript(d.filename);
+                if (!restarted) {
+                    this.stateManager.saveScriptStopped(d.filename);
+                }
+            } else if (!transientReasons.includes(d.reason)) {
                 this.stateManager.saveScriptStopped(d.filename);
             }
         }
@@ -534,6 +545,17 @@ class Kernel extends EventEmitter {
         const level = d.type === 'success' ? 'debug' : (d.type || 'info');
         this.logManager.add(level, 'System', `${path.basename(d.filename)} ${d.reason}`);
         this.emit('status_update');
+    }
+
+    /**
+     * Tells running scripts that the HA connection was lost or restored, so scripts
+     * that care can react (e.g. pause their own logic) via ha.onConnectionChange().
+     * @param {boolean} connected
+     */
+    _notifyConnectionChange(connected) {
+        if (this.workerManager) {
+            this.workerManager.broadcastToWorkers({ type: 'ha_connection_changed', connected });
+        }
     }
 
     _onWorkerLog(data) {
@@ -557,6 +579,7 @@ class Kernel extends EventEmitter {
                 this._reconnectState = { attempts: 0, startedAt: Date.now() };
                 console.log("⚠️ HA Connection lost. Attempting to reconnect...");
                 this.logManager.add('warn', 'System', 'HA Connection lost. Attempting to reconnect...');
+                this._notifyConnectionChange(false);
             }
             const state = this._reconnectState;
             state.attempts++;
@@ -567,6 +590,7 @@ class Kernel extends EventEmitter {
                 console.log(`✅ HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this.logManager.add('info', 'System', `HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this._reconnectState = null;
+                this._notifyConnectionChange(true);
 
                 // If the initial connect during start() failed, the whole
                 // post-connect startup (event subscriptions, autostart, MQTT)

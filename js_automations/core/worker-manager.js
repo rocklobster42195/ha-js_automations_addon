@@ -608,6 +608,8 @@ class WorkerManager extends EventEmitter {
 
     /**
      * Starts a script in an isolated thread.
+     * @returns {boolean} True if the worker was actually started, false if aborted
+     *   (script not found, not compiled yet, or excessive restart rate).
      */
     startScript(filename) {
         let fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
@@ -616,7 +618,7 @@ class WorkerManager extends EventEmitter {
 
         if (!fs.existsSync(fullPath)) {
             this.emit('log', { source: 'System', message: `Script not found: ${filename}`, level: 'error' });
-            return;
+            return false;
         }
 
         if (isTypeScript) {
@@ -626,7 +628,7 @@ class WorkerManager extends EventEmitter {
             if (!fs.existsSync(compiledPath)) {
                 const displayFile = path.basename(filename);
                 this.emit('log', { source: 'System', message: `Compiled version for ${displayFile} not found in dist. Was it transpiled? Check logs for Compiler errors.`, level: 'error' });
-                return;
+                return false;
             }
             executionPath = compiledPath;
         }
@@ -644,7 +646,7 @@ class WorkerManager extends EventEmitter {
         if (recentRestarts.length >= this.settings.restart_protection_count) {
             this.emit('log', { source: 'System', message: `🛑 Script '${name}' stopped due to excessive restart rate (>${this.settings.restart_protection_count} restarts in ${this.settings.restart_protection_time / 1000}s).`, level: 'error' });
             this.lastExitState.set(scriptId, 'error');
-            return; // Abort start
+            return false; // Abort start
         }
         recentRestarts.push(now);
         this.restartTracker.set(scriptId, recentRestarts);
@@ -696,6 +698,7 @@ class WorkerManager extends EventEmitter {
             workerData: {
                 ...scriptMeta,
                 path: executionPath,
+                initialConnected: this.haConnector ? !!this.haConnector.isReady : true,
                 initialStates: (() => {
                     const raw = this.haConnector ? this.haConnector.states : {};
                     // Add alias entries so ha.getState(userEntityId) works from the first line
@@ -1107,6 +1110,8 @@ class WorkerManager extends EventEmitter {
         setTimeout(() => {
             if (this.workers.has(scriptMeta.filename)) worker.postMessage({ type: 'get_stats' });
         }, 1000);
+
+        return true;
     }
 
     /**

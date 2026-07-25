@@ -467,6 +467,29 @@ ha.onError((error) => {
 
 ---
 
+### 12. HA Connection Status (`ha.isConnected` / `ha.onConnectionChange`)
+Most scripts don't need to worry about brief HA disconnects (e.g. during a Home Assistant Core update/restart) — the addon container itself keeps running, and `await` calls like `ha.callService()` simply reject with an error while the connection is down instead of crashing the script.
+
+Use these when a script wants to actively react to the connection state, e.g. to skip a scheduled action while HA is unreachable instead of letting it fail and log an error:
+
+```javascript
+schedule('every 5m', async () => {
+    if (!ha.isConnected()) {
+        ha.log('HA is currently unreachable, skipping this run.');
+        return;
+    }
+    await ha.callService('light.turn_on', { entity_id: 'light.living_room' });
+});
+
+ha.onConnectionChange((connected) => {
+    ha.log(connected ? 'HA connection restored.' : 'HA connection lost.');
+});
+```
+
+`ha.isConnected()` returns the current state synchronously. `ha.onConnectionChange` fires once per transition (lost → true→false, restored → false→true), not on every reconnect attempt.
+
+---
+
 ## Global Built-ins
 
 Functions that are always available in the global scope.
