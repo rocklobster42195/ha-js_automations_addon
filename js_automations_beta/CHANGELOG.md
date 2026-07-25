@@ -1,3 +1,9 @@
+## [2.57.9-beta.2] - 2026-07-25
+
+- feat: auto-restart crashed scripts and expose HA connection status to scripts
+
+---
+
 ## [2.57.9-beta.1] - 2026-07-23
 
 - fix: status bar and header version badge stuck stale after a socket reconnect
