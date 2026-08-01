@@ -16,8 +16,8 @@
 //    Body (JSON): { "hello": "world" }
 // ---------------------------------------------------------------------------
 ha.onWebhook('ping', async (req, res) => {
-    ha.log(`[webhook_api_test] ping: method=${req.method} body=${JSON.stringify(req.body)} ip=${req.ip}`);
-    res.json({ received: true, echo: req.body });
+  ha.log(`[webhook_api_test] ping: method=${req.method} body=${JSON.stringify(req.body)} ip=${req.ip}`);
+  res.json({ received: true, echo: req.body });
 });
 
 // ---------------------------------------------------------------------------
@@ -26,8 +26,8 @@ ha.onWebhook('ping', async (req, res) => {
 //    Test: GET http://<host>:<webhook_port>/webhook/status?foo=bar
 // ---------------------------------------------------------------------------
 ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
-    ha.log(`[webhook_api_test] status: query=${JSON.stringify(req.query)}`);
-    res.json({ ok: true, uptime: process.uptime(), query: req.query });
+  ha.log(`[webhook_api_test] status: query=${JSON.stringify(req.query)}`);
+  res.json({ ok: true, uptime: process.uptime(), query: req.query });
 });
 
 // ---------------------------------------------------------------------------
@@ -42,13 +42,13 @@ ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
 const openConfig = ha.persistent('open_webhook_config', {});
 
 ha.onWebhook('open', { noAuth: true }, async (req, res) => {
-    if (!openConfig.verification_token) {
-        return res.status(500).json({ error: 'not configured — set open_webhook_config in Store Explorer' });
-    }
-    if (req.body?.verification_token !== openConfig.verification_token) {
-        return res.status(401).json({ error: 'unauthorized' });
-    }
-    res.json({ status: 'ok' });
+  if (!openConfig.verification_token) {
+    return res.status(500).json({ error: 'not configured — set open_webhook_config in Store Explorer' });
+  }
+  if (req.body?.verification_token !== openConfig.verification_token) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  res.json({ status: 'ok' });
 });
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ ha.onWebhook('open', { noAuth: true }, async (req, res) => {
 //    Test: POST http://<host>:<webhook_port>/webhook/boom
 // ---------------------------------------------------------------------------
 ha.onWebhook('boom', async (req, res) => {
-    throw new Error('Deliberate test failure');
+  throw new Error('Deliberate test failure');
 });
 
 // ---------------------------------------------------------------------------
@@ -65,8 +65,8 @@ ha.onWebhook('boom', async (req, res) => {
 //    Test: POST http://<host>:<webhook_port>/webhook/timeout
 // ---------------------------------------------------------------------------
 ha.onWebhook('timeout', async (req, res) => {
-    ha.log('[webhook_api_test] timeout: intentionally not responding...');
-    await new Promise(() => {}); // never resolves — handler stays pending until the 10s timeout fires
+  ha.log('[webhook_api_test] timeout: intentionally not responding...');
+  await new Promise(() => {}); // never resolves — handler stays pending until the 10s timeout fires
 });
 
 // ---------------------------------------------------------------------------
@@ -78,8 +78,8 @@ ha.onWebhook('timeout', async (req, res) => {
 //    Test: POST http://<host>:<webhook_port>/webhook/allowlisted
 // ---------------------------------------------------------------------------
 ha.onWebhook('allowlisted', { allowlist: ['127.0.0.1', '::1'] }, async (req, res) => {
-    ha.log(`[webhook_api_test] allowlisted: call accepted from ${req.ip}`);
-    res.json({ received: true });
+  ha.log(`[webhook_api_test] allowlisted: call accepted from ${req.ip}`);
+  res.json({ received: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -95,11 +95,13 @@ ha.onWebhook('allowlisted', { allowlist: ['127.0.0.1', '::1'] }, async (req, res
 const hmacConfig = ha.persistent('signed_webhook_config', { secret: 'test-hmac-secret' });
 
 ha.onWebhook('signed', { noAuth: true }, async (req, res) => {
-    const sig = req.headers['x-hub-signature-256'];
-    if (!ha.verifyWebhookSignature(req.rawBody, sig, hmacConfig.secret)) {
-        return res.status(401).json({ error: 'invalid signature' });
-    }
-    res.json({ received: true, echo: req.body });
+  const sig = req.headers['x-hub-signature-256'];
+  if (!ha.verifyWebhookSignature(req.rawBody, sig, hmacConfig.secret)) {
+    return res.status(401).json({ error: 'invalid signature' });
+  }
+  res.json({ received: true, echo: req.body });
 });
 
-ha.log('[webhook_api_test] Registered: ping (POST), status (GET), open (POST, noAuth), boom (POST, throws), timeout (POST, never responds), allowlisted (POST, IP-filtered), signed (POST, HMAC).');
+ha.log(
+  '[webhook_api_test] Registered: ping (POST), status (GET), open (POST, noAuth), boom (POST, throws), timeout (POST, never responds), allowlisted (POST, IP-filtered), signed (POST, HMAC).'
+);

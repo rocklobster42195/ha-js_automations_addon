@@ -1,0 +1,11 @@
+node_modules/
+scripts/
+js_automations_beta/
+js_automations/public/js/vendor/
+package-lock.json
+CHANGELOG.md
+
+# Home Assistant addon manifest — version line is rewritten with double quotes
+# by tools/update-version.js on every release; keep it out of Prettier's scope
+# so the two don't fight over quote style.
+config.yaml

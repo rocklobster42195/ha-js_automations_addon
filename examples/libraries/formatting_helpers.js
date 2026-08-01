@@ -11,17 +11,17 @@
  * @returns {string} The formatted duration string.
  */
 function formatDuration(totalSeconds) {
-    if (totalSeconds < 0) return "0s";
-    if (totalSeconds < 60) return `${Math.round(totalSeconds)}s`;
+  if (totalSeconds < 0) return '0s';
+  if (totalSeconds < 60) return `${Math.round(totalSeconds)}s`;
 
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    
-    let result = '';
-    if (hours > 0) result += `${hours}h `;
-    if (minutes > 0) result += `${minutes}min`;
-    
-    return result.trim();
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  let result = '';
+  if (hours > 0) result += `${hours}h `;
+  if (minutes > 0) result += `${minutes}min`;
+
+  return result.trim();
 }
 
 /**
@@ -30,11 +30,11 @@ function formatDuration(totalSeconds) {
  * @returns {'bright'|'daylight'|'twilight'|'dark'|'pitch_black'} A string describing the light level.
  */
 function luxToDarkness(luxValue) {
-    if (luxValue > 1000) return 'bright';      // Direct sunlight
-    if (luxValue > 100) return 'daylight';     // Overcast day
-    if (luxValue > 10) return 'twilight';      // Civil twilight
-    if (luxValue > 1) return 'dark';           // Deep twilight / Full moon
-    return 'pitch_black';                      // No light
+  if (luxValue > 1000) return 'bright'; // Direct sunlight
+  if (luxValue > 100) return 'daylight'; // Overcast day
+  if (luxValue > 10) return 'twilight'; // Civil twilight
+  if (luxValue > 1) return 'dark'; // Deep twilight / Full moon
+  return 'pitch_black'; // No light
 }
 
 /**
@@ -44,6 +44,6 @@ function luxToDarkness(luxValue) {
  * @returns {number} The rounded number.
  */
 function round(value, precision = 0) {
-    const multiplier = Math.pow(10, precision || 0);
-    return Math.round(value * multiplier) / multiplier;
+  const multiplier = Math.pow(10, precision || 0);
+  return Math.round(value * multiplier) / multiplier;
 }

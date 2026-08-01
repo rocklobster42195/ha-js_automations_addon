@@ -7,169 +7,169 @@ var editor = null; // Global instance for editor-config.js
 
 // Capture console methods immediately to allow restoring/filtering.
 const originalConsole = {
-    log: console.log,
-    debug: console.debug,
-    info: console.info,
-    warn: console.warn,
-    error: console.error
+  log: console.log,
+  debug: console.debug,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
 };
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Initialize Internationalization.
-    await initI18next();
-    
-    // 2. Initialize WebSocket Connection.
-    initSocket();
+  // 1. Initialize Internationalization.
+  await initI18next();
 
-    // 3. Initialize Monaco Editor (AMD Loader).
-    if (typeof require !== 'undefined') {
-        const monacoLang = i18next.language.startsWith('de') ? 'de' : '';
-        require.config({ 
-            paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' },
-            'vs/nls': { availableLanguages: { '*': monacoLang } }
-        });
-        
-        require(['vs/editor/editor.main'], () => {
-            // Create Editor Instance.
-            editor = monaco.editor.create(document.getElementById('monaco-container'), {
-                model: null, // No model initially, will be set when a tab is opened
-                language: 'javascript',
-                theme: 'vs-dark',
-                automaticLayout: true,
-                fontSize: 13,
-                minimap: { enabled: true },
-                suggest: { showWords: false }
-            });
+  // 2. Initialize WebSocket Connection.
+  initSocket();
 
-            // Restore Word Wrap Setting.
-            const savedWordWrap = localStorage.getItem('js_editor_wordwrap') || 'off';
-            editor.updateOptions({ wordWrap: savedWordWrap });
-            
-            // Update UI Button for Word Wrap.
-            const wrapButton = document.getElementById('btn-word-wrap');
-            if (wrapButton) {
-                const icon = wrapButton.querySelector('i');
-                if (icon) {
-                    icon.className = `mdi mdi-wrap${savedWordWrap === 'on' ? '' : '-disabled'}`;
-                }
-            }
+  // 3. Initialize Monaco Editor (AMD Loader).
+  if (typeof require !== 'undefined') {
+    const monacoLang = i18next.language.startsWith('de') ? 'de' : '';
+    require.config({
+      paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' },
+      'vs/nls': { availableLanguages: { '*': monacoLang } },
+    });
 
-            // Register Keyboard Shortcuts (Ctrl+S / Cmd+S).
-            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
+    require(['vs/editor/editor.main'], () => {
+      // Create Editor Instance.
+      editor = monaco.editor.create(document.getElementById('monaco-container'), {
+        model: null, // No model initially, will be set when a tab is opened
+        language: 'javascript',
+        theme: 'vs-dark',
+        automaticLayout: true,
+        fontSize: 13,
+        minimap: { enabled: true },
+        suggest: { showWords: false },
+      });
 
-            // Initialize TypeScript Typings for Monaco.
-            initMonacoTypeScript();
+      // Restore Word Wrap Setting.
+      const savedWordWrap = localStorage.getItem('js_editor_wordwrap') || 'off';
+      editor.updateOptions({ wordWrap: savedWordWrap });
 
-            // --- SETTINGS INTEGRATION ---
-            window.addEventListener('settings-changed', (e) => {
-                applyEditorSettings(e.detail);
-                applySystemSettings(e.detail);
-            });
-            if (window.currentSettings) {
-                // Apply settings with a short delay to ensure Monaco is fully ready.
-                setTimeout(() => {
-                    applyEditorSettings(window.currentSettings);
-                    applySystemSettings(window.currentSettings);
-                }, 100);
-            }
+      // Update UI Button for Word Wrap.
+      const wrapButton = document.getElementById('btn-word-wrap');
+      if (wrapButton) {
+        const icon = wrapButton.querySelector('i');
+        if (icon) {
+          icon.className = `mdi mdi-wrap${savedWordWrap === 'on' ? '' : '-disabled'}`;
+        }
+      }
 
-            // Add Context Menu Action: Insert Entity.
-            editor.addAction({
-                id: 'insert-entity',
-                label: i18next.t('modal_insert_entity_title', { defaultValue: 'Insert Entity' }),
-                contextMenuGroupId: '90_snippets_general',
-                contextMenuOrder: 0,
-                keybindings: [ monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE ],
-                run: () => { if (window.openEntityPicker) window.openEntityPicker(); }
-            });
+      // Register Keyboard Shortcuts (Ctrl+S / Cmd+S).
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
 
-            // --- SNIPPETS: context menu + keybindings from central registry ---
-            registerSnippetContextMenu(editor);
-            registerSnippetKeybindings(editor);
+      // Initialize TypeScript Typings for Monaco.
+      initMonacoTypeScript();
 
-            // --- SNIPPETS: build toolbar buttons from registry ---
-            buildSnippetToolbar(document.getElementById('toolbar-snippets'));
+      // --- SETTINGS INTEGRATION ---
+      window.addEventListener('settings-changed', (e) => {
+        applyEditorSettings(e.detail);
+        applySystemSettings(e.detail);
+      });
+      if (window.currentSettings) {
+        // Apply settings with a short delay to ensure Monaco is fully ready.
+        setTimeout(() => {
+          applyEditorSettings(window.currentSettings);
+          applySystemSettings(window.currentSettings);
+        }, 100);
+      }
 
-            // Initialize Editor Configuration & Layout.
-            configureMonaco();
-            loadScripts();
-            initResizer();
-            initLogPaneResizer();
-            initDevPanelTabs();
-            initEventInspector();
-            initWatch();
-            initRepl();
-            initMqttMonitor();
-            initWebhookPanel();
-        });
-    }
+      // Add Context Menu Action: Insert Entity.
+      editor.addAction({
+        id: 'insert-entity',
+        label: i18next.t('modal_insert_entity_title', { defaultValue: 'Insert Entity' }),
+        contextMenuGroupId: '90_snippets_general',
+        contextMenuOrder: 0,
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
+        run: () => {
+          if (window.openEntityPicker) window.openEntityPicker();
+        },
+      });
 
-    // 4. Load Global Data.
-    loadHAMetadata();
-    loadMDIIcons();
-    loadHAServices();
-    initLogs();
+      // --- SNIPPETS: context menu + keybindings from central registry ---
+      registerSnippetContextMenu(editor);
+      registerSnippetKeybindings(editor);
 
-    // Load settings (after i18n init).
-    if (window.loadSettingsData) window.loadSettingsData();
-    
-    // Start statusbar (after footer exists and socket is ready).
-    if (window.statusBar) window.statusBar.init();
+      // --- SNIPPETS: build toolbar buttons from registry ---
+      buildSnippetToolbar(document.getElementById('toolbar-snippets'));
 
-    // Initial System Check (Integration Status).
-    checkSystemStatus();
+      // Initialize Editor Configuration & Layout.
+      configureMonaco();
+      loadScripts();
+      initResizer();
+      initLogPaneResizer();
+      initDevPanelTabs();
+      initEventInspector();
+      initWatch();
+      initRepl();
+      initMqttMonitor();
+      initWebhookPanel();
+    });
+  }
 
+  // 4. Load Global Data.
+  loadHAMetadata();
+  loadMDIIcons();
+  loadHAServices();
+  initLogs();
 
+  // Load settings (after i18n init).
+  if (window.loadSettingsData) window.loadSettingsData();
+
+  // Start statusbar (after footer exists and socket is ready).
+  if (window.statusBar) window.statusBar.init();
+
+  // Initial System Check (Integration Status).
+  checkSystemStatus();
 });
 
 /**
  * Determines the Monaco language ID based on the file extension.
- * @param {string} filename 
+ * @param {string} filename
  * @returns {string} 'typescript' or 'javascript'
  */
 function getLanguageByFilename(filename) {
-    if (!filename) return 'javascript';
-    const ext = filename.split('.').pop().toLowerCase();
-    return ext === 'ts' ? 'typescript' : 'javascript';
+  if (!filename) return 'javascript';
+  const ext = filename.split('.').pop().toLowerCase();
+  return ext === 'ts' ? 'typescript' : 'javascript';
 }
 window.getLanguageByFilename = getLanguageByFilename;
 
 /**
  * Heuristic to detect if code is TypeScript based on common keywords/syntax.
- * @param {string} content 
+ * @param {string} content
  * @returns {string} 'typescript' or 'javascript'
  */
 function detectLanguageFromContent(content) {
-    if (!content) return 'javascript';
-    const tsPatterns = [
-        /\binterface\s+\w+/,                // interface Name
-        /\btype\s+\w+\s*=/,                 // type Name =
-        /\benum\s+\w+/,                     // enum Name
-        /\bnamespace\s+\w+/,                // namespace Name
-        /:\s*(string|number|boolean|any|void)\b/, // : string
-        /\bas\s+(string|number|boolean|any|object)\b/, // value as string
-        /\w+<\w+>/,                         // Array<string> or Generics
-        /\b(private|public|protected)\s+\w+/, // Class modifiers
-        /\?\./                              // Optional chaining (though also in modern JS)
-    ];
+  if (!content) return 'javascript';
+  const tsPatterns = [
+    /\binterface\s+\w+/, // interface Name
+    /\btype\s+\w+\s*=/, // type Name =
+    /\benum\s+\w+/, // enum Name
+    /\bnamespace\s+\w+/, // namespace Name
+    /:\s*(string|number|boolean|any|void)\b/, // : string
+    /\bas\s+(string|number|boolean|any|object)\b/, // value as string
+    /\w+<\w+>/, // Array<string> or Generics
+    /\b(private|public|protected)\s+\w+/, // Class modifiers
+    /\?\./, // Optional chaining (though also in modern JS)
+  ];
 
-    const isTypeScript = tsPatterns.some(pattern => pattern.test(content));
-    return isTypeScript ? 'typescript' : 'javascript';
+  const isTypeScript = tsPatterns.some((pattern) => pattern.test(content));
+  return isTypeScript ? 'typescript' : 'javascript';
 }
 window.detectLanguageFromContent = detectLanguageFromContent;
 
 /**
  * Generates the HTML for a language badge (JS/TS).
- * @param {string} filename 
+ * @param {string} filename
  * @returns {string} HTML string
  */
 function getLanguageBadge(filename) {
-    if (!filename || filename.startsWith('System: ')) return '';
-    const lang = getLanguageByFilename(filename);
-    const label = lang === 'typescript' ? 'TS' : 'JS';
-    const cssClass = lang === 'typescript' ? 'lang-badge-ts' : 'lang-badge-js';
-    return `<span class="lang-badge ${cssClass}">${label}</span>`;
+  if (!filename || filename.startsWith('System: ')) return '';
+  const lang = getLanguageByFilename(filename);
+  const label = lang === 'typescript' ? 'TS' : 'JS';
+  const cssClass = lang === 'typescript' ? 'lang-badge-ts' : 'lang-badge-js';
+  return `<span class="lang-badge ${cssClass}">${label}</span>`;
 }
 window.getLanguageBadge = getLanguageBadge;
 
@@ -180,47 +180,47 @@ const compilerMarkers = new Map();
  * Initializes TypeScript support in Monaco by loading the type definitions bundle from the API.
  */
 async function initMonacoTypeScript() {
-    const compilerOptions = {
-        target: monaco.languages.typescript.ScriptTarget.ES2020,
-        module: monaco.languages.typescript.ModuleKind.Node16,
-        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Node16,
-        allowNonTsExtensions: true,
-        noEmit: true,
-        strict: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        baseUrl: "file:///",
-        paths: { "*": ["file:///node_modules/@types/*"] }
-    };
+  const compilerOptions = {
+    target: monaco.languages.typescript.ScriptTarget.ES2020,
+    module: monaco.languages.typescript.ModuleKind.Node16,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Node16,
+    allowNonTsExtensions: true,
+    noEmit: true,
+    strict: true,
+    skipLibCheck: true,
+    forceConsistentCasingInFileNames: true,
+    esModuleInterop: true,
+    allowSyntheticDefaultImports: true,
+    baseUrl: 'file:///',
+    paths: { '*': ['file:///node_modules/@types/*'] },
+  };
 
-    // Configure both TypeScript AND JavaScript defaults
-    monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-        ...compilerOptions,
-        checkJs: true,
-        allowJs: true
+  // Configure both TypeScript AND JavaScript defaults
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+    ...compilerOptions,
+    checkJs: true,
+    allowJs: true,
+  });
+
+  try {
+    const res = await fetch('api/scripts/typings');
+    if (!res.ok) return;
+
+    const typings = await res.json();
+    typings.forEach((lib) => {
+      const uri = `file:///${lib.filename}`;
+      // Register for TS
+      monaco.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri);
+      // Also register for JS so ha.states etc. work there too
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri);
     });
+  } catch (err) {
+    console.error('[Monaco] Failed to load typings:', err);
+  }
 
-    try {
-        const res = await fetch('api/scripts/typings');
-        if (!res.ok) return;
-        
-        const typings = await res.json();
-        typings.forEach(lib => {
-            const uri = `file:///${lib.filename}`;
-            // Register for TS
-            monaco.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri);
-            // Also register for JS so ha.states etc. work there too
-            monaco.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri);
-        });
-    } catch (err) {
-        console.error("[Monaco] Failed to load typings:", err);
-    }
-
-    // Card-side __jsa__ type defs (available in card tabs for __jsa__.callAction etc.)
-    const jsaCardDefs = `
+  // Card-side __jsa__ type defs (available in card tabs for __jsa__.callAction etc.)
+  const jsaCardDefs = `
 declare const __jsa__: {
   /**
    * Call a named action handler registered in the parent script via ha.action().
@@ -231,133 +231,135 @@ declare const __jsa__: {
   scriptName: string;
 };
 `;
-    monaco.languages.typescript.javascriptDefaults.addExtraLib(jsaCardDefs, 'file:///jsa-card-api.d.ts');
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(jsaCardDefs, 'file:///jsa-card-api.d.ts');
 
-    // Reactive update when typings change on server
-    if (window.socket) {
-        window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());
-    }
+  // Reactive update when typings change on server
+  if (window.socket) {
+    window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());
+  }
 
-    // Listener for compiler signals (for precise markers in the editor)
-    if (window.socket) {
-        window.socket.off('compiler_signal').on('compiler_signal', (data) => {
-            if (data.type === 'TS_OK') {
-                clearCompilerMarkers(data.filename);
-            } else {
-                // Expects object format directly from socket
-                handleCompilerMarker(data.filename, data.line, data.col, data.text, data.code, data.type);
-            }
-        });
-    }
+  // Listener for compiler signals (for precise markers in the editor)
+  if (window.socket) {
+    window.socket.off('compiler_signal').on('compiler_signal', (data) => {
+      if (data.type === 'TS_OK') {
+        clearCompilerMarkers(data.filename);
+      } else {
+        // Expects object format directly from socket
+        handleCompilerMarker(data.filename, data.line, data.col, data.text, data.code, data.type);
+      }
+    });
+  }
 }
 
 /**
  * Sets or updates markers in the Monaco editor based on compiler feedback.
  */
 function handleCompilerMarker(filename, line, col, message, code, type) {
-    const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
-    if (!model) return;
+  const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(filename));
+  if (!model) return;
 
-    if (!compilerMarkers.has(filename)) {
-        compilerMarkers.set(filename, []);
-    }
+  if (!compilerMarkers.has(filename)) {
+    compilerMarkers.set(filename, []);
+  }
 
-    const markers = compilerMarkers.get(filename);
-    markers.push({
-        startLineNumber: line,
-        startColumn: col,
-        endLineNumber: line,
-        endColumn: col + 10, // Rough estimate for marking
-        message: `${code}: ${message}`,
-        severity: type === 'TS_ERR' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
-        source: 'TypeScript Compiler'
-    });
+  const markers = compilerMarkers.get(filename);
+  markers.push({
+    startLineNumber: line,
+    startColumn: col,
+    endLineNumber: line,
+    endColumn: col + 10, // Rough estimate for marking
+    message: `${code}: ${message}`,
+    severity: type === 'TS_ERR' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+    source: 'TypeScript Compiler',
+  });
 
-    // Apply markers to editor
-    monaco.editor.setModelMarkers(model, "compiler", markers);
+  // Apply markers to editor
+  monaco.editor.setModelMarkers(model, 'compiler', markers);
 }
 
 /**
  * Deletes all compiler markers for a specific file.
  */
 function clearCompilerMarkers(filename) {
-    const model = monaco.editor.getModels().find(m => m.uri.path.endsWith(filename));
-    compilerMarkers.delete(filename);
-    
-    if (model) {
-        monaco.editor.setModelMarkers(model, "compiler", []);
-    }
+  const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(filename));
+  compilerMarkers.delete(filename);
+
+  if (model) {
+    monaco.editor.setModelMarkers(model, 'compiler', []);
+  }
 }
 
 async function checkSystemStatus() {
-    try {
-        const res = await fetch('api/system/integration');
-        if (res.ok) {
-            const status = await res.json();
-            
-            // Optimistic update: Only overwrite if we don't have a status yet 
-            // or if the new status is actually "better" (connected)
-            if (!window.currentIntegrationStatus || status.is_connected || status.is_running) {
-                window.currentIntegrationStatus = status;
-            }
-            updateSystemNotifications();
-        }
-    } catch (e) {
-        console.warn("System status check failed", e);
+  try {
+    const res = await fetch('api/system/integration');
+    if (res.ok) {
+      const status = await res.json();
+
+      // Optimistic update: Only overwrite if we don't have a status yet
+      // or if the new status is actually "better" (connected)
+      if (!window.currentIntegrationStatus || status.is_connected || status.is_running) {
+        window.currentIntegrationStatus = status;
+      }
+      updateSystemNotifications();
     }
+  } catch (e) {
+    console.warn('System status check failed', e);
+  }
 }
 
 function updateSystemNotifications() {
-    const status = window.currentIntegrationStatus;
-    const isSocketConnected = !!(window.socket && window.socket.connected);
+  const status = window.currentIntegrationStatus;
+  const isSocketConnected = !!(window.socket && window.socket.connected);
 
-    // Update MQTT Status via the Statusbar helper (repurposing the integration icon)
-    if (window.statusBar && status && status.mqtt) {
-        window.statusBar.updateMqttIndicator(status.mqtt);
-    } else if (!isSocketConnected) {
-        const intIcon = document.getElementById('integration-status-icon');
-        const intItem = document.getElementById('integration-status-item');
-        if (intIcon) {
-            intIcon.className = 'mdi mdi-circle-outline integration-icon';
-            intIcon.style.color = 'var(--danger)';
-            intIcon.style.opacity = '1';
-            if (intItem) intItem.title = 'Connection lost (Socket)';
-        }
+  // Update MQTT Status via the Statusbar helper (repurposing the integration icon)
+  if (window.statusBar && status && status.mqtt) {
+    window.statusBar.updateMqttIndicator(status.mqtt);
+  } else if (!isSocketConnected) {
+    const intIcon = document.getElementById('integration-status-icon');
+    const intItem = document.getElementById('integration-status-item');
+    if (intIcon) {
+      intIcon.className = 'mdi mdi-circle-outline integration-icon';
+      intIcon.style.color = 'var(--danger)';
+      intIcon.style.opacity = '1';
+      if (intItem) intItem.title = 'Connection lost (Socket)';
     }
+  }
 
-    if (!isSocketConnected) {
-        if (typeof window.renderSettingsCategories === 'function') {
-            window.renderSettingsCategories(); // Update settings UI with disconnected state
-        }
-    }
-
-    if (!status) return;
-
-    // Update the banner (Status Bar in Header)
-    if (typeof window.handleIntegrationStatus === 'function') {
-        if (!isSocketConnected && status.installed) {
-            window.handleIntegrationStatus(null);
-        } else {
-            window.handleIntegrationStatus(status);
-        }
-    }
-
-    // --- Logic for Settings Notification Dot ---
-    // The dot indicates if an update is available or a restart is required.
-    // This is independent of the socket connection state.
-    const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find(btn => btn.querySelector('.mdi-cog'));
-    if (settingsBtn) {
-        settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
-
-        if (window.newVersionInfo && window.newVersionInfo.update_available) {
-            settingsBtn.classList.add('badge-warning');
-        }
-    }
-    
-    // Update Settings Sidebar if open
+  if (!isSocketConnected) {
     if (typeof window.renderSettingsCategories === 'function') {
-        window.renderSettingsCategories();
+      window.renderSettingsCategories(); // Update settings UI with disconnected state
     }
+  }
+
+  if (!status) return;
+
+  // Update the banner (Status Bar in Header)
+  if (typeof window.handleIntegrationStatus === 'function') {
+    if (!isSocketConnected && status.installed) {
+      window.handleIntegrationStatus(null);
+    } else {
+      window.handleIntegrationStatus(status);
+    }
+  }
+
+  // --- Logic for Settings Notification Dot ---
+  // The dot indicates if an update is available or a restart is required.
+  // This is independent of the socket connection state.
+  const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find((btn) =>
+    btn.querySelector('.mdi-cog')
+  );
+  if (settingsBtn) {
+    settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
+
+    if (window.newVersionInfo && window.newVersionInfo.update_available) {
+      settingsBtn.classList.add('badge-warning');
+    }
+  }
+
+  // Update Settings Sidebar if open
+  if (typeof window.renderSettingsCategories === 'function') {
+    window.renderSettingsCategories();
+  }
 }
 window.updateSystemNotifications = updateSystemNotifications;
 
@@ -365,56 +367,56 @@ window.updateSystemNotifications = updateSystemNotifications;
  * Applies settings to the Monaco Editor instance.
  */
 function applyEditorSettings(settings) {
-    if (!editor || !settings || !settings.editor) return;
-    const conf = settings.editor;
+  if (!editor || !settings || !settings.editor) return;
+  const conf = settings.editor;
 
-    editor.updateOptions({
-        fontSize: conf.fontSize,
-        wordWrap: conf.wordWrap,
-        minimap: { enabled: conf.minimap }
-    });
+  editor.updateOptions({
+    fontSize: conf.fontSize,
+    wordWrap: conf.wordWrap,
+    minimap: { enabled: conf.minimap },
+  });
 
-    const toolbar = document.querySelector('.editor-toolbar');
-    if (toolbar) {
-        const shouldHide = !conf.showToolbar;
-        if ((toolbar.style.display === 'none') !== shouldHide) {
-            toolbar.style.display = shouldHide ? 'none' : 'flex';
-            setTimeout(() => editor.layout(), 0);
-        }
+  const toolbar = document.querySelector('.editor-toolbar');
+  if (toolbar) {
+    const shouldHide = !conf.showToolbar;
+    if ((toolbar.style.display === 'none') !== shouldHide) {
+      toolbar.style.display = shouldHide ? 'none' : 'flex';
+      setTimeout(() => editor.layout(), 0);
     }
+  }
 
-    // Sync Toolbar Button UI
-    const wrapButton = document.getElementById('btn-word-wrap');
-    if (wrapButton && wrapButton.querySelector('i')) {
-        wrapButton.querySelector('i').className = `mdi mdi-wrap${conf.wordWrap === 'on' ? '' : '-disabled'}`;
-    }
+  // Sync Toolbar Button UI
+  const wrapButton = document.getElementById('btn-word-wrap');
+  if (wrapButton && wrapButton.querySelector('i')) {
+    wrapButton.querySelector('i').className = `mdi mdi-wrap${conf.wordWrap === 'on' ? '' : '-disabled'}`;
+  }
 }
 
 /**
  * Applies system settings, specifically the log level for the browser console.
  */
 function applySystemSettings(settings) {
-    if (!settings || !settings.system) return;
-    const level = settings.system.log_level || 'info';
+  if (!settings || !settings.system) return;
+  const level = settings.system.log_level || 'info';
 
-    // Reset to original methods first
-    console.log = originalConsole.log;
-    console.debug = originalConsole.debug;
-    console.info = originalConsole.info;
-    console.warn = originalConsole.warn;
-    console.error = originalConsole.error;
+  // Reset to original methods first
+  console.log = originalConsole.log;
+  console.debug = originalConsole.debug;
+  console.info = originalConsole.info;
+  console.warn = originalConsole.warn;
+  console.error = originalConsole.error;
 
-    // Apply filter based on level
-    if (level === 'info') {
-        console.debug = function() {};
-    } else if (level === 'warn') {
-        console.debug = function() {};
-        console.log = function() {};
-        console.info = function() {};
-    } else if (level === 'error') {
-        console.debug = function() {};
-        console.log = function() {};
-        console.info = function() {};
-        console.warn = function() {};
-    }
+  // Apply filter based on level
+  if (level === 'info') {
+    console.debug = function () {};
+  } else if (level === 'warn') {
+    console.debug = function () {};
+    console.log = function () {};
+    console.info = function () {};
+  } else if (level === 'error') {
+    console.debug = function () {};
+    console.log = function () {};
+    console.info = function () {};
+    console.warn = function () {};
+  }
 }

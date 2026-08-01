@@ -1,14 +1,6 @@
 {
   "verbose": true,
-  "ignore": [
-    "scripts/*",
-    "node_modules",
-    "state.json",
-    "store.json",
-    ".git"
-  ],
-  "watch": [
-    "js_automations/"
-  ],
+  "ignore": ["scripts/*", "node_modules", "state.json", "store.json", ".git"],
+  "watch": ["js_automations/"],
   "ext": "js,json,html,css"
 }

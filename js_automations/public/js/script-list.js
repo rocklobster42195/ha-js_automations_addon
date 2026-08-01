@@ -7,231 +7,237 @@ var allScripts = [];
 var collapsedSections = JSON.parse(localStorage.getItem('js_collapsed_sections') || '[]');
 
 async function loadScripts() {
-    // Refresh Metadata (Labels, Areas) in background
-    if (typeof loadHAMetadata === 'function') {
-        try { await loadHAMetadata(); } catch (e) { console.debug("Metadata load error", e); }
+  // Refresh Metadata (Labels, Areas) in background
+  if (typeof loadHAMetadata === 'function') {
+    try {
+      await loadHAMetadata();
+    } catch (e) {
+      console.debug('Metadata load error', e);
     }
+  }
 
-    // apiFetch is global from app.js
-    const res = await apiFetch('api/scripts');
-    if (res.ok) renderScripts(await res.json());
+  // apiFetch is global from app.js
+  const res = await apiFetch('api/scripts');
+  if (res.ok) renderScripts(await res.json());
 }
 
 function filterScripts() {
-    const searchInput = document.getElementById('search-input');
-    const clearBtn = document.getElementById('clear-search-btn');
-    const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const searchInput = document.getElementById('search-input');
+  const clearBtn = document.getElementById('clear-search-btn');
+  const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-    if (clearBtn) clearBtn.classList.toggle('hidden', searchTerm.length === 0);
+  if (clearBtn) clearBtn.classList.toggle('hidden', searchTerm.length === 0);
 
-    if (searchTerm === '') {
-        renderScripts(allScripts, true); // Use complete list
-        return;
-    }
+  if (searchTerm === '') {
+    renderScripts(allScripts, true); // Use complete list
+    return;
+  }
 
-    const filtered = allScripts.filter(s =>
-        s.name.toLowerCase().includes(searchTerm) ||
-        s.filename.toLowerCase().includes(searchTerm) ||
-        (s.description && s.description.toLowerCase().includes(searchTerm)) ||
-        (s.area && s.area.toLowerCase().includes(searchTerm)) ||
-        (s.label && s.label.toLowerCase().includes(searchTerm))
-    );
+  const filtered = allScripts.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchTerm) ||
+      s.filename.toLowerCase().includes(searchTerm) ||
+      (s.description && s.description.toLowerCase().includes(searchTerm)) ||
+      (s.area && s.area.toLowerCase().includes(searchTerm)) ||
+      (s.label && s.label.toLowerCase().includes(searchTerm))
+  );
 
-    renderScripts(filtered, false);
+  renderScripts(filtered, false);
 }
 
 function clearSearch() {
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.value = '';
-        filterScripts();
-    }
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    filterScripts();
+  }
 }
 
 /**
  * UI RENDERING: Groups scripts by Label and persists collapse state.
  */
 function renderScripts(scripts, updateGlobal = true) {
-    if (updateGlobal) allScripts = scripts;
+  if (updateGlobal) allScripts = scripts;
 
-    // Update toolbar of the active tab if status has changed.
-    if (typeof activeTabFilename !== 'undefined' && activeTabFilename && activeTabFilename !== 'System: Store') {
-        const tab = typeof openTabs !== 'undefined' ? openTabs.find(t => t.filename === activeTabFilename) : null;
-        if (tab && typeof updateToolbarUI === 'function') {
-            updateToolbarUI(activeTabFilename, tab.icon, tab.isDirty);
-        }
+  // Update toolbar of the active tab if status has changed.
+  if (typeof activeTabFilename !== 'undefined' && activeTabFilename && activeTabFilename !== 'System: Store') {
+    const tab = typeof openTabs !== 'undefined' ? openTabs.find((t) => t.filename === activeTabFilename) : null;
+    if (tab && typeof updateToolbarUI === 'function') {
+      updateToolbarUI(activeTabFilename, tab.icon, tab.isDirty);
+    }
+  }
+
+  // Refresh tabs for status colors.
+  if (typeof renderTabs === 'function') renderTabs();
+
+  const list = document.getElementById('script-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const searchInput = document.getElementById('search-input');
+  const isSearchActive = searchInput && searchInput.value.length > 0;
+
+  if (scripts.length === 0) {
+    const message = isSearchActive ? i18next.t('no_scripts_found_search') : i18next.t('no_scripts_found');
+    list.innerHTML = `<div style="text-align:center; padding:20px; color:#555">${message}</div>`;
+    return;
+  }
+
+  // 1. Group by Label.
+  const groups = {};
+  const groupDisplayNames = {};
+  const NO_GROUP = '___none___';
+  const LIB_GROUP = '___libraries___';
+
+  scripts.forEach((script) => {
+    // Check if it is a library (based on path)
+    const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
+
+    const rawLabel = script.label && script.label.trim() !== '' ? script.label : NO_GROUP;
+    const groupKey = isLib ? LIB_GROUP : rawLabel;
+
+    const normalizedKey = groupKey === NO_GROUP || groupKey === LIB_GROUP ? groupKey : groupKey.toLowerCase();
+
+    if (!groups[normalizedKey]) {
+      groups[normalizedKey] = [];
+      groupDisplayNames[normalizedKey] = groupKey;
+    } else {
+      // Update to a "prettier" display name if available.
+      if (groupDisplayNames[normalizedKey] === normalizedKey && groupKey !== normalizedKey) {
+        groupDisplayNames[normalizedKey] = groupKey;
+      }
+    }
+    groups[normalizedKey].push(script);
+  });
+
+  // 2. Sort groups (alphabetically, with special groups at the bottom).
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === LIB_GROUP) return 1; // Libraries always at the bottom.
+    if (b === LIB_GROUP) return -1;
+    if (a === NO_GROUP) return 1;
+    if (b === NO_GROUP) return -1;
+    return a.localeCompare(b);
+  });
+
+  // 3. Render sections.
+  sortedKeys.forEach((key) => {
+    const groupScripts = groups[key];
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'script-group';
+
+    // Check collapse state; always expand if search is active.
+    const isCollapsed = isSearchActive ? false : collapsedSections.some((s) => s.toLowerCase() === key.toLowerCase());
+
+    // --- CREATE HEADER ---
+    let headerName = key === NO_GROUP ? i18next.t('group_none') : groupDisplayNames[key] || key;
+    let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
+    let iconStyle = '';
+
+    if (key === LIB_GROUP) {
+      headerName = i18next.t('group_global_libraries');
+      iconClass = 'mdi-bookshelf';
     }
 
-    // Refresh tabs for status colors.
-    if (typeof renderTabs === 'function') renderTabs();
-
-    const list = document.getElementById('script-list');
-    if (!list) return;
-    list.innerHTML = '';
-
-    const searchInput = document.getElementById('search-input');
-    const isSearchActive = searchInput && searchInput.value.length > 0;
-
-    if (scripts.length === 0) {
-        const message = isSearchActive ? i18next.t('no_scripts_found_search') : i18next.t('no_scripts_found');
-        list.innerHTML = `<div style="text-align:center; padding:20px; color:#555">${message}</div>`;
-        return;
+    if (key !== NO_GROUP && typeof haData !== 'undefined' && haData && Array.isArray(haData.labels)) {
+      const haLabel = haData.labels.find((l) => l.name.toLowerCase() === key);
+      if (haLabel) {
+        headerName = haLabel.name;
+        if (haLabel.icon) iconClass = haLabel.icon.replace(':', '-');
+        if (haLabel.color) iconStyle = `color: ${haLabel.color};`;
+      }
     }
 
-    // 1. Group by Label.
-    const groups = {};
-    const groupDisplayNames = {};
-    const NO_GROUP = '___none___';
-    const LIB_GROUP = '___libraries___';
-
-    scripts.forEach(script => {
-        // Check if it is a library (based on path)
-        const isLib = script.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\'));
-        
-        const rawLabel = (script.label && script.label.trim() !== '') ? script.label : NO_GROUP;
-        const groupKey = isLib ? LIB_GROUP : rawLabel;
-        
-        const normalizedKey = (groupKey === NO_GROUP || groupKey === LIB_GROUP) ? groupKey : groupKey.toLowerCase();
-
-        if (!groups[normalizedKey]) {
-            groups[normalizedKey] = [];
-            groupDisplayNames[normalizedKey] = groupKey;
-        } else {
-            // Update to a "prettier" display name if available.
-            if (groupDisplayNames[normalizedKey] === normalizedKey && groupKey !== normalizedKey) {
-                groupDisplayNames[normalizedKey] = groupKey;
-            }
-        }
-        groups[normalizedKey].push(script);
-    });
-
-    // 2. Sort groups (alphabetically, with special groups at the bottom).
-    const sortedKeys = Object.keys(groups).sort((a, b) => {
-        if (a === LIB_GROUP) return 1; // Libraries always at the bottom.
-        if (b === LIB_GROUP) return -1;
-        if (a === NO_GROUP) return 1;
-        if (b === NO_GROUP) return -1;
-        return a.localeCompare(b);
-    });
-
-    // 3. Render sections.
-    sortedKeys.forEach(key => {
-        const groupScripts = groups[key];
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'script-group';
-
-        // Check collapse state; always expand if search is active.
-        const isCollapsed = isSearchActive ? false : collapsedSections.some(s => s.toLowerCase() === key.toLowerCase());
-
-        // --- CREATE HEADER ---
-        let headerName = key === NO_GROUP ? i18next.t('group_none') : (groupDisplayNames[key] || key);
-        let iconClass = key === NO_GROUP ? 'mdi-folder-open-outline' : 'mdi-label-outline';
-        let iconStyle = '';
-
-        if (key === LIB_GROUP) {
-            headerName = i18next.t('group_global_libraries');
-            iconClass = "mdi-bookshelf";
-        }
-
-        if (key !== NO_GROUP && typeof haData !== 'undefined' && haData && Array.isArray(haData.labels)) {
-            const haLabel = haData.labels.find(l => l.name.toLowerCase() === key);
-            if (haLabel) {
-                headerName = haLabel.name;
-                if (haLabel.icon) iconClass = haLabel.icon.replace(':', '-');
-                if (haLabel.color) iconStyle = `color: ${haLabel.color};`;
-            }
-        }
-
-        const header = document.createElement('div');
-        header.className = 'section-header';
-        header.style.opacity = isCollapsed ? '0.7' : '1';
-        header.innerHTML = `
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.style.opacity = isCollapsed ? '0.7' : '1';
+    header.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px;">
                 <i class="mdi ${iconClass}" style="font-size:1rem; ${iconStyle}"></i> 
                 <span>${headerName}</span>
             </div>
             <i class="mdi mdi-chevron-${isCollapsed ? 'down' : 'up'}" style="font-size:0.8rem; opacity:0.5;"></i>`;
 
-        groupDiv.appendChild(header);
+    groupDiv.appendChild(header);
 
-        // --- CONTAINER FOR ROWS ---
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'group-content';
-        contentDiv.style.display = isCollapsed ? 'none' : 'block';
+    // --- CONTAINER FOR ROWS ---
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'group-content';
+    contentDiv.style.display = isCollapsed ? 'none' : 'block';
 
-        // Event listener for collapsing and persistence.
-        header.onclick = () => {
-            if (isSearchActive) return;
-            const nowHidden = contentDiv.style.display !== 'none';
-            contentDiv.style.display = nowHidden ? 'none' : 'block';
-            const chevron = header.querySelector('.mdi-chevron-up, .mdi-chevron-down');
-            if (chevron) chevron.className = `mdi mdi-chevron-${nowHidden ? 'down' : 'up'}`;
-            header.style.opacity = nowHidden ? '0.7' : '1';
-            if (nowHidden) {
-                if (!collapsedSections.includes(key)) collapsedSections.push(key);
-            } else {
-                collapsedSections = collapsedSections.filter(s => s.toLowerCase() !== key.toLowerCase());
-            }
-            localStorage.setItem('js_collapsed_sections', JSON.stringify(collapsedSections));
-        };
+    // Event listener for collapsing and persistence.
+    header.onclick = () => {
+      if (isSearchActive) return;
+      const nowHidden = contentDiv.style.display !== 'none';
+      contentDiv.style.display = nowHidden ? 'none' : 'block';
+      const chevron = header.querySelector('.mdi-chevron-up, .mdi-chevron-down');
+      if (chevron) chevron.className = `mdi mdi-chevron-${nowHidden ? 'down' : 'up'}`;
+      header.style.opacity = nowHidden ? '0.7' : '1';
+      if (nowHidden) {
+        if (!collapsedSections.includes(key)) collapsedSections.push(key);
+      } else {
+        collapsedSections = collapsedSections.filter((s) => s.toLowerCase() !== key.toLowerCase());
+      }
+      localStorage.setItem('js_collapsed_sections', JSON.stringify(collapsedSections));
+    };
 
-        // Sort scripts within the group.
-        groupScripts.sort((a, b) => {
-            const score = (s) => (s.status === 'error' ? 2 : (s.running ? 1 : 0));
-            const scoreDiff = score(b) - score(a);
-            if (scoreDiff !== 0) return scoreDiff;
-            return a.name.localeCompare(b.name);
-        });
+    // Sort scripts within the group.
+    groupScripts.sort((a, b) => {
+      const score = (s) => (s.status === 'error' ? 2 : s.running ? 1 : 0);
+      const scoreDiff = score(b) - score(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.name.localeCompare(b.name);
+    });
 
-        // --- RENDER ROWS ---
-        groupScripts.forEach(s => {
-            const row = document.createElement('div');
-            row.className = 'script-row';
-            
-            // Check for MQTT configuration warning
-            const mqttStatus = window.currentIntegrationStatus?.mqtt;
-            const needsMqtt = s.expose && (!mqttStatus || !mqttStatus.connected);
-            if (needsMqtt) row.classList.add('needs-mqtt');
+    // --- RENDER ROWS ---
+    groupScripts.forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'script-row';
 
-            row.title = buildScriptTooltip(s);
-            row.onclick = () => openOrSwitchToTab(s.filename, s.icon);
+      // Check for MQTT configuration warning
+      const mqttStatus = window.currentIntegrationStatus?.mqtt;
+      const needsMqtt = s.expose && (!mqttStatus || !mqttStatus.connected);
+      if (needsMqtt) row.classList.add('needs-mqtt');
 
-            let icon = s.icon ? s.icon.split(':').pop() : 'script-text';
-            if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(icon)) {
-                icon = 'script-text';
-            }
-            let statusClass = s.running ? 'status-running' : (s.status === 'error' ? 'status-error' : 'status-stopped');
-            const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
+      row.title = buildScriptTooltip(s);
+      row.onclick = () => openOrSwitchToTab(s.filename, s.icon);
 
-            const langBadge = (window.getLanguageBadge) ? window.getLanguageBadge(s.filename) : '';
-            const capBadges = getCapabilityBadgesHTML(s.capabilities);
-            let devBadge = '';
-            if (s.card === 'dev') {
-                devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-dev" title="Card: dev mode — preview only, not installed in Lovelace"></i>`;
-            } else if (s.card) {
-                if (s.cardInstalled) {
-                    devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-installed" title="Card: installed in Lovelace"></i>`;
-                } else {
-                    devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-pending" title="Card: embedded block present, not yet installed"></i>`;
-                }
-            }
-            const conflictBadge = (s.entity_conflicts && s.entity_conflicts.length > 0)
-                ? `<i class="mdi mdi-alert-outline" style="color: var(--color-warning, #f0a500); font-size:0.9rem; margin-right:4px;" title="${s.entity_conflicts.map(c => `${c.expected} → ${c.actual}`).join('\n')}"></i>`
-                : '';
-            // Libraries are passive; hide most controls.
-            const isLib = key === LIB_GROUP;
-            const firstBtn = s.status === 'error'
-                ? `<button class="btn-row" onclick="event.stopPropagation(); dismissError('${s.filename}')" title="${i18next.t('script_action_dismiss_title')}"><i class="mdi mdi-check"></i></button>`
-                : `<button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}"><i class="mdi ${toggleIcon}"></i></button>`;
-            const controlsHtml = isLib ?
-                `<span style="font-size:0.75rem; color:#666; font-style:italic; margin-right:10px;">${i18next.t('status_passive_library')}</span>
+      let icon = s.icon ? s.icon.split(':').pop() : 'script-text';
+      if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(icon)) {
+        icon = 'script-text';
+      }
+      let statusClass = s.running ? 'status-running' : s.status === 'error' ? 'status-error' : 'status-stopped';
+      const toggleIcon = s.running ? 'mdi-stop' : 'mdi-play';
+
+      const langBadge = window.getLanguageBadge ? window.getLanguageBadge(s.filename) : '';
+      const capBadges = getCapabilityBadgesHTML(s.capabilities);
+      let devBadge = '';
+      if (s.card === 'dev') {
+        devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-dev" title="Card: dev mode — preview only, not installed in Lovelace"></i>`;
+      } else if (s.card) {
+        if (s.cardInstalled) {
+          devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-installed" title="Card: installed in Lovelace"></i>`;
+        } else {
+          devBadge = `<i class="mdi mdi-view-dashboard-outline card-badge-icon card-badge-icon-pending" title="Card: embedded block present, not yet installed"></i>`;
+        }
+      }
+      const conflictBadge =
+        s.entity_conflicts && s.entity_conflicts.length > 0
+          ? `<i class="mdi mdi-alert-outline" style="color: var(--color-warning, #f0a500); font-size:0.9rem; margin-right:4px;" title="${s.entity_conflicts.map((c) => `${c.expected} → ${c.actual}`).join('\n')}"></i>`
+          : '';
+      // Libraries are passive; hide most controls.
+      const isLib = key === LIB_GROUP;
+      const firstBtn =
+        s.status === 'error'
+          ? `<button class="btn-row" onclick="event.stopPropagation(); dismissError('${s.filename}')" title="${i18next.t('script_action_dismiss_title')}"><i class="mdi mdi-check"></i></button>`
+          : `<button class="btn-row" onclick="event.stopPropagation(); toggleScript('${s.filename}')" title="${i18next.t('script_action_toggle_title')}"><i class="mdi ${toggleIcon}"></i></button>`;
+      const controlsHtml = isLib
+        ? `<span style="font-size:0.75rem; color:#666; font-style:italic; margin-right:10px;">${i18next.t('status_passive_library')}</span>
                  <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>`
-                :
-                `${firstBtn}
+        : `${firstBtn}
                  <button class="btn-row" onclick="event.stopPropagation(); restartScript('${s.filename}')" title="${i18next.t('script_action_restart_title')}" ${!s.running ? 'disabled' : ''}><i class="mdi mdi-restart"></i></button>
                  <button class="btn-row" onclick="event.stopPropagation(); deleteScript('${s.filename}')" title="${i18next.t('script_action_delete_title')}"><i class="mdi mdi-delete-outline"></i></button>`;
 
-            row.innerHTML = `
+      row.innerHTML = `
                 <div class="script-icon">
                     <i class="mdi mdi-${icon} ${statusClass}"></i>
                 </div>
@@ -244,12 +250,12 @@ function renderScripts(scripts, updateGlobal = true) {
                         </div>
                     </div>
                 </div>`;
-            contentDiv.appendChild(row);
-        });
-
-        groupDiv.appendChild(contentDiv);
-        list.appendChild(groupDiv);
+      contentDiv.appendChild(row);
     });
+
+    groupDiv.appendChild(contentDiv);
+    list.appendChild(groupDiv);
+  });
 }
 
 /**
@@ -261,175 +267,193 @@ function renderScripts(scripts, updateGlobal = true) {
  *  - declared + not detected     → gray at 35% opacity (informational)
  */
 function getCapabilityBadgesHTML(caps) {
-    if (!caps) return '';
-    const { detected, declared, undeclared } = caps;
+  if (!caps) return '';
+  const { detected, declared, undeclared } = caps;
 
-    const all = new Set([...detected, ...declared]);
-    if (all.size === 0) return '';
+  const all = new Set([...detected, ...declared]);
+  if (all.size === 0) return '';
 
-    // When fs:write is present (detected or declared), suppress fs:read badge
-    const hasFsWrite = all.has('fs:write');
+  // When fs:write is present (detected or declared), suppress fs:read badge
+  const hasFsWrite = all.has('fs:write');
 
-    const BADGES = [
-        { token: 'network', icon: 'mdi-web',              tipKey: 'cap_tip_network',   warnKey: 'cap_tip_network_warn'   },
-        { token: 'fs:write', icon: 'mdi-file-edit-outline', tipKey: 'cap_tip_fs_write', warnKey: 'cap_tip_fs_write_warn'  },
-        { token: 'fs:read',  icon: 'mdi-file-eye-outline',  tipKey: 'cap_tip_fs_read',  warnKey: 'cap_tip_fs_read_warn'   },
-        { token: 'exec',     icon: 'mdi-console',           tipKey: 'cap_tip_exec',     warnKey: 'cap_tip_exec_warn'      },
-        { token: 'webhook',  icon: 'mdi-webhook',           tipKey: 'cap_tip_webhook',  warnKey: 'cap_tip_webhook_warn'   },
-    ];
+  const BADGES = [
+    { token: 'network', icon: 'mdi-web', tipKey: 'cap_tip_network', warnKey: 'cap_tip_network_warn' },
+    { token: 'fs:write', icon: 'mdi-file-edit-outline', tipKey: 'cap_tip_fs_write', warnKey: 'cap_tip_fs_write_warn' },
+    { token: 'fs:read', icon: 'mdi-file-eye-outline', tipKey: 'cap_tip_fs_read', warnKey: 'cap_tip_fs_read_warn' },
+    { token: 'exec', icon: 'mdi-console', tipKey: 'cap_tip_exec', warnKey: 'cap_tip_exec_warn' },
+    { token: 'webhook', icon: 'mdi-webhook', tipKey: 'cap_tip_webhook', warnKey: 'cap_tip_webhook_warn' },
+  ];
 
-    return BADGES.map(({ token, icon, tipKey, warnKey }) => {
-        if (!all.has(token)) return '';
-        if (token === 'fs:read' && hasFsWrite) return '';
+  return BADGES.map(({ token, icon, tipKey, warnKey }) => {
+    if (!all.has(token)) return '';
+    if (token === 'fs:read' && hasFsWrite) return '';
 
-        const isDetected  = detected.includes(token);
-        const isUndeclared = undeclared.includes(token);
-        const isUnused     = declared.includes(token) && !isDetected;
+    const isDetected = detected.includes(token);
+    const isUndeclared = undeclared.includes(token);
+    const isUnused = declared.includes(token) && !isDetected;
 
-        let cls = 'cap-badge';
-        let tip;
-        if (isUndeclared) {
-            cls += token === 'exec' ? ' cap-badge-warn-exec' : ' cap-badge-warn';
-            tip = i18next.t(warnKey);
-        } else if (isUnused) {
-            cls += ' cap-badge-unused';
-            tip = i18next.t('cap_tip_unused');
-        } else {
-            tip = i18next.t(tipKey);
-        }
+    let cls = 'cap-badge';
+    let tip;
+    if (isUndeclared) {
+      cls += token === 'exec' ? ' cap-badge-warn-exec' : ' cap-badge-warn';
+      tip = i18next.t(warnKey);
+    } else if (isUnused) {
+      cls += ' cap-badge-unused';
+      tip = i18next.t('cap_tip_unused');
+    } else {
+      tip = i18next.t(tipKey);
+    }
 
-        return `<i class="mdi ${icon} ${cls}" title="${tip}"></i>`;
-    }).join('');
+    return `<i class="mdi ${icon} ${cls}" title="${tip}"></i>`;
+  }).join('');
 }
 
 function buildScriptTooltip(s) {
-    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
-    const lines = [`File: ${s.filename} (${lang})`];
-    lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
+  const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
+  const lines = [`File: ${s.filename} (${lang})`];
+  lines.push(`State: ${s.running ? 'Running' : 'Stopped'}`);
 
-    if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
-    if (s.last_started) lines.push(`Started: ${new Date(s.last_started).toLocaleString()}`);
+  if (s.ram_usage) lines.push(`RAM: ~${s.ram_usage.toFixed(1)} MB`);
+  if (s.last_started) lines.push(`Started: ${new Date(s.last_started).toLocaleString()}`);
 
-    if (s.capabilities) {
-        const { detected, undeclared } = s.capabilities;
-        if (detected && detected.length > 0) {
-            lines.push(`\nCapabilities: ${detected.join(', ')}`);
-            if (undeclared && undeclared.length > 0) {
-                lines.push(`Undeclared: ${undeclared.join(', ')} (add @permission)`);
-            }
-        }
+  if (s.capabilities) {
+    const { detected, undeclared } = s.capabilities;
+    if (detected && detected.length > 0) {
+      lines.push(`\nCapabilities: ${detected.join(', ')}`);
+      if (undeclared && undeclared.length > 0) {
+        lines.push(`Undeclared: ${undeclared.join(', ')} (add @permission)`);
+      }
     }
+  }
 
-    if (s.description) lines.push(`\n${s.description}`);
-    return lines.join('\n');
+  if (s.description) lines.push(`\n${s.description}`);
+  return lines.join('\n');
 }
 
 function updateScriptStats(statsMap) {
-    if (!allScripts) return;
-    let changed = false;
-    
-    // Update data in local array.
-    for (const [filename, data] of Object.entries(statsMap)) {
-        const script = allScripts.find(s => s.filename === filename);
-        if (script) {
-            script.ram_usage = data.ram_usage;
-            changed = true;
-        }
+  if (!allScripts) return;
+  let changed = false;
+
+  // Update data in local array.
+  for (const [filename, data] of Object.entries(statsMap)) {
+    const script = allScripts.find((s) => s.filename === filename);
+    if (script) {
+      script.ram_usage = data.ram_usage;
+      changed = true;
     }
-    
-    // Only update DOM attributes (no full re-render).
-    if (changed && document.body.classList.contains('expert-mode')) {
-        const rows = document.querySelectorAll('.script-row');
-        rows.forEach(row => {
-            const nameEl = row.querySelector('.script-name');
-            if (nameEl) {
-                const name = nameEl.textContent.trim();
-                const s = allScripts.find(script => script.name === name);
-                if (s) row.title = buildScriptTooltip(s);
-            }
-        });
-    }
+  }
+
+  // Only update DOM attributes (no full re-render).
+  if (changed && document.body.classList.contains('expert-mode')) {
+    const rows = document.querySelectorAll('.script-row');
+    rows.forEach((row) => {
+      const nameEl = row.querySelector('.script-name');
+      if (nameEl) {
+        const name = nameEl.textContent.trim();
+        const s = allScripts.find((script) => script.name === name);
+        if (s) row.title = buildScriptTooltip(s);
+      }
+    });
+  }
 }
 
-function updateIconPreview(id, s) { 
-    const el = document.getElementById(id); 
-    if (!el) return;
-    
-    let icon = s ? s.split(':').pop().trim() : 'script-text';
-    if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(icon)) {
-        icon = 'script-text';
-    }
-    el.className = `mdi mdi-${icon}`; 
+function updateIconPreview(id, s) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  let icon = s ? s.split(':').pop().trim() : 'script-text';
+  if (typeof mdiIcons !== 'undefined' && mdiIcons.length > 0 && !mdiIcons.includes(icon)) {
+    icon = 'script-text';
+  }
+  el.className = `mdi mdi-${icon}`;
 }
 
 async function createNewScript() {
-    // Redirect to Wizard.
-    if (window.openCreationWizard) window.openCreationWizard('create');
+  // Redirect to Wizard.
+  if (window.openCreationWizard) window.openCreationWizard('create');
 }
 
 async function editScript(filename) {
-    const script = allScripts.find(s => s.filename === filename);
-    if (!script) return;
-    
-    if (window.openCreationWizard) window.openCreationWizard('edit', script);
+  const script = allScripts.find((s) => s.filename === filename);
+  if (!script) return;
+
+  if (window.openCreationWizard) window.openCreationWizard('edit', script);
 }
 
 async function duplicateScript(filename) {
-    const script = allScripts.find(s => s.filename === filename);
-    if (!script) return;
+  const script = allScripts.find((s) => s.filename === filename);
+  if (!script) return;
 
-    let code = '';
-    // Fetch script content.
-    try {
-        const res = await apiFetch(`api/scripts/${filename}/content`);
-        if (res.ok) {
-            const data = await res.json();
-            // Strip header (everything up to first */).
-            code = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
-        }
-    } catch (e) {
-        console.error("Failed to fetch script content for duplication", e);
-        return;
+  let code = '';
+  // Fetch script content.
+  try {
+    const res = await apiFetch(`api/scripts/${filename}/content`);
+    if (res.ok) {
+      const data = await res.json();
+      // Strip header (everything up to first */).
+      code = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
     }
+  } catch (e) {
+    console.error('Failed to fetch script content for duplication', e);
+    return;
+  }
 
-    if (window.openCreationWizard) window.openCreationWizard('duplicate', { ...script, code });
+  if (window.openCreationWizard) window.openCreationWizard('duplicate', { ...script, code });
 }
 
-async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }
-async function restartScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'restart' }) }); }
-async function dismissError(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'dismiss' }) }); }
+async function toggleScript(f) {
+  await apiFetch('api/scripts/control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: f, action: 'toggle' }),
+  });
+}
+async function restartScript(f) {
+  await apiFetch('api/scripts/control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: f, action: 'restart' }),
+  });
+}
+async function dismissError(f) {
+  await apiFetch('api/scripts/control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: f, action: 'dismiss' }),
+  });
+}
 async function deleteScript(f) {
-    // Check dependencies (Libraries).
-    const dependents = allScripts.filter(s => {
-        if (!s.includes || !Array.isArray(s.includes)) return false;
-        // Check exact match or without extension.
-        return s.includes.some(inc => inc === f || inc === f.replace(/\.(js|ts)$/, ''));
+  // Check dependencies (Libraries).
+  const dependents = allScripts.filter((s) => {
+    if (!s.includes || !Array.isArray(s.includes)) return false;
+    // Check exact match or without extension.
+    return s.includes.some((inc) => inc === f || inc === f.replace(/\.(js|ts)$/, ''));
+  });
+
+  if (dependents.length > 0) {
+    const depNames = dependents.map((s) => s.name).join(', ');
+    const msg = i18next.t('warn_library_in_use', {
+      filename: f,
+      count: dependents.length,
+      scripts: depNames,
     });
+    if (!confirm(msg)) return;
+  } else {
+    const shouldConfirm = window.currentSettings?.general?.confirm_delete ?? true;
+    if (shouldConfirm && !confirm(i18next.t('confirm_delete_script', { filename: f }))) return;
+  }
 
-    if (dependents.length > 0) {
-        const depNames = dependents.map(s => s.name).join(', ');
-        const msg = i18next.t('warn_library_in_use', { 
-            filename: f, 
-            count: dependents.length, 
-            scripts: depNames
-        });
-        if (!confirm(msg)) return;
-    } else {
-        const shouldConfirm = window.currentSettings?.general?.confirm_delete ?? true;
-        if (shouldConfirm && !confirm(i18next.t('confirm_delete_script', { filename: f }))) return;
-    }
+  await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });
+  // openTabs is global from tab-manager.js.
+  if (typeof openTabs !== 'undefined') {
+    const t = openTabs.find((t) => t.filename === f);
+    if (t) t.isDirty = false;
+    closeTab(f);
+  }
+  loadScripts();
 
-    await apiFetch(`api/scripts/${f}`, { method: 'DELETE' });
-    // openTabs is global from tab-manager.js.
-    if (typeof openTabs !== 'undefined') {
-        const t = openTabs.find(t => t.filename === f);
-        if (t) t.isDirty = false;
-        closeTab(f);
-    }
-    loadScripts();
-    
-    // Update IntelliSense if a library was deleted.
-    if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
+  // Update IntelliSense if a library was deleted.
+  if (typeof loadLibraryDefinitions === 'function') await loadLibraryDefinitions();
 }
 
 // Make globally available
@@ -448,29 +472,31 @@ window.updateScriptStats = updateScriptStats;
 
 // --- VERSION LOADER ---
 async function loadVersion() {
-    const el = document.getElementById('app-version');
-    if (!el) return;
-    try {
-        const res = await apiFetch('api/status');
-        if (res.ok) {
-            const data = await res.json();
-            if (data.version) {
-                // Beta builds: compact version chip (v2.57.6-b1 instead of
-                // v2.57.6-beta.1, which wraps) and a distinct header title.
-                const beta = data.version.match(/^(.+)-beta\.(\d+)$/);
-                if (beta) {
-                    el.textContent = `v${beta[1]}-b${beta[2]}`;
-                    const title = document.querySelector('[data-i18n="header_title"]');
-                    if (title) {
-                        title.textContent = 'JSA BETA';
-                        // Detach from i18n so a language switch doesn't revert it
-                        title.removeAttribute('data-i18n');
-                    }
-                } else {
-                    el.textContent = `v${data.version}`;
-                }
-            }
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  try {
+    const res = await apiFetch('api/status');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.version) {
+        // Beta builds: compact version chip (v2.57.6-b1 instead of
+        // v2.57.6-beta.1, which wraps) and a distinct header title.
+        const beta = data.version.match(/^(.+)-beta\.(\d+)$/);
+        if (beta) {
+          el.textContent = `v${beta[1]}-b${beta[2]}`;
+          const title = document.querySelector('[data-i18n="header_title"]');
+          if (title) {
+            title.textContent = 'JSA BETA';
+            // Detach from i18n so a language switch doesn't revert it
+            title.removeAttribute('data-i18n');
+          }
+        } else {
+          el.textContent = `v${data.version}`;
         }
-    } catch (e) { console.debug("Version check failed", e); }
+      }
+    }
+  } catch (e) {
+    console.debug('Version check failed', e);
+  }
 }
 loadVersion();

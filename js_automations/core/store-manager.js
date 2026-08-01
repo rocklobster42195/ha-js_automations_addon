@@ -7,84 +7,84 @@ const path = require('path');
 const EventEmitter = require('events');
 
 class StoreManager extends EventEmitter {
-    constructor(rootDir) {
-        super();
-        this.storeFile = path.join(rootDir, 'store.json');
+  constructor(rootDir) {
+    super();
+    this.storeFile = path.join(rootDir, 'store.json');
+    this.data = {};
+    this.load();
+  }
+
+  load() {
+    if (fs.existsSync(this.storeFile)) {
+      try {
+        this.data = JSON.parse(fs.readFileSync(this.storeFile, 'utf8'));
+      } catch (e) {
+        console.error('❌ Failed to load store.json');
         this.data = {};
-        this.load();
+      }
     }
+  }
 
-    load() {
-        if (fs.existsSync(this.storeFile)) {
-            try {
-                this.data = JSON.parse(fs.readFileSync(this.storeFile, 'utf8'));
-            } catch (e) {
-                console.error("❌ Failed to load store.json");
-                this.data = {};
-            }
-        }
-    }
+  save() {
+    fs.writeFileSync(this.storeFile, JSON.stringify(this.data, null, 2));
+  }
 
-    save() {
-        fs.writeFileSync(this.storeFile, JSON.stringify(this.data, null, 2));
-    }
+  set(key, value, scriptName, isSecret = false) {
+    this.data[key] = {
+      value: value,
+      owner: scriptName,
+      isSecret: isSecret === true,
+      updated: new Date().toISOString(),
+      accessed: new Date().toISOString(),
+    };
+    this.save();
+    this.emit('changed', { key, item: this.data[key] });
+  }
 
-    set(key, value, scriptName, isSecret = false) {
-        this.data[key] = {
-            value: value,
-            owner: scriptName,
-            isSecret: isSecret === true,
-            updated: new Date().toISOString(),
-            accessed: new Date().toISOString()
-        };
-        this.save();
-        this.emit('changed', { key, item: this.data[key] });
+  get(key) {
+    if (this.data[key]) {
+      this.data[key].accessed = new Date().toISOString();
+      // We don't save immediately on read for performance reasons.
+      // Data stays in RAM and save() is triggered on the next write operation.
+      return this.data[key].value;
     }
+    return null;
+  }
 
-    get(key) {
-        if (this.data[key]) {
-            this.data[key].accessed = new Date().toISOString();
-            // We don't save immediately on read for performance reasons.
-            // Data stays in RAM and save() is triggered on the next write operation.
-            return this.data[key].value;
-        }
-        return null;
-    }
+  getAll() {
+    return this.data;
+  }
 
-    getAll() {
-        return this.data;
+  delete(key) {
+    if (this.data[key]) {
+      delete this.data[key];
+      this.save();
+      this.emit('changed', { key, deleted: true });
+      return true;
     }
+    return false;
+  }
 
-    delete(key) {
-        if (this.data[key]) {
-            delete this.data[key];
-            this.save();
-            this.emit('changed', { key, deleted: true });
-            return true;
-        }
-        return false;
-    }
+  clear() {
+    this.data = {};
+    this.save();
+    this.emit('changed', { cleared: true });
+  }
 
-    clear() {
-        this.data = {};
-        this.save();
-        this.emit('changed', { cleared: true });
+  /** Deletes all variables created by a specific script. */
+  pruneByOwner(scriptName) {
+    let count = 0;
+    for (let key in this.data) {
+      if (this.data[key].owner === scriptName) {
+        delete this.data[key];
+        count++;
+      }
     }
-
-    /** Deletes all variables created by a specific script. */
-    pruneByOwner(scriptName) {
-        let count = 0;
-        for (let key in this.data) {
-            if (this.data[key].owner === scriptName) {
-                delete this.data[key];
-                count++;
-            }
-        }
-        if (count > 0) {
-            this.save();
-        }
-        return count;
+    if (count > 0) {
+      this.save();
     }
+    return count;
+  }
 }
 
 module.exports = StoreManager;
