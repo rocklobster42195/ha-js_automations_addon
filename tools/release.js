@@ -14,10 +14,12 @@
  *   2. Verifies the local git tag vX.X.X exists.
  *   3. Extracts the CHANGELOG.md entry for this version as release notes
  *      (beta versions always use the auto-collected commit log instead).
- *   4. Pushes commit + specific tag to origin (no other tags).
- *   5. Creates a GitHub Release via API (triggers the release.yml CI workflow).
+ *   4. Runs lint + format:check + test. Aborts here (nothing pushed or
+ *      published) if any of them fail.
+ *   5. Pushes commit + specific tag to origin (no other tags).
+ *   6. Creates a GitHub Release via API (triggers the release.yml CI workflow).
  *      Beta versions (x.y.z-beta.n) are created as pre-releases.
- *   6. After a stable release: deletes all beta pre-releases, tags, and GHCR
+ *   7. After a stable release: deletes all beta pre-releases, tags, and GHCR
  *      image versions — every stable release supersedes all existing betas.
  */
 
@@ -157,6 +159,21 @@ if (!releaseNotes) {
   } catch {
     console.warn(`  ⚠️  Could not collect commits — release notes will be empty`);
   }
+}
+
+// --- 4b. Quality gate — must pass before anything is pushed or published ---
+// This is the last point where aborting is cheap: the tag only exists locally
+// so far. Runs lint + format + test; `build` will join once the LIT/esbuild
+// bundling step exists (see docs/RFC_FRONTEND_MODERNIZATION.md).
+console.log(`  🔎 Running pre-release checks (lint, format, test)...`);
+try {
+  execSync('npm run lint', { stdio: 'inherit', cwd: rootDir });
+  execSync('npm run format:check', { stdio: 'inherit', cwd: rootDir });
+  execSync('npm test', { stdio: 'inherit', cwd: rootDir });
+  console.log(`  ✅ Pre-release checks passed`);
+} catch {
+  console.error(`  ❌ Pre-release checks failed — aborting before push. Nothing has been published.`);
+  process.exit(1);
 }
 
 // --- 5. Push commit + tag (only the specific tag, not all local tags) ---
