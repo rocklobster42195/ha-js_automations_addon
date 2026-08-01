@@ -3,23 +3,6 @@
  * Complete Style Reset & Layout Fixes
  */
 
-:root {
-  --bg: #0c0c0c;
-  --side: #141414;
-  --main: #000000;
-  --border: #252525;
-  --accent: #03a9f4;
-  --text-main: #ffffff;
-  --text-sec: #aaaaaa;
-  --text-dim: #666666;
-  --success: #4caf50;
-  --danger: #f44336;
-  --warn: #ff9800;
-  --modal-bg: #1c1c1c;
-  --input-bg: #222;
-  color-scheme: dark;
-}
-
 /* --- GLOBAL RESET --- */
 * {
   box-sizing: border-box;
@@ -31,8 +14,8 @@ html {
   padding: 0;
   height: 100vh;
   width: 100vw;
-  background: var(--bg);
-  color: var(--text-main);
+  background: var(--surface-0);
+  color: var(--text-primary);
   font-family:
     'Roboto',
     -apple-system,
@@ -77,7 +60,7 @@ button:disabled {
 .sidebar {
   width: 310px;
   min-width: 310px;
-  background: var(--side);
+  background: var(--surface-1);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -113,7 +96,7 @@ body.expert-mode .nav-logo {
 .version-tag {
   font-family: monospace;
   font-size: 0.7rem;
-  color: var(--text-dim);
+  color: var(--text-muted);
   background: #222;
   padding: 2px 6px;
   border-radius: 4px;
@@ -210,7 +193,7 @@ body.expert-mode .nav-logo {
   width: 100%;
 }
 .header-actions button {
-  color: var(--text-sec) !important;
+  color: var(--text-secondary) !important;
   font-size: 1.3rem !important;
   width: 32px;
   height: 32px;
@@ -262,7 +245,7 @@ body.expert-mode .nav-logo {
   height: 8px;
   background-color: var(--warn);
   border-radius: 50%;
-  border: 1px solid var(--side);
+  border: 1px solid var(--surface-1);
   pointer-events: none;
 }
 
@@ -288,7 +271,7 @@ body.expert-mode .nav-logo {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1px solid var(--side);
+  border: 1px solid var(--surface-1);
   pointer-events: none;
 }
 
@@ -517,7 +500,7 @@ input#search-input:focus {
 .btn-row {
   width: 28px !important;
   height: 28px !important;
-  color: var(--text-sec) !important;
+  color: var(--text-secondary) !important;
   border-radius: 4px;
 }
 
@@ -576,13 +559,13 @@ input#search-input:focus {
 }
 
 .editor-toolbar button {
-  color: var(--text-sec) !important;
+  color: var(--text-secondary) !important;
   font-size: 1.3rem !important;
   width: 32px;
   height: 32px;
 }
 .editor-toolbar button:hover {
-  color: var(--text-main) !important;
+  color: var(--text-primary) !important;
   background: #252525 !important;
 }
 
@@ -614,7 +597,7 @@ input#search-input:focus {
   font-size: 0.8rem;
 }
 .snippet-variant-picker__label {
-  color: var(--text-sec);
+  color: var(--text-secondary);
   white-space: nowrap;
   margin-right: 4px;
 }
@@ -622,7 +605,7 @@ input#search-input:focus {
   background: #2d2d2d;
   border: 1px solid var(--border);
   border-radius: 4px;
-  color: var(--text-main);
+  color: var(--text-primary);
   padding: 2px 8px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -657,7 +640,7 @@ input#search-input:focus {
   padding: 5px 8px;
   border-radius: 4px;
   font-size: 0.82rem;
-  color: var(--text-sec);
+  color: var(--text-secondary);
   background: none;
   border: none;
   cursor: pointer;
@@ -711,13 +694,13 @@ body.resizing #resizer {
   flex-shrink: 0;
 }
 .log-header button {
-  color: var(--text-dim) !important;
+  color: var(--text-muted) !important;
   width: 32px;
   height: 32px;
   border-radius: 4px;
 }
 .log-header button:hover {
-  color: var(--text-main) !important;
+  color: var(--text-primary) !important;
   background: #222 !important;
 }
 .log-header button i {
@@ -767,7 +750,7 @@ body.resizing #resizer {
   backdrop-filter: blur(3px);
 }
 .modal {
-  background: var(--modal-bg) !important;
+  background: var(--surface-2) !important;
   border: 1px solid var(--border) !important;
   padding: 25px !important;
   width: 520px !important;
@@ -777,7 +760,7 @@ body.resizing #resizer {
 .modal h3 {
   margin: 0 0 20px 0;
   font-size: 1.1rem;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-weight: 500;
   border-bottom: 1px solid var(--border);
   padding-bottom: 10px;
@@ -799,7 +782,7 @@ body.resizing #resizer {
 }
 .form-group label {
   font-size: 0.65rem;
-  color: var(--text-sec);
+  color: var(--text-secondary);
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -808,7 +791,7 @@ body.resizing #resizer {
 .form-group input,
 .form-group textarea,
 .form-group select {
-  background: var(--input-bg) !important;
+  background: var(--surface-2) !important;
   border: 1px solid #383838 !important;
   color: #fff !important;
   padding: 10px !important;
@@ -827,7 +810,7 @@ body.resizing #resizer {
 .icon-input-container {
   display: flex;
   align-items: center;
-  background: var(--input-bg);
+  background: var(--surface-2);
   border: 1px solid #383838;
   border-radius: 6px;
   padding: 0 10px;
@@ -854,7 +837,7 @@ body.resizing #resizer {
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
-  background: var(--input-bg);
+  background: var(--surface-2);
   border: 1px solid #383838;
   border-radius: 6px;
   padding: 5px;
@@ -945,7 +928,7 @@ body.resizing #resizer {
   color: #000 !important;
 }
 .btn-text {
-  color: var(--text-sec) !important;
+  color: var(--text-secondary) !important;
   font-size: 0.8rem;
   padding: 10px;
 }
@@ -968,7 +951,7 @@ body.resizing #resizer {
 .entity-list {
   flex: 1;
   overflow-y: auto;
-  background: var(--input-bg);
+  background: var(--surface-2);
   border: 1px solid #383838;
   border-radius: 6px;
 }
@@ -1003,7 +986,7 @@ body.resizing #resizer {
 /* --- EDITOR TABS --- */
 #tab-bar {
   display: flex;
-  background: var(--side);
+  background: var(--surface-1);
   width: 100%;
   height: 45px;
   flex-shrink: 0;
@@ -1021,11 +1004,11 @@ body.resizing #resizer {
   align-items: center;
   gap: 8px;
   padding: 10px 15px;
-  border-right: 1px solid var(--bg);
+  border-right: 1px solid var(--surface-0);
   cursor: pointer;
   font-size: 0.85rem;
   font-family: monospace;
-  color: var(--text-sec);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -1034,8 +1017,8 @@ body.resizing #resizer {
 }
 
 .tab.active {
-  background: var(--main);
-  color: var(--text-main);
+  background: var(--surface-0);
+  color: var(--text-primary);
 }
 
 .tab .tab-icon {
@@ -1059,7 +1042,7 @@ body.resizing #resizer {
   width: 100%;
   height: 100%;
   border-radius: 4px;
-  color: var(--text-dim) !important;
+  color: var(--text-muted) !important;
   font-size: 1.1rem !important;
   display: none; /* Hidden by default */
 }
@@ -1125,7 +1108,7 @@ body.resizing #resizer {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--surface-0);
   min-height: 0;
   overflow: hidden;
 }
@@ -1143,7 +1126,7 @@ body.resizing #resizer {
 
 /* Buttons im Store-Header (wie header-actions) */
 .store-toolbar button {
-  color: var(--text-sec);
+  color: var(--text-secondary);
   font-size: 1.3rem;
   width: 32px;
   height: 32px;
@@ -1206,7 +1189,7 @@ body.resizing #resizer {
 
 .store-table th {
   background: #1a1a1a;
-  color: var(--text-sec);
+  color: var(--text-secondary);
   text-align: center;
   padding: 10px 15px;
   font-weight: bold;
@@ -1243,7 +1226,7 @@ body.resizing #resizer {
 }
 .store-owner {
   width: 120px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
@@ -1251,14 +1234,14 @@ body.resizing #resizer {
 }
 .store-updated {
   width: 150px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 0.85rem;
   white-space: nowrap;
   text-align: right;
 }
 .store-accessed {
   width: 150px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 0.85rem;
   white-space: nowrap;
   text-align: right;
@@ -1274,7 +1257,7 @@ body.resizing #resizer {
   display: inline-flex;
   width: 28px;
   height: 28px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 1.2rem;
   margin-left: 4px;
   vertical-align: middle;
@@ -1681,7 +1664,7 @@ body.resizing #resizer {
     background 0.15s;
 }
 .preview-action-btn:hover {
-  color: var(--text-main, #e0e0e0);
+  color: var(--text-primary, #e0e0e0);
   background: #333;
 }
 
@@ -2589,11 +2572,11 @@ body.expert-mode .log-pane-right {
     background 0.1s;
 }
 .log-pane-tab:hover {
-  color: var(--text-main);
+  color: var(--text-primary);
   background: #111;
 }
 .log-pane-tab.active {
-  color: var(--text-main);
+  color: var(--text-primary);
   border-bottom-color: var(--accent);
 }
 
@@ -2689,7 +2672,7 @@ body.expert-mode .log-pane-right {
     background 0.1s;
 }
 .repl-toolbar-btn:hover {
-  color: var(--text-main);
+  color: var(--text-primary);
   background: #1a1a1a;
 }
 
@@ -2729,7 +2712,7 @@ body.expert-mode .log-pane-right {
 }
 .repl-snippet-row:hover {
   background: #2a2a2a;
-  color: var(--text-main);
+  color: var(--text-primary);
 }
 .repl-snippet-row:hover i {
   color: var(--accent);
@@ -2823,7 +2806,7 @@ body.expert-mode .log-pane-right {
   font-family: monospace;
   font-weight: 600;
   white-space: nowrap;
-  color: var(--text-main);
+  color: var(--text-primary);
   padding-left: 12px !important;
 }
 
@@ -3058,7 +3041,7 @@ body.expert-mode .log-pane-right {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-size: 0.78rem;
   font-family: monospace;
 }
