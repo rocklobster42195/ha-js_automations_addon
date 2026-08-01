@@ -16,6 +16,7 @@
     "ship:beta:major": "npm version premajor --preid=beta && npm run release",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
