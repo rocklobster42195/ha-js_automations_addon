@@ -26,6 +26,7 @@ module.exports = [
       'js_automations/routes/**/*.js',
       'js_automations/services/**/*.js',
       'tools/**/*.js',
+      'test/**/*.js',
     ],
     languageOptions: {
       ecmaVersion: 2022,

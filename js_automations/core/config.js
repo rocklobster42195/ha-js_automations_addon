@@ -9,7 +9,10 @@ const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
 const ADDON_DIR = path.join(__dirname, '..');
 
 // Base Directories
-const SCRIPTS_DIR = IS_ADDON ? '/config/js-automations' : path.resolve(__dirname, '../../scripts');
+// JSA_SCRIPTS_DIR lets tests point this at an isolated temp directory instead of
+// the real /config/js-automations or scripts/ folder; unset in normal operation.
+const SCRIPTS_DIR =
+  process.env.JSA_SCRIPTS_DIR || (IS_ADDON ? '/config/js-automations' : path.resolve(__dirname, '../../scripts'));
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
 const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');

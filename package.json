@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.js\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

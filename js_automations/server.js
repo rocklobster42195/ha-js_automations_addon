@@ -4,7 +4,14 @@
  * boots the Kernel, and wires up the API routes.
  */
 // DEV SETUP CHECK
-if (!process.env.SUPERVISOR_TOKEN && !require('fs').existsSync(require('path').join(__dirname, '..', '.env'))) {
+// Skipped if running as an addon (SUPERVISOR_TOKEN), a .env file already
+// configures HA connectivity, or HA_URL is already provided via the
+// environment directly (e.g. CI, docker run -e, systemd unit).
+if (
+  !process.env.SUPERVISOR_TOKEN &&
+  !process.env.HA_URL &&
+  !require('fs').existsSync(require('path').join(__dirname, '..', '.env'))
+) {
   try {
     require('child_process').execSync(
       `"${process.execPath}" "${require('path').join(__dirname, 'core', 'dev-setup.js')}"`,
@@ -15,7 +22,7 @@ if (!process.env.SUPERVISOR_TOKEN && !require('fs').existsSync(require('path').j
   }
 }
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
