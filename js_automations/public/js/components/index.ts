@@ -5,3 +5,5 @@
 import './safe-mode-banner';
 import './integration-banner';
 import './log-viewer';
+import './status-bar';
+import './status-bar-header-actions';

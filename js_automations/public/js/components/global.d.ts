@@ -26,6 +26,50 @@ export interface JsaIntegrationStatus {
   mqtt?: { enabled: boolean; connected: boolean };
 }
 
+export interface JsaStatusBarSettings {
+  slot1?: string;
+  slot2?: string;
+  slot3?: string;
+  customEntitySlot1?: string;
+  customEntitySlot2?: string;
+  customEntitySlot3?: string;
+  show_sparkline_slot1?: boolean;
+  show_sparkline_slot2?: boolean;
+  show_sparkline_slot3?: boolean;
+  show_statusbar?: boolean;
+  hide_sparkline_on_dense?: boolean;
+  header_action_1?: string;
+  header_action_2?: string;
+  header_action_3?: string;
+}
+
+export interface JsaSettings {
+  statusbar?: JsaStatusBarSettings;
+  mqtt?: { enabled?: boolean };
+  [key: string]: unknown;
+}
+
+export interface JsaHaState {
+  entity_id: string;
+  state: string;
+  attributes: {
+    unit_of_measurement?: string;
+    icon?: string;
+    friendly_name?: string;
+    rgb_color?: number[];
+    icon_color?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface JsaStatusBarBridge {
+  init(): void;
+  updateMqttIndicator(status: { connected: boolean; error?: string }): void;
+  setConnected(isConnected: boolean): void;
+  isDisconnected(): boolean;
+  showConnectionLost(): void;
+}
+
 declare global {
   interface Window {
     socket?: JsaSocket;
@@ -38,6 +82,12 @@ declare global {
     hideIntegrationBanner?: () => void;
     initLogs?: () => Promise<void>;
     appendLog?: (entry: any, autoScroll?: boolean) => void;
+    currentSettings?: JsaSettings | null;
+    getHAStates?: () => Promise<JsaHaState[]>;
+    cachedEntities?: JsaHaState[];
+    /** In-flight dedup for fetchAllStatesDeduped() (see ha-entity-cache.ts). */
+    _jsaEntityFetchPromise?: Promise<JsaHaState[]> | null;
+    statusBar?: JsaStatusBarBridge;
   }
 }
 

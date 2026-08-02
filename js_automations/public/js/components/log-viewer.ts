@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { mdiStylesheetLink } from './mdi';
 
 interface LogEntry {
   ts?: number;
@@ -26,8 +27,6 @@ interface LogEntry {
 @customElement('log-viewer')
 export class LogViewer extends LitElement {
   static styles = css`
-    @import url('https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css');
-
     :host {
       flex: 1;
       display: flex;
@@ -278,6 +277,7 @@ export class LogViewer extends LitElement {
 
   render() {
     return html`
+      ${mdiStylesheetLink}
       <div class="log-header">
         <div class="log-header-left">
           <span>${this._t('log_header', 'LOGS')}</span>

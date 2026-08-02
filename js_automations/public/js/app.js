@@ -315,14 +315,7 @@ function updateSystemNotifications() {
   if (window.statusBar && status && status.mqtt) {
     window.statusBar.updateMqttIndicator(status.mqtt);
   } else if (!isSocketConnected) {
-    const intIcon = document.getElementById('integration-status-icon');
-    const intItem = document.getElementById('integration-status-item');
-    if (intIcon) {
-      intIcon.className = 'mdi mdi-circle-outline integration-icon';
-      intIcon.style.color = 'var(--danger)';
-      intIcon.style.opacity = '1';
-      if (intItem) intItem.title = 'Connection lost (Socket)';
-    }
+    window.statusBar?.showConnectionLost();
   }
 
   if (!isSocketConnected) {

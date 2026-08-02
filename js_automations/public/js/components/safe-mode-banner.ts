@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { mdiStylesheetLink } from './mdi';
 
 /**
  * Bootloop-protection banner. Always mounted (see index.html); renders
@@ -8,10 +9,6 @@ import { customElement, state } from 'lit/decorators.js';
 @customElement('safe-mode-banner')
 export class SafeModeBanner extends LitElement {
   static styles = css`
-    /* Shadow DOM doesn't inherit the document-level MDI stylesheet link;
-       re-importing here is cheap after the first (cached) fetch. */
-    @import url('https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css');
-
     :host {
       display: contents;
     }
@@ -131,6 +128,7 @@ export class SafeModeBanner extends LitElement {
   render() {
     if (!this._active) return html``;
     return html`
+      ${mdiStylesheetLink}
       <div class="banner">
         <div class="content">
           <i class="mdi mdi-alert-decagram icon"></i>

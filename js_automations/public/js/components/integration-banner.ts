@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { JsaIntegrationStatus } from './global';
+import { mdiStylesheetLink } from './mdi';
 
 // Banner is only shown after MQTT has been disconnected for this long —
 // prevents flashing during startup / brief reconnects.
@@ -21,8 +22,6 @@ type BannerType = 'mqtt_disabled' | 'mqtt_error' | null;
 @customElement('integration-banner')
 export class IntegrationBanner extends LitElement {
   static styles = css`
-    @import url('https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css');
-
     :host {
       display: contents;
     }
@@ -207,6 +206,7 @@ export class IntegrationBanner extends LitElement {
     const btnText = this._t('settings.system.mqtt_configure_btn', 'Configure MQTT');
 
     return html`
+      ${mdiStylesheetLink}
       <div class="banner" @click=${() => this._openSettings('mqtt')}>
         <div class="content">
           <i class="mdi ${icon} icon"></i>

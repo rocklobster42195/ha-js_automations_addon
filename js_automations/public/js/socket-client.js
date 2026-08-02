@@ -19,42 +19,16 @@ window.updateIntegrationStatusUI = function () {
   }
 };
 
-/**
- * Injects the sidebar footer if it doesn't exist.
- * This fixes the ReferenceError: injectSidebarFooter is not defined.
- */
-window.injectSidebarFooter = function () {
-  const sidebar = document.querySelector('.sidebar');
-  if (!sidebar || document.getElementById('sidebar-footer')) return;
-
-  const footer = document.createElement('div');
-  footer.id = 'sidebar-footer';
-  footer.className = 'sidebar-footer';
-  sidebar.appendChild(footer);
-  console.debug('UI: Sidebar footer injected.');
-};
-
 function initSocket() {
   // BASE_PATH is global from api.js.
   window.socket = io({ path: BASE_PATH.replace(/\/$/, '') + '/socket.io' });
 
   // Helper: Central control for Heartbeat UI and Connection Overlay.
   const updateConnectionUI = (isConnected) => {
-    const hb = document.getElementById('heartbeat-icon');
     const overlay = document.getElementById('connection-lost-overlay');
 
-    // 1. Heartbeat Icon
-    if (hb) {
-      const hbParent = hb.parentElement;
-      if (hbParent)
-        hbParent.title = isConnected ? i18next.t('statusbar.ha_connected') : i18next.t('statusbar.ha_disconnected');
-      hb.className = `mdi ${isConnected ? 'mdi-circle-slice-8' : 'mdi-circle-outline'} heartbeat-icon`;
-      hb.style.color = isConnected ? '#fff' : 'var(--danger)';
-      hb.style.opacity = '1';
-      hb.dataset.status = isConnected ? 'connected' : 'disconnected';
-      // Reset rotation on connection success.
-      if (isConnected) hb.style.transform = '';
-    }
+    // 1. Heartbeat Icon (lives inside <status-bar>'s shadow root)
+    window.statusBar?.setConnected(isConnected);
 
     // 2. Overlay
     if (overlay) {
@@ -150,12 +124,9 @@ function initSocket() {
   });
 
   window.socket.on('system_stats', (data) => {
-    const hb = document.getElementById('heartbeat-icon');
-    if (hb) {
-      // If we receive data but UI shows disconnected, handle as silent reconnect.
-      if (hb.dataset.status === 'disconnected') {
-        handleConnectionEstablished();
-      }
+    // If we receive data but UI shows disconnected, handle as silent reconnect.
+    if (window.statusBar?.isDisconnected()) {
+      handleConnectionEstablished();
     }
 
     // Update status bar slots if the function is available.

@@ -53,7 +53,7 @@
             <button id="btn-reference" onclick="openReferenceTab()" title="Command Reference" class="hidden">
               <i class="mdi mdi-help-circle-outline"></i>
             </button>
-            <div id="header-entity-actions"></div>
+            <status-bar-header-actions></status-bar-header-actions>
           </div>
         </div>
 
@@ -77,27 +77,7 @@
           <!-- Scripts will be injected here -->
         </div>
 
-        <div id="status-bar" class="sidebar-footer">
-          <div class="status-left">
-            <div class="stat-item" title="Backend Heartbeat">
-              <i id="heartbeat-icon" class="mdi mdi-circle-outline heartbeat-icon"></i>
-            </div>
-            <div
-              id="integration-status-item"
-              class="stat-item"
-              title="MQTT Status"
-              onclick="openSettingsTab('mqtt')"
-              style="cursor: pointer"
-            >
-              <i id="integration-status-icon" class="mdi mdi-circle-outline integration-icon"></i>
-            </div>
-          </div>
-          <div class="status-slots">
-            <div id="sb-slot1" class="sb-item"></div>
-            <div id="sb-slot2" class="sb-item"></div>
-            <div id="sb-slot3" class="sb-item"></div>
-          </div>
-        </div>
+        <status-bar></status-bar>
       </aside>
 
       <main class="main-content">
@@ -432,7 +412,6 @@
     <script src="js/app.js"></script>
     <script src="js/store-explorer.js"></script>
     <script src="js/settings.js"></script>
-    <script src="js/statusbar.js"></script>
     <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
     <script src="js/event-inspector.js"></script>
