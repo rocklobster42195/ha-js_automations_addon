@@ -337,38 +337,7 @@
         <div class="log-section">
           <div class="log-panes">
             <!-- LEFT: existing log console -->
-            <div class="log-pane-left">
-              <div class="log-header">
-                <div style="display: flex; align-items: center; gap: 20px">
-                  <span data-i18n="log_header">LOGS</span>
-                  <div style="display: flex; align-items: center; gap: 8px">
-                    <label for="logFilter" data-i18n="log_filter_label" style="font-size: 0.8rem; opacity: 0.7"
-                      >Filter:</label
-                    >
-                    <select id="logFilter" onchange="filterLogs()">
-                      <option value="ALL" data-i18n="log_filter_all">All</option>
-                      <option value="System">System</option>
-                    </select>
-                  </div>
-                </div>
-                <div style="display: flex; gap: 5px">
-                  <button onclick="clearLogView()" data-i18n="log_clear_view_title" data-i18n-title title="Clear View">
-                    <i class="mdi mdi-trash-can-outline"></i>
-                  </button>
-                  <button
-                    id="btn-clear-server-logs"
-                    class="hidden"
-                    onclick="clearServerLogs()"
-                    data-i18n="log_clear_server_title"
-                    data-i18n-title
-                    title="Delete Server Logs"
-                  >
-                    <i class="mdi mdi-delete-forever"></i>
-                  </button>
-                </div>
-              </div>
-              <div id="console-output" class="console"></div>
-            </div>
+            <log-viewer></log-viewer>
 
             <!-- PANE RESIZER (expert mode only) -->
             <div id="log-pane-resizer" class="log-pane-resizer"></div>
@@ -458,7 +427,6 @@
     <script src="js/tab-manager.js"></script>
     <script src="js/card-preview.js"></script>
     <script src="js/script-list.js"></script>
-    <script src="js/log-viewer.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>

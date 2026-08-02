@@ -679,61 +679,6 @@ body.resizing #resizer {
   position: relative;
   z-index: 1;
 }
-.log-header {
-  padding: 8px 15px;
-  background: #0a0a0a;
-  border-bottom: 1px solid #111;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.8rem;
-  color: #666;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
-}
-.log-header button {
-  color: var(--text-muted) !important;
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-}
-.log-header button:hover {
-  color: var(--text-primary) !important;
-  background: #222 !important;
-}
-.log-header button i {
-  font-size: 1.4rem !important;
-}
-
-/* Log Filter / Protocol Filter */
-.log-header select,
-.log-header input {
-  background-color: #333;
-  border: 1px solid #555;
-  color: #fff;
-  border-radius: 3px;
-  outline: none;
-  padding: 2px 5px;
-  font-size: 0.8rem;
-}
-
-.log-header select option {
-  background: #222;
-  color: #aaa;
-}
-
-.console {
-  flex: 1;
-  padding: 12px;
-  overflow-y: auto;
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: #999;
-  line-height: 1.5;
-}
-
 /* --- MODAL (Grid Layout) --- */
 .modal-overlay {
   position: fixed !important;
@@ -2496,13 +2441,6 @@ body.card-tab-active #btn-card-menu {
   flex-direction: row;
   flex: 1;
   min-height: 0;
-}
-
-.log-pane-left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 
 /* Vertical divider between panes — hidden unless expert mode is on */

@@ -22,7 +22,7 @@ async function initI18next() {
   if (opts.expert_mode || urlParams.get('expert') === 'true') {
     document.body.classList.add('expert-mode');
     document.getElementById('btn-store-explorer')?.classList.remove('hidden');
-    document.getElementById('btn-clear-server-logs')?.classList.remove('hidden');
+    document.querySelector('log-viewer')?.setAttribute('expert-mode', '');
   }
 
   if (!lang && opts.ui_language && opts.ui_language !== 'auto') lang = opts.ui_language;

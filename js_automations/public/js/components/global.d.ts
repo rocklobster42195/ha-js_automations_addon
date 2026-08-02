@@ -12,6 +12,7 @@ export interface JsaSocket {
 
 export interface JsaI18next {
   t(key: string, options?: Record<string, unknown>): string;
+  language: string;
 }
 
 export interface JsaScript {
@@ -35,6 +36,8 @@ declare global {
     currentIntegrationStatus?: JsaIntegrationStatus;
     handleIntegrationStatus?: (status: JsaIntegrationStatus | null) => void;
     hideIntegrationBanner?: () => void;
+    initLogs?: () => Promise<void>;
+    appendLog?: (entry: any, autoScroll?: boolean) => void;
   }
 }
 

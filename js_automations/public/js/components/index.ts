@@ -4,3 +4,4 @@
 // docs/RFC_FRONTEND_MODERNIZATION.md section 6 for the migration order.
 import './safe-mode-banner';
 import './integration-banner';
+import './log-viewer';
