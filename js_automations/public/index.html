@@ -17,6 +17,8 @@
   </head>
 
   <body>
+    <safe-mode-banner></safe-mode-banner>
+    <integration-banner></integration-banner>
     <div class="app-wrapper">
       <aside class="sidebar">
         <div class="sidebar-header">
@@ -465,12 +467,12 @@
     <script src="js/statusbar.js"></script>
     <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
-    <script src="js/safe-mode.js"></script>
     <script src="js/event-inspector.js"></script>
     <script src="js/watch.js"></script>
     <script src="js/repl.js"></script>
     <script src="js/mqtt-monitor.js"></script>
     <script src="js/webhook-panel.js"></script>
-    <script src="js/integration-banner.js"></script>
+    <!-- LIT components bundle (built by `npm run build`, see docs/RFC_FRONTEND_MODERNIZATION.md) -->
+    <script type="module" src="js/dist/components.js"></script>
   </body>
 </html>

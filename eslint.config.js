@@ -11,6 +11,7 @@ module.exports = [
       'scripts/**',
       'js_automations_beta/**',
       'js_automations/public/js/vendor/**',
+      'js_automations/public/js/dist/**',
       'js_automations/locales/**',
       'docs/**',
       'notes/**',

@@ -17,6 +17,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "typecheck:frontend": "tsc --noEmit -p js_automations/public/tsconfig.json",
+    "build": "esbuild js_automations/public/js/components/index.ts --bundle --format=esm --outfile=js_automations/public/js/dist/components.js",
     "test": "node --test \"test/**/*.test.js\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -32,6 +34,7 @@
     "home-assistant-js-websocket": "^9.6.0",
     "i18next": "^26.3.2",
     "i18next-http-backend": "^4.0.0",
+    "lit": "^3.3.3",
     "mqtt": "^5.10.1",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
@@ -42,6 +45,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.8.0",

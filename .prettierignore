@@ -2,6 +2,7 @@ node_modules/
 scripts/
 js_automations_beta/
 js_automations/public/js/vendor/
+js_automations/public/js/dist/
 package-lock.json
 CHANGELOG.md
 
