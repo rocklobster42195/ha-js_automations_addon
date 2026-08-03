@@ -12,6 +12,7 @@ import './mqtt-monitor';
 import './watch-panel';
 import './store-explorer';
 import './event-inspector';
+import './settings-view';
 import { observeTabVisibility } from './tab-visibility';
 
 // repl.js (not yet migrated) still uses this as a bare global — see

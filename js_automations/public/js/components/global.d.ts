@@ -76,6 +76,15 @@ export interface JsaStoreExplorerBridge {
   refreshIfSocketDown(): void;
 }
 
+export interface JsaTab {
+  filename: string;
+  icon: string;
+  isDirty: boolean;
+  type?: string;
+  model: unknown;
+  viewState?: unknown;
+}
+
 declare global {
   interface Window {
     socket?: JsaSocket;
@@ -109,6 +118,16 @@ declare global {
     allEntities?: string[];
     /** repl.js (not yet migrated) still calls this as a bare global — see js/components/index.ts. */
     observeTabVisibility?: (el: HTMLElement, cb: (visible: boolean) => void) => MutationObserver;
+    /** tab-manager.js (not yet migrated) globals for the editor tab strip. */
+    openTabs?: JsaTab[];
+    renderTabs?: () => void;
+    switchToTab?: (filename: string) => void;
+    closeTab?: (filename: string) => void;
+    activeTabFilename?: string | null;
+    loadSettingsData?: (isBackgroundRefresh?: boolean) => Promise<void>;
+    /** Re-checks window.newVersionInfo and refreshes the settings category sidebar's update-available dot. */
+    renderSettingsCategories?: () => void;
+    newVersionInfo?: { update_available?: boolean; [key: string]: unknown } | null;
   }
 }
 
