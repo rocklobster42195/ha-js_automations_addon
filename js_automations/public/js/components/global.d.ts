@@ -88,6 +88,11 @@ declare global {
     /** In-flight dedup for fetchAllStatesDeduped() (see ha-entity-cache.ts). */
     _jsaEntityFetchPromise?: Promise<JsaHaState[]> | null;
     statusBar?: JsaStatusBarBridge;
+    onWatchUpdate?: (data: any) => void;
+    onWatchClear?: (data: any) => void;
+    onInspectSnapshot?: (data: any) => void;
+    onBreakpointHit?: (data: any) => void;
+    onBreakpointContinued?: (data: any) => void;
   }
 }
 

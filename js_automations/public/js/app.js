@@ -100,10 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       initLogPaneResizer();
       initDevPanelTabs();
       initEventInspector();
-      initWatch();
       initRepl();
-      initMqttMonitor();
-      initWebhookPanel();
     });
   }
 

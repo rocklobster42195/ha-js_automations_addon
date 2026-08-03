@@ -332,11 +332,11 @@
                 <button class="log-pane-tab" data-tab="webhooks">WEBHOOKS</button>
               </div>
               <div class="log-pane-content">
-                <div id="dev-tab-watch" class="dev-tab-panel"></div>
+                <watch-panel id="dev-tab-watch" class="dev-tab-panel"></watch-panel>
                 <div id="dev-tab-repl" class="dev-tab-panel hidden"></div>
-                <div id="dev-tab-mqtt" class="dev-tab-panel hidden"></div>
+                <mqtt-monitor id="dev-tab-mqtt" class="dev-tab-panel hidden"></mqtt-monitor>
                 <div id="dev-tab-events" class="dev-tab-panel hidden"></div>
-                <div id="dev-tab-webhooks" class="dev-tab-panel hidden"></div>
+                <webhook-panel id="dev-tab-webhooks" class="dev-tab-panel hidden"></webhook-panel>
               </div>
             </div>
           </div>
@@ -415,10 +415,7 @@
     <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
     <script src="js/event-inspector.js"></script>
-    <script src="js/watch.js"></script>
     <script src="js/repl.js"></script>
-    <script src="js/mqtt-monitor.js"></script>
-    <script src="js/webhook-panel.js"></script>
     <!-- LIT components bundle (built by `npm run build`, see docs/RFC_FRONTEND_MODERNIZATION.md) -->
     <script type="module" src="js/dist/components.js"></script>
   </body>

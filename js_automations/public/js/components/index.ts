@@ -7,3 +7,6 @@ import './integration-banner';
 import './log-viewer';
 import './status-bar';
 import './status-bar-header-actions';
+import './webhook-panel';
+import './mqtt-monitor';
+import './watch-panel';
