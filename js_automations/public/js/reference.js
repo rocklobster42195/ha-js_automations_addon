@@ -10,18 +10,11 @@ const referenceManager = {
 
   async open() {
     this.injectUI();
+    document.getElementById('editor-section').classList.remove('hidden');
 
-    // UI umschalten
-    document.getElementById('editor-section').classList.add('hidden');
-    const settingsWrapper = document.getElementById('settings-wrapper');
-    if (settingsWrapper) settingsWrapper.classList.add('hidden');
-    const storeWrapper = document.getElementById('store-wrapper');
-    if (storeWrapper) storeWrapper.classList.add('hidden');
-
-    const refWrapper = document.getElementById('reference-wrapper');
-    if (refWrapper) refWrapper.classList.remove('hidden');
-
-    // Tab Management
+    // Tab Management — goes through the normal switchToTab flow (like store/settings)
+    // so #reference-wrapper's visibility, the resizer, and the active-tab UI all stay
+    // in sync with the other virtual views instead of being managed by hand here.
     if (typeof openTabs !== 'undefined') {
       const existing = openTabs.find((t) => t.filename === REFERENCE_TAB_ID);
       if (!existing) {
@@ -33,12 +26,8 @@ const referenceManager = {
           model: null,
         });
       }
-      if (window.renderTabs) window.renderTabs();
-      // Wir setzen den aktiven Tab manuell im UI, da switchToTab evtl. den Type nicht kennt
-      const tabs = document.querySelectorAll('.tab');
-      tabs.forEach((t) => t.classList.remove('active'));
-      const refTab = Array.from(tabs).find((t) => t.innerText.includes('Reference'));
-      if (refTab) refTab.classList.add('active');
+      window.renderTabs?.();
+      window.switchToTab?.(REFERENCE_TAB_ID);
     }
 
     // Inhalt laden
@@ -64,8 +53,13 @@ const referenceManager = {
     const wrapper = document.createElement('div');
     wrapper.id = 'reference-wrapper';
     wrapper.className = 'hidden'; // Start hidden
+    // Sits inside #editor-section as a sibling of #editor-wrapper/store-wrapper/
+    // settings-wrapper, so it shares the same resizer-controlled height instead of
+    // sizing itself independently (that used to make the drag-resizer a no-op
+    // whenever Reference was the active view).
     wrapper.style.display = 'flex';
-    wrapper.style.height = '100%';
+    wrapper.style.flex = '1';
+    wrapper.style.minHeight = '0';
     wrapper.style.width = '100%';
     wrapper.style.overflow = 'hidden';
     wrapper.style.backgroundColor = '#1e1e1e';
@@ -76,16 +70,16 @@ const referenceManager = {
             </div>
         `;
 
-    const section = document.getElementById('editor-section');
-    if (section && section.parentNode) {
-      section.parentNode.insertBefore(wrapper, section.nextSibling);
-    }
+    document.getElementById('editor-section')?.appendChild(wrapper);
   },
 
   async fetchDefinitions() {
-    const res = await fetch('/types/ha-api.d.ts');
+    const res = await apiFetch('api/scripts/typings');
     if (!res.ok) throw new Error(res.statusText);
-    return await res.text();
+    const typings = await res.json();
+    const haApi = typings.find((t) => t.filename === 'ha-api.d.ts');
+    if (!haApi) throw new Error('ha-api.d.ts not found in typings bundle');
+    return haApi.content;
   },
 
   parseDefinitions(dtsText) {

@@ -27,6 +27,12 @@ const NETWORK_PATTERNS = [
 // Patterns that indicate ha.onWebhook() usage
 const WEBHOOK_PATTERNS = [/\bha\.onWebhook\s*\(/];
 
+// Patterns that indicate direct ha.mqtt.* usage (distinct from the generic
+// 'network' capability — used to drive the sidebar's needs-mqtt warning dot
+// for scripts that depend on the broker without necessarily @expose-ing an
+// entity). Not rendered as its own capability badge (see script-row.ts).
+const MQTT_PATTERNS = [/\bha\.mqtt\.(publish|subscribe)\s*\(/];
+
 // Patterns that indicate ha.fs read operations
 const FS_READ_PATTERNS = [
   /\bha\.fs\.read\s*\(/,
@@ -79,6 +85,7 @@ class CapabilityAnalyzer {
 
     if (NETWORK_PATTERNS.some((p) => p.test(s))) detected.push('network');
     if (WEBHOOK_PATTERNS.some((p) => p.test(s))) detected.push('webhook');
+    if (MQTT_PATTERNS.some((p) => p.test(s))) detected.push('mqtt');
     if (FS_WRITE_PATTERNS.some((p) => p.test(s))) detected.push('fs:write');
     // Only add fs:read if not already implying it via fs:write
     else if (FS_READ_PATTERNS.some((p) => p.test(s))) detected.push('fs:read');
