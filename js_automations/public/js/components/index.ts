@@ -11,3 +11,9 @@ import './webhook-panel';
 import './mqtt-monitor';
 import './watch-panel';
 import './store-explorer';
+import './event-inspector';
+import { observeTabVisibility } from './tab-visibility';
+
+// repl.js (not yet migrated) still uses this as a bare global — see
+// js/repl.js's `typeof observeTabVisibility === 'function'` check.
+window.observeTabVisibility = observeTabVisibility;

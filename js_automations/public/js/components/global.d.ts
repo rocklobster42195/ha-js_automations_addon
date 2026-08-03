@@ -104,6 +104,11 @@ declare global {
     onStoreChanged?: (data: { cleared?: boolean; deleted?: boolean; key?: string; item?: unknown }) => void;
     /** Opens the create/edit modal (store-modal.js) — omit `key` for create mode. */
     openStoreModal?: (key?: string) => void;
+    onHaEventStream?: (payload: { t: number; type: string; data: Record<string, any> }) => void;
+    /** All known entity IDs, populated by editor-config.js for Monaco completions; also used by the entity-filter dropdowns. */
+    allEntities?: string[];
+    /** repl.js (not yet migrated) still calls this as a bare global — see js/components/index.ts. */
+    observeTabVisibility?: (el: HTMLElement, cb: (visible: boolean) => void) => MutationObserver;
   }
 }
 

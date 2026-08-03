@@ -99,7 +99,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       initResizer();
       initLogPaneResizer();
       initDevPanelTabs();
-      initEventInspector();
       initRepl();
     });
   }
