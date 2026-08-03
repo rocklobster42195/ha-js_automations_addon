@@ -99,9 +99,20 @@ class MqttManager extends EventEmitter {
 
       let finished = false;
 
+      // mqtt.js's own connectTimeout doesn't reliably fire an 'error' for every
+      // failure mode (e.g. a filtered port that neither refuses nor responds) —
+      // without this, the test hangs forever and the UI is stuck on "Testing...".
+      const fallbackTimer = setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        testClient.end(true);
+        resolve({ success: false, error: 'Connection timed out' });
+      }, 6000);
+
       testClient.on('connect', () => {
         if (finished) return;
         finished = true;
+        clearTimeout(fallbackTimer);
         testClient.end(true);
         resolve({ success: true });
       });
@@ -109,6 +120,7 @@ class MqttManager extends EventEmitter {
       testClient.on('error', (err) => {
         if (finished) return;
         finished = true;
+        clearTimeout(fallbackTimer);
         testClient.end(true);
         resolve({ success: false, error: err.message });
       });
