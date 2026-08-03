@@ -70,6 +70,12 @@ export interface JsaStatusBarBridge {
   showConnectionLost(): void;
 }
 
+export interface JsaStoreExplorerBridge {
+  getItem(key: string): unknown;
+  hasKey(key: string): boolean;
+  refreshIfSocketDown(): void;
+}
+
 declare global {
   interface Window {
     socket?: JsaSocket;
@@ -93,6 +99,11 @@ declare global {
     onInspectSnapshot?: (data: any) => void;
     onBreakpointHit?: (data: any) => void;
     onBreakpointContinued?: (data: any) => void;
+    storeExplorer?: JsaStoreExplorerBridge;
+    loadStoreData?: () => Promise<void>;
+    onStoreChanged?: (data: { cleared?: boolean; deleted?: boolean; key?: string; item?: unknown }) => void;
+    /** Opens the create/edit modal (store-modal.js) — omit `key` for create mode. */
+    openStoreModal?: (key?: string) => void;
   }
 }
 

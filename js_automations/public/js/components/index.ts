@@ -10,3 +10,4 @@ import './status-bar-header-actions';
 import './webhook-panel';
 import './mqtt-monitor';
 import './watch-panel';
+import './store-explorer';

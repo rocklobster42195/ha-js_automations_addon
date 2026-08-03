@@ -185,94 +185,7 @@
           </div>
 
           <!-- STORE VIEW -->
-          <div id="store-wrapper" class="hidden">
-            <div class="store-toolbar">
-              <h4 data-i18n="store.title">Global Store (ha.store)</h4>
-              <div class="store-search-box">
-                <input
-                  type="text"
-                  id="store-search"
-                  class="store-search-input"
-                  data-i18n="store.actions.filter_placeholder"
-                  data-i18n-placeholder
-                  placeholder="Filter..."
-                  oninput="renderStoreTable()"
-                />
-                <button
-                  id="store-search-clear"
-                  class="hidden"
-                  onclick="clearStoreSearch()"
-                  data-i18n="store.actions.clear_filter"
-                  data-i18n-title
-                  title="Clear filter"
-                >
-                  <i class="mdi mdi-close"></i>
-                </button>
-              </div>
-              <button
-                onclick="clearStore()"
-                data-i18n="store.actions.clear_all"
-                data-i18n-title
-                title="Clear All (Delete everything)"
-                style="color: var(--danger)"
-              >
-                <i class="mdi mdi-delete-alert"></i>
-              </button>
-              <button onclick="loadStoreData()" data-i18n="store.actions.refresh" data-i18n-title title="Refresh">
-                <i class="mdi mdi-refresh"></i>
-              </button>
-            </div>
-            <div class="store-content">
-              <table class="store-table">
-                <thead>
-                  <tr>
-                    <th
-                      id="th-store-key"
-                      data-i18n="store.headers.key"
-                      onclick="sortStore('key')"
-                      style="cursor: pointer; user-select: none"
-                    >
-                      Key
-                    </th>
-                    <th
-                      id="th-store-value"
-                      data-i18n="store.headers.value"
-                      onclick="sortStore('value')"
-                      style="cursor: pointer; user-select: none"
-                    >
-                      Value
-                    </th>
-                    <th
-                      id="th-store-owner"
-                      data-i18n="store.headers.owner"
-                      onclick="sortStore('owner')"
-                      style="cursor: pointer; user-select: none"
-                    >
-                      Owner
-                    </th>
-                    <th
-                      id="th-store-updated"
-                      data-i18n="store.headers.updated"
-                      onclick="sortStore('updated')"
-                      style="cursor: pointer; user-select: none"
-                    >
-                      Updated
-                    </th>
-                    <th
-                      id="th-store-accessed"
-                      data-i18n="store.headers.accessed"
-                      onclick="sortStore('accessed')"
-                      style="cursor: pointer; user-select: none"
-                    >
-                      Accessed
-                    </th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="store-table-body"></tbody>
-              </table>
-            </div>
-          </div>
+          <store-explorer id="store-wrapper" class="hidden"></store-explorer>
 
           <!-- SETTINGS VIEW -->
           <div
@@ -410,7 +323,7 @@
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/store-explorer.js"></script>
+    <script src="js/store-modal.js"></script>
     <script src="js/settings.js"></script>
     <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>

@@ -45,7 +45,7 @@
   "script_action_duplicate_title": "Duplizieren",
   "download_script_title": "Skript herunterladen",
   "script_action_delete_title": "Löschen",
-  "global_store_explorer_title": "Globaler Datenspeicher",
+  "global_store_explorer_title": "Store Explorer",
   "settings_button_title": "Einstellungen",
   "confirm_discard_changes": "Änderungen an {{filename}} verwerfen?",
   "confirm_discard_all_changes": "Alle ungespeicherten Änderungen verwerfen?",
@@ -269,7 +269,7 @@
     "version": "Addon Version"
   },
   "store": {
-    "title": "Globaler Datenspeicher (ha.store)",
+    "title": "Store Explorer (ha.store)",
     "loading": "Daten werden geladen...",
     "load_error": "Fehler beim Laden der Daten.",
     "empty": "Der Speicher ist leer.",
