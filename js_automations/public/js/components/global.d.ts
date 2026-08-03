@@ -15,8 +15,55 @@ export interface JsaI18next {
   language: string;
 }
 
+export interface JsaScriptCapabilities {
+  detected: string[];
+  declared: string[];
+  undeclared: string[];
+}
+
+export interface JsaEntityConflict {
+  expected: string;
+  actual: string;
+}
+
 export interface JsaScript {
+  filename: string;
+  name: string;
+  icon?: string;
   expose?: string | null;
+  running?: boolean;
+  status?: string;
+  description?: string;
+  area?: string;
+  label?: string;
+  path?: string;
+  capabilities?: JsaScriptCapabilities;
+  card?: string | boolean;
+  cardInstalled?: boolean;
+  entity_conflicts?: JsaEntityConflict[];
+  ram_usage?: number;
+  last_started?: string | number;
+  includes?: string[];
+  [key: string]: unknown;
+}
+
+export interface JsaHaLabel {
+  name: string;
+  icon?: string;
+  color?: string;
+}
+
+export interface JsaHaData {
+  areas: unknown[];
+  labels: JsaHaLabel[];
+  services: Record<string, unknown>;
+  language: string | null;
+}
+
+export interface JsaAppSidebarBridge {
+  setActiveScript(filename: string | null): void;
+  /** Re-checks window.newVersionInfo and refreshes the settings gear icon's update-available dot. */
+  refreshBadges(): void;
 }
 
 export interface JsaIntegrationStatus {
@@ -113,6 +160,8 @@ declare global {
     onStoreChanged?: (data: { cleared?: boolean; deleted?: boolean; key?: string; item?: unknown }) => void;
     /** Opens the create/edit modal (store-modal.js) — omit `key` for create mode. */
     openStoreModal?: (key?: string) => void;
+    /** Opens/switches to the Store Explorer tab (store-modal.js). */
+    openStoreTab?: () => void;
     onHaEventStream?: (payload: { t: number; type: string; data: Record<string, any> }) => void;
     /** All known entity IDs, populated by editor-config.js for Monaco completions; also used by the entity-filter dropdowns. */
     allEntities?: string[];
@@ -122,12 +171,34 @@ declare global {
     openTabs?: JsaTab[];
     renderTabs?: () => void;
     switchToTab?: (filename: string) => void;
+    updateToolbarUI?: (filename: string, icon: string, isDirty: boolean) => void;
     closeTab?: (filename: string) => void;
     activeTabFilename?: string | null;
     loadSettingsData?: (isBackgroundRefresh?: boolean) => Promise<void>;
     /** Re-checks window.newVersionInfo and refreshes the settings category sidebar's update-available dot. */
     renderSettingsCategories?: () => void;
     newVersionInfo?: { update_available?: boolean; [key: string]: unknown } | null;
+    /** app.js (not yet migrated) globals for the script sidebar. */
+    haData?: JsaHaData;
+    mdiIcons?: string[];
+    loadHAMetadata?: (retryCount?: number) => Promise<void>;
+    getLanguageBadge?: (filename: string) => string;
+    loadVersion?: () => Promise<void>;
+    openCreationWizard?: (mode?: string, data?: unknown) => Promise<void> | void;
+    openReferenceTab?: () => void;
+    openOrSwitchToTab?: (filename: string, icon?: string) => Promise<void> | void;
+    /** app-sidebar.ts bridges — replace the old script-list.js globals. */
+    loadScripts?: () => Promise<void>;
+    renderScripts?: (scripts: JsaScript[], updateGlobal?: boolean) => void;
+    toggleScript?: (filename: string) => Promise<void>;
+    restartScript?: (filename: string) => Promise<void>;
+    deleteScript?: (filename: string) => Promise<void>;
+    editScript?: (filename: string) => Promise<void>;
+    duplicateScript?: (filename: string) => Promise<void>;
+    updateScriptStats?: (statsMap: Record<string, { ram_usage: number }>) => void;
+    appSidebar?: JsaAppSidebarBridge;
+    /** editor-config.js: reloads library `.d.ts` IntelliSense after a library script is deleted. */
+    loadLibraryDefinitions?: () => Promise<void>;
   }
 }
 

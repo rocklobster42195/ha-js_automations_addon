@@ -225,22 +225,25 @@ function switchToTab(filename) {
   const newTab = openTabs.find((t) => t.filename === filename);
   if (!newTab) return;
 
+  // Virtual tabs (store/settings) have a `type`; only real script tabs should highlight a sidebar row.
+  window.appSidebar?.setActiveScript(newTab.type ? null : filename);
+
+  // Every "virtual view" (editor/store/settings/reference) shares the same main-content
+  // slot — always hide all of them first, then show only the one that's now active.
+  document.getElementById('editor-wrapper').classList.add('hidden');
+  document.getElementById('store-wrapper').classList.add('hidden');
+  document.getElementById('settings-wrapper')?.classList.add('hidden');
+  document.getElementById('reference-wrapper')?.classList.add('hidden');
+
   if (newTab.type === 'store') {
-    document.getElementById('editor-wrapper').classList.add('hidden');
     document.getElementById('store-wrapper').classList.remove('hidden');
-    const settingsWrapper = document.getElementById('settings-wrapper');
-    if (settingsWrapper) settingsWrapper.classList.add('hidden');
     if (typeof window.loadStoreData === 'function') window.loadStoreData();
   } else if (newTab.type === 'settings') {
-    document.getElementById('editor-wrapper').classList.add('hidden');
-    document.getElementById('store-wrapper').classList.add('hidden');
-    const settingsWrapper = document.getElementById('settings-wrapper');
-    if (settingsWrapper) settingsWrapper.classList.remove('hidden');
+    document.getElementById('settings-wrapper')?.classList.remove('hidden');
     if (typeof window.loadSettingsData === 'function') window.loadSettingsData();
+  } else if (newTab.type === 'reference') {
+    document.getElementById('reference-wrapper')?.classList.remove('hidden');
   } else {
-    document.getElementById('store-wrapper').classList.add('hidden');
-    const settingsWrapper = document.getElementById('settings-wrapper');
-    if (settingsWrapper) settingsWrapper.classList.add('hidden');
     document.getElementById('editor-wrapper').classList.remove('hidden');
 
     if (editor) {
@@ -310,6 +313,7 @@ function closeTab(filename) {
   if (openTabs.length === 0) {
     document.getElementById('editor-section').classList.add('hidden');
     activeTabFilename = null;
+    window.appSidebar?.setActiveScript(null);
     if (editor) editor.setModel(null);
   } else if (activeTabFilename === filename || activeTabFilename === null) {
     const newIndex = Math.max(0, index - 1);

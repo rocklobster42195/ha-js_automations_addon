@@ -331,18 +331,11 @@ function updateSystemNotifications() {
     }
   }
 
-  // --- Logic for Settings Notification Dot ---
+  // --- Logic for Settings Notification Dot (sidebar header gear icon) ---
   // The dot indicates if an update is available or a restart is required.
   // This is independent of the socket connection state.
-  const settingsBtn = Array.from(document.querySelectorAll('.header-actions button')).find((btn) =>
-    btn.querySelector('.mdi-cog')
-  );
-  if (settingsBtn) {
-    settingsBtn.classList.remove('badge-warning', 'badge-info', 'has-notification');
-
-    if (window.newVersionInfo && window.newVersionInfo.update_available) {
-      settingsBtn.classList.add('badge-warning');
-    }
+  if (typeof window.appSidebar?.refreshBadges === 'function') {
+    window.appSidebar.refreshBadges();
   }
 
   // Update Settings Sidebar if open

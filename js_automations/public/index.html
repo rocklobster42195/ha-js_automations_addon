@@ -20,65 +20,7 @@
     <safe-mode-banner></safe-mode-banner>
     <integration-banner></integration-banner>
     <div class="app-wrapper">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <div class="brand">
-            <i class="mdi mdi-robot-happy-outline nav-logo"></i>
-            <span data-i18n="header_title">JS AUTOMATIONS</span>
-            <span id="app-version" class="version-tag"></span>
-          </div>
-          <div class="header-actions">
-            <button onclick="openCreationWizard()" data-i18n="new_script_title" data-i18n-title title="New Script">
-              <i class="mdi mdi-plus"></i>
-            </button>
-            <button
-              id="btn-store-explorer"
-              class="hidden"
-              onclick="openStoreTab()"
-              data-i18n="global_store_explorer_title"
-              data-i18n-title
-              title="Global Store Explorer"
-            >
-              <i class="mdi mdi-database-search"></i>
-            </button>
-            <button
-              id="btn-settings"
-              onclick="openSettingsTab()"
-              data-i18n="settings_button_title"
-              data-i18n-title
-              title="Settings"
-            >
-              <i class="mdi mdi-cog"></i>
-            </button>
-            <button id="btn-reference" onclick="openReferenceTab()" title="Command Reference" class="hidden">
-              <i class="mdi mdi-help-circle-outline"></i>
-            </button>
-            <status-bar-header-actions></status-bar-header-actions>
-          </div>
-        </div>
-
-        <div class="search-box">
-          <div class="search-container">
-            <input
-              type="text"
-              id="search-input"
-              data-i18n="search_placeholder"
-              data-i18n-placeholder
-              placeholder="Suchen..."
-              oninput="filterScripts()"
-            />
-            <button id="clear-search-btn" class="hidden" onclick="clearSearch()" title="Clear search">
-              <i class="mdi mdi-close"></i>
-            </button>
-          </div>
-        </div>
-
-        <div id="script-list" class="script-list">
-          <!-- Scripts will be injected here -->
-        </div>
-
-        <status-bar></status-bar>
-      </aside>
+      <app-sidebar></app-sidebar>
 
       <main class="main-content">
         <div id="editor-section" class="hidden">
@@ -285,7 +227,6 @@
     <script src="js/i18n.js"></script>
     <script src="js/tab-manager.js"></script>
     <script src="js/card-preview.js"></script>
-    <script src="js/script-list.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>

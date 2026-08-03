@@ -21,7 +21,7 @@ async function initI18next() {
 
   if (opts.expert_mode || urlParams.get('expert') === 'true') {
     document.body.classList.add('expert-mode');
-    document.getElementById('btn-store-explorer')?.classList.remove('hidden');
+    document.querySelector('app-sidebar')?.setAttribute('expert-mode', '');
     document.querySelector('log-viewer')?.setAttribute('expert-mode', '');
   }
 

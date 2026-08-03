@@ -13,6 +13,9 @@ import './watch-panel';
 import './store-explorer';
 import './event-inspector';
 import './settings-view';
+import './script-row';
+import './script-group';
+import './app-sidebar';
 import { observeTabVisibility } from './tab-visibility';
 
 // repl.js (not yet migrated) still uses this as a bare global — see
