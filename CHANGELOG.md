@@ -4,18 +4,6 @@
 
 ## [2.57.9] - 2026-08-07
 
-- docs: add CHANGELOG entry for 2.57.9
-- feat: add ha.frontend.cacheAsset() for locally caching external assets
-- fix: capability-analyzer now detects direct ha.mqtt.publish()/subscribe() usage
-- fix: MQTT test connection could hang forever on a dead port
-- feat: auto-restart crashed scripts and expose HA connection status to scripts
-- fix: status bar and header version badge stuck stale after a socket reconnect
-- fix: Webhook Panel could stay stuck on pre-restart state after an addon restart
-
----
-
-## [2.57.9] - 2026-08-07
-
 - feat: add ha.frontend.cacheAsset() for locally caching external assets (team logos, album art, ...)
 - feat: auto-restart crashed scripts and expose HA connection status to scripts
 - fix: MQTT test connection could hang forever on a dead port
