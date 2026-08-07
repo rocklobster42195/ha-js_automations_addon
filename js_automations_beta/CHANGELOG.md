@@ -1,3 +1,11 @@
+## [2.57.9-beta.3] - 2026-08-07
+
+- feat: add ha.frontend.cacheAsset() for locally caching external assets
+- fix: capability-analyzer now detects direct ha.mqtt.publish()/subscribe() usage
+- fix: MQTT test connection could hang forever on a dead port
+
+---
+
 ## [2.57.9-beta.2] - 2026-07-25
 
 - feat: auto-restart crashed scripts and expose HA connection status to scripts
