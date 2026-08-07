@@ -14,6 +14,11 @@ const ScriptHeaderParser = require('./script-header-parser');
 const CARD_START = '__JSA_CARD__';
 const CARD_END = '__JSA_CARD_END__';
 const REGISTRY_FILE = 'card-registry.json';
+const ASSET_REGISTRY_FILE = 'asset-cache-registry.json';
+const ASSET_MAX_SIZE_DEFAULT = 5 * 1024 * 1024; // 5MB safety cap when no maxSize is given
+const ASSET_FETCH_TIMEOUT_MS = 15000;
+const ASSET_FAILURE_COOLDOWN_MS = 5 * 60 * 1000; // don't hammer a failing host between calls
+const ASSET_FAILURE_COOLDOWN_MAX_MS = 15 * 60 * 1000; // cap for a server-provided Retry-After
 
 // Injected before the card code at install time.
 // Provides __jsa__.callAction() → HA Event Bus transport back to the addon.
@@ -290,6 +295,13 @@ class CardManager {
     this.haConnector = haConnector;
     this.registryPath = path.join(storageDir, REGISTRY_FILE);
     this.registry = this._loadRegistry();
+    this.assetsDir = path.join(wwwCardsDir, 'assets');
+    this.assetRegistryPath = path.join(storageDir, ASSET_REGISTRY_FILE);
+    this.assetRegistry = this._loadJson(this.assetRegistryPath);
+    // In-memory only (not persisted) — just needs to survive long enough to stop a
+    // tight retry loop (e.g. a script polling once a second) from hammering a host
+    // that's already failing or rate-limiting us.
+    this.assetFailures = new Map();
   }
 
   // ---------------------------------------------------------------------------
@@ -372,6 +384,10 @@ class CardManager {
    */
   removeCard(scriptFilePath) {
     const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
+    // Independent of whether a card was ever installed — a script can cache assets
+    // via ha.frontend.cacheAsset() without necessarily having a __JSA_CARD__ block.
+    this.removeAssets(scriptName);
+
     const entry = this.registry[scriptName];
     if (!entry) return;
 
@@ -493,6 +509,151 @@ class CardManager {
    */
   getCardSource(scriptFilePath) {
     return this._extractCardBlock(scriptFilePath);
+  }
+
+  /**
+   * Downloads `url` once and caches it under config/www/jsa-cards/assets/<scriptName>/,
+   * returning a stable /local/... URL that's reachable from any device on the HA
+   * instance — not just the addon's own ingress page. Backs `ha.frontend.cacheAsset()`.
+   *
+   * Repeated calls with the same (scriptName, url) are free (served from the on-disk
+   * cache) unless `force` is set or `ttl` has elapsed since the last download.
+   *
+   * A failed download is remembered for a short cooldown (honoring a Retry-After
+   * header when the host sends one) so a caller polling on a short interval can't
+   * turn a single failure into a request flood against a struggling/rate-limiting host.
+   *
+   * @param {string} scriptName - Script base filename (no extension), used as the cache subdir.
+   * @param {string} url - The external URL to download.
+   * @param {object} [options]
+   * @param {string} [options.filename] - Override the cached filename (incl. extension) instead of deriving one.
+   * @param {number} [options.ttl] - Re-download if the cached copy is older than this many ms.
+   * @param {boolean} [options.force] - Skip the cache and re-download unconditionally.
+   * @param {number} [options.maxSize] - Max accepted response size in bytes (default 5MB).
+   * @returns {Promise<string>} The cached asset's /local/... URL.
+   */
+  async cacheAsset(scriptName, url, options = {}) {
+    if (!url || typeof url !== 'string') throw new Error('cacheAsset: url is required');
+    // Keyed by the resolved output filename, not just (scriptName, url) — otherwise a
+    // later call for the same URL with a different `filename` option would just hit the
+    // cache entry written under the first filename and silently ignore the option.
+    const filename = options.filename || this._deriveAssetFilename(url);
+    const cacheKey = `${scriptName}:${filename}`;
+    const existing = this.assetRegistry[cacheKey];
+    const now = Date.now();
+
+    if (existing && !options.force && fs.existsSync(existing.absPath)) {
+      const expired = options.ttl != null && now - existing.downloadedAt > options.ttl;
+      if (!expired) return this._publicAssetUrl(existing.resourceUrl);
+    }
+
+    const lastFailure = this.assetFailures.get(cacheKey);
+    if (lastFailure && now - lastFailure.failedAt < lastFailure.cooldownMs) {
+      throw new Error(lastFailure.error);
+    }
+
+    try {
+      const maxSize = options.maxSize ?? ASSET_MAX_SIZE_DEFAULT;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'HA-JS-Automations-Addon/1.0 (cacheAsset)' },
+        signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        const retryAfterSec = Number(res.headers.get('retry-after'));
+        const cooldownMs = retryAfterSec > 0
+          ? Math.min(retryAfterSec * 1000, ASSET_FAILURE_COOLDOWN_MAX_MS)
+          : ASSET_FAILURE_COOLDOWN_MS;
+        throw Object.assign(new Error(`cacheAsset: HTTP ${res.status} for ${url}`), { cooldownMs });
+      }
+
+      const contentLength = Number(res.headers.get('content-length') || 0);
+      if (contentLength && contentLength > maxSize) {
+        throw new Error(`cacheAsset: response too large (${contentLength} > ${maxSize} bytes)`);
+      }
+
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxSize) {
+        throw new Error(`cacheAsset: downloaded content too large (${buf.length} > ${maxSize} bytes)`);
+      }
+
+      const dir = path.join(this.assetsDir, scriptName);
+      fs.mkdirSync(dir, { recursive: true });
+      const absPath = path.join(dir, filename);
+      fs.writeFileSync(absPath, buf);
+
+      const resourceUrl = `/local/jsa-cards/assets/${scriptName}/${filename}`;
+      this.assetRegistry[cacheKey] = { absPath, resourceUrl, downloadedAt: now, size: buf.length };
+      this._saveJson(this.assetRegistryPath, this.assetRegistry);
+      this.assetFailures.delete(cacheKey);
+
+      return this._publicAssetUrl(resourceUrl);
+    } catch (err) {
+      this.assetFailures.set(cacheKey, {
+        failedAt: now,
+        error: err.message,
+        cooldownMs: err.cooldownMs || ASSET_FAILURE_COOLDOWN_MS,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Resolves a `/local/...` path to something the browser can actually load.
+   *
+   * In production the addon UI is served through HA's own ingress, so it shares
+   * an origin with HA core and a root-relative path resolves correctly on its own.
+   * In dev mode the UI is served standalone (e.g. localhost:3000) on a different
+   * origin than the configured HA instance, so a relative path would 404 silently
+   * (a broken <img>, with nothing to report to our own log panel) — prefix it with
+   * the real HA_URL there instead.
+   * @param {string} relativePath - A path starting with '/', e.g. '/local/...'
+   */
+  _publicAssetUrl(relativePath) {
+    if (this.haConnector && !this.haConnector.isAddon && this.haConnector.baseUrl) {
+      return `${this.haConnector.baseUrl}${relativePath}`;
+    }
+    return relativePath;
+  }
+
+  /**
+   * Removes all assets cached for a script — called when its card/script is removed
+   * so orphaned files don't accumulate in config/www/.
+   * @param {string} scriptName
+   */
+  removeAssets(scriptName) {
+    const dir = path.join(this.assetsDir, scriptName);
+    if (fs.existsSync(dir)) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`[CardManager] Failed to remove asset cache for ${scriptName}:`, e.message);
+      }
+    }
+    const prefix = `${scriptName}:`;
+    for (const key of this.assetFailures.keys()) {
+      if (key.startsWith(prefix)) this.assetFailures.delete(key);
+    }
+    let dirty = false;
+    for (const key of Object.keys(this.assetRegistry)) {
+      if (key.startsWith(prefix)) {
+        delete this.assetRegistry[key];
+        dirty = true;
+      }
+    }
+    if (dirty) this._saveJson(this.assetRegistryPath, this.assetRegistry);
+  }
+
+  _deriveAssetFilename(url) {
+    const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
+    let ext = '.bin';
+    try {
+      ext = path.extname(new URL(url).pathname) || '.bin';
+      // Guard against pathological extensions (query-string leakage, overly long, etc.)
+      if (!/^\.[a-zA-Z0-9]{1,8}$/.test(ext)) ext = '.bin';
+    } catch {
+      /* malformed URL — fall back to .bin */
+    }
+    return `${hash}${ext}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -625,6 +786,22 @@ class CardManager {
   _ensureCardsDir() {
     if (!fs.existsSync(this.wwwCardsDir)) {
       fs.mkdirSync(this.wwwCardsDir, { recursive: true });
+    }
+  }
+
+  _loadJson(filePath) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      return {};
+    }
+  }
+
+  _saveJson(filePath, data) {
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      console.error(`[CardManager] Failed to save ${path.basename(filePath)}:`, e.message);
     }
   }
 }

@@ -6,6 +6,7 @@
 // since those are buried inside the package's node_modules.
 const NETWORK_PATTERNS = [
   /\bha\.http\b/,
+  /\bha\.frontend\.cacheAsset\s*\(/,
   /\bfetch\s*\(/,
   /require\s*\(\s*['"]https?['"]\s*\)/,
   /require\s*\(\s*['"]node-fetch['"]\s*\)/,

@@ -1002,6 +1002,19 @@ class WorkerManager extends EventEmitter {
           worker.postMessage({ type: 'install_card_response', callId: msg.callId, error: 'CardManager not available' });
         }
 
+        // 9.1 ha.frontend.cacheAsset() — download & cache an external asset under config/www/
+        if (msg.type === 'cache_asset' && this.cardManager) {
+          const scriptName = path.basename(fullPath, path.extname(fullPath));
+          this.cardManager
+            .cacheAsset(scriptName, msg.url, msg.options || {})
+            .then((url) => worker.postMessage({ type: 'cache_asset_response', callId: msg.callId, url }))
+            .catch((err) =>
+              worker.postMessage({ type: 'cache_asset_response', callId: msg.callId, error: err.message })
+            );
+        } else if (msg.type === 'cache_asset' && !this.cardManager) {
+          worker.postMessage({ type: 'cache_asset_response', callId: msg.callId, error: 'CardManager not available' });
+        }
+
         // ha.getHistory() — proxy the HA WebSocket call to the master process
         if (msg.type === 'get_history' && this.haConnector) {
           this.haConnector

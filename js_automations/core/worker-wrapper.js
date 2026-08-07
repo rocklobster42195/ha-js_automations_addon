@@ -379,6 +379,18 @@ function ensureMessageListener() {
       return;
     }
 
+    // Handle ha.frontend.cacheAsset() response
+    if (msg.type === 'cache_asset_response') {
+      const promise = pendingServiceCalls.get(msg.callId);
+      if (promise) {
+        if (msg.error) promise.reject(new Error(msg.error));
+        else promise.resolve(msg.url);
+        pendingServiceCalls.delete(msg.callId);
+        _releaseRef();
+      }
+      return;
+    }
+
     // Handle ha.getHistory() response
     if (msg.type === 'get_history_response') {
       const promise = pendingServiceCalls.get(msg.callId);
@@ -1133,6 +1145,34 @@ const ha = {
         _addRef();
         pendingServiceCalls.set(callId, { resolve, reject });
         parentPort.postMessage({ type: 'install_card', options, callId });
+      }),
+
+    /**
+     * Downloads an external URL once and caches it under config/www/jsa-cards/assets/,
+     * returning a stable /local/... URL that's reachable from any device on the HA
+     * instance — not routed through the addon's own ingress. Use this instead of
+     * hotlinking third-party images/assets directly in a card (e.g. team logos, album
+     * art) — hotlinked URLs depend on the source staying up and fast, which HA
+     * dashboards on flaky/kiosk devices are especially sensitive to.
+     *
+     * Repeated calls with the same URL are served from the on-disk cache — free unless
+     * `force` is set or `ttl` has elapsed. Requires @permission network.
+     *
+     * @param {string} url - The external URL to download.
+     * @param {object} [options]
+     * @param {string} [options.filename] - Override the cached filename (incl. extension).
+     * @param {number} [options.ttl] - Re-download if the cached copy is older than this many ms.
+     * @param {boolean} [options.force] - Skip the cache and re-download unconditionally.
+     * @param {number} [options.maxSize] - Max accepted response size in bytes (default 5MB).
+     * @returns {Promise<string>} The cached asset's /local/... URL.
+     */
+    cacheAsset: (url, options = {}) =>
+      new Promise((resolve, reject) => {
+        const callId = `asset_${serviceCallCounter++}`;
+        ensureMessageListener();
+        _addRef();
+        pendingServiceCalls.set(callId, { resolve, reject });
+        parentPort.postMessage({ type: 'cache_asset', url, options, callId });
       }),
   },
 

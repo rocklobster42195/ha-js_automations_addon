@@ -1079,6 +1079,53 @@ ha.action('set-team', async ({ teamId }) => {
 
 ---
 
+## Frontend / Card Assets (`ha.frontend`)
+
+### `ha.frontend.installCard(options?)`
+
+Installs the card embedded in the script's `__JSA_CARD__` block to `config/www/jsa-cards/` and registers it as a Lovelace resource. Skips the write if the card source hash is unchanged. In `@card dev` mode, the file write and Lovelace registration are skipped — the preview panel receives the live card source instead.
+
+```javascript
+await ha.frontend.installCard();
+
+await ha.frontend.installCard({
+  config: { entity_id: 'sensor.openligadb_bvb', title: 'BVB' },
+});
+```
+
+### `ha.frontend.cacheAsset(url, options?)`
+
+Downloads an external URL **once** and caches it under `config/www/jsa-cards/assets/<script>/`, returning a stable `/local/...` URL — reachable from **any device on the HA instance**, not routed through the add-on's own ingress. Use this instead of hotlinking third-party images/assets directly into a card config or entity attribute (team logos, album art, avatars, ...).
+
+**Why this matters:** a hotlinked URL depends on the source staying fast and reachable on every render. That's usually fine in a normal browser, but wall-mounted/kiosk dashboard devices are far more sensitive to a slow or flaky external host — a source that "usually" loads fine on your phone can intermittently fail there. Caching once, locally, removes that dependency entirely.
+
+Repeated calls with the same URL are served from the on-disk cache — free — unless `force` is set or `ttl` has elapsed.
+
+A failed download is remembered for a few minutes (longer if the host sends a `Retry-After` header) and rejects immediately on retry during that window, without making another network call. This protects a script that calls `cacheAsset()` from a tight polling loop — e.g. once a second while tracking a live event — from turning a single failure into a request flood against a struggling or rate-limiting host.
+
+| Option     | Type      | Description                                                                                                                                          |
+| ---------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filename` | `string`  | Override the cached filename (including extension) instead of deriving one from the URL.                                                             |
+| `ttl`      | `number`  | Re-download if the cached copy is older than this many milliseconds. Omit for "cache forever" (fine for things that never change, like a team logo). |
+| `force`    | `boolean` | Skip the cache and re-download unconditionally.                                                                                                      |
+| `maxSize`  | `number`  | Max accepted response size in bytes. Default `5242880` (5MB).                                                                                        |
+
+```javascript
+// Cache a team logo once; store the returned local URL instead of the source URL.
+const localUrl = await ha.frontend.cacheAsset(team.teamIconUrl);
+ha.update(entityId, 'scheduled', { team_home_icon: localUrl });
+
+// Force a fresh copy, e.g. from a manual "refresh icon" action.
+await ha.frontend.cacheAsset(avatarUrl, { force: true });
+
+// Re-check every 24h — for assets that can legitimately change (unlike a static logo).
+await ha.frontend.cacheAsset(avatarUrl, { ttl: 24 * 60 * 60 * 1000 });
+```
+
+Cached assets for a script are deleted automatically when that script is removed. Requires `@permission network` (the capability badge is detected automatically, same as `fetch()`/`ha.http`).
+
+---
+
 ## MQTT API (`ha.mqtt`)
 
 `ha.mqtt` gives scripts a direct line to the MQTT broker — no HA entity in between, no polling. Subscribe to any topic, react to raw hardware messages, publish commands, or use MQTT as an inter-script bus that survives HA restarts.

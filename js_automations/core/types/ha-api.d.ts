@@ -343,6 +343,50 @@ interface HA {
       /** Force reinstall even if the card source hash has not changed. */
       force?: boolean;
     }): Promise<string>;
+
+    /**
+     * Downloads an external URL once and caches it under `config/www/jsa-cards/assets/`,
+     * returning a stable `/local/...` URL reachable from any device on the HA instance —
+     * not routed through the addon's own ingress. Use this instead of hotlinking
+     * third-party images/assets directly in a card (team logos, album art, ...): a
+     * hotlinked URL depends on the source staying up and fast, which matters a lot more
+     * on flaky/kiosk dashboard devices than in a normal browser.
+     *
+     * Repeated calls with the same URL are served from the on-disk cache — free unless
+     * `force` is set or `ttl` has elapsed.
+     *
+     * A failed download is remembered for a few minutes (or longer if the host sends a
+     * `Retry-After` header) and rejects immediately on retry during that window — no
+     * network call is made. This matters if you call `cacheAsset()` from a tight polling
+     * loop: a single failure won't turn into a request flood against a struggling host.
+     *
+     * @requires `@permission network`
+     * @example
+     * // Cache a team logo once; store the returned local URL instead of the source URL.
+     * const localUrl = await ha.frontend.cacheAsset(team.teamIconUrl);
+     * ha.update(entityId, 'scheduled', { team_home_icon: localUrl });
+     *
+     * @example
+     * // Force a fresh copy, e.g. from a manual "refresh icon" action.
+     * await ha.frontend.cacheAsset(avatarUrl, { force: true });
+     *
+     * @example
+     * // Re-check every 24h — for assets that can legitimately change (unlike a static logo).
+     * await ha.frontend.cacheAsset(avatarUrl, { ttl: 24 * 60 * 60 * 1000 });
+     */
+    cacheAsset(
+      url: string,
+      options?: {
+        /** Override the cached filename (including extension) instead of deriving one from the URL. */
+        filename?: string;
+        /** Re-download if the cached copy is older than this many milliseconds. */
+        ttl?: number;
+        /** Skip the cache and re-download unconditionally. */
+        force?: boolean;
+        /** Max accepted response size in bytes. @default 5242880 (5MB) */
+        maxSize?: number;
+      }
+    ): Promise<string>;
   };
 
   // --- Home Assistant Services & Entities ---

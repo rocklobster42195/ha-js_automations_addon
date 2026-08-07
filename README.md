@@ -41,7 +41,7 @@
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
 - **Developer Tools (Expert Mode)** — Enable **Settings → General → Expert Mode** to reveal a split developer panel next to the log console with three tools: **Event Inspector** (live HA event stream with entity filter), **Live REPL** (run ad-hoc JavaScript with full `ha` API access against your live instance), and **Breakpoints** (`ha.breakpoint('label', { vars })` pauses execution and displays variables in a built-in variable inspector — click Continue to resume).
-- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic _and_ a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed.
+- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic _and_ a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed. `ha.frontend.cacheAsset(url)` downloads and caches external images/assets (team logos, album art, ...) under `config/www/` once, returning a stable local URL — no more hotlinked images breaking on flaky dashboard devices when the source is slow or unreachable.
 
 ---
 
