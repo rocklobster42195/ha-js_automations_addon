@@ -88,6 +88,7 @@ export class AppSidebar extends LitElement {
 
     .header-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 2px;
       width: 100%;
     }
@@ -125,6 +126,10 @@ export class AppSidebar extends LitElement {
       border-radius: 50%;
       border: 1px solid var(--surface-1);
       pointer-events: none;
+    }
+    .header-actions button.mobile-nav-btn.active {
+      color: var(--accent);
+      background: #252525;
     }
 
     .search-box {
@@ -346,10 +351,6 @@ export class AppSidebar extends LitElement {
     const next: 'mobile' | 'desktop' = this._effectiveMobile ? 'desktop' : 'mobile';
     this._mobileOverride = next;
     localStorage.setItem(MOBILE_OVERRIDE_KEY, next);
-  }
-
-  private _toggleMobileScreen(): void {
-    this._mobileScreen = this._mobileScreen === 'dashboard' ? 'log' : 'dashboard';
   }
 
   /** Also called by status-bar.ts's MQTT indicator (jumps to the mqtt settings
@@ -651,56 +652,72 @@ export class AppSidebar extends LitElement {
           <span class="version-tag">${this._version}</span>
         </div>
         <div class="header-actions">
-          <button
-            class=${this.mobile ? 'hidden' : ''}
-            @click=${() => window.openCreationWizard?.()}
-            title=${this._t('new_script_title', 'New Script')}
-          >
-            <i class="mdi mdi-plus"></i>
-          </button>
-          <button
-            class=${this.expertMode && !this.mobile ? '' : 'hidden'}
-            @click=${() => window.storeExplorer?.openTab()}
-            title=${this._t('global_store_explorer_title', 'Global Store Explorer')}
-          >
-            <i class="mdi mdi-database-search"></i>
-          </button>
-          <button
-            class=${this._updateAvailable ? 'has-notification' : ''}
-            @click=${() => this.openSettings()}
-            title=${this._t('settings_button_title', 'Settings')}
-          >
-            <i class="mdi mdi-cog"></i>
-          </button>
-          <!-- Kept hidden on purpose: the reference docs UI still needs real work
-               before shipping — see [[project_reference_docs_feature]] memory. -->
-          <button class="hidden" @click=${() => window.openReferenceTab?.()} title="Command Reference">
-            <i class="mdi mdi-help-circle-outline"></i>
-          </button>
-          <button
-            class=${!this.mobile && this._hideMobileToggleInDesktop ? 'hidden' : ''}
-            @click=${() => this._toggleMobileOverride()}
-            title=${
-              this.mobile
-                ? this._t('mobile_switch_to_desktop_title', 'Switch to desktop view')
-                : this._t('mobile_switch_to_mobile_title', 'Switch to mobile view')
-            }
-          >
-            <i class="mdi ${this.mobile ? 'mdi-monitor' : 'mdi-cellphone'}"></i>
-          </button>
-          <button
-            class=${this.mobile ? '' : 'hidden'}
-            @click=${() => this._toggleMobileScreen()}
-            title=${
-              this._mobileScreen === 'dashboard'
-                ? this._t('mobile_screen_log_title', 'Show log')
-                : this._t('mobile_screen_dashboard_title', 'Show dashboard')
-            }
-          >
-            <i
-              class="mdi ${this._mobileScreen === 'dashboard' ? 'mdi-text-box-outline' : 'mdi-view-dashboard-outline'}"
-            ></i>
-          </button>
+          ${
+            this.mobile
+              ? html`
+                  <button
+                    class="mobile-nav-btn ${this._mobileScreen === 'dashboard' ? 'active' : ''}"
+                    @click=${() => (this._mobileScreen = 'dashboard')}
+                    title=${this._t('mobile_screen_dashboard_title', 'Dashboard')}
+                  >
+                    <i class="mdi mdi-view-dashboard-outline"></i>
+                  </button>
+                  <button
+                    class="mobile-nav-btn ${this._mobileScreen === 'log' ? 'active' : ''}"
+                    @click=${() => (this._mobileScreen = 'log')}
+                    title=${this._t('mobile_screen_log_title', 'Log')}
+                  >
+                    <i class="mdi mdi-text-box-outline"></i>
+                  </button>
+                  <button
+                    class="mobile-nav-btn ${this._mobileScreen === 'settings' ? 'active' : ''} ${
+                      this._updateAvailable ? 'has-notification' : ''
+                    }"
+                    @click=${() => this.openSettings()}
+                    title=${this._t('settings_button_title', 'Settings')}
+                  >
+                    <i class="mdi mdi-cog"></i>
+                  </button>
+                  <button
+                    class="mobile-nav-btn"
+                    @click=${() => this._toggleMobileOverride()}
+                    title=${this._t('mobile_switch_to_desktop_title', 'Switch to desktop view')}
+                  >
+                    <i class="mdi mdi-monitor"></i>
+                  </button>
+                `
+              : html`
+                  <button @click=${() => window.openCreationWizard?.()} title=${this._t('new_script_title', 'New Script')}>
+                    <i class="mdi mdi-plus"></i>
+                  </button>
+                  <button
+                    class=${this.expertMode ? '' : 'hidden'}
+                    @click=${() => window.storeExplorer?.openTab()}
+                    title=${this._t('global_store_explorer_title', 'Global Store Explorer')}
+                  >
+                    <i class="mdi mdi-database-search"></i>
+                  </button>
+                  <button
+                    class=${this._updateAvailable ? 'has-notification' : ''}
+                    @click=${() => this.openSettings()}
+                    title=${this._t('settings_button_title', 'Settings')}
+                  >
+                    <i class="mdi mdi-cog"></i>
+                  </button>
+                  <!-- Kept hidden on purpose: the reference docs UI still needs real work
+                       before shipping — see [[project_reference_docs_feature]] memory. -->
+                  <button class="hidden" @click=${() => window.openReferenceTab?.()} title="Command Reference">
+                    <i class="mdi mdi-help-circle-outline"></i>
+                  </button>
+                  <button
+                    class=${this._hideMobileToggleInDesktop && !this._autoMobile ? 'hidden' : ''}
+                    @click=${() => this._toggleMobileOverride()}
+                    title=${this._t('mobile_switch_to_mobile_title', 'Switch to mobile view')}
+                  >
+                    <i class="mdi mdi-cellphone"></i>
+                  </button>
+                `
+          }
           <status-bar-header-actions></status-bar-header-actions>
         </div>
       </div>

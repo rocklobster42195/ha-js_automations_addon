@@ -186,6 +186,9 @@ export class SettingsView extends LitElement {
       padding: 20px 40px 100px 40px;
       scroll-behavior: smooth;
     }
+    :host([mobile]) .settings-content {
+      padding: 16px 15px 40px 15px;
+    }
     .settings-section {
       scroll-margin-top: 20px;
       margin-bottom: 50px;
@@ -780,13 +783,19 @@ export class SettingsView extends LitElement {
   render() {
     return html`
       ${mdiStylesheetLink}
-      <div class="settings-header">
-        <h2><i class="mdi mdi-cog"></i> <span>${this._t('settings_title', 'Settings')}</span></h2>
-        <div class="settings-header-spacer"></div>
-        <button class="settings-close-btn" @click=${() => this._close()} title="Close">
-          <i class="mdi mdi-close"></i>
-        </button>
-      </div>
+      ${
+        this.mobile
+          ? nothing
+          : html`
+              <div class="settings-header">
+                <h2><i class="mdi mdi-cog"></i> <span>${this._t('settings_title', 'Settings')}</span></h2>
+                <div class="settings-header-spacer"></div>
+                <button class="settings-close-btn" @click=${() => this._close()} title="Close">
+                  <i class="mdi mdi-close"></i>
+                </button>
+              </div>
+            `
+      }
       <div class="settings-body">
         <div class="settings-categories">${this._renderCategorySidebar()}</div>
         <div class="settings-content">
