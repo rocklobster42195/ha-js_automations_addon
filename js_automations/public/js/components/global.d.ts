@@ -132,6 +132,14 @@ export interface JsaTab {
   viewState?: unknown;
 }
 
+export interface JsaCardPreviewBridge {
+  open(scriptFilename: string): void;
+  close(): void;
+  toggle(scriptFilename: string | null | undefined): void;
+  reload(): void;
+  isOpen(): boolean;
+}
+
 declare global {
   interface Window {
     socket?: JsaSocket;
@@ -199,6 +207,12 @@ declare global {
     appSidebar?: JsaAppSidebarBridge;
     /** editor-config.js: reloads library `.d.ts` IntelliSense after a library script is deleted. */
     loadLibraryDefinitions?: () => Promise<void>;
+    CardPreview?: JsaCardPreviewBridge;
+    /** api.js: ingress-aware URL prefix, e.g. '/api/hassio_ingress/<token>/'. */
+    BASE_PATH?: string;
+    /** Set by tab-manager.js's switchToTab() — the script whose card the preview toggle button controls. */
+    _activeCardParentScript?: string | null;
+    _toggleCardPreview?: () => void;
   }
 }
 

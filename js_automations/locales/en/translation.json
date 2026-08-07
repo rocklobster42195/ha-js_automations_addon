@@ -386,5 +386,19 @@
     "webhook_delete": "Delete",
     "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone.",
     "webhook_ip_filtered": "IP-filtered"
+  },
+  "preview": {
+    "card_config": "Card Config",
+    "entity_states": "Preview Data",
+    "errors": "Errors",
+    "no_entities": "No entities yet. Add one below to feed it into the card preview.",
+    "invalid_json": "Invalid JSON",
+    "no_errors": "No errors.",
+    "line": "line",
+    "card_source": "Card",
+    "clear_all": "Clear all",
+    "entity_discovered": "Entity auto-detected from Home Assistant.",
+    "entity_manual": "Manually configured.",
+    "entity_guessed": "Guessed default — not yet confirmed against a real entity."
   }
 }

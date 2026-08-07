@@ -394,5 +394,19 @@
     "webhook_delete": "Löschen",
     "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "webhook_ip_filtered": "IP-gefiltert"
+  },
+  "preview": {
+    "card_config": "Karten-Konfiguration",
+    "entity_states": "Vorschau-Daten",
+    "errors": "Fehler",
+    "no_entities": "Noch keine Entities. Unten eine hinzufügen, um sie in die Kartenvorschau einzuspeisen.",
+    "invalid_json": "Ungültiges JSON",
+    "no_errors": "Keine Fehler.",
+    "line": "Zeile",
+    "card_source": "Karte",
+    "clear_all": "Alle löschen",
+    "entity_discovered": "Entity automatisch aus Home Assistant erkannt.",
+    "entity_manual": "Manuell konfiguriert.",
+    "entity_guessed": "Geratener Standardwert — noch nicht gegen eine echte Entity bestätigt."
   }
 }
