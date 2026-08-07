@@ -359,7 +359,10 @@ function _updateCardTabBtn(filename) {
     const cardTabOpen = openTabs.some((t) => t.filename === cardTabName);
     const icon = btn.querySelector('i');
     if (icon) {
-      icon.className = cardTabOpen ? 'mdi mdi-view-dashboard-edit-outline' : 'mdi mdi-view-dashboard-edit-outline';
+      // Solid icon while the card tab is open, outline otherwise — previously both
+      // branches were identical (dead ternary, never actually distinguished the two
+      // states).
+      icon.className = cardTabOpen ? 'mdi mdi-card-text' : 'mdi mdi-card-text-outline';
     }
     btn.classList.toggle('preview-active', cardTabOpen);
     btn.title = cardTabOpen ? 'Close Card Tab' : 'Open Card Tab';
@@ -523,7 +526,7 @@ function updateEditorMode(filename) {
     banner.style.padding = '4px 10px';
     banner.style.fontSize = '0.8rem';
     banner.style.borderBottom = '1px solid var(--accent-dark, #1a4a8a)';
-    banner.innerHTML = `<i class="mdi mdi-view-dashboard-outline" style="margin-right:6px;"></i> Card Editor — <strong>${cardTab?.parentScript ?? ''}</strong> &nbsp;·&nbsp; Ctrl+S to save`;
+    banner.innerHTML = `<i class="mdi mdi-card-text-outline" style="margin-right:6px;"></i> Card Editor — <strong>${cardTab?.parentScript ?? ''}</strong> &nbsp;·&nbsp; Ctrl+S to save`;
     container.insertBefore(banner, container.firstChild);
   } else if (isLib) {
     const banner = document.createElement('div');
@@ -610,7 +613,10 @@ async function saveActiveTab() {
 }
 
 async function closeAllTabs() {
-  if (openTabs.some((t) => t.isDirty) && !(await window.confirmDialog.confirm(i18next.t('confirm_discard_all_changes')))) {
+  if (
+    openTabs.some((t) => t.isDirty) &&
+    !(await window.confirmDialog.confirm(i18next.t('confirm_discard_all_changes')))
+  ) {
     return;
   }
   openTabs.forEach((t) => {

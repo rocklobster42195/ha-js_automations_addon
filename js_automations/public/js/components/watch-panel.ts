@@ -440,6 +440,7 @@ export class WatchPanel extends LitElement {
     window.onInspectSnapshot = this.onInspectSnapshot;
     window.onBreakpointHit = this.onBreakpointHit;
     window.onBreakpointContinued = this.onBreakpointContinued;
+    window.watchPanel = this;
     this._loadHAIcons();
     this._waitForSocket();
   }
@@ -451,6 +452,17 @@ export class WatchPanel extends LitElement {
     if (window.onInspectSnapshot === this.onInspectSnapshot) delete window.onInspectSnapshot;
     if (window.onBreakpointHit === this.onBreakpointHit) delete window.onBreakpointHit;
     if (window.onBreakpointContinued === this.onBreakpointContinued) delete window.onBreakpointContinued;
+    if (window.watchPanel === this) delete window.watchPanel;
+  }
+
+  /** Mobile per-script inline status (RFC §7 follow-up) — a snapshot at call
+   * time of this script's currently active watch tiles, keyed by filename
+   * (unlike log entries, watch payloads carry the real filename, not the
+   * display name). */
+  getTilesForFilename(filename: string): { label: string; value: WatchValue }[] {
+    return [...this._watchRows.entries()]
+      .filter(([, e]) => e.filename === filename)
+      .map(([label, e]) => ({ label, value: e.lastValue }));
   }
 
   private _waitForSocket = (): void => {

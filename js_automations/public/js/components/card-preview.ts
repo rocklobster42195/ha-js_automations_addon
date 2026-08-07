@@ -1026,7 +1026,7 @@ export class CardPreview extends LitElement {
     return html`
       ${mdiStylesheetLink}
       <div class="preview-titlebar">
-        <i class="mdi mdi-view-dashboard-outline" style="margin-right:6px;opacity:.7;"></i>
+        <i class="mdi mdi-card-text-outline" style="margin-right:6px;opacity:.7;"></i>
         <span class="preview-title">${this._title}</span>
         <div class="preview-titlebar-actions">
           <button

@@ -70,6 +70,7 @@ export class ScriptGroup extends LitElement {
   @property({ type: Boolean, attribute: 'mqtt-connected' }) mqttConnected = true;
   @property({ type: Boolean, attribute: 'search-active' }) searchActive = false;
   @property({ type: String, attribute: 'active-filename' }) activeFilename: string | null = null;
+  @property({ type: Boolean, reflect: true }) mobile = false;
 
   private _t(key: string, fallback?: string): string {
     return window.i18next?.t(key, { defaultValue: fallback }) ?? fallback ?? key;
@@ -125,6 +126,7 @@ export class ScriptGroup extends LitElement {
               .isLib=${this.isLib}
               .mqttConnected=${this.mqttConnected}
               .active=${s.filename === this.activeFilename}
+              ?mobile=${this.mobile}
             ></script-row>
           `
         )}

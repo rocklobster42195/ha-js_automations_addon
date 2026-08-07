@@ -40,6 +40,13 @@ module.exports = [
         type: 'boolean',
         default: true,
       },
+      {
+        key: 'hide_mobile_toggle_in_desktop',
+        label: 'settings.general.hide_mobile_toggle_in_desktop',
+        description: 'settings.general.hide_mobile_toggle_in_desktop_desc',
+        type: 'boolean',
+        default: false,
+      },
     ],
   },
   {

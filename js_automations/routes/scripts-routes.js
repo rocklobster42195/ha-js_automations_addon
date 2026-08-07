@@ -193,6 +193,25 @@ module.exports = (
     res.json(typings);
   });
 
+  // GET Search (script source code content, not just metadata — used by the
+  // sidebar's search box to also match code, not just name/description/etc.)
+  router.get('/search', (req, res) => {
+    const term = (req.query.q || '').toString().trim().toLowerCase();
+    if (!term) return res.json({ filenames: [] });
+
+    const filenames = [];
+    workerManager.getScripts().forEach((fullPath) => {
+      try {
+        const source = fs.readFileSync(fullPath, 'utf8');
+        if (source.toLowerCase().includes(term)) filenames.push(path.basename(fullPath));
+      } catch (e) {
+        // Skip unreadable files rather than failing the whole search.
+      }
+    });
+
+    res.json({ filenames });
+  });
+
   // GET Content
   router.get('/:filename/content', (req, res) => {
     const filename = req.params.filename;

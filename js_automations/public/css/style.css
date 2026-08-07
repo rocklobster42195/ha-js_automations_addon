@@ -36,6 +36,62 @@ html {
   display: none !important;
 }
 
+/* ── Mobile View (RFC §7) ─────────────────────────────────────────────────
+   Driven entirely by classes <app-sidebar> toggles on <body> based on its own
+   computed mobile/screen state (matchMedia + manual override) — deliberately
+   NOT wrapped in @media, since the mode can be manually forced regardless of
+   actual viewport width. Three mobile "screens": dashboard (<app-sidebar>
+   full-screen, the default), log, and settings. For the latter two,
+   "fullscreen" applies: the header bar from <app-sidebar> stays on top —
+   that's where the screen-switch/back button lives, so you're never trapped —
+   with .main-content filling the rest below it; <app-sidebar> itself hides
+   its search/list internally via its own _mobileScreen state (not via body
+   classes, since those live inside its Shadow DOM) — <status-bar> stays up
+   for dashboard AND settings, only dropped for log (own condition, same
+   reasoning as Q2: give the log stream the space). -screen-log narrows which
+   *part* of .main-content shows: the log split-pane's .log-section for log,
+   or #editor-section (already home to the settings view via the same tab
+   machinery desktop uses) for anything else — and for that "anything else"
+   case, #tab-bar (also inside #editor-section) is hidden too, since
+   <settings-view> already renders its own equivalent header/close button and
+   mobile never has more than one tab open at once anyway (Editor/Store are
+   out of scope). */
+body.jsa-mobile .main-content {
+  display: none !important;
+}
+body.jsa-mobile.jsa-mobile-fullscreen .app-wrapper {
+  flex-direction: column !important;
+}
+body.jsa-mobile.jsa-mobile-fullscreen .main-content {
+  display: flex !important;
+  flex: 1;
+  min-height: 0;
+}
+body.jsa-mobile.jsa-mobile-fullscreen.jsa-mobile-screen-log #editor-section,
+body.jsa-mobile.jsa-mobile-fullscreen.jsa-mobile-screen-log #log-pane-resizer,
+body.jsa-mobile.jsa-mobile-fullscreen.jsa-mobile-screen-log .log-pane-right {
+  display: none !important;
+}
+body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) .log-section {
+  display: none !important;
+}
+body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) #tab-bar {
+  display: none !important;
+}
+/* #editor-section's height is otherwise a desktop drag-resizer's inline px
+   value (js_editor_height_px in localStorage) left over from a completely
+   different split-pane layout — it has nothing to do with mobile and would
+   leave a dead gap below the settings content otherwise. */
+body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) #editor-section {
+  height: auto !important;
+  flex: 1;
+}
+/* Clearance for <status-bar>'s viewport-fixed positioning on mobile (see
+   status-bar.ts) — dropped on the log screen along with the bar itself. */
+body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) .main-content {
+  padding-bottom: 30px;
+}
+
 /* Buttons global zurücksetzen */
 button {
   background: transparent !important;

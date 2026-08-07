@@ -220,9 +220,11 @@ export class EntityPickerModal extends LitElement {
               (id) => id,
               (id) => html`<div class="entity-row" @click=${() => this._insert(id)}>${id}</div>`
             )}
-            ${filtered.length > RENDER_LIMIT
-              ? html`<div class="entity-more">... ${filtered.length - RENDER_LIMIT} more</div>`
-              : ''}
+            ${
+              filtered.length > RENDER_LIMIT
+                ? html`<div class="entity-more">... ${filtered.length - RENDER_LIMIT} more</div>`
+                : ''
+            }
           </div>
           <div class="modal-btns">
             <button class="btn-text" @click=${() => this.close()}>${this._t('button_cancel', 'CANCEL')}</button>

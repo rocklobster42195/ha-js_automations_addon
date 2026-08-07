@@ -1,13 +1,15 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mdiStylesheetLink } from './mdi';
 import './script-group';
-import type { JsaScript } from './global';
+import type { JsaScript, JsaSettings } from './global';
 
 const NO_GROUP = '___none___';
 const LIB_GROUP = '___libraries___';
 const COLLAPSED_STORAGE_KEY = 'js_collapsed_sections';
+const MOBILE_OVERRIDE_KEY = 'js_mobile_view_override';
+const MOBILE_BREAKPOINT_QUERY = '(max-width: 768px)';
 
 interface ScriptGroupData {
   key: string;
@@ -37,6 +39,12 @@ export class AppSidebar extends LitElement {
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
+    }
+
+    :host([mobile]) {
+      width: 100%;
+      min-width: 0;
+      border-right: none;
     }
 
     .sidebar-header {
@@ -122,11 +130,40 @@ export class AppSidebar extends LitElement {
     .search-box {
       padding: 10px 15px;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .search-container {
       position: relative;
       display: flex;
       align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+    .collapse-all-btn {
+      flex-shrink: 0;
+      color: var(--text-secondary);
+      font-size: 1.2rem;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin: 0;
+      background: none;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    .collapse-all-btn i {
+      line-height: 1;
+    }
+    .collapse-all-btn:hover {
+      color: #fff;
+      background: #252525;
     }
     .search-input {
       width: 100%;
@@ -172,6 +209,11 @@ export class AppSidebar extends LitElement {
       overflow-y: auto;
       overflow-x: hidden;
     }
+    :host([mobile]) .script-list {
+      /* Clearance for <status-bar>'s viewport-fixed positioning on mobile
+         (see status-bar.ts) — otherwise it overlaps the last row(s). */
+      padding-bottom: 30px;
+    }
     .script-list-empty {
       text-align: center;
       padding: 20px;
@@ -181,14 +223,27 @@ export class AppSidebar extends LitElement {
 
   @state() private _scripts: JsaScript[] = [];
   @state() private _search = '';
+  @state() private _codeMatchFilenames: Set<string> | null = null;
+  private _searchDebounce: ReturnType<typeof setTimeout> | null = null;
   @state() private _collapsedKeys: Set<string> = new Set(this._loadCollapsedKeys());
   @state() private _activeFilename: string | null = null;
   @state() private _version = '';
   @state() private _isBeta = false;
   @state() private _updateAvailable = false;
+  private _mediaQuery: MediaQueryList = window.matchMedia(MOBILE_BREAKPOINT_QUERY);
+
   @state() private _mqttConnected = false;
+  @state() private _autoMobile: boolean = this._mediaQuery.matches;
+  @state() private _mobileOverride: 'mobile' | 'desktop' | null = this._loadMobileOverride();
+  @state() private _mobileScreen: 'dashboard' | 'log' | 'settings' = 'dashboard';
+  @state() private _hideMobileToggleInDesktop = false;
 
   @property({ type: Boolean, attribute: 'expert-mode', reflect: true }) expertMode = false;
+  @property({ type: Boolean, reflect: true }) mobile = false;
+
+  private get _effectiveMobile(): boolean {
+    return this._mobileOverride ? this._mobileOverride === 'mobile' : this._autoMobile;
+  }
 
   private _t(key: string, fallback?: string, options?: Record<string, unknown>): string {
     return window.i18next?.t(key, { defaultValue: fallback, ...options }) ?? fallback ?? key;
@@ -200,6 +255,11 @@ export class AppSidebar extends LitElement {
     } catch {
       return [];
     }
+  }
+
+  private _loadMobileOverride(): 'mobile' | 'desktop' | null {
+    const stored = localStorage.getItem(MOBILE_OVERRIDE_KEY);
+    return stored === 'mobile' || stored === 'desktop' ? stored : null;
   }
 
   connectedCallback() {
@@ -222,6 +282,10 @@ export class AppSidebar extends LitElement {
     this.addEventListener('jsa-dismiss-error', this._onDismissError as EventListener);
     this.addEventListener('jsa-toggle-group', this._onToggleGroup as EventListener);
 
+    this._mediaQuery.addEventListener('change', this._onMediaChange);
+    window.addEventListener('settings-changed', this._onSettingsChanged);
+    if (window.currentSettings) this._applyMobileSettings(window.currentSettings);
+
     this._loadVersion();
     this.refreshBadges();
   }
@@ -235,6 +299,72 @@ export class AppSidebar extends LitElement {
     if (window.duplicateScript === this._duplicateScript) delete window.duplicateScript;
     if (window.deleteScript === this._deleteScript) delete window.deleteScript;
     if (window.loadVersion === this._loadVersion) delete window.loadVersion;
+    this._mediaQuery.removeEventListener('change', this._onMediaChange);
+    window.removeEventListener('settings-changed', this._onSettingsChanged);
+    if (this._searchDebounce) clearTimeout(this._searchDebounce);
+  }
+
+  willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has('_autoMobile') || changed.has('_mobileOverride')) {
+      this.mobile = this._effectiveMobile;
+    }
+  }
+
+  updated(changed: Map<string, unknown>): void {
+    if (changed.has('mobile') || changed.has('_mobileScreen')) {
+      document.body.classList.toggle('jsa-mobile', this.mobile);
+      // "fullscreen" = any non-dashboard mobile screen (log OR settings) — main-content
+      // takes over and the sidebar collapses to just its header in all of them; which
+      // *part* of main-content shows is then further narrowed by -screen-log below.
+      document.body.classList.toggle('jsa-mobile-fullscreen', this.mobile && this._mobileScreen !== 'dashboard');
+      document.body.classList.toggle('jsa-mobile-screen-log', this.mobile && this._mobileScreen === 'log');
+    }
+    if (changed.has('mobile')) {
+      // <settings-view> isn't a child of this component (mounted separately in
+      // index.html), so it can't receive `mobile` as a normal property — set
+      // externally instead, same as i18n.js does for this component's own
+      // expert-mode attribute.
+      document.querySelector('settings-view')?.toggleAttribute('mobile', this.mobile);
+    }
+  }
+
+  private _onMediaChange = (e: MediaQueryListEvent): void => {
+    this._autoMobile = e.matches;
+  };
+
+  private _onSettingsChanged = (e: Event): void => {
+    this._applyMobileSettings((e as CustomEvent<JsaSettings>).detail);
+  };
+
+  private _applyMobileSettings(settings: JsaSettings | null | undefined): void {
+    this._hideMobileToggleInDesktop =
+      (settings?.general as { hide_mobile_toggle_in_desktop?: boolean } | undefined)?.hide_mobile_toggle_in_desktop ??
+      false;
+  }
+
+  private _toggleMobileOverride(): void {
+    const next: 'mobile' | 'desktop' = this._effectiveMobile ? 'desktop' : 'mobile';
+    this._mobileOverride = next;
+    localStorage.setItem(MOBILE_OVERRIDE_KEY, next);
+  }
+
+  private _toggleMobileScreen(): void {
+    this._mobileScreen = this._mobileScreen === 'dashboard' ? 'log' : 'dashboard';
+  }
+
+  /** Also called by status-bar.ts's MQTT indicator (jumps to the mqtt settings
+   * section) — routed through here rather than calling window.openSettingsTab
+   * directly, so the mobile screen state stays in sync regardless of entry point. */
+  openSettings(target?: string): void {
+    if (this.mobile) this._mobileScreen = 'settings';
+    window.openSettingsTab?.(target);
+  }
+
+  /** Called by settings-view.ts's own close button — a tab closing on its own
+   * has no reason to know about mobile screen state, so this resets it back
+   * to the dashboard on its behalf. No-op (harmless) when not in mobile mode. */
+  returnToDashboard(): void {
+    this._mobileScreen = 'dashboard';
   }
 
   /** Bridge for tab-manager.js: highlights the sidebar row of the open tab. */
@@ -342,7 +472,10 @@ export class AppSidebar extends LitElement {
     } else {
       const shouldConfirm =
         (window.currentSettings?.general as { confirm_delete?: boolean } | undefined)?.confirm_delete ?? true;
-      if (shouldConfirm && !(await window.confirmDialog!.confirm(this._t('confirm_delete_script', undefined, { filename }))))
+      if (
+        shouldConfirm &&
+        !(await window.confirmDialog!.confirm(this._t('confirm_delete_script', undefined, { filename })))
+      )
         return;
     }
 
@@ -400,13 +533,50 @@ export class AppSidebar extends LitElement {
     localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...next]));
   };
 
+  private _areAllGroupsCollapsed(groups: ScriptGroupData[]): boolean {
+    return groups.length > 0 && groups.every((g) => this._collapsedKeys.has(g.key));
+  }
+
+  private _toggleCollapseAll(groups: ScriptGroupData[]): void {
+    const next = this._areAllGroupsCollapsed(groups) ? new Set<string>() : new Set(groups.map((g) => g.key));
+    this._collapsedKeys = next;
+    localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...next]));
+  }
+
   private _onSearchInput(e: Event): void {
     this._search = (e.target as HTMLInputElement).value;
+    this._debounceCodeSearch();
   }
   private _clearSearch(): void {
     this._search = '';
+    this._codeMatchFilenames = null;
+    if (this._searchDebounce) {
+      clearTimeout(this._searchDebounce);
+      this._searchDebounce = null;
+    }
     const input = this.renderRoot.querySelector<HTMLInputElement>('.search-input');
     if (input) input.value = '';
+  }
+
+  private _debounceCodeSearch(): void {
+    if (this._searchDebounce) clearTimeout(this._searchDebounce);
+    const term = this._search.trim();
+    if (!term) {
+      this._codeMatchFilenames = null;
+      return;
+    }
+    this._searchDebounce = setTimeout(async () => {
+      try {
+        const res = await window.apiFetch!(`api/scripts/search?q=${encodeURIComponent(term)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        // A newer keystroke may have already replaced this._search by the time the
+        // response lands — only apply it if it still matches the current term.
+        if (this._search.trim() === term) this._codeMatchFilenames = new Set(data.filenames ?? []);
+      } catch (e) {
+        console.debug('Code search failed', e);
+      }
+    }, 300);
   }
 
   private _visibleGroups(): { groups: ScriptGroupData[]; isSearchActive: boolean; isEmpty: boolean } {
@@ -420,7 +590,8 @@ export class AppSidebar extends LitElement {
             s.filename.toLowerCase().includes(filter) ||
             (s.description && s.description.toLowerCase().includes(filter)) ||
             (s.area && s.area.toLowerCase().includes(filter)) ||
-            (s.label && s.label.toLowerCase().includes(filter))
+            (s.label && s.label.toLowerCase().includes(filter)) ||
+            (this._codeMatchFilenames?.has(s.filename) ?? false)
         )
       : this._scripts;
 
@@ -467,6 +638,9 @@ export class AppSidebar extends LitElement {
 
   render() {
     const { groups, isSearchActive, isEmpty } = this._visibleGroups();
+    // Collapse to header-only for any non-dashboard mobile screen (log OR settings) —
+    // main-content takes over the rest in both cases, just showing different content.
+    const isFullscreenContent = this.mobile && this._mobileScreen !== 'dashboard';
 
     return html`
       ${mdiStylesheetLink}
@@ -477,11 +651,15 @@ export class AppSidebar extends LitElement {
           <span class="version-tag">${this._version}</span>
         </div>
         <div class="header-actions">
-          <button @click=${() => window.openCreationWizard?.()} title=${this._t('new_script_title', 'New Script')}>
+          <button
+            class=${this.mobile ? 'hidden' : ''}
+            @click=${() => window.openCreationWizard?.()}
+            title=${this._t('new_script_title', 'New Script')}
+          >
             <i class="mdi mdi-plus"></i>
           </button>
           <button
-            class=${this.expertMode ? '' : 'hidden'}
+            class=${this.expertMode && !this.mobile ? '' : 'hidden'}
             @click=${() => window.storeExplorer?.openTab()}
             title=${this._t('global_store_explorer_title', 'Global Store Explorer')}
           >
@@ -489,7 +667,7 @@ export class AppSidebar extends LitElement {
           </button>
           <button
             class=${this._updateAvailable ? 'has-notification' : ''}
-            @click=${() => window.openSettingsTab?.()}
+            @click=${() => this.openSettings()}
             title=${this._t('settings_button_title', 'Settings')}
           >
             <i class="mdi mdi-cog"></i>
@@ -499,55 +677,98 @@ export class AppSidebar extends LitElement {
           <button class="hidden" @click=${() => window.openReferenceTab?.()} title="Command Reference">
             <i class="mdi mdi-help-circle-outline"></i>
           </button>
+          <button
+            class=${!this.mobile && this._hideMobileToggleInDesktop ? 'hidden' : ''}
+            @click=${() => this._toggleMobileOverride()}
+            title=${
+              this.mobile
+                ? this._t('mobile_switch_to_desktop_title', 'Switch to desktop view')
+                : this._t('mobile_switch_to_mobile_title', 'Switch to mobile view')
+            }
+          >
+            <i class="mdi ${this.mobile ? 'mdi-monitor' : 'mdi-cellphone'}"></i>
+          </button>
+          <button
+            class=${this.mobile ? '' : 'hidden'}
+            @click=${() => this._toggleMobileScreen()}
+            title=${
+              this._mobileScreen === 'dashboard'
+                ? this._t('mobile_screen_log_title', 'Show log')
+                : this._t('mobile_screen_dashboard_title', 'Show dashboard')
+            }
+          >
+            <i
+              class="mdi ${this._mobileScreen === 'dashboard' ? 'mdi-text-box-outline' : 'mdi-view-dashboard-outline'}"
+            ></i>
+          </button>
           <status-bar-header-actions></status-bar-header-actions>
         </div>
       </div>
 
-      <div class="search-box">
-        <div class="search-container">
-          <input
-            type="text"
-            class="search-input"
-            placeholder=${this._t('search_placeholder', 'Suchen...')}
-            @input=${(e: Event) => this._onSearchInput(e)}
-          />
-          ${
-            this._search
-              ? html`<button class="clear-search-btn" @click=${() => this._clearSearch()} title="Clear search">
-                  <i class="mdi mdi-close"></i>
-                </button>`
-              : ''
-          }
-        </div>
-      </div>
+      ${
+        isFullscreenContent
+          ? nothing
+          : html`
+              <div class="search-box">
+                <div class="search-container">
+                  <input
+                    type="text"
+                    class="search-input"
+                    placeholder=${this._t('search_placeholder', 'Suchen...')}
+                    @input=${(e: Event) => this._onSearchInput(e)}
+                  />
+                  ${
+                    this._search
+                      ? html`<button class="clear-search-btn" @click=${() => this._clearSearch()} title="Clear search">
+                          <i class="mdi mdi-close"></i>
+                        </button>`
+                      : ''
+                  }
+                </div>
+                <button
+                  class="collapse-all-btn"
+                  @click=${() => this._toggleCollapseAll(groups)}
+                  title=${
+                    this._areAllGroupsCollapsed(groups)
+                      ? this._t('expand_all_groups_title', 'Expand all groups')
+                      : this._t('collapse_all_groups_title', 'Collapse all groups')
+                  }
+                >
+                  <i
+                    class="mdi ${this._areAllGroupsCollapsed(groups) ? 'mdi-unfold-more-horizontal' : 'mdi-unfold-less-horizontal'}"
+                  ></i>
+                </button>
+              </div>
 
-      <div class="script-list">
-        ${
-          isEmpty
-            ? html`<div class="script-list-empty">
-                ${isSearchActive ? this._t('no_scripts_found_search') : this._t('no_scripts_found')}
-              </div>`
-            : repeat(
-                groups,
-                (g) => g.key,
-                (g) => html`
-                  <script-group
-                    group-key=${g.key}
-                    display-name=${g.displayName}
-                    ?is-lib=${g.isLib}
-                    ?is-none=${g.isNone}
-                    .scripts=${g.scripts}
-                    ?collapsed=${g.collapsed}
-                    ?mqtt-connected=${this._mqttConnected}
-                    ?search-active=${isSearchActive}
-                    .activeFilename=${this._activeFilename}
-                  ></script-group>
-                `
-              )
-        }
-      </div>
-
-      <status-bar></status-bar>
+              <div class="script-list">
+                ${
+                  isEmpty
+                    ? html`<div class="script-list-empty">
+                        ${isSearchActive ? this._t('no_scripts_found_search') : this._t('no_scripts_found')}
+                      </div>`
+                    : repeat(
+                        groups,
+                        (g) => g.key,
+                        (g) => html`
+                          <script-group
+                            group-key=${g.key}
+                            display-name=${g.displayName}
+                            ?is-lib=${g.isLib}
+                            ?is-none=${g.isNone}
+                            .scripts=${g.scripts}
+                            ?collapsed=${g.collapsed}
+                            ?mqtt-connected=${this._mqttConnected}
+                            ?search-active=${isSearchActive}
+                            .activeFilename=${this._activeFilename}
+                            ?mobile=${this.mobile}
+                          ></script-group>
+                        `
+                      )
+                }
+              </div>
+            `
+      }
+      ${this.mobile && this._mobileScreen === 'log' ? nothing : html`<status-bar ?mobile=${this.mobile}></status-bar>`}
     `;
   }
 }

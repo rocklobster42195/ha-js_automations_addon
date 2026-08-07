@@ -69,7 +69,8 @@ async function initI18next() {
   // Re-open settings tab after a reload (e.g., after language change) if requested.
   if (urlParams.get('open') === 'settings') {
     setTimeout(() => {
-      if (typeof window.openSettingsTab === 'function') window.openSettingsTab();
+      if (window.appSidebar) window.appSidebar.openSettings();
+      else if (typeof window.openSettingsTab === 'function') window.openSettingsTab();
       // Remove parameter from URL without reloading the page.
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('open');

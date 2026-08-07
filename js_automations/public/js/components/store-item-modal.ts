@@ -228,7 +228,10 @@ export class StoreItemModal extends LitElement {
     }
     const item = window.storeExplorer?.getItem(key);
     if (item === undefined) return;
-    const val = item && typeof item === 'object' && 'value' in (item as Record<string, unknown>) ? (item as { value: unknown }).value : item;
+    const val =
+      item && typeof item === 'object' && 'value' in (item as Record<string, unknown>)
+        ? (item as { value: unknown }).value
+        : item;
     const isSecret = (item as { isSecret?: boolean } | undefined)?.isSecret ?? false;
 
     const valStr = typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '');
@@ -422,13 +425,15 @@ export class StoreItemModal extends LitElement {
                 @input=${(e: InputEvent) => this._onValueInput(e)}
               ></textarea>
               <div class="icon-col">
-                ${this._type === 'json'
-                  ? html`<i
-                      class="mdi mdi-format-indent-increase"
-                      title=${this._t('store.actions.prettify')}
-                      @click=${() => this._prettify()}
-                    ></i>`
-                  : nothing}
+                ${
+                  this._type === 'json'
+                    ? html`<i
+                        class="mdi mdi-format-indent-increase"
+                        title=${this._t('store.actions.prettify')}
+                        @click=${() => this._prettify()}
+                      ></i>`
+                    : nothing
+                }
                 <i
                   class="mdi ${this._valueMasked ? 'mdi-eye' : 'mdi-eye-off'}"
                   @click=${() => this._toggleValueVisibility()}

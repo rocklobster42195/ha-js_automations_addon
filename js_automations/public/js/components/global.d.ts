@@ -64,6 +64,10 @@ export interface JsaAppSidebarBridge {
   setActiveScript(filename: string | null): void;
   /** Re-checks window.newVersionInfo and refreshes the settings gear icon's update-available dot. */
   refreshBadges(): void;
+  /** Opens Settings, keeping mobile screen state in sync — use instead of window.openSettingsTab directly. */
+  openSettings(target?: string): void;
+  /** Resets mobile screen state back to the dashboard — call when closing a tab that put it elsewhere. */
+  returnToDashboard(): void;
 }
 
 export interface JsaIntegrationStatus {
@@ -162,6 +166,28 @@ export interface JsaEntityPickerModalBridge {
   close(): void;
 }
 
+export interface JsaLogEntry {
+  ts?: number;
+  level?: string;
+  source?: string;
+  message: string;
+}
+
+export interface JsaLogViewerBridge {
+  /** Mobile per-script inline log (RFC §7) — a snapshot at call time, not a live subscription. */
+  getEntriesForSource(source: string): JsaLogEntry[];
+}
+
+export interface JsaWatchTile {
+  label: string;
+  value: unknown;
+}
+
+export interface JsaWatchPanelBridge {
+  /** Mobile per-script inline status (RFC §7 follow-up) — a snapshot at call time, keyed by filename. */
+  getTilesForFilename(filename: string): JsaWatchTile[];
+}
+
 declare global {
   interface Window {
     socket?: JsaSocket;
@@ -230,6 +256,8 @@ declare global {
     confirmDialog?: JsaConfirmDialogBridge;
     alertToast?: JsaAlertToastBridge;
     entityPickerModal?: JsaEntityPickerModalBridge;
+    logViewer?: JsaLogViewerBridge;
+    watchPanel?: JsaWatchPanelBridge;
     /** api.js: ingress-aware URL prefix, e.g. '/api/hassio_ingress/<token>/'. */
     BASE_PATH?: string;
     /** Set by tab-manager.js's switchToTab() — the script whose card the preview toggle button controls. */

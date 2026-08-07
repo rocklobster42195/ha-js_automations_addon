@@ -260,7 +260,7 @@ const SNIPPET_REGISTRY = [
 
   {
     id: 'card_litelement',
-    icon: 'mdi-view-dashboard-outline',
+    icon: 'mdi-card-text-outline',
     labelKey: 'snippet_card_litelement',
     toolbarGroup: 'card',
     contextMenu: false,

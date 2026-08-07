@@ -69,6 +69,21 @@ export class SafeModeBanner extends LitElement {
       opacity: 0.7;
       cursor: default;
     }
+
+    @media (max-width: 768px) {
+      .content {
+        flex-wrap: wrap;
+      }
+      .title,
+      .desc {
+        overflow-wrap: break-word;
+      }
+      .btn {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+      }
+    }
   `;
 
   @state() private _active = false;
@@ -114,13 +129,16 @@ export class SafeModeBanner extends LitElement {
       const data = await res.json();
       if (data.success) {
         this._active = false;
-        alert(this._t('safe_mode_deactivated', 'Safe Mode deactivated. You can now start scripts manually.'));
+        window.alertToast?.show(
+          this._t('safe_mode_deactivated', 'Safe Mode deactivated. You can now start scripts manually.'),
+          { variant: 'success' }
+        );
       } else {
         this._resolving = false;
       }
     } catch (e) {
       console.error(e);
-      alert(this._t('safe_mode_failed', 'Failed to resolve Safe Mode.'));
+      window.alertToast?.show(this._t('safe_mode_failed', 'Failed to resolve Safe Mode.'));
       this._resolving = false;
     }
   };

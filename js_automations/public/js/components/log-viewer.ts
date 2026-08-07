@@ -9,6 +9,10 @@ interface LogEntry {
   message: string;
 }
 
+/** Caps in-memory retention for getEntriesForSource() (mobile per-script inline
+ * log, RFC §7) — this is a live stream, not meant to grow unbounded. */
+const MAX_RETAINED_ENTRIES = 1000;
+
 /**
  * Log console (left pane of the split log/dev-tools panel — index.html still
  * owns the surrounding .log-panes/.log-pane-resizer/.log-pane-right, which
@@ -113,6 +117,7 @@ export class LogViewer extends LitElement {
   @property({ type: Boolean, attribute: 'expert-mode', reflect: true }) expertMode = false;
   @state() private _sources: string[] = ['System'];
   @state() private _filter = 'ALL';
+  private _entries: LogEntry[] = [];
 
   private _todayFmt?: Intl.DateTimeFormat;
   private _weekdayFmt?: Intl.DateTimeFormat;
@@ -131,12 +136,20 @@ export class LogViewer extends LitElement {
     super.connectedCallback();
     window.initLogs = this.initLogs;
     window.appendLog = this.appendLog;
+    window.logViewer = this;
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     if (window.initLogs === this.initLogs) delete window.initLogs;
     if (window.appendLog === this.appendLog) delete window.appendLog;
+    if (window.logViewer === this) delete window.logViewer;
+  }
+
+  /** Mobile per-script inline log (RFC §7) — a read-only snapshot, not a live
+   * subscription, so callers re-call this each time they want fresh entries. */
+  getEntriesForSource(source: string): LogEntry[] {
+    return this._entries.filter((e) => (e.source || 'System') === source);
   }
 
   updated(changed: Map<string, unknown>) {
@@ -152,6 +165,7 @@ export class LogViewer extends LitElement {
       const consoleEl = this._consoleEl;
       if (consoleEl) consoleEl.innerHTML = '';
       this._sources = ['System'];
+      this._entries = [];
 
       history.forEach((entry) => this.appendLog(entry, false));
       this._scrollToBottom();
@@ -163,10 +177,15 @@ export class LogViewer extends LitElement {
   clearLogView = (): void => {
     const consoleEl = this._consoleEl;
     if (consoleEl) consoleEl.innerHTML = '';
+    this._entries = [];
   };
 
   clearServerLogs = async (): Promise<void> => {
-    if (!(await window.confirmDialog!.confirm(this._t('confirm_clear_logs', 'Do you really want to delete the entire server log?'))))
+    if (
+      !(await window.confirmDialog!.confirm(
+        this._t('confirm_clear_logs', 'Do you really want to delete the entire server log?')
+      ))
+    )
       return;
     await window.apiFetch!('api/logs', { method: 'DELETE' });
     this.clearLogView();
@@ -181,6 +200,10 @@ export class LogViewer extends LitElement {
     if (!this._sources.includes(source)) {
       this._sources = [...this._sources, source];
     }
+
+    this._entries.push(e);
+    if (this._entries.length > MAX_RETAINED_ENTRIES)
+      this._entries.splice(0, this._entries.length - MAX_RETAINED_ENTRIES);
 
     const consoleEl = this._consoleEl;
     if (!consoleEl) return;

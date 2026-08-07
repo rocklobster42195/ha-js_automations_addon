@@ -189,7 +189,8 @@ export class IntegrationBanner extends LitElement {
   };
 
   private _openSettings = (target: string): void => {
-    window.openSettingsTab?.(target);
+    if (window.appSidebar) window.appSidebar.openSettings(target);
+    else window.openSettingsTab?.(target);
   };
 
   render() {

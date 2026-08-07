@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state, query } from 'lit/decorators.js';
+import { customElement, property, state, query } from 'lit/decorators.js';
 import type { JsaSettings, JsaStatusBarBridge } from './global';
 import { mdiStylesheetLink } from './mdi';
 import { fetchAllStatesDeduped } from './ha-entity-cache';
@@ -72,6 +72,28 @@ export class StatusBar extends LitElement {
       justify-content: space-between;
       border-top: 1px solid #333;
       flex-shrink: 0;
+      box-sizing: border-box;
+    }
+
+    /* Mobile View (RFC §7): <app-sidebar> collapses to just its header for any
+       non-dashboard screen, so this — normally just the last flex child in its
+       column — would otherwise render right below the header instead of at
+       the actual bottom of the viewport (main-content sits after it in the
+       DOM, not before). Pinning it to the viewport bottom sidesteps that
+       structural ordering problem outright, same pattern as any mobile app's
+       bottom status/nav bar. app-sidebar reserves matching bottom space in
+       whatever's now the visible content so nothing renders underneath it. */
+    :host([mobile]) {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      /* The reserved padding-bottom gap in whatever's showing above it already
+         visually separates content from the bar — the base border-top on top
+         of that reads as a double line on mobile specifically. */
+      border-top: none;
+      box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.4);
     }
 
     .status-left {
@@ -133,9 +155,16 @@ export class StatusBar extends LitElement {
     }
 
     .sb-item .val {
-      white-space: nowrap;
+      /* pre, not nowrap: CPU/RAM already pad their text with leading spaces
+         (padStart) to reserve a fixed width so the icon doesn't jump around
+         as digit count changes — but plain HTML whitespace-collapsing eats
+         those spaces unless whitespace is preserved. nowrap alone only stops
+         wrapping, it doesn't preserve the spaces. */
+      white-space: pre;
     }
   `;
+
+  @property({ type: Boolean, reflect: true }) mobile = false;
 
   @state() private _connected = true;
   @state() private _connectionLost = false;
@@ -529,7 +558,7 @@ export class StatusBar extends LitElement {
           id="integration-status-item"
           class="stat-item"
           title=${mqttTitle}
-          @click=${() => window.openSettingsTab?.('mqtt')}
+          @click=${() => (window.appSidebar ? window.appSidebar.openSettings('mqtt') : window.openSettingsTab?.('mqtt'))}
         >
           <i class="mdi ${mqttIconClass} integration-icon" style="color: ${mqttColor}; opacity: ${mqttOpacity}"></i>
         </div>

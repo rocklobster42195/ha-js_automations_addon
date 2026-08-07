@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { mdiStylesheetLink } from './mdi';
 import type { JsaSettings, JsaHaState } from './global';
@@ -144,6 +144,40 @@ export class SettingsView extends LitElement {
       background-color: var(--warn, #f59e0b);
       border-radius: 50%;
       pointer-events: none;
+    }
+
+    /* Mobile View (RFC §7): the 200px vertical sidebar eats too much width on
+       a narrow screen, and icon-only would make categories like "Danger Zone"
+       or "MQTT Broker" ambiguous with no hover/tooltip on touch — so instead
+       it becomes a horizontal, scrollable chip row across the top. */
+    :host([mobile]) .settings-body {
+      flex-direction: column;
+    }
+    :host([mobile]) .settings-categories {
+      width: auto;
+      display: flex;
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      border-right: none;
+      border-bottom: 1px solid #333;
+      padding: 8px 10px;
+      gap: 8px;
+    }
+    :host([mobile]) .settings-category-item {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 20px;
+      background: #1a1a1a;
+    }
+    :host([mobile]) .settings-category-item.active {
+      background: var(--accent);
+      color: #000;
+      border-right: none;
+    }
+    :host([mobile]) .settings-category-item.has-update-dot::after {
+      right: 6px;
     }
 
     .settings-content {
@@ -296,6 +330,11 @@ export class SettingsView extends LitElement {
     }
   `;
 
+  /** Set externally by app-sidebar.ts's updated() (mirrors expert-mode) — this
+   * component isn't a child of <app-sidebar>, so it can't receive it as a
+   * property the normal way. */
+  @property({ type: Boolean, reflect: true }) mobile = false;
+
   @state() private _schema: SettingsCategory[] | null = null;
   @state() private _settings: JsaSettings = {};
   @state() private _activeCategory: string | null = null;
@@ -332,6 +371,13 @@ export class SettingsView extends LitElement {
     if (changed.has('_schema') && this._schema) {
       this._initScrollSpy();
     }
+    if (changed.has('_activeCategory') && this.mobile) {
+      // Keeps the horizontal chip row (mobile only) following along as the
+      // active category changes — whether from tapping a chip or scroll-spy.
+      this.renderRoot
+        .querySelector(`.settings-category-item[data-cat-id="${this._activeCategory}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
   }
 
   private _openTab = (targetId?: string | null): void => {
@@ -360,6 +406,7 @@ export class SettingsView extends LitElement {
   };
 
   private _close(): void {
+    window.appSidebar?.returnToDashboard();
     window.closeTab?.(SETTINGS_TAB_ID);
   }
 
@@ -569,6 +616,7 @@ export class SettingsView extends LitElement {
           class="settings-category-item ${this._activeCategory === cat.id ? 'active' : ''} ${
             showDot ? 'has-update-dot' : ''
           }"
+          data-cat-id=${cat.id}
           @click=${() => this._selectCategory(cat.id)}
         >
           <i class="mdi ${cat.icon.replace('mdi:', 'mdi-')}"></i>
