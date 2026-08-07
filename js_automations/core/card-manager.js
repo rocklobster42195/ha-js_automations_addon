@@ -560,9 +560,8 @@ class CardManager {
       });
       if (!res.ok) {
         const retryAfterSec = Number(res.headers.get('retry-after'));
-        const cooldownMs = retryAfterSec > 0
-          ? Math.min(retryAfterSec * 1000, ASSET_FAILURE_COOLDOWN_MAX_MS)
-          : ASSET_FAILURE_COOLDOWN_MS;
+        const cooldownMs =
+          retryAfterSec > 0 ? Math.min(retryAfterSec * 1000, ASSET_FAILURE_COOLDOWN_MAX_MS) : ASSET_FAILURE_COOLDOWN_MS;
         throw Object.assign(new Error(`cacheAsset: HTTP ${res.status} for ${url}`), { cooldownMs });
       }
 
