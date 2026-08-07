@@ -238,6 +238,13 @@ module.exports = (
     const scriptName = filename.replace(/\.[^.]+$/, '');
     const safeCardSource = cardSource.replace(/<\/script>/gi, '<\\/script>');
     const safeScriptName = JSON.stringify(scriptName);
+    // Guess the entity domain from @expose so the first-paint default config
+    // (before any real discovery completes) isn't always "sensor." — wrong for
+    // @expose switch/button scripts.
+    const exposeMeta = ScriptHeaderParser.parse(fullPath);
+    const defaultDomain =
+      exposeMeta.expose === 'button' ? 'button' : exposeMeta.expose === 'switch' ? 'switch' : 'sensor';
+    const safeDefaultDomain = JSON.stringify(defaultDomain);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -560,7 +567,7 @@ module.exports = (
       const container = document.getElementById('card-container');
 
       // Default config — card receives entity_id from the start, no postMessage needed
-      const _defaultConfig = { entity_id: 'sensor.' + ${safeScriptName}.replace(/-/g, '_') };
+      const _defaultConfig = { entity_id: ${safeDefaultDomain} + '.' + ${safeScriptName}.replace(/-/g, '_') };
 
       const tryMount = () => {
         if (!customElements.get(tagName)) return false;
