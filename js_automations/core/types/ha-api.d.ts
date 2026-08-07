@@ -8,7 +8,7 @@
 
 // Placeholder for dynamically generated entities.d.ts content
 // This will be replaced by the actual content of entities.d.ts
-interface HAEntities { }
+interface HAEntities {}
 
 // Placeholder for dynamically generated store.d.ts content
 // This will be replaced by the actual content of store.d.ts
@@ -19,62 +19,87 @@ interface GlobalStoreSchema /*__JSA_STORE_SCHEMA__*/ {}
  * This interface is extended by the automatically generated services.d.ts.
  * If you see no autocomplete, ensure the Add-on has connected to HA at least once.
  */
-interface ServiceMap { }
+interface ServiceMap {}
 
 /** Helper to generate all possible 'domain.service' strings from ServiceMap */
 type AllServiceIds = {
-    [D in keyof ServiceMap & string]: D extends string 
-        ? { [S in keyof ServiceMap[D] & string]: S extends string ? `${D}.${S}` : never }[keyof ServiceMap[D] & string]
-        : never
+  [D in keyof ServiceMap & string]: D extends string
+    ? { [S in keyof ServiceMap[D] & string]: S extends string ? `${D}.${S}` : never }[keyof ServiceMap[D] & string]
+    : never;
 }[keyof ServiceMap & string];
 
 /** Helper to extract the data payload type for a combined service ID */
 type ServiceData<T extends string> = T extends `${infer D}.${infer S}`
-    ? D extends keyof ServiceMap
-        ? S extends keyof ServiceMap[D] 
-            ? { 
-                [K in keyof ServiceMap[D][S]]: K extends 'entity_id' 
-                    ? EntityID | EntityID[] 
-                    : ServiceMap[D][S][K] 
-              } & { entity_id?: EntityID | EntityID[] }
-            : Record<string, any>
-        : Record<string, any>
-    : Record<string, any>;
+  ? D extends keyof ServiceMap
+    ? S extends keyof ServiceMap[D]
+      ? {
+          [K in keyof ServiceMap[D][S]]: K extends 'entity_id' ? EntityID | EntityID[] : ServiceMap[D][S][K];
+        } & { entity_id?: EntityID | EntityID[] }
+      : Record<string, any>
+    : Record<string, any>
+  : Record<string, any>;
 
 /** Helper to map a domain to its available services as methods */
 type EntityServices<T extends string> = T extends `${infer Domain}.${infer Rest}`
-    ? Domain extends keyof ServiceMap 
-        ? { [S in keyof ServiceMap[Domain] & string]: (data?: Partial<ServiceMap[Domain][S]>) => Promise<EntityServices<T>> } & EntityMethods<T>
-        : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>
-    : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>;
+  ? Domain extends keyof ServiceMap
+    ? {
+        [S in keyof ServiceMap[Domain] & string]: (data?: Partial<ServiceMap[Domain][S]>) => Promise<EntityServices<T>>;
+      } & EntityMethods<T>
+    : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>
+  : Record<string, (data?: any) => Promise<any>> & EntityMethods<T>;
 
 /** Helper to extract only literal keys (excluding index signatures) for better IntelliSense */
 type KnownKeys<T> = keyof { [K in keyof T as string extends K ? never : number extends K ? never : K]: any };
 
 /** Helper to extract attribute keys for a specific entity ID with autocomplete fallback */
-type AttributeKey<T extends string> = T extends keyof HAEntities 
-    ? (HAEntities[T] extends HAState<infer A> ? (KnownKeys<A> | (string & {})) : (KnownKeys<HAAttributes> | (string & {})))
-    : (KnownKeys<HAAttributes> | (string & {}));
+type AttributeKey<T extends string> = T extends keyof HAEntities
+  ? HAEntities[T] extends HAState<infer A>
+    ? KnownKeys<A> | (string & {})
+    : KnownKeys<HAAttributes> | (string & {})
+  : KnownKeys<HAAttributes> | (string & {});
 
 interface EntityMethods<T extends string> {
-    /** Pauses the execution chain for a specific duration. */
-    wait(ms: number): Promise<EntityServices<T>>;
-    /** Gets a specific attribute value for this entity. */
-    getAttribute<K extends AttributeKey<T>>(name: K): T extends keyof HAEntities 
-        ? (HAEntities[T] extends HAState<infer A> ? (K extends keyof A ? A[K] : any) : any) 
-        : any;
-    /** The current state value of the entity. */
-    readonly state: string | undefined;
-    /** The attributes of the entity, automatically typed if the entity ID is known. */
-    readonly attributes: T extends keyof HAEntities ? (HAEntities[T] extends HAState<infer A> ? A : HAAttributes) : HAAttributes;
+  /** Pauses the execution chain for a specific duration. */
+  wait(ms: number): Promise<EntityServices<T>>;
+  /** Gets a specific attribute value for this entity. */
+  getAttribute<K extends AttributeKey<T>>(
+    name: K
+  ): T extends keyof HAEntities
+    ? HAEntities[T] extends HAState<infer A>
+      ? K extends keyof A
+        ? A[K]
+        : any
+      : any
+    : any;
+  /** The current state value of the entity. */
+  readonly state: string | undefined;
+  /** The attributes of the entity, automatically typed if the entity ID is known. */
+  readonly attributes: T extends keyof HAEntities
+    ? HAEntities[T] extends HAState<infer A>
+      ? A
+      : HAAttributes
+    : HAAttributes;
 }
 
 /** Helper to map a domain to its available services as batch methods */
 type SelectorServices<T extends string> = T extends `${infer Domain}.${infer Rest}`
-    ? Domain extends keyof ServiceMap 
-        ? { [S in keyof ServiceMap[Domain] & string]: (data?: Partial<ServiceMap[Domain][S]>) => Promise<EntitySelector & SelectorServices<T>> } & { throttle(ms: number): EntitySelector & SelectorServices<T>; wait(ms: number): Promise<EntitySelector & SelectorServices<T>> }
-        : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> }
-    : Record<string, (data?: any) => Promise<EntitySelector>> & { throttle(ms: number): EntitySelector; wait(ms: number): Promise<EntitySelector> };
+  ? Domain extends keyof ServiceMap
+    ? {
+        [S in keyof ServiceMap[Domain] & string]: (
+          data?: Partial<ServiceMap[Domain][S]>
+        ) => Promise<EntitySelector & SelectorServices<T>>;
+      } & {
+        throttle(ms: number): EntitySelector & SelectorServices<T>;
+        wait(ms: number): Promise<EntitySelector & SelectorServices<T>>;
+      }
+    : Record<string, (data?: any) => Promise<EntitySelector>> & {
+        throttle(ms: number): EntitySelector;
+        wait(ms: number): Promise<EntitySelector>;
+      }
+  : Record<string, (data?: any) => Promise<EntitySelector>> & {
+      throttle(ms: number): EntitySelector;
+      wait(ms: number): Promise<EntitySelector>;
+    };
 
 /** Type that provides autocomplete for known keys in GlobalStoreSchema while allowing any string. */
 type StoreKey = keyof GlobalStoreSchema | (string & { _?: never });
@@ -86,101 +111,101 @@ type EntityID = keyof HAEntities | (string & { _?: never });
  * Represents a Home Assistant entity state.
  */
 interface HAState<T = HAAttributes> {
-    entity_id: string;
-    state: string;
-    attributes: T;
-    last_changed: string;
-    last_updated: string;
-    context: {
-        id: string;
-        parent_id: string | null;
-        user_id: string | null;
-    };
+  entity_id: string;
+  state: string;
+  attributes: T;
+  last_changed: string;
+  last_updated: string;
+  context: {
+    id: string;
+    parent_id: string | null;
+    user_id: string | null;
+  };
 }
 
 /**
  * Represents common Home Assistant entity attributes.
  */
 interface HAAttributes {
-    friendly_name?: string;
-    icon?: string;
-    device_class?: string;
-    unit_of_measurement?: string;
-    [key: string]: any;
+  friendly_name?: string;
+  icon?: string;
+  device_class?: string;
+  unit_of_measurement?: string;
+  [key: string]: any;
 }
 
 /** Specific attributes for light entities */
 interface LightAttributes extends HAAttributes {
-    brightness?: number;
-    color_temp?: number;
-    rgb_color?: [number, number, number];
-    xy_color?: [number, number];
-    hs_color?: [number, number];
-    effect?: string;
-    effect_list?: string[];
-    supported_color_modes?: string[];
-    color_mode?: string;
+  brightness?: number;
+  color_temp?: number;
+  rgb_color?: [number, number, number];
+  xy_color?: [number, number];
+  hs_color?: [number, number];
+  effect?: string;
+  effect_list?: string[];
+  supported_color_modes?: string[];
+  color_mode?: string;
 }
 
 /** Specific attributes for media player entities */
 interface MediaPlayerAttributes extends HAAttributes {
-    volume_level?: number;
-    is_volume_muted?: boolean;
-    media_content_id?: string;
-    media_content_type?: string;
-    media_duration?: number;
-    media_position?: number;
-    media_title?: string;
-    media_artist?: string;
-    media_album_name?: string;
-    source?: string;
-    source_list?: string[];
+  volume_level?: number;
+  is_volume_muted?: boolean;
+  media_content_id?: string;
+  media_content_type?: string;
+  media_duration?: number;
+  media_position?: number;
+  media_title?: string;
+  media_artist?: string;
+  media_album_name?: string;
+  source?: string;
+  source_list?: string[];
 }
 
 /** Specific attributes for climate entities */
 interface ClimateAttributes extends HAAttributes {
-    current_temperature?: number;
-    temperature?: number;
-    target_temp_high?: number;
-    target_temp_low?: number;
-    fan_mode?: string;
-    fan_modes?: string[];
-    hvac_action?: string;
-    hvac_modes?: string[];
-    preset_mode?: string;
-    preset_modes?: string[];
+  current_temperature?: number;
+  temperature?: number;
+  target_temp_high?: number;
+  target_temp_low?: number;
+  fan_mode?: string;
+  fan_modes?: string[];
+  hvac_action?: string;
+  hvac_modes?: string[];
+  preset_mode?: string;
+  preset_modes?: string[];
 }
 
 /** Specific attributes for sensor entities */
 interface SensorAttributes extends HAAttributes {
-    state_class?: 'measurement' | 'total' | 'total_increasing';
-    last_reset?: string;
+  state_class?: 'measurement' | 'total' | 'total_increasing';
+  last_reset?: string;
 }
 
 /**
  * Represents a change event for an entity state.
  */
 interface StateChangeData {
-    entity_id: EntityID;
-    state: string;
-    old_state: string | null;
-    attributes: Record<string, any>;
+  entity_id: EntityID;
+  state: string;
+  old_state: string | null;
+  attributes: Record<string, any>;
 }
 
 /**
  * Represents an error that occurred in the background (e.g., unhandled promise rejection).
  */
 interface BackgroundErrorData {
-    message: string;
-    stack: string;
-    type: 'background' | 'script';
+  message: string;
+  stack: string;
+  type: 'background' | 'script';
 }
 
 /** A single history entry — format returned by `ha.history.get()` and accepted by all computed helpers. */
 interface HAHistoryEntry {
-    state: string;
-    last_changed: string;
-    attributes?: Record<string, any>;
+  state: string;
+  last_changed: string;
+  attributes?: Record<string, any>;
 }
 
 /**
@@ -207,371 +232,428 @@ declare const schedule: (cronExpression: string, callback: () => void | Promise<
 declare const sleep: (ms: number) => Promise<void>;
 
 interface HA {
-    /**
-     * Returns a localized string based on the current language.
-     * @param mapping Object mapping language codes to strings (e.g. { en: "Hi", de: "Hallo" })
-     * @param fallback Optional fallback string if language is not found
-     */
-    localize(mapping: Record<string, string>, fallback?: string): string;
+  /**
+   * Returns a localized string based on the current language.
+   * @param mapping Object mapping language codes to strings (e.g. { en: "Hi", de: "Hallo" })
+   * @param fallback Optional fallback string if language is not found
+   */
+  localize(mapping: Record<string, string>, fallback?: string): string;
 
-    /** The current language of the Home Assistant instance. */
-    readonly language: string;
+  /** The current language of the Home Assistant instance. */
+  readonly language: string;
 
-    // --- Logging ---
-    /** Logs a debug message to the console. */
-    debug(message: any): void;
-    /** Logs an informational message to the console. */
-    log(message: any): void;
-    /** Logs a warning message to the console. */
-    warn(message: any): void;
-    /** Logs an error message to the console. */
-    error(message: any): void;
+  // --- Logging ---
+  /** Logs a debug message to the console. */
+  debug(message: any): void;
+  /** Logs an informational message to the console. */
+  log(message: any): void;
+  /** Logs a warning message to the console. */
+  warn(message: any): void;
+  /** Logs an error message to the console. */
+  error(message: any): void;
 
-    // --- Script Lifecycle ---
-    /** Stops the current script. */
-    stop(reason?: string): void;
-    /** Restarts the current script. */
-    restart(reason?: string): void;
-    /**
-     * Pauses script execution until the developer clicks "Continue" in the Breakpoints tab.
-     * The vars object is displayed as a variable inspector in the UI.
-     * Auto-resumes after 60 seconds.
-     * @param label - Descriptive label shown in the UI
-     * @param vars  - Variables to inspect (shown as a key/value table)
-     */
-    breakpoint(label: string, vars?: Record<string, unknown>): void;
-    /**
-     * Sends a one-shot variable snapshot to the WATCH tab (non-blocking).
-     * Appears as a timestamped list entry below the live watch tiles.
-     * @param label - Descriptive label shown in the UI
-     * @param vars  - Variables to display (key/value pairs)
-     */
-    inspect(label: string, vars?: Record<string, unknown>): void;
-    /**
-     * Registers a live watch expression that re-evaluates on every HA state change.
-     * Results appear as updating tiles at the top of the WATCH tab.
-     * @param label - Unique label for the tile
-     * @param fn    - Expression to evaluate; has full access to the ha API
-     */
-    watch(label: string, fn: () => unknown): void;
-    /** Registers a callback to be executed when the script is stopped. */
-    onStop(callback: () => void | Promise<void>): void;
-    /** Registers a callback to be executed when an unhandled error occurs. */
-    onError(callback: (error: BackgroundErrorData) => void): void;
+  // --- Script Lifecycle ---
+  /** Stops the current script. */
+  stop(reason?: string): void;
+  /** Restarts the current script. */
+  restart(reason?: string): void;
+  /**
+   * Pauses script execution until the developer clicks "Continue" in the Breakpoints tab.
+   * The vars object is displayed as a variable inspector in the UI.
+   * Auto-resumes after 60 seconds.
+   * @param label - Descriptive label shown in the UI
+   * @param vars  - Variables to inspect (shown as a key/value table)
+   */
+  breakpoint(label: string, vars?: Record<string, unknown>): void;
+  /**
+   * Sends a one-shot variable snapshot to the WATCH tab (non-blocking).
+   * Appears as a timestamped list entry below the live watch tiles.
+   * @param label - Descriptive label shown in the UI
+   * @param vars  - Variables to display (key/value pairs)
+   */
+  inspect(label: string, vars?: Record<string, unknown>): void;
+  /**
+   * Registers a live watch expression that re-evaluates on every HA state change.
+   * Results appear as updating tiles at the top of the WATCH tab.
+   * @param label - Unique label for the tile
+   * @param fn    - Expression to evaluate; has full access to the ha API
+   */
+  watch(label: string, fn: () => unknown): void;
+  /** Registers a callback to be executed when the script is stopped. */
+  onStop(callback: () => void | Promise<void>): void;
+  /** Registers a callback to be executed when an unhandled error occurs. */
+  onError(callback: (error: BackgroundErrorData) => void): void;
 
-    /** Returns whether the addon currently has a live HA WebSocket connection. */
-    isConnected(): boolean;
-    /** Registers a callback invoked whenever the HA WebSocket connection is lost or restored. */
-    onConnectionChange(callback: (connected: boolean) => void): void;
+  /** Returns whether the addon currently has a live HA WebSocket connection. */
+  isConnected(): boolean;
+  /** Registers a callback invoked whenever the HA WebSocket connection is lost or restored. */
+  onConnectionChange(callback: (connected: boolean) => void): void;
 
+  /**
+   * Registers a named action handler that can be triggered from multiple sources:
+   * - A Lovelace card via `__jsa__.callAction('name', payload)`
+   * - A `ha.register()` button entity with `{ action: 'name' }` — fires on button press
+   * - The addon UI (future)
+   *
+   * The handler may return a value that is forwarded back to the caller.
+   *
+   * For broadcasting to multiple unspecified listeners without a return value, use `ha.fireEvent()` instead.
+   *
+   * @see fireEvent
+   *
+   * @example
+   * // Simple trigger — no payload
+   * ha.action('refresh', async () => { await update(); });
+   *
+   * @example
+   * // With payload and return value
+   * ha.action('set-team', async ({ teamId }) => {
+   *   CONFIG.teamId = teamId;
+   *   await update();
+   *   return { ok: true };
+   * });
+   *
+   * @example
+   * // Button entity routed to an action
+   * ha.register('button.openligadb_refresh', { name: 'Refresh', action: 'refresh' });
+   */
+  action(name: string, handler: (payload: Record<string, unknown>) => unknown | Promise<unknown>): void;
+
+  // --- Script Pack: Lovelace Card Installation ---
+  frontend: {
     /**
-     * Registers a named action handler that can be triggered from multiple sources:
-     * - A Lovelace card via `__jsa__.callAction('name', payload)`
-     * - A `ha.register()` button entity with `{ action: 'name' }` — fires on button press
-     * - The addon UI (future)
+     * Installs the card embedded in this script's `__JSA_CARD__` block to
+     * `config/www/jsa-cards/` and registers it as a Lovelace resource.
      *
-     * The handler may return a value that is forwarded back to the caller.
-     *
-     * For broadcasting to multiple unspecified listeners without a return value, use `ha.fireEvent()` instead.
-     *
-     * @see fireEvent
+     * - Skips write if the card source is unchanged (hash-based).
+     * - In `@card dev` mode: skips file write and Lovelace registration entirely.
+     *   The preview panel receives the live card source instead.
      *
      * @example
-     * // Simple trigger — no payload
-     * ha.action('refresh', async () => { await update(); });
+     * await ha.frontend.installCard();
      *
      * @example
-     * // With payload and return value
-     * ha.action('set-team', async ({ teamId }) => {
-     *   CONFIG.teamId = teamId;
-     *   await update();
-     *   return { ok: true };
-     * });
-     *
-     * @example
-     * // Button entity routed to an action
-     * ha.register('button.openligadb_refresh', { name: 'Refresh', action: 'refresh' });
-     */
-    action(name: string, handler: (payload: Record<string, unknown>) => unknown | Promise<unknown>): void;
-
-    // --- Script Pack: Lovelace Card Installation ---
-    frontend: {
-        /**
-         * Installs the card embedded in this script's `__JSA_CARD__` block to
-         * `config/www/jsa-cards/` and registers it as a Lovelace resource.
-         *
-         * - Skips write if the card source is unchanged (hash-based).
-         * - In `@card dev` mode: skips file write and Lovelace registration entirely.
-         *   The preview panel receives the live card source instead.
-         *
-         * @example
-         * await ha.frontend.installCard();
-         *
-         * @example
-         * await ha.frontend.installCard({
-         *   config: { entity_id: 'sensor.openligadb_bvb', title: 'BVB' },
-         * });
-         */
-        installCard(options?: {
-            /** Config object passed to the card's setConfig() on first connect. */
-            config?: Record<string, unknown>;
-            /** Force reinstall even if the card source hash has not changed. */
-            force?: boolean;
-        }): Promise<string>;
-    };
-
-    // --- Home Assistant Services & Entities ---
-    /** 
-     * Returns a fluent API for a specific entity with domain-specific services.
-     * @param entityId The entity ID (e.g., 'light.living_room').
-     */
-    entity<K extends EntityID>(entityId: K): EntityServices<K & string>;
-
-    /** 
-     * @deprecated Use ha.call() instead for a cleaner 'domain.service' syntax.
-     * Calls a Home Assistant service. 
-     */
-    callService<D extends keyof ServiceMap | (string & {}), S extends (D extends keyof ServiceMap ? keyof ServiceMap[D] : string)>(
-        domain: D,
-        service: S,
-        data?: D extends keyof ServiceMap ? (S extends keyof ServiceMap[D] ? ServiceMap[D][S] : any) : any
-    ): void;
-
-    /**
-     * Safely calls a Home Assistant service using the 'domain.service' format.
-     * Automatically catches and logs errors in the master process to prevent script crashes.
-     * @param serviceId The service to call (e.g., 'light.turn_on' or 'tts.cloud_say').
-     * @param data Optional service data payload.
-     */
-    call<T extends AllServiceIds | (string & {})>(
-        serviceId: T,
-        data?: T extends AllServiceIds ? ServiceData<T> : Record<string, any>
-    ): void;
-    /**
-     * Calls a Home Assistant service and awaits its response payload.
-     * Use this for "response-only" or "response-optional" services such as
-     * `weather.get_forecasts` or `calendar.list_events` that return data instead
-     * of (or in addition to) performing an action.
-     * @param serviceId The service to call (e.g., 'weather.get_forecasts').
-     * @param data Optional service data payload.
-     * @param options Pass `{ returnResponse: true }` to await the response.
-     * @returns The service's `response` payload, keyed by target entity_id.
-     * @example
-     * const result = await ha.call('weather.get_forecasts',
-     *   { entity_id: 'weather.openweathermap', type: 'daily' },
-     *   { returnResponse: true }
-     * );
-     * const forecast = result['weather.openweathermap'].forecast;
-     */
-    call<T extends AllServiceIds | (string & {})>(
-        serviceId: T,
-        data: T extends AllServiceIds ? ServiceData<T> : Record<string, any>,
-        options: { returnResponse: true }
-    ): Promise<Record<string, any>>;
-
-    /**
-     * Sends an actionable notification and waits for the user's response.
-     * Returns a Promise that resolves with the chosen action string,
-     * or with `defaultAction` (default: `null`) if the timeout expires.
-     *
-     * Requires the HA companion app installed on at least one device.
-     * 
-     * **Note:** This does not work in the web browser as it relies on mobile app events.
-     *
-     * @example
-     * const answer = await ha.ask("Garage door left open. Close it?", {
-     *   title: "Garage",
-     *   target: "notify.mobile_app_my_phone",
-     *   defaultAction: "SNOOZE",
-     *   actions: [
-     *     { action: "CLOSE",  title: "Close now" },
-     *     { action: "SNOOZE", title: "Remind in 30 min" },
-     *     { action: "IGNORE", title: "Ignore" },
-     *   ]
-     * });
-     * if (answer === "CLOSE") ha.entity('cover.garage').close_cover();
-     * if (answer === "SNOOZE" || answer === null) setTimeout(checkGarage, 30 * 60 * 1000);
-     */
-    ask(message: string, options?: {
-        /** Notification title shown in the push notification header. */
-        title?: string;
-        /**
-         * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
-         * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
-         */
-        target?: string;
-        /** Timeout in milliseconds before the promise resolves with `defaultAction`. Default: 60000 (1 min). */
-        timeout?: number;
-        /** Value resolved when the timeout expires. Default: `null`. */
-        defaultAction?: string | null;
-        /** Action buttons shown in the notification. Each `action` string is returned when tapped. */
-        actions?: Array<{ action: string; title: string }>;
-    }): Promise<string | null>;
-
-    /**
-     * Sends a notification via Home Assistant's notify service.
-     * Defaults to `notify.notify` (broadcasts to all configured notifiers).
-     *
-     * **Note:** Advanced data features (images, actions) are only supported by mobile companion apps.
-     *
-     * @example
-     * ha.notify("Motion detected!", { title: "Security", target: "notify.mobile_app_my_phone" });
-     *
-     * @example
-     * // With extra platform-specific data (e.g. image on Android/iOS):
-     * ha.notify("Someone at the door", {
-     *   title: "Doorbell",
-     *   data: { image: "/local/snapshot.jpg", channel: "Doorbell" }
+     * await ha.frontend.installCard({
+     *   config: { entity_id: 'sensor.openligadb_bvb', title: 'BVB' },
      * });
      */
-    notify(message: string, options?: {
-        /** Notification title shown in the push notification header. */
-        title?: string;
-        /**
-         * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
-         * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
-         */
-        target?: string;
-        /**
-         * If true, sends the notification to Home Assistant's internal persistent notification system.
-         * These appear in the web browser's sidebar.
-         * When active, the 'target' option is ignored.
-         */
-        persistent?: boolean;
-        /**
-         * Platform-specific extra data passed under the `data` key of the notify service call.
-         * Examples: `{ image: '/local/cam.jpg' }`, `{ channel: 'Alarm' }`, `{ tag: 'motion' }`.
-         */
-        data?: Record<string, any>;
-    }): void;
+    installCard(options?: {
+      /** Config object passed to the card's setConfig() on first connect. */
+      config?: Record<string, unknown>;
+      /** Force reinstall even if the card source hash has not changed. */
+      force?: boolean;
+    }): Promise<string>;
 
     /**
-     * Updates the state and/or attributes of an existing Home Assistant entity.
-     * If the entity was registered via `ha.register`, it will use the native integration.
-     * Otherwise, it falls back to the legacy HTTP API.
-     * @param entityId The entity ID to update (e.g., 'sensor.my_sensor').
-     * @param state The new state value.
-     * @param attributes Optional attributes to set.
-     */
-    update(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
-    /**
-     * Updates only the attributes of an existing Home Assistant entity, preserving its current state.
-     * @param entityId The entity ID to update (e.g., 'sensor.my_sensor').
-     * @param attributes Attributes to set or update.
-     */
-    update(entityId: EntityID, attributes: Record<string, any>): void;
-
-    /**
-     * @deprecated Use ha.update() instead.
-     * Updates the state and/or attributes of an existing Home Assistant entity.
-     * @param entityId The entity ID to update.
-     * @param state The new state value.
-     * @param attributes Optional attributes to set.
-     */
-    updateState(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
-
-    /**
-     * Registers a native Home Assistant entity via MQTT Discovery.
-     * Creates a persistent entity in Home Assistant's registry.
-     * Calling `ha.register()` again with the same `entityId` updates the configuration.
+     * Downloads an external URL once and caches it under `config/www/jsa-cards/assets/`,
+     * returning a stable `/local/...` URL reachable from any device on the HA instance —
+     * not routed through the addon's own ingress. Use this instead of hotlinking
+     * third-party images/assets directly in a card (team logos, album art, ...): a
+     * hotlinked URL depends on the source staying up and fast, which matters a lot more
+     * on flaky/kiosk dashboard devices than in a normal browser.
+     *
+     * Repeated calls with the same URL are served from the on-disk cache — free unless
+     * `force` is set or `ttl` has elapsed.
+     *
+     * A failed download is remembered for a few minutes (or longer if the host sends a
+     * `Retry-After` header) and rejects immediately on retry during that window — no
+     * network call is made. This matters if you call `cacheAsset()` from a tight polling
+     * loop: a single failure won't turn into a request flood against a struggling host.
+     *
+     * @requires `@permission network`
+     * @example
+     * // Cache a team logo once; store the returned local URL instead of the source URL.
+     * const localUrl = await ha.frontend.cacheAsset(team.teamIconUrl);
+     * ha.update(entityId, 'scheduled', { team_home_icon: localUrl });
      *
      * @example
-     * ha.register('sensor.outside_temp', {
-     *   name: 'Outside Temperature',
-     *   icon: 'mdi:thermometer',
-     *   unit: '°C',
-     *   device_class: 'temperature',
-     *   state_class: 'measurement',
-     *   initial_state: 0,
-     * });
+     * // Force a fresh copy, e.g. from a manual "refresh icon" action.
+     * await ha.frontend.cacheAsset(avatarUrl, { force: true });
      *
      * @example
-     * ha.register('switch.sprinkler', { name: 'Sprinkler', icon: 'mdi:sprinkler' });
-     * ha.register('select.mode', { name: 'Mode', options: ['auto', 'manual', 'off'] });
-     *
-     * @param entityId The desired entity ID (e.g., `'sensor.my_value'`). The domain determines the entity type.
-     * @param config Configuration for the entity.
+     * // Re-check every 24h — for assets that can legitimately change (unlike a static logo).
+     * await ha.frontend.cacheAsset(avatarUrl, { ttl: 24 * 60 * 60 * 1000 });
      */
-    register(entityId: string, config?: {
-        /** Display name shown in HA (defaults to a prettified version of the entity ID). */
-        name?: string;
-        /** Alias for `name`. */
-        friendly_name?: string;
-        /** MDI icon (e.g. `'mdi:thermometer'`). Can be changed at runtime via `ha.update()`. */
-        icon?: string;
-        /** Unit of measurement (e.g. `'°C'`, `'%'`, `'W'`). Alias: `unit`. */
-        unit_of_measurement?: string;
-        /** Alias for `unit_of_measurement`. */
-        unit?: string;
-        /** HA device class (e.g. `'temperature'`, `'humidity'`, `'power'`). */
-        device_class?: string;
-        /** HA state class for long-term statistics: `'measurement'`, `'total'`, `'total_increasing'`. */
-        state_class?: 'measurement' | 'total' | 'total_increasing';
-        /**
-         * Places the entity in HA's diagnostic or config category.
-         * - `'diagnostic'`: shown in a separate "Diagnostic" section (e.g. signal strength, uptime)
-         * - `'config'`: shown in a separate "Configuration" section (e.g. thresholds, modes)
-         */
-        entity_category?: 'diagnostic' | 'config';
-        /** Minimum value for `number` entities. */
-        min?: number;
-        /** Maximum value for `number` entities. */
-        max?: number;
-        /** Step size for `number` entities. */
-        step?: number;
-        /** Display mode for `number` entities: `'auto'`, `'box'`, or `'slider'`. */
-        mode?: 'auto' | 'box' | 'slider';
-        /** Number of decimal places HA should display for sensor values (e.g. `2` → `23.45 °C`). */
-        suggested_display_precision?: number;
-        /** Whether the entity is enabled in HA by default. Set to `false` to create it disabled. */
-        enabled_by_default?: boolean;
-        /** Seconds after the last state update before HA marks the entity as `unavailable`. */
-        expire_after?: number;
-        /**
-         * When `true`, this entity stays available (showing its last value) when the parent
-         * script stops — only tied to the addon's global status, not the per-script one.
-         * Pair with `expire_after` if the value should eventually be flagged stale anyway.
-         * Default: `false` (entity goes `unavailable` while its script is stopped).
-         */
-        stale_ok?: boolean;
-        /** Initial state value set when the entity is first created. */
-        initial_state?: string | number | boolean;
-        /** Initial attributes (merged with the state on first publish). */
-        attributes?: Record<string, any>;
-        /** Direct area ID to assign this entity to (e.g. `'living_room'`). Takes precedence over `area`. */
-        area_id?: string;
-        /** Area name to assign this entity to (e.g. `'Living Room'`). Resolved to area ID automatically. */
-        area?: string;
-        /** Alias for `area`. */
-        suggested_area?: string;
-        /** Label names or IDs to assign to this entity (e.g. `['System', 'Critical']`). */
-        labels?: string[];
-        /**
-         * Options list for `select` entities.
-         * @example ['auto', 'manual', 'off']
-         */
-        options?: string[];
-        /**
-         * Groups this entity under a device in Home Assistant.
-         * - `true`: use the script's name and slug as the device (e.g. all entities from `my_script.js` → device "My Script")
-         * - `object`: provide a custom device configuration
-         *
-         * **Note:** When a device block is present, HA generates the entity_id as
-         * `{device_name_slug}_{entity_name_slug}`, ignoring `object_id`.
-         * Omit `device` (default) to ensure the entity_id matches exactly what you pass to `ha.register()`.
-         *
-         * @example
-         * // Group all entities from this script under one device card:
-         * ha.register('sensor.outside_temp', { name: 'Outside Temperature', device: true });
-         *
-         * @example
-         * // Custom device metadata:
-         * ha.register('sensor.outside_temp', {
-         *   name: 'Outside Temperature',
-         *   device: { name: 'Weather Station', identifiers: ['my_weather_station'], model: 'v2' }
-         * });
-         */
-        device?: true | {
+    cacheAsset(
+      url: string,
+      options?: {
+        /** Override the cached filename (including extension) instead of deriving one from the URL. */
+        filename?: string;
+        /** Re-download if the cached copy is older than this many milliseconds. */
+        ttl?: number;
+        /** Skip the cache and re-download unconditionally. */
+        force?: boolean;
+        /** Max accepted response size in bytes. @default 5242880 (5MB) */
+        maxSize?: number;
+      }
+    ): Promise<string>;
+  };
+
+  // --- Home Assistant Services & Entities ---
+  /**
+   * Returns a fluent API for a specific entity with domain-specific services.
+   * @param entityId The entity ID (e.g., 'light.living_room').
+   */
+  entity<K extends EntityID>(entityId: K): EntityServices<K & string>;
+
+  /**
+   * @deprecated Use ha.call() instead for a cleaner 'domain.service' syntax.
+   * Calls a Home Assistant service.
+   */
+  callService<
+    D extends keyof ServiceMap | (string & {}),
+    S extends (D extends keyof ServiceMap ? keyof ServiceMap[D] : string),
+  >(
+    domain: D,
+    service: S,
+    data?: D extends keyof ServiceMap ? (S extends keyof ServiceMap[D] ? ServiceMap[D][S] : any) : any
+  ): void;
+
+  /**
+   * Safely calls a Home Assistant service using the 'domain.service' format.
+   * Automatically catches and logs errors in the master process to prevent script crashes.
+   * @param serviceId The service to call (e.g., 'light.turn_on' or 'tts.cloud_say').
+   * @param data Optional service data payload.
+   */
+  call<T extends AllServiceIds | (string & {})>(
+    serviceId: T,
+    data?: T extends AllServiceIds ? ServiceData<T> : Record<string, any>
+  ): void;
+  /**
+   * Calls a Home Assistant service and awaits its response payload.
+   * Use this for "response-only" or "response-optional" services such as
+   * `weather.get_forecasts` or `calendar.list_events` that return data instead
+   * of (or in addition to) performing an action.
+   * @param serviceId The service to call (e.g., 'weather.get_forecasts').
+   * @param data Optional service data payload.
+   * @param options Pass `{ returnResponse: true }` to await the response.
+   * @returns The service's `response` payload, keyed by target entity_id.
+   * @example
+   * const result = await ha.call('weather.get_forecasts',
+   *   { entity_id: 'weather.openweathermap', type: 'daily' },
+   *   { returnResponse: true }
+   * );
+   * const forecast = result['weather.openweathermap'].forecast;
+   */
+  call<T extends AllServiceIds | (string & {})>(
+    serviceId: T,
+    data: T extends AllServiceIds ? ServiceData<T> : Record<string, any>,
+    options: { returnResponse: true }
+  ): Promise<Record<string, any>>;
+
+  /**
+   * Sends an actionable notification and waits for the user's response.
+   * Returns a Promise that resolves with the chosen action string,
+   * or with `defaultAction` (default: `null`) if the timeout expires.
+   *
+   * Requires the HA companion app installed on at least one device.
+   *
+   * **Note:** This does not work in the web browser as it relies on mobile app events.
+   *
+   * @example
+   * const answer = await ha.ask("Garage door left open. Close it?", {
+   *   title: "Garage",
+   *   target: "notify.mobile_app_my_phone",
+   *   defaultAction: "SNOOZE",
+   *   actions: [
+   *     { action: "CLOSE",  title: "Close now" },
+   *     { action: "SNOOZE", title: "Remind in 30 min" },
+   *     { action: "IGNORE", title: "Ignore" },
+   *   ]
+   * });
+   * if (answer === "CLOSE") ha.entity('cover.garage').close_cover();
+   * if (answer === "SNOOZE" || answer === null) setTimeout(checkGarage, 30 * 60 * 1000);
+   */
+  ask(
+    message: string,
+    options?: {
+      /** Notification title shown in the push notification header. */
+      title?: string;
+      /**
+       * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
+       * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
+       */
+      target?: string;
+      /** Timeout in milliseconds before the promise resolves with `defaultAction`. Default: 60000 (1 min). */
+      timeout?: number;
+      /** Value resolved when the timeout expires. Default: `null`. */
+      defaultAction?: string | null;
+      /** Action buttons shown in the notification. Each `action` string is returned when tapped. */
+      actions?: Array<{ action: string; title: string }>;
+    }
+  ): Promise<string | null>;
+
+  /**
+   * Sends a notification via Home Assistant's notify service.
+   * Defaults to `notify.notify` (broadcasts to all configured notifiers).
+   *
+   * **Note:** Advanced data features (images, actions) are only supported by mobile companion apps.
+   *
+   * @example
+   * ha.notify("Motion detected!", { title: "Security", target: "notify.mobile_app_my_phone" });
+   *
+   * @example
+   * // With extra platform-specific data (e.g. image on Android/iOS):
+   * ha.notify("Someone at the door", {
+   *   title: "Doorbell",
+   *   data: { image: "/local/snapshot.jpg", channel: "Doorbell" }
+   * });
+   */
+  notify(
+    message: string,
+    options?: {
+      /** Notification title shown in the push notification header. */
+      title?: string;
+      /**
+       * Target notify service (e.g. `'notify.mobile_app_my_phone'` or just `'mobile_app_my_phone'`).
+       * Defaults to `'notify.notify'` which broadcasts to all configured notifiers.
+       */
+      target?: string;
+      /**
+       * If true, sends the notification to Home Assistant's internal persistent notification system.
+       * These appear in the web browser's sidebar.
+       * When active, the 'target' option is ignored.
+       */
+      persistent?: boolean;
+      /**
+       * Platform-specific extra data passed under the `data` key of the notify service call.
+       * Examples: `{ image: '/local/cam.jpg' }`, `{ channel: 'Alarm' }`, `{ tag: 'motion' }`.
+       */
+      data?: Record<string, any>;
+    }
+  ): void;
+
+  /**
+   * Updates the state and/or attributes of an existing Home Assistant entity.
+   * If the entity was registered via `ha.register`, it will use the native integration.
+   * Otherwise, it falls back to the legacy HTTP API.
+   * @param entityId The entity ID to update (e.g., 'sensor.my_sensor').
+   * @param state The new state value.
+   * @param attributes Optional attributes to set.
+   */
+  update(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
+  /**
+   * Updates only the attributes of an existing Home Assistant entity, preserving its current state.
+   * @param entityId The entity ID to update (e.g., 'sensor.my_sensor').
+   * @param attributes Attributes to set or update.
+   */
+  update(entityId: EntityID, attributes: Record<string, any>): void;
+
+  /**
+   * @deprecated Use ha.update() instead.
+   * Updates the state and/or attributes of an existing Home Assistant entity.
+   * @param entityId The entity ID to update.
+   * @param state The new state value.
+   * @param attributes Optional attributes to set.
+   */
+  updateState(entityId: EntityID, state: string | number | boolean | null, attributes?: Record<string, any>): void;
+
+  /**
+   * Registers a native Home Assistant entity via MQTT Discovery.
+   * Creates a persistent entity in Home Assistant's registry.
+   * Calling `ha.register()` again with the same `entityId` updates the configuration.
+   *
+   * @example
+   * ha.register('sensor.outside_temp', {
+   *   name: 'Outside Temperature',
+   *   icon: 'mdi:thermometer',
+   *   unit: '°C',
+   *   device_class: 'temperature',
+   *   state_class: 'measurement',
+   *   initial_state: 0,
+   * });
+   *
+   * @example
+   * ha.register('switch.sprinkler', { name: 'Sprinkler', icon: 'mdi:sprinkler' });
+   * ha.register('select.mode', { name: 'Mode', options: ['auto', 'manual', 'off'] });
+   *
+   * @param entityId The desired entity ID (e.g., `'sensor.my_value'`). The domain determines the entity type.
+   * @param config Configuration for the entity.
+   */
+  register(
+    entityId: string,
+    config?: {
+      /** Display name shown in HA (defaults to a prettified version of the entity ID). */
+      name?: string;
+      /** Alias for `name`. */
+      friendly_name?: string;
+      /** MDI icon (e.g. `'mdi:thermometer'`). Can be changed at runtime via `ha.update()`. */
+      icon?: string;
+      /** Unit of measurement (e.g. `'°C'`, `'%'`, `'W'`). Alias: `unit`. */
+      unit_of_measurement?: string;
+      /** Alias for `unit_of_measurement`. */
+      unit?: string;
+      /** HA device class (e.g. `'temperature'`, `'humidity'`, `'power'`). */
+      device_class?: string;
+      /** HA state class for long-term statistics: `'measurement'`, `'total'`, `'total_increasing'`. */
+      state_class?: 'measurement' | 'total' | 'total_increasing';
+      /**
+       * Places the entity in HA's diagnostic or config category.
+       * - `'diagnostic'`: shown in a separate "Diagnostic" section (e.g. signal strength, uptime)
+       * - `'config'`: shown in a separate "Configuration" section (e.g. thresholds, modes)
+       */
+      entity_category?: 'diagnostic' | 'config';
+      /** Minimum value for `number` entities. */
+      min?: number;
+      /** Maximum value for `number` entities. */
+      max?: number;
+      /** Step size for `number` entities. */
+      step?: number;
+      /** Display mode for `number` entities: `'auto'`, `'box'`, or `'slider'`. */
+      mode?: 'auto' | 'box' | 'slider';
+      /** Number of decimal places HA should display for sensor values (e.g. `2` → `23.45 °C`). */
+      suggested_display_precision?: number;
+      /** Whether the entity is enabled in HA by default. Set to `false` to create it disabled. */
+      enabled_by_default?: boolean;
+      /** Seconds after the last state update before HA marks the entity as `unavailable`. */
+      expire_after?: number;
+      /**
+       * When `true`, this entity stays available (showing its last value) when the parent
+       * script stops — only tied to the addon's global status, not the per-script one.
+       * Pair with `expire_after` if the value should eventually be flagged stale anyway.
+       * Default: `false` (entity goes `unavailable` while its script is stopped).
+       */
+      stale_ok?: boolean;
+      /** Initial state value set when the entity is first created. */
+      initial_state?: string | number | boolean;
+      /** Initial attributes (merged with the state on first publish). */
+      attributes?: Record<string, any>;
+      /** Direct area ID to assign this entity to (e.g. `'living_room'`). Takes precedence over `area`. */
+      area_id?: string;
+      /** Area name to assign this entity to (e.g. `'Living Room'`). Resolved to area ID automatically. */
+      area?: string;
+      /** Alias for `area`. */
+      suggested_area?: string;
+      /** Label names or IDs to assign to this entity (e.g. `['System', 'Critical']`). */
+      labels?: string[];
+      /**
+       * Options list for `select` entities.
+       * @example ['auto', 'manual', 'off']
+       */
+      options?: string[];
+      /**
+       * Groups this entity under a device in Home Assistant.
+       * - `true`: use the script's name and slug as the device (e.g. all entities from `my_script.js` → device "My Script")
+       * - `object`: provide a custom device configuration
+       *
+       * **Note:** When a device block is present, HA generates the entity_id as
+       * `{device_name_slug}_{entity_name_slug}`, ignoring `object_id`.
+       * Omit `device` (default) to ensure the entity_id matches exactly what you pass to `ha.register()`.
+       *
+       * @example
+       * // Group all entities from this script under one device card:
+       * ha.register('sensor.outside_temp', { name: 'Outside Temperature', device: true });
+       *
+       * @example
+       * // Custom device metadata:
+       * ha.register('sensor.outside_temp', {
+       *   name: 'Outside Temperature',
+       *   device: { name: 'Weather Station', identifiers: ['my_weather_station'], model: 'v2' }
+       * });
+       */
+      device?:
+        | true
+        | {
             /** Device identifiers (defaults to `['jsa_script_<scriptSlug>']`). */
             identifiers?: string[];
             /** Device display name (defaults to the script's display name). */
@@ -580,701 +662,757 @@ interface HA {
             manufacturer?: string;
             /** Device model string (defaults to `'Script'`). */
             model?: string;
-        };
-        /** Allow any additional HA discovery config fields. */
-        [key: string]: any;
-    }): void;
+          };
+      /** Allow any additional HA discovery config fields. */
+      [key: string]: any;
+    }
+  ): void;
 
+  /**
+   * Permanently removes a dynamically-created entity from Home Assistant (discovery teardown +
+   * cleared retained state), without restarting the script. Use this when a script manages
+   * entities for a changing set of items (e.g. one per discovered device) and an item goes
+   * away at runtime — the automatic Mark-and-Sweep cleanup only runs on script restart.
+   * Entities declared via the `@expose` header are managed automatically and cannot be unregistered.
+   *
+   * @example
+   * ha.unregister('sensor.device_123_battery');
+   *
+   * @param entityId The entity ID to remove (as passed to `ha.register()`).
+   */
+  unregister(entityId: string): void;
+
+  /** A live cache of all Home Assistant entity states. */
+  readonly states: HAEntities;
+  /** Gets the current state object for a given entity ID. */
+  getState<K extends EntityID>(entityId: K): K extends keyof HAEntities ? HAEntities[K] : HAState | undefined;
+  /** Gets a specific attribute value for an entity. */
+  getAttr<K extends EntityID>(entityId: K, attribute: AttributeKey<K>): any;
+  /** Gets the state value of an entity, converting 'on'/'off' to boolean and numbers to number. */
+  getStateValue(entityId: EntityID): string | number | boolean | undefined;
+  /** Gets the members of a group entity. */
+  getGroupMembers(entityId: EntityID): EntityID[];
+  /**
+   * Returns `true` if an entity with the given ID exists in the current state cache.
+   * Useful as a safe guard before reading state from an entity that may not be loaded yet.
+   * @example
+   * if (ha.entityExists('sensor.my_sensor')) {
+   *   const val = ha.getStateValue('sensor.my_sensor');
+   * }
+   */
+  entityExists(entityId: string): boolean;
+
+  /**
+   * Returns all areas registered in Home Assistant.
+   * The list is fetched once on startup; restart the script if areas change.
+   * @example
+   * const areas = ha.getAreas();
+   * // → [{ area_id: 'living_room', name: 'Living Room', aliases: [], picture: null }, ...]
+   */
+  getAreas(): Array<{ area_id: string; name: string; aliases: string[]; picture: string | null; [key: string]: any }>;
+
+  /**
+   * Returns the entity IDs of all (enabled) entities assigned to a given area.
+   * The list is fetched once on startup; restart the script if assignments change.
+   * @example
+   * const entities = ha.getEntitiesInArea('living_room');
+   * // → ['light.floor_lamp', 'sensor.temperature', ...]
+   */
+  getEntitiesInArea(areaId: string): EntityID[];
+
+  /**
+   * Access to Home Assistant state history, long-term statistics, and computed helpers.
+   *
+   * All six computed helpers accept either:
+   * - A **string** (entity ID) — fetches history from HA automatically.
+   * - An **array** of `{ state: string; last_changed: string }` — uses the provided data directly.
+   *   This allows feeding external API data into the same computation functions.
+   *
+   * @example
+   * // HA entity (fetches internally)
+   * await ha.history.trend('sensor.temperature', { period: '1h' });
+   *
+   * @example
+   * // External data (e.g. from an API)
+   * const raw = externalData.map((p, i) => ({ state: String(p.value), last_changed: p.timestamp }));
+   * await ha.history.trend(raw, { sensitivity: 0.5 });
+   */
+  readonly history: {
     /**
-     * Permanently removes a dynamically-created entity from Home Assistant (discovery teardown +
-     * cleared retained state), without restarting the script. Use this when a script manages
-     * entities for a changing set of items (e.g. one per discovered device) and an item goes
-     * away at runtime — the automatic Mark-and-Sweep cleanup only runs on script restart.
-     * Entities declared via the `@expose` header are managed automatically and cannot be unregistered.
+     * Fetches the state history for an entity from Home Assistant.
+     * Wraps the HA WebSocket `history/history_during_period` command.
+     *
+     * @param entityId The entity to query (e.g. `'sensor.power_usage'`).
+     * @param options Query options. Defaults: last 24 hours, minimal response enabled.
+     * @returns A promise resolving to an array of state entries ordered by time.
      *
      * @example
-     * ha.unregister('sensor.device_123_battery');
-     *
-     * @param entityId The entity ID to remove (as passed to `ha.register()`).
-     */
-    unregister(entityId: string): void;
-
-    /** A live cache of all Home Assistant entity states. */
-    readonly states: HAEntities;
-    /** Gets the current state object for a given entity ID. */
-    getState<K extends EntityID>(entityId: K): K extends keyof HAEntities ? HAEntities[K] : HAState | undefined;
-    /** Gets a specific attribute value for an entity. */
-    getAttr<K extends EntityID>(entityId: K, attribute: AttributeKey<K>): any;
-    /** Gets the state value of an entity, converting 'on'/'off' to boolean and numbers to number. */
-    getStateValue(entityId: EntityID): string | number | boolean | undefined;
-    /** Gets the members of a group entity. */
-    getGroupMembers(entityId: EntityID): EntityID[];
-    /**
-     * Returns `true` if an entity with the given ID exists in the current state cache.
-     * Useful as a safe guard before reading state from an entity that may not be loaded yet.
-     * @example
-     * if (ha.entityExists('sensor.my_sensor')) {
-     *   const val = ha.getStateValue('sensor.my_sensor');
-     * }
-     */
-    entityExists(entityId: string): boolean;
-
-    /**
-     * Returns all areas registered in Home Assistant.
-     * The list is fetched once on startup; restart the script if areas change.
-     * @example
-     * const areas = ha.getAreas();
-     * // → [{ area_id: 'living_room', name: 'Living Room', aliases: [], picture: null }, ...]
-     */
-    getAreas(): Array<{ area_id: string; name: string; aliases: string[]; picture: string | null; [key: string]: any }>;
-
-    /**
-     * Returns the entity IDs of all (enabled) entities assigned to a given area.
-     * The list is fetched once on startup; restart the script if assignments change.
-     * @example
-     * const entities = ha.getEntitiesInArea('living_room');
-     * // → ['light.floor_lamp', 'sensor.temperature', ...]
-     */
-    getEntitiesInArea(areaId: string): EntityID[];
-
-    /**
-     * Access to Home Assistant state history, long-term statistics, and computed helpers.
-     *
-     * All six computed helpers accept either:
-     * - A **string** (entity ID) — fetches history from HA automatically.
-     * - An **array** of `{ state: string; last_changed: string }` — uses the provided data directly.
-     *   This allows feeding external API data into the same computation functions.
-     *
-     * @example
-     * // HA entity (fetches internally)
-     * await ha.history.trend('sensor.temperature', { period: '1h' });
-     *
-     * @example
-     * // External data (e.g. from an API)
-     * const raw = externalData.map((p, i) => ({ state: String(p.value), last_changed: p.timestamp }));
-     * await ha.history.trend(raw, { sensitivity: 0.5 });
-     */
-    readonly history: {
-        /**
-         * Fetches the state history for an entity from Home Assistant.
-         * Wraps the HA WebSocket `history/history_during_period` command.
-         *
-         * @param entityId The entity to query (e.g. `'sensor.power_usage'`).
-         * @param options Query options. Defaults: last 24 hours, minimal response enabled.
-         * @returns A promise resolving to an array of state entries ordered by time.
-         *
-         * @example
-         * const history = await ha.history.get('sensor.power_usage', {
-         *   start: new Date(Date.now() - 24 * 60 * 60 * 1000),
-         *   end: new Date(),
-         * });
-         * // → [{ state: '123.4', last_changed: '2026-06-14T10:00:00Z' }, ...]
-         */
-        get(entityId: EntityID | string, options?: {
-            /** Start of the history window. Defaults to 24 hours ago. */
-            start?: Date;
-            /** End of the history window. Defaults to now. */
-            end?: Date;
-            /** When `true`, only `state` and `last_changed` are returned (no attributes). Default: `true`. */
-            minimalResponse?: boolean;
-            /** When `true`, attributes are omitted entirely. Default: `false`. */
-            noAttributes?: boolean;
-        }): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
-
-        /**
-         * Fetches pre-aggregated long-term statistics from HA's recorder.
-         * Data is bucketed into hourly or daily intervals (mean, min, max, sum) — much faster than
-         * `ha.history.get()` for long time ranges. Requires the entity to have `state_class` set.
-         *
-         * @param statId The statistic ID — usually the same as an entity ID (e.g. `'sensor.power_usage'`).
-         * @param options Query options. Defaults: last 24 hours, period `'hour'`, types `['mean','min','max','sum']`.
-         * @returns A promise resolving to an array of aggregated statistic entries.
-         *
-         * @example
-         * const stats = await ha.history.statistics('sensor.power_usage', {
-         *   start: new Date(Date.now() - 7 * 86400_000),
-         *   period: 'day',
-         *   types: ['mean', 'sum'],
-         * });
-         * // → [{ start: '2026-06-08T00:00:00Z', mean: 230.4, sum: 1840 }, ...]
-         */
-        statistics(statId: string, options?: {
-            /** Start of the statistics window. Defaults to 24 hours ago. */
-            start?: Date;
-            /** End of the statistics window. Defaults to unlimited. */
-            end?: Date;
-            /** Aggregation period. Default: `'hour'`. */
-            period?: 'hour' | 'day' | '5minute';
-            /** Which aggregates to include. Default: `['mean','min','max','sum']`. */
-            types?: Array<'mean' | 'min' | 'max' | 'sum'>;
-        }): Promise<HAStatisticEntry[]>;
-
-        /**
-         * Returns the trend direction of a numeric sensor over a time window using OLS linear regression.
-         * @param options.period Time window as a human string ('1h', '30m', '2d') or ms. Default: `'1h'`.
-         * @param options.sensitivity Minimum slope magnitude (units/hour) to count as moving. Default: `0.1`.
-         * @example
-         * const t = await ha.history.trend('sensor.living_room_temperature', { period: '30m' });
-         * if (t === 'rising') ha.call('climate.set_temperature', { entity_id: '...', temperature: 21 });
-         */
-        trend(source: EntityID | string | HAHistoryEntry[], options?: {
-            period?: string | number;
-            sensitivity?: number;
-        }): Promise<'rising' | 'falling' | 'stable'>;
-
-        /**
-         * Returns the current rate of change of a numeric sensor.
-         * - `method: 'linear'` (default): OLS slope over all points — robust for monotone curves.
-         * - `method: 'polynomial'`: fits a curve to the data, returns the instantaneous slope at the last point — better for non-linear curves like heating or charging.
-         * @param options.period Time window. Default: `'1h'`.
-         * @param options.unit Rate denominator. Default: `'minute'`.
-         * @param options.method Fitting method. Default: `'linear'`.
-         * @param options.degree Polynomial degree (only for `method: 'polynomial'`). Default: `2`.
-         * @example
-         * const rate = await ha.history.derivative('sensor.living_room_temperature', {
-         *   period: '45m', unit: 'minute', method: 'polynomial', degree: 2,
-         * });
-         * const minutesLeft = rate > 0 ? (21 - parseFloat(ha.getStateValue('sensor.living_room_temperature'))) / rate : Infinity;
-         */
-        derivative(source: EntityID | string | HAHistoryEntry[], options?: {
-            period?: string | number;
-            unit?: 'second' | 'minute' | 'hour';
-            method?: 'linear' | 'polynomial';
-            degree?: number;
-        }): Promise<number>;
-
-        /**
-         * Returns the Riemann integral (area under the curve) of a numeric sensor over a time window.
-         * Useful for converting a rate sensor (W) to a cumulative value (Wh).
-         * @param options.period Time window. Default: `'1h'`.
-         * @param options.unit Time unit for the output denominator. Default: `'hour'`.
-         * @param options.method Integration method. Default: `'trapezoidal'`.
-         * @example
-         * const wh = await ha.history.integral('sensor.washing_machine_power', { period: '2h', unit: 'hour' });
-         * ha.log(`Last wash used ${wh.toFixed(0)} Wh`);
-         */
-        integral(source: EntityID | string | HAHistoryEntry[], options?: {
-            period?: string | number;
-            unit?: 'second' | 'minute' | 'hour';
-            method?: 'left' | 'right' | 'trapezoidal';
-        }): Promise<number>;
-
-        /**
-         * Returns descriptive statistics for a numeric sensor over a time window.
-         * @param options.period Time window. Default: `'24h'`.
-         * @example
-         * const s = await ha.history.stats('sensor.bedroom_temperature', { period: '24h' });
-         * ha.log(`avg ${s.mean.toFixed(1)}°C, min ${s.min.toFixed(1)}°C, max ${s.max.toFixed(1)}°C`);
-         */
-        stats(source: EntityID | string | HAHistoryEntry[], options?: {
-            period?: string | number;
-        }): Promise<{ mean: number; min: number; max: number; median: number; stddev: number; count: number }>;
-
-        /**
-         * Returns milliseconds since the last state change, or since a specific state was last entered.
-         * Without `state`: reads `last_changed` directly — no history call.
-         * With `state`: searches history for the last transition into that state.
-         * @example
-         * const ms = await ha.history.timeSince('binary_sensor.front_door', 'on');
-         * if (ms > 10 * 60 * 1000) ha.notify('Front door still open!');
-         */
-        timeSince(source: EntityID | string | HAHistoryEntry[], state?: string): Promise<number>;
-
-        /**
-         * Returns total milliseconds spent in a specific state within a time window.
-         * @param options.period Time window. Default: `'24h'`.
-         * @param options.start Explicit start (overrides `period`).
-         * @param options.end Explicit end. Default: now.
-         * @example
-         * const ms = await ha.history.timeInState('climate.living_room', 'heat', { period: '24h' });
-         * ha.log(`Heating was active ${(ms / 3600000).toFixed(1)}h today`);
-         */
-        timeInState(source: EntityID | string | HAHistoryEntry[], state: string, options?: {
-            period?: string | number;
-            start?: Date;
-            end?: Date;
-        }): Promise<number>;
-    };
-
-
-    /**
-     * Evaluates a Jinja2 template string via HA's template engine.
-     * Gives access to all HA template functions: `states()`, `distance()`,
-     * `relative_time()`, `area_entities()`, etc.
-     * Wraps the HA WebSocket `render_template` command.
-     *
-     * @param template A Jinja2 template string.
-     * @returns A promise resolving to the rendered value (string, number, or boolean).
-     *
-     * @example
-     * const result = await ha.renderTemplate("{{ states('sun.sun') }}");
-     * // → 'above_horizon'
-     *
-     * const msg = await ha.renderTemplate(
-     *   "Sun sets in {{ relative_time(states.sun.sun.attributes.next_setting) }}."
-     * );
-     */
-    renderTemplate(template: string): Promise<string | number | boolean | null>;
-
-    /**
-     * Fetches events from a HA calendar entity for a given time window.
-     * Wraps the HA WebSocket `calendar/get_events` command.
-     *
-     * @param entityId The calendar entity ID (e.g. `'calendar.family'`).
-     * @param options Time window. Defaults: now → 7 days from now.
-     * @returns A promise resolving to an array of calendar events.
-     *
-     * @example
-     * const events = await ha.getCalendarEvents('calendar.family', {
-     *   start: new Date(),
-     *   end: new Date(Date.now() + 7 * 86400_000),
+     * const history = await ha.history.get('sensor.power_usage', {
+     *   start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+     *   end: new Date(),
      * });
-     * const isHoliday = events.some(e => e.summary.toLowerCase().includes('ferien'));
+     * // → [{ state: '123.4', last_changed: '2026-06-14T10:00:00Z' }, ...]
      */
-    getCalendarEvents(entityId: EntityID | string, options?: {
-        /** Start of the query window. Defaults to now. */
+    get(
+      entityId: EntityID | string,
+      options?: {
+        /** Start of the history window. Defaults to 24 hours ago. */
         start?: Date;
-        /** End of the query window. Defaults to 7 days from now. */
+        /** End of the history window. Defaults to now. */
         end?: Date;
-    }): Promise<HACalendarEvent[]>;
+        /** When `true`, only `state` and `last_changed` are returned (no attributes). Default: `true`. */
+        minimalResponse?: boolean;
+        /** When `true`, attributes are omitted entirely. Default: `false`. */
+        noAttributes?: boolean;
+      }
+    ): Promise<Array<{ state: string; last_changed: string; attributes?: Record<string, any> }>>;
 
     /**
-     * Fetches items from a HA todo list entity.
-     * Wraps the HA WebSocket `todo/get_items` command.
+     * Fetches pre-aggregated long-term statistics from HA's recorder.
+     * Data is bucketed into hourly or daily intervals (mean, min, max, sum) — much faster than
+     * `ha.history.get()` for long time ranges. Requires the entity to have `state_class` set.
      *
-     * @param entityId The todo entity ID (e.g. `'todo.shopping_list'`).
-     * @returns A promise resolving to an array of todo items.
-     *
-     * @example
-     * const items = await ha.getTodoItems('todo.shopping_list');
-     * const pending = items.filter(i => i.status === 'needs_action');
-     * ha.log(`${pending.length} items left`);
-     */
-    getTodoItems(entityId: EntityID | string): Promise<HATodoItem[]>;
-
-    /**
-     * Returns all labels registered in Home Assistant (HA 2023.6+).
-     * The list is fetched once on startup; restart the script if labels change.
+     * @param statId The statistic ID — usually the same as an entity ID (e.g. `'sensor.power_usage'`).
+     * @param options Query options. Defaults: last 24 hours, period `'hour'`, types `['mean','min','max','sum']`.
+     * @returns A promise resolving to an array of aggregated statistic entries.
      *
      * @example
-     * const labels = ha.getLabels();
-     * // → [{ label_id: 'night_lights', name: 'Night Lights', color: 'blue' }, ...]
-     */
-    getLabels(): HALabel[];
-
-    /**
-     * Returns the entity IDs of all enabled entities that carry a specific label.
-     * The label can be matched by `label_id` or `name`.
-     * The registry is fetched once on startup; restart the script if assignments change.
-     *
-     * @example
-     * for (const id of ha.getEntitiesWithLabel('vacation_safe')) {
-     *   ha.entity(id).turn_off();
-     * }
-     */
-    getEntitiesWithLabel(labelIdOrName: string): EntityID[];
-
-    /**
-     * Returns all floors registered in Home Assistant (HA 2024.2+).
-     * The list is fetched once on startup; restart the script if floors change.
-     *
-     * @example
-     * const floors = ha.getFloors();
-     * // → [{ floor_id: 'ground_floor', name: 'Ground Floor', level: 0 }, ...]
-     */
-    getFloors(): HAFloor[];
-
-    /**
-     * Returns all areas assigned to a given floor.
-     * The list is fetched once on startup.
-     *
-     * @example
-     * const areas = ha.getAreasInFloor('ground_floor');
-     * // → [{ area_id: 'living_room', name: 'Living Room', floor_id: 'ground_floor', ... }, ...]
-     */
-    getAreasInFloor(floorIdOrName: string): Array<{ area_id: string; name: string; floor_id: string; [key: string]: any }>;
-
-    /**
-     * Subscribes to any HA event bus event by type.
-     * Unlike `ha.on()`, which only reacts to `state_changed`, this can receive
-     * automation triggers, NFC tags, custom events, and anything else on the HA event bus.
-     *
-     * Keeps the worker alive as long as the listener is registered.
-     *
-     * @example
-     * ha.onEvent('automation_triggered', (event) => {
-     *   ha.log(`Automation fired: ${event.data.name}`);
+     * const stats = await ha.history.statistics('sensor.power_usage', {
+     *   start: new Date(Date.now() - 7 * 86400_000),
+     *   period: 'day',
+     *   types: ['mean', 'sum'],
      * });
-     *
-     * ha.onEvent('my_custom_event', (event) => {
-     *   ha.log(event.data.payload);
+     * // → [{ start: '2026-06-08T00:00:00Z', mean: 230.4, sum: 1840 }, ...]
+     */
+    statistics(
+      statId: string,
+      options?: {
+        /** Start of the statistics window. Defaults to 24 hours ago. */
+        start?: Date;
+        /** End of the statistics window. Defaults to unlimited. */
+        end?: Date;
+        /** Aggregation period. Default: `'hour'`. */
+        period?: 'hour' | 'day' | '5minute';
+        /** Which aggregates to include. Default: `['mean','min','max','sum']`. */
+        types?: Array<'mean' | 'min' | 'max' | 'sum'>;
+      }
+    ): Promise<HAStatisticEntry[]>;
+
+    /**
+     * Returns the trend direction of a numeric sensor over a time window using OLS linear regression.
+     * @param options.period Time window as a human string ('1h', '30m', '2d') or ms. Default: `'1h'`.
+     * @param options.sensitivity Minimum slope magnitude (units/hour) to count as moving. Default: `0.1`.
+     * @example
+     * const t = await ha.history.trend('sensor.living_room_temperature', { period: '30m' });
+     * if (t === 'rising') ha.call('climate.set_temperature', { entity_id: '...', temperature: 21 });
+     */
+    trend(
+      source: EntityID | string | HAHistoryEntry[],
+      options?: {
+        period?: string | number;
+        sensitivity?: number;
+      }
+    ): Promise<'rising' | 'falling' | 'stable'>;
+
+    /**
+     * Returns the current rate of change of a numeric sensor.
+     * - `method: 'linear'` (default): OLS slope over all points — robust for monotone curves.
+     * - `method: 'polynomial'`: fits a curve to the data, returns the instantaneous slope at the last point — better for non-linear curves like heating or charging.
+     * @param options.period Time window. Default: `'1h'`.
+     * @param options.unit Rate denominator. Default: `'minute'`.
+     * @param options.method Fitting method. Default: `'linear'`.
+     * @param options.degree Polynomial degree (only for `method: 'polynomial'`). Default: `2`.
+     * @example
+     * const rate = await ha.history.derivative('sensor.living_room_temperature', {
+     *   period: '45m', unit: 'minute', method: 'polynomial', degree: 2,
      * });
+     * const minutesLeft = rate > 0 ? (21 - parseFloat(ha.getStateValue('sensor.living_room_temperature'))) / rate : Infinity;
      */
-    onEvent(eventType: string, callback: (event: HACustomEvent) => void): void;
+    derivative(
+      source: EntityID | string | HAHistoryEntry[],
+      options?: {
+        period?: string | number;
+        unit?: 'second' | 'minute' | 'hour';
+        method?: 'linear' | 'polynomial';
+        degree?: number;
+      }
+    ): Promise<number>;
 
     /**
-     * Fires a custom event on the HA event bus.
-     * Other scripts can listen for it via `ha.onEvent()`.
-     *
-     * Use this for fire-and-forget broadcasts where any number of listeners may react
-     * and no return value is needed. For targeted calls from a card or button entity
-     * that require a response, use `ha.action()` instead.
-     *
-     * @see action
+     * Returns the Riemann integral (area under the curve) of a numeric sensor over a time window.
+     * Useful for converting a rate sensor (W) to a cumulative value (Wh).
+     * @param options.period Time window. Default: `'1h'`.
+     * @param options.unit Time unit for the output denominator. Default: `'hour'`.
+     * @param options.method Integration method. Default: `'trapezoidal'`.
      * @example
-     * ha.fireEvent('my_custom_event', { payload: 'hello from script A' });
+     * const wh = await ha.history.integral('sensor.washing_machine_power', { period: '2h', unit: 'hour' });
+     * ha.log(`Last wash used ${wh.toFixed(0)} Wh`);
      */
-    fireEvent(eventType: string, eventData?: Record<string, unknown>): void;
+    integral(
+      source: EntityID | string | HAHistoryEntry[],
+      options?: {
+        period?: string | number;
+        unit?: 'second' | 'minute' | 'hour';
+        method?: 'left' | 'right' | 'trapezoidal';
+      }
+    ): Promise<number>;
 
     /**
-     * Reads a value from the script's header (e.g., `@name`, `@icon`).
-     * @param key The header key (e.g., 'name', 'icon').
-     * @param defaultValue A fallback value if the header is not found.
-     */
-    getHeader(key: string, defaultValue?: any): any;
-
-    /**
-     * Selects one or more entities based on a pattern for bulk actions.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     */
-    select<P extends string>(pattern: P | EntityID[] | RegExp): EntitySelector & SelectorServices<P>;
-
-    /**
-     * Registers a callback to be executed when an entity's state changes.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param callback The function to call when the state changes.
-     */
-    on(pattern: EntityID | EntityID[] | RegExp | string, callback: (event: StateChangeData) => void): void;
-    /**
-     * Registers a callback to be executed when an entity's state changes, with an optional filter.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le') or a specific value to compare against.
-     * @param callback The function to call when the state changes and the filter condition is met.
-     */
-    on(pattern: EntityID | EntityID[] | RegExp | string, filter: ChangeFilter | string | number, callback: (event: StateChangeData) => void): void;
-    /**
-     * Registers a callback to be executed when an entity's state changes, with a filter and an optional threshold.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le').
-     * @param threshold A numeric or string threshold to compare the new state against.
-     * @param callback The function to call when the state changes and the filter condition is met.
-     */
-    on(pattern: EntityID | EntityID[] | RegExp | string, filter: ChangeFilter, threshold: string | number, callback: (event: StateChangeData) => void): void;
-
-    /**
-     * Waits for a specific event or state change.
-     * Returns a Promise that resolves when the condition is met.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param options Optional: { timeout?: number }
-     */
-    waitFor(pattern: EntityID | EntityID[] | RegExp | string, options?: { timeout?: number }): Promise<StateChangeData>;
-    /**
-     * Waits for a specific event or state change with a filter.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le') or a specific value to compare against.
-     * @param options Optional: { timeout?: number }
-     */
-    waitFor(pattern: EntityID | EntityID[] | RegExp | string, filter: ChangeFilter | string | number, options?: { timeout?: number }): Promise<StateChangeData>;
-    /**
-     * Waits for a specific event or state change with a filter and threshold.
-     * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
-     * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le').
-     * @param threshold A numeric or string threshold to compare the new state against.
-     * @param options Optional: { timeout?: number }
-     */
-    waitFor(pattern: EntityID | EntityID[] | RegExp | string, filter: ChangeFilter, threshold: string | number, options?: { timeout?: number }): Promise<StateChangeData>;
-
-    /**
-     * Waits until a specific condition function returns true.
-     * This is useful for complex state checks involving multiple entities.
-     * @param condition A function that returns true when the desired state is met.
-     * @param options Optional: { timeout?: number, pollInterval?: number }
-     */
-    waitUntil(condition: () => boolean, options?: { timeout?: number, pollInterval?: number }): Promise<void>;
-
-    /**
-     * Provides access to the global persistent store.
-     */
-    store: {
-        /**
-         * A direct reference to the current values in the store.
-         * Accessing properties directly on `ha.store.val` will not trigger change listeners or persistence.
-         * Use `ha.store.get` and `ha.store.set` for reactive and persistent operations.
-         */
-        readonly val: GlobalStoreSchema;
-
-        /**
-         * Sets a value in the Global Store.
-         * @param key The key to store the value under.
-         * @param value The value to store.
-         * @param isSecret If true, the value will be masked in the UI.
-         */
-        set<K extends keyof GlobalStoreSchema>(key: K, value: GlobalStoreSchema[K], isSecret?: boolean): void;
-        set<T = any>(key: string & { _?: never }, value: T, isSecret?: boolean): void;
-
-        /**
-         * Retrieves a value from the Global Store.
-         * @param key The key of the value to retrieve.
-         * @returns The stored value, or `undefined` if not found.
-         */
-        get<K extends keyof GlobalStoreSchema>(key: K): GlobalStoreSchema[K];
-        get<T = any>(key: string & { _?: never }): T | undefined;
-
-        /**
-         * Deletes a value from the Global Store.
-         * @param key The key of the value to delete.
-         */
-        delete(key: StoreKey): void;
-
-        /**
-         * Registers a callback to be executed when a specific store key's value changes.
-         * @param key The store key to listen for changes on.
-         * @param callback The function to call when the value changes.
-         */
-        on<K extends keyof GlobalStoreSchema>(key: K, callback: (newValue: GlobalStoreSchema[K] | undefined, oldValue: GlobalStoreSchema[K] | undefined) => void): void;
-        on<T = any>(key: string & { _?: never }, callback: (newValue: T | undefined, oldValue: T | undefined) => void): void;
-    };
-
-    /**
-     * Creates a persistent ref wrapper for a primitive value stored in `ha.store`.
-     * Access and modify the value via `.value` — changes are automatically saved.
+     * Returns descriptive statistics for a numeric sensor over a time window.
+     * @param options.period Time window. Default: `'24h'`.
      * @example
-     * const counter = ha.persistent('counter', 0);
-     * counter.value++;
-     * const enabled = ha.persistent('enabled', false);
-     * enabled.value = true;
+     * const s = await ha.history.stats('sensor.bedroom_temperature', { period: '24h' });
+     * ha.log(`avg ${s.mean.toFixed(1)}°C, min ${s.min.toFixed(1)}°C, max ${s.max.toFixed(1)}°C`);
      */
-    persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: T };
+    stats(
+      source: EntityID | string | HAHistoryEntry[],
+      options?: {
+        period?: string | number;
+      }
+    ): Promise<{ mean: number; min: number; max: number; median: number; stddev: number; count: number }>;
 
     /**
-     * Creates a deep proxy for an object stored in `ha.store`,
-     * automatically saving changes back to the store when properties are modified.
-     * Ideal for managing complex configuration objects persistently.
-     * @param key The store key where the object is saved.
-     * @param defaultValue An optional default value if the key is not found in the store.
-     * @returns A Proxy object that automatically persists changes.
+     * Returns milliseconds since the last state change, or since a specific state was last entered.
+     * Without `state`: reads `last_changed` directly — no history call.
+     * With `state`: searches history for the last transition into that state.
+     * @example
+     * const ms = await ha.history.timeSince('binary_sensor.front_door', 'on');
+     * if (ms > 10 * 60 * 1000) ha.notify('Front door still open!');
      */
-    persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
-    persistent<T extends object = Record<string, any>>(key: string, defaultValue?: T): T;
+    timeSince(source: EntityID | string | HAHistoryEntry[], state?: string): Promise<number>;
 
     /**
-     * Built-in HTTP convenience wrapper.
-     * Requires `@permission network` in the script header.
-     *
+     * Returns total milliseconds spent in a specific state within a time window.
+     * @param options.period Time window. Default: `'24h'`.
+     * @param options.start Explicit start (overrides `period`).
+     * @param options.end Explicit end. Default: now.
      * @example
-     * // @permission network
-     * const data = await ha.http.get('https://api.example.com/data');
-     * await ha.http.post('https://api.example.com/submit', { key: 'value' });
+     * const ms = await ha.history.timeInState('climate.living_room', 'heat', { period: '24h' });
+     * ha.log(`Heating was active ${(ms / 3600000).toFixed(1)}h today`);
      */
-    readonly http: {
-        /**
-         * Performs an HTTP GET request and returns the parsed response.
-         * Automatically parses JSON when the `Content-Type` is `application/json`, otherwise returns text.
-         * Throws on non-2xx status codes.
-         * @param url The URL to fetch.
-         * @param options Optional `fetch` init options (headers, signal, etc.).
-         */
-        get(url: string, options?: RequestInit): Promise<any>;
-        /**
-         * Performs an HTTP POST request and returns the parsed response.
-         * Objects are serialized as JSON with `Content-Type: application/json`.
-         * Throws on non-2xx status codes.
-         * @param url The URL to post to.
-         * @param body The request body. Objects are sent as JSON; strings/Buffers are sent as-is.
-         * @param options Optional `fetch` init options (additional headers, signal, etc.).
-         */
-        post(url: string, body?: Record<string, any> | string, options?: RequestInit): Promise<any>;
-    };
+    timeInState(
+      source: EntityID | string | HAHistoryEntry[],
+      state: string,
+      options?: {
+        period?: string | number;
+        start?: Date;
+        end?: Date;
+      }
+    ): Promise<number>;
+  };
+
+  /**
+   * Evaluates a Jinja2 template string via HA's template engine.
+   * Gives access to all HA template functions: `states()`, `distance()`,
+   * `relative_time()`, `area_entities()`, etc.
+   * Wraps the HA WebSocket `render_template` command.
+   *
+   * @param template A Jinja2 template string.
+   * @returns A promise resolving to the rendered value (string, number, or boolean).
+   *
+   * @example
+   * const result = await ha.renderTemplate("{{ states('sun.sun') }}");
+   * // → 'above_horizon'
+   *
+   * const msg = await ha.renderTemplate(
+   *   "Sun sets in {{ relative_time(states.sun.sun.attributes.next_setting) }}."
+   * );
+   */
+  renderTemplate(template: string): Promise<string | number | boolean | null>;
+
+  /**
+   * Fetches events from a HA calendar entity for a given time window.
+   * Wraps the HA WebSocket `calendar/get_events` command.
+   *
+   * @param entityId The calendar entity ID (e.g. `'calendar.family'`).
+   * @param options Time window. Defaults: now → 7 days from now.
+   * @returns A promise resolving to an array of calendar events.
+   *
+   * @example
+   * const events = await ha.getCalendarEvents('calendar.family', {
+   *   start: new Date(),
+   *   end: new Date(Date.now() + 7 * 86400_000),
+   * });
+   * const isHoliday = events.some(e => e.summary.toLowerCase().includes('ferien'));
+   */
+  getCalendarEvents(
+    entityId: EntityID | string,
+    options?: {
+      /** Start of the query window. Defaults to now. */
+      start?: Date;
+      /** End of the query window. Defaults to 7 days from now. */
+      end?: Date;
+    }
+  ): Promise<HACalendarEvent[]>;
+
+  /**
+   * Fetches items from a HA todo list entity.
+   * Wraps the HA WebSocket `todo/get_items` command.
+   *
+   * @param entityId The todo entity ID (e.g. `'todo.shopping_list'`).
+   * @returns A promise resolving to an array of todo items.
+   *
+   * @example
+   * const items = await ha.getTodoItems('todo.shopping_list');
+   * const pending = items.filter(i => i.status === 'needs_action');
+   * ha.log(`${pending.length} items left`);
+   */
+  getTodoItems(entityId: EntityID | string): Promise<HATodoItem[]>;
+
+  /**
+   * Returns all labels registered in Home Assistant (HA 2023.6+).
+   * The list is fetched once on startup; restart the script if labels change.
+   *
+   * @example
+   * const labels = ha.getLabels();
+   * // → [{ label_id: 'night_lights', name: 'Night Lights', color: 'blue' }, ...]
+   */
+  getLabels(): HALabel[];
+
+  /**
+   * Returns the entity IDs of all enabled entities that carry a specific label.
+   * The label can be matched by `label_id` or `name`.
+   * The registry is fetched once on startup; restart the script if assignments change.
+   *
+   * @example
+   * for (const id of ha.getEntitiesWithLabel('vacation_safe')) {
+   *   ha.entity(id).turn_off();
+   * }
+   */
+  getEntitiesWithLabel(labelIdOrName: string): EntityID[];
+
+  /**
+   * Returns all floors registered in Home Assistant (HA 2024.2+).
+   * The list is fetched once on startup; restart the script if floors change.
+   *
+   * @example
+   * const floors = ha.getFloors();
+   * // → [{ floor_id: 'ground_floor', name: 'Ground Floor', level: 0 }, ...]
+   */
+  getFloors(): HAFloor[];
+
+  /**
+   * Returns all areas assigned to a given floor.
+   * The list is fetched once on startup.
+   *
+   * @example
+   * const areas = ha.getAreasInFloor('ground_floor');
+   * // → [{ area_id: 'living_room', name: 'Living Room', floor_id: 'ground_floor', ... }, ...]
+   */
+  getAreasInFloor(
+    floorIdOrName: string
+  ): Array<{ area_id: string; name: string; floor_id: string; [key: string]: any }>;
+
+  /**
+   * Subscribes to any HA event bus event by type.
+   * Unlike `ha.on()`, which only reacts to `state_changed`, this can receive
+   * automation triggers, NFC tags, custom events, and anything else on the HA event bus.
+   *
+   * Keeps the worker alive as long as the listener is registered.
+   *
+   * @example
+   * ha.onEvent('automation_triggered', (event) => {
+   *   ha.log(`Automation fired: ${event.data.name}`);
+   * });
+   *
+   * ha.onEvent('my_custom_event', (event) => {
+   *   ha.log(event.data.payload);
+   * });
+   */
+  onEvent(eventType: string, callback: (event: HACustomEvent) => void): void;
+
+  /**
+   * Fires a custom event on the HA event bus.
+   * Other scripts can listen for it via `ha.onEvent()`.
+   *
+   * Use this for fire-and-forget broadcasts where any number of listeners may react
+   * and no return value is needed. For targeted calls from a card or button entity
+   * that require a response, use `ha.action()` instead.
+   *
+   * @see action
+   * @example
+   * ha.fireEvent('my_custom_event', { payload: 'hello from script A' });
+   */
+  fireEvent(eventType: string, eventData?: Record<string, unknown>): void;
+
+  /**
+   * Reads a value from the script's header (e.g., `@name`, `@icon`).
+   * @param key The header key (e.g., 'name', 'icon').
+   * @param defaultValue A fallback value if the header is not found.
+   */
+  getHeader(key: string, defaultValue?: any): any;
+
+  /**
+   * Selects one or more entities based on a pattern for bulk actions.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   */
+  select<P extends string>(pattern: P | EntityID[] | RegExp): EntitySelector & SelectorServices<P>;
+
+  /**
+   * Registers a callback to be executed when an entity's state changes.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param callback The function to call when the state changes.
+   */
+  on(pattern: EntityID | EntityID[] | RegExp | string, callback: (event: StateChangeData) => void): void;
+  /**
+   * Registers a callback to be executed when an entity's state changes, with an optional filter.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le') or a specific value to compare against.
+   * @param callback The function to call when the state changes and the filter condition is met.
+   */
+  on(
+    pattern: EntityID | EntityID[] | RegExp | string,
+    filter: ChangeFilter | string | number,
+    callback: (event: StateChangeData) => void
+  ): void;
+  /**
+   * Registers a callback to be executed when an entity's state changes, with a filter and an optional threshold.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le').
+   * @param threshold A numeric or string threshold to compare the new state against.
+   * @param callback The function to call when the state changes and the filter condition is met.
+   */
+  on(
+    pattern: EntityID | EntityID[] | RegExp | string,
+    filter: ChangeFilter,
+    threshold: string | number,
+    callback: (event: StateChangeData) => void
+  ): void;
+
+  /**
+   * Waits for a specific event or state change.
+   * Returns a Promise that resolves when the condition is met.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param options Optional: { timeout?: number }
+   */
+  waitFor(pattern: EntityID | EntityID[] | RegExp | string, options?: { timeout?: number }): Promise<StateChangeData>;
+  /**
+   * Waits for a specific event or state change with a filter.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le') or a specific value to compare against.
+   * @param options Optional: { timeout?: number }
+   */
+  waitFor(
+    pattern: EntityID | EntityID[] | RegExp | string,
+    filter: ChangeFilter | string | number,
+    options?: { timeout?: number }
+  ): Promise<StateChangeData>;
+  /**
+   * Waits for a specific event or state change with a filter and threshold.
+   * @param pattern An entity ID, a wildcard pattern (e.g., 'light.*'), an array of entity IDs, or a RegExp.
+   * @param filter A filter string ('ne', 'eq', 'gt', 'ge', 'lt', 'le').
+   * @param threshold A numeric or string threshold to compare the new state against.
+   * @param options Optional: { timeout?: number }
+   */
+  waitFor(
+    pattern: EntityID | EntityID[] | RegExp | string,
+    filter: ChangeFilter,
+    threshold: string | number,
+    options?: { timeout?: number }
+  ): Promise<StateChangeData>;
+
+  /**
+   * Waits until a specific condition function returns true.
+   * This is useful for complex state checks involving multiple entities.
+   * @param condition A function that returns true when the desired state is met.
+   * @param options Optional: { timeout?: number, pollInterval?: number }
+   */
+  waitUntil(condition: () => boolean, options?: { timeout?: number; pollInterval?: number }): Promise<void>;
+
+  /**
+   * Provides access to the global persistent store.
+   */
+  store: {
+    /**
+     * A direct reference to the current values in the store.
+     * Accessing properties directly on `ha.store.val` will not trigger change listeners or persistence.
+     * Use `ha.store.get` and `ha.store.set` for reactive and persistent operations.
+     */
+    readonly val: GlobalStoreSchema;
 
     /**
-     * Direct MQTT broker access — subscribe and publish without a HA entity in between.
-     * Wildcards are supported: `+` (single level), `#` (multi-level, must be last segment).
-     * Subscriptions are scoped to the script and cleaned up automatically when it stops.
-     *
-     * @example
-     * // Subscribe to a single topic
-     * ha.mqtt.subscribe('tasmota/sensor1/tele/SENSOR', (topic, payload) => {
-     *   ha.log(`Temperature: ${payload.SI7021?.Temperature}`);
-     * });
-     *
-     * @example
-     * // Wildcard subscription — all Shelly dimmer status topics
-     * ha.mqtt.subscribe('shellies/+/light/0/status', (topic, payload) => {
-     *   const device = topic.split('/')[1];
-     *   ha.log(`${device} is ${payload.ison ? 'on' : 'off'}`);
-     * });
-     *
-     * @example
-     * // Unsubscribe manually
-     * const unsub = ha.mqtt.subscribe('my/topic', (topic, payload) => { ... });
-     * unsub();
-     *
-     * @example
-     * // Publish with retain flag
-     * ha.mqtt.publish('my/status', 'online', { retain: true });
+     * Sets a value in the Global Store.
+     * @param key The key to store the value under.
+     * @param value The value to store.
+     * @param isSecret If true, the value will be masked in the UI.
      */
-    readonly mqtt: {
-        /**
-         * Subscribes to an MQTT topic. Wildcards `+` and `#` are supported.
-         * Payloads are auto-parsed as JSON when valid, otherwise delivered as a string.
-         * Returns an unsubscribe function — call it to stop listening.
-         *
-         * @param topic - MQTT topic filter (e.g. `'shellies/+/light/0/status'`)
-         * @param callback - Receives `(topic, payload)`. Payload is JSON-parsed when valid.
-         * @returns Unsubscribe function
-         */
-        subscribe(topic: string, callback: (topic: string, payload: any) => void): () => void;
-
-        /**
-         * Publishes a message to an MQTT topic.
-         * Objects are automatically serialized to JSON.
-         *
-         * @param topic - MQTT topic to publish to
-         * @param payload - Message payload. Objects are JSON-serialized; strings are sent as-is.
-         * @param options - Optional publish options
-         */
-        publish(topic: string, payload: any, options?: { retain?: boolean; qos?: 0 | 1 | 2 }): void;
-    };
+    set<K extends keyof GlobalStoreSchema>(key: K, value: GlobalStoreSchema[K], isSecret?: boolean): void;
+    set<T = any>(key: string & { _?: never }, value: T, isSecret?: boolean): void;
 
     /**
-     * Registers a webhook endpoint at `:3001/webhook/<id>` (fixed port). External services can POST
-     * (or GET, depending on `options.method`) data to this URL and your handler returns a real
-     * HTTP response — unlike HA's built-in webhook automations, which always return an empty `200 OK`
-     * immediately. Requires `@permission webhook` in the script header.
-     *
-     * A secret token is auto-generated and managed by JSA (shown in the Webhook Panel) and verified
-     * automatically via the `X-Webhook-Secret` header — no code needed in the handler, unless `noAuth: true`.
-     *
-     * One ID always maps to exactly one fixed path and one HTTP method; JSA does not support
-     * arbitrary custom routing.
-     *
-     * @example
-     * // @permission webhook
-     * ha.onWebhook('github-push', async (req, res) => {
-     *   // Token already verified — handler only called if valid
-     *   const { ref, repository } = req.body;
-     *   await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
-     *   res.json({ received: true });
-     * });
-     *
-     * @example
-     * // Public endpoint — service embeds its own token in the body (e.g. Ko-fi).
-     * // Store the externally-issued token in ha.store (flagged as Secret), not hardcoded.
-     * // @permission webhook
-     * const config = ha.persistent('kofi_config', {}); // { verification_token: '...' }
-     * ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
-     *   const data = JSON.parse(req.body.data);
-     *   if (data.verification_token !== config.verification_token) {
-     *     return res.status(401).json({ error: 'unauthorized' });
-     *   }
-     *   res.json({ status: 'ok' });
-     * });
-     *
-     * @example
-     * // GET webhook, e.g. for a simple status/polling check
-     * // @permission webhook
-     * ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
-     *   res.json({ ok: true });
-     * });
-     *
-     * @example
-     * // IP allowlist as a second layer on top of the token — GitHub's published webhook range
-     * // @permission webhook
-     * ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
-     *   res.json({ received: true });
-     * });
+     * Retrieves a value from the Global Store.
+     * @param key The key of the value to retrieve.
+     * @returns The stored value, or `undefined` if not found.
      */
-    onWebhook(id: string, handler: WebhookHandler): void;
-    onWebhook(id: string, options: WebhookOptions, handler: WebhookHandler): void;
+    get<K extends keyof GlobalStoreSchema>(key: K): GlobalStoreSchema[K];
+    get<T = any>(key: string & { _?: never }): T | undefined;
 
     /**
-     * Verifies an HMAC signature of the form providers like GitHub/Stripe send alongside
-     * a webhook payload (e.g. GitHub's `X-Hub-Signature-256: sha256=<hex>`). Unlike
-     * `noAuth` + a static token (Ko-fi-style), here the secret is one *you* choose when
-     * configuring the webhook in the external service's UI — the service signs the raw
-     * payload with it instead of sending the secret itself.
-     *
-     * Always verify against `req.rawBody`, not `req.body` — the parsed-and-re-serialized
-     * JSON is not guaranteed to be byte-identical to what the sender actually signed.
-     *
-     * @param payload The raw request body as received (`req.rawBody`) — not the parsed `req.body`.
-     * @param signature The signature header value sent by the provider.
-     * @param secret The shared secret you configured in the external service's webhook settings.
-     * @param options.algorithm HMAC algorithm. @default 'sha256'
-     * @param options.encoding Digest encoding. @default 'hex'
-     * @param options.prefix Prefix expected before the digest (GitHub uses `'sha256='`). Set `''` to disable. @default '<algorithm>='
-     *
-     * @example
-     * // @permission webhook
-     * const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, as Secret
-     * ha.onWebhook('github-push', async (req, res) => {
-     *   const sig = req.headers['x-hub-signature-256'];
-     *   if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
-     *     return res.status(401).json({ error: 'invalid signature' });
-     *   }
-     *   res.json({ received: true });
-     * });
+     * Deletes a value from the Global Store.
+     * @param key The key of the value to delete.
      */
-    verifyWebhookSignature(payload: string, signature: string, secret: string, options?: {
-        algorithm?: string;
-        encoding?: 'hex' | 'base64';
-        prefix?: string;
-    }): boolean;
+    delete(key: StoreKey): void;
 
     /**
-     * Filesystem API — available when the `filesystem_enabled` setting is on.
-     * Uses virtual paths: `internal://`, `shared://`, `media://`.
-     * Requires `@permission fs:read` and/or `@permission fs:write` in the script header
-     * when capability enforcement is active.
+     * Registers a callback to be executed when a specific store key's value changes.
+     * @param key The store key to listen for changes on.
+     * @param callback The function to call when the value changes.
      */
-    readonly fs?: HaFs;
+    on<K extends keyof GlobalStoreSchema>(
+      key: K,
+      callback: (newValue: GlobalStoreSchema[K] | undefined, oldValue: GlobalStoreSchema[K] | undefined) => void
+    ): void;
+    on<T = any>(
+      key: string & { _?: never },
+      callback: (newValue: T | undefined, oldValue: T | undefined) => void
+    ): void;
+  };
+
+  /**
+   * Creates a persistent ref wrapper for a primitive value stored in `ha.store`.
+   * Access and modify the value via `.value` — changes are automatically saved.
+   * @example
+   * const counter = ha.persistent('counter', 0);
+   * counter.value++;
+   * const enabled = ha.persistent('enabled', false);
+   * enabled.value = true;
+   */
+  persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: T };
+
+  /**
+   * Creates a deep proxy for an object stored in `ha.store`,
+   * automatically saving changes back to the store when properties are modified.
+   * Ideal for managing complex configuration objects persistently.
+   * @param key The store key where the object is saved.
+   * @param defaultValue An optional default value if the key is not found in the store.
+   * @returns A Proxy object that automatically persists changes.
+   */
+  persistent<K extends keyof GlobalStoreSchema>(key: K, defaultValue?: GlobalStoreSchema[K]): GlobalStoreSchema[K];
+  persistent<T extends object = Record<string, any>>(key: string, defaultValue?: T): T;
+
+  /**
+   * Built-in HTTP convenience wrapper.
+   * Requires `@permission network` in the script header.
+   *
+   * @example
+   * // @permission network
+   * const data = await ha.http.get('https://api.example.com/data');
+   * await ha.http.post('https://api.example.com/submit', { key: 'value' });
+   */
+  readonly http: {
+    /**
+     * Performs an HTTP GET request and returns the parsed response.
+     * Automatically parses JSON when the `Content-Type` is `application/json`, otherwise returns text.
+     * Throws on non-2xx status codes.
+     * @param url The URL to fetch.
+     * @param options Optional `fetch` init options (headers, signal, etc.).
+     */
+    get(url: string, options?: RequestInit): Promise<any>;
+    /**
+     * Performs an HTTP POST request and returns the parsed response.
+     * Objects are serialized as JSON with `Content-Type: application/json`.
+     * Throws on non-2xx status codes.
+     * @param url The URL to post to.
+     * @param body The request body. Objects are sent as JSON; strings/Buffers are sent as-is.
+     * @param options Optional `fetch` init options (additional headers, signal, etc.).
+     */
+    post(url: string, body?: Record<string, any> | string, options?: RequestInit): Promise<any>;
+  };
+
+  /**
+   * Direct MQTT broker access — subscribe and publish without a HA entity in between.
+   * Wildcards are supported: `+` (single level), `#` (multi-level, must be last segment).
+   * Subscriptions are scoped to the script and cleaned up automatically when it stops.
+   *
+   * @example
+   * // Subscribe to a single topic
+   * ha.mqtt.subscribe('tasmota/sensor1/tele/SENSOR', (topic, payload) => {
+   *   ha.log(`Temperature: ${payload.SI7021?.Temperature}`);
+   * });
+   *
+   * @example
+   * // Wildcard subscription — all Shelly dimmer status topics
+   * ha.mqtt.subscribe('shellies/+/light/0/status', (topic, payload) => {
+   *   const device = topic.split('/')[1];
+   *   ha.log(`${device} is ${payload.ison ? 'on' : 'off'}`);
+   * });
+   *
+   * @example
+   * // Unsubscribe manually
+   * const unsub = ha.mqtt.subscribe('my/topic', (topic, payload) => { ... });
+   * unsub();
+   *
+   * @example
+   * // Publish with retain flag
+   * ha.mqtt.publish('my/status', 'online', { retain: true });
+   */
+  readonly mqtt: {
+    /**
+     * Subscribes to an MQTT topic. Wildcards `+` and `#` are supported.
+     * Payloads are auto-parsed as JSON when valid, otherwise delivered as a string.
+     * Returns an unsubscribe function — call it to stop listening.
+     *
+     * @param topic - MQTT topic filter (e.g. `'shellies/+/light/0/status'`)
+     * @param callback - Receives `(topic, payload)`. Payload is JSON-parsed when valid.
+     * @returns Unsubscribe function
+     */
+    subscribe(topic: string, callback: (topic: string, payload: any) => void): () => void;
+
+    /**
+     * Publishes a message to an MQTT topic.
+     * Objects are automatically serialized to JSON.
+     *
+     * @param topic - MQTT topic to publish to
+     * @param payload - Message payload. Objects are JSON-serialized; strings are sent as-is.
+     * @param options - Optional publish options
+     */
+    publish(topic: string, payload: any, options?: { retain?: boolean; qos?: 0 | 1 | 2 }): void;
+  };
+
+  /**
+   * Registers a webhook endpoint at `:3001/webhook/<id>` (fixed port). External services can POST
+   * (or GET, depending on `options.method`) data to this URL and your handler returns a real
+   * HTTP response — unlike HA's built-in webhook automations, which always return an empty `200 OK`
+   * immediately. Requires `@permission webhook` in the script header.
+   *
+   * A secret token is auto-generated and managed by JSA (shown in the Webhook Panel) and verified
+   * automatically via the `X-Webhook-Secret` header — no code needed in the handler, unless `noAuth: true`.
+   *
+   * One ID always maps to exactly one fixed path and one HTTP method; JSA does not support
+   * arbitrary custom routing.
+   *
+   * @example
+   * // @permission webhook
+   * ha.onWebhook('github-push', async (req, res) => {
+   *   // Token already verified — handler only called if valid
+   *   const { ref, repository } = req.body;
+   *   await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+   *   res.json({ received: true });
+   * });
+   *
+   * @example
+   * // Public endpoint — service embeds its own token in the body (e.g. Ko-fi).
+   * // Store the externally-issued token in ha.store (flagged as Secret), not hardcoded.
+   * // @permission webhook
+   * const config = ha.persistent('kofi_config', {}); // { verification_token: '...' }
+   * ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
+   *   const data = JSON.parse(req.body.data);
+   *   if (data.verification_token !== config.verification_token) {
+   *     return res.status(401).json({ error: 'unauthorized' });
+   *   }
+   *   res.json({ status: 'ok' });
+   * });
+   *
+   * @example
+   * // GET webhook, e.g. for a simple status/polling check
+   * // @permission webhook
+   * ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
+   *   res.json({ ok: true });
+   * });
+   *
+   * @example
+   * // IP allowlist as a second layer on top of the token — GitHub's published webhook range
+   * // @permission webhook
+   * ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
+   *   res.json({ received: true });
+   * });
+   */
+  onWebhook(id: string, handler: WebhookHandler): void;
+  onWebhook(id: string, options: WebhookOptions, handler: WebhookHandler): void;
+
+  /**
+   * Verifies an HMAC signature of the form providers like GitHub/Stripe send alongside
+   * a webhook payload (e.g. GitHub's `X-Hub-Signature-256: sha256=<hex>`). Unlike
+   * `noAuth` + a static token (Ko-fi-style), here the secret is one *you* choose when
+   * configuring the webhook in the external service's UI — the service signs the raw
+   * payload with it instead of sending the secret itself.
+   *
+   * Always verify against `req.rawBody`, not `req.body` — the parsed-and-re-serialized
+   * JSON is not guaranteed to be byte-identical to what the sender actually signed.
+   *
+   * @param payload The raw request body as received (`req.rawBody`) — not the parsed `req.body`.
+   * @param signature The signature header value sent by the provider.
+   * @param secret The shared secret you configured in the external service's webhook settings.
+   * @param options.algorithm HMAC algorithm. @default 'sha256'
+   * @param options.encoding Digest encoding. @default 'hex'
+   * @param options.prefix Prefix expected before the digest (GitHub uses `'sha256='`). Set `''` to disable. @default '<algorithm>='
+   *
+   * @example
+   * // @permission webhook
+   * const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, as Secret
+   * ha.onWebhook('github-push', async (req, res) => {
+   *   const sig = req.headers['x-hub-signature-256'];
+   *   if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
+   *     return res.status(401).json({ error: 'invalid signature' });
+   *   }
+   *   res.json({ received: true });
+   * });
+   */
+  verifyWebhookSignature(
+    payload: string,
+    signature: string,
+    secret: string,
+    options?: {
+      algorithm?: string;
+      encoding?: 'hex' | 'base64';
+      prefix?: string;
+    }
+  ): boolean;
+
+  /**
+   * Filesystem API — available when the `filesystem_enabled` setting is on.
+   * Uses virtual paths: `internal://`, `shared://`, `media://`.
+   * Requires `@permission fs:read` and/or `@permission fs:write` in the script header
+   * when capability enforcement is active.
+   */
+  readonly fs?: HaFs;
 }
 
 /** Options for {@link HA.onWebhook}. */
 interface WebhookOptions {
-    /** HTTP method this webhook accepts. One method per ID. @default 'POST' */
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-    /** Skip automatic `X-Webhook-Secret` verification — the endpoint becomes fully public. @default false */
-    noAuth?: boolean;
-    /**
-     * Restrict callers to specific IPs/ranges — useful for providers that publish static
-     * IP ranges (GitHub, Stripe). A second layer of defense on top of the token, not a
-     * replacement for one. Entries are either an exact IP or an IPv4 CIDR range
-     * (e.g. `'192.30.252.0/22'`). IPv6 CIDR ranges are not supported — only exact IPv6
-     * addresses match.
-     */
-    allowlist?: string[];
+  /** HTTP method this webhook accepts. One method per ID. @default 'POST' */
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  /** Skip automatic `X-Webhook-Secret` verification — the endpoint becomes fully public. @default false */
+  noAuth?: boolean;
+  /**
+   * Restrict callers to specific IPs/ranges — useful for providers that publish static
+   * IP ranges (GitHub, Stripe). A second layer of defense on top of the token, not a
+   * replacement for one. Entries are either an exact IP or an IPv4 CIDR range
+   * (e.g. `'192.30.252.0/22'`). IPv6 CIDR ranges are not supported — only exact IPv6
+   * addresses match.
+   */
+  allowlist?: string[];
 }
 
 /** Incoming request passed to a {@link HA.onWebhook} handler. */
 interface WebhookRequest {
-    /** HTTP method of the request (matches the registered `method`). */
-    method: string;
-    /** Request headers. */
-    headers: Record<string, string>;
-    /** Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. */
-    body: any;
-    /**
-     * The exact, unparsed request body as received. Use this — not `body` — when
-     * verifying an HMAC signature with {@link HA.verifyWebhookSignature}, since the
-     * parsed-and-re-serialized JSON is not guaranteed to be byte-identical to what the
-     * sender signed.
-     */
-    rawBody: string;
-    /** URL query parameters. */
-    query: Record<string, string>;
-    /** Caller IP. Only reflects the real client IP if `webhook_trust_proxy` is enabled behind a trusted reverse proxy. */
-    ip: string;
+  /** HTTP method of the request (matches the registered `method`). */
+  method: string;
+  /** Request headers. */
+  headers: Record<string, string>;
+  /** Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. */
+  body: any;
+  /**
+   * The exact, unparsed request body as received. Use this — not `body` — when
+   * verifying an HMAC signature with {@link HA.verifyWebhookSignature}, since the
+   * parsed-and-re-serialized JSON is not guaranteed to be byte-identical to what the
+   * sender signed.
+   */
+  rawBody: string;
+  /** URL query parameters. */
+  query: Record<string, string>;
+  /** Caller IP. Only reflects the real client IP if `webhook_trust_proxy` is enabled behind a trusted reverse proxy. */
+  ip: string;
 }
 
 /** Response builder passed to a {@link HA.onWebhook} handler. */
 interface WebhookResponse {
-    /** Sets the HTTP status code. Chainable. */
-    status(code: number): WebhookResponse;
-    /** Sends a JSON response. */
-    json(data: any): void;
-    /** Sends a plain-text response. */
-    send(text: string): void;
+  /** Sets the HTTP status code. Chainable. */
+  status(code: number): WebhookResponse;
+  /** Sends a JSON response. */
+  json(data: any): void;
+  /** Sends a plain-text response. */
+  send(text: string): void;
 }
 
 /** Handler function for {@link HA.onWebhook}. */
@@ -1285,9 +1423,9 @@ type VirtualPath = `internal://${string}` | `shared://${string}` | `media://${st
 
 /** File/directory metadata returned by ha.fs.stat() */
 interface FsStat {
-    size: number;
-    modified: Date;
-    isDirectory: boolean;
+  size: number;
+  modified: Date;
+  isDirectory: boolean;
 }
 
 /**
@@ -1295,156 +1433,156 @@ interface FsStat {
  * Available only when the `filesystem_enabled` addon setting is enabled.
  */
 interface HaFs {
-    /**
-     * Reads a file. Returns a UTF-8 string by default; pass `'binary'` for a Buffer.
-     * @requires @permission fs:read
-     */
-    read(virtualPath: VirtualPath, encoding?: 'utf8'): Promise<string>;
-    read(virtualPath: VirtualPath, encoding: 'binary'): Promise<Buffer>;
+  /**
+   * Reads a file. Returns a UTF-8 string by default; pass `'binary'` for a Buffer.
+   * @requires @permission fs:read
+   */
+  read(virtualPath: VirtualPath, encoding?: 'utf8'): Promise<string>;
+  read(virtualPath: VirtualPath, encoding: 'binary'): Promise<Buffer>;
 
-    /**
-     * Writes (or overwrites) a file. Creates parent directories if needed.
-     * @requires @permission fs:write
-     */
-    write(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
+  /**
+   * Writes (or overwrites) a file. Creates parent directories if needed.
+   * @requires @permission fs:write
+   */
+  write(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
 
-    /**
-     * Appends data to a file. Creates the file and parent directories if needed.
-     * @requires @permission fs:write
-     */
-    append(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
+  /**
+   * Appends data to a file. Creates the file and parent directories if needed.
+   * @requires @permission fs:write
+   */
+  append(virtualPath: VirtualPath, data: string | Buffer): Promise<void>;
 
-    /**
-     * Returns `true` if the path exists (file or directory).
-     * @requires @permission fs:read
-     */
-    exists(virtualPath: VirtualPath): Promise<boolean>;
+  /**
+   * Returns `true` if the path exists (file or directory).
+   * @requires @permission fs:read
+   */
+  exists(virtualPath: VirtualPath): Promise<boolean>;
 
-    /**
-     * Lists entries in a directory. Directory names are suffixed with `/`.
-     * @requires @permission fs:read
-     */
-    list(virtualPath: VirtualPath): Promise<string[]>;
+  /**
+   * Lists entries in a directory. Directory names are suffixed with `/`.
+   * @requires @permission fs:read
+   */
+  list(virtualPath: VirtualPath): Promise<string[]>;
 
-    /**
-     * Returns file/directory metadata.
-     * @requires @permission fs:read
-     */
-    stat(virtualPath: VirtualPath): Promise<FsStat>;
+  /**
+   * Returns file/directory metadata.
+   * @requires @permission fs:read
+   */
+  stat(virtualPath: VirtualPath): Promise<FsStat>;
 
-    /**
-     * Moves or renames a file. Both paths must be valid virtual paths.
-     * @requires @permission fs:write
-     */
-    move(srcVirtual: VirtualPath, destVirtual: VirtualPath): Promise<void>;
+  /**
+   * Moves or renames a file. Both paths must be valid virtual paths.
+   * @requires @permission fs:write
+   */
+  move(srcVirtual: VirtualPath, destVirtual: VirtualPath): Promise<void>;
 
-    /**
-     * Deletes a file or directory (recursively for directories).
-     * @requires @permission fs:write
-     */
-    delete(virtualPath: VirtualPath): Promise<void>;
+  /**
+   * Deletes a file or directory (recursively for directories).
+   * @requires @permission fs:write
+   */
+  delete(virtualPath: VirtualPath): Promise<void>;
 
-    /**
-     * Watches a file or directory for changes.
-     * @param callback Called with `(event, filename)` on each change.
-     * @returns Unsubscribe function — call it to stop watching.
-     * @requires @permission fs:read
-     */
-    watch(virtualPath: VirtualPath, callback: (event: string, filename: string | null) => void): () => void;
+  /**
+   * Watches a file or directory for changes.
+   * @param callback Called with `(event, filename)` on each change.
+   * @returns Unsubscribe function — call it to stop watching.
+   * @requires @permission fs:read
+   */
+  watch(virtualPath: VirtualPath, callback: (event: string, filename: string | null) => void): () => void;
 
-    /**
-     * Log rotation helper. Trims the file when it exceeds `maxSize`,
-     * keeping up to `keep` numbered backup files.
-     * @example
-     * await ha.fs.rotate('internal://app.log', { maxSize: '5MB', keep: 3 });
-     * // Produces: app.log, app.1.log, app.2.log, app.3.log
-     * @requires @permission fs:write
-     */
-    rotate(virtualPath: VirtualPath, options?: { maxSize?: string | number; keep?: number }): Promise<void>;
+  /**
+   * Log rotation helper. Trims the file when it exceeds `maxSize`,
+   * keeping up to `keep` numbered backup files.
+   * @example
+   * await ha.fs.rotate('internal://app.log', { maxSize: '5MB', keep: 3 });
+   * // Produces: app.log, app.1.log, app.2.log, app.3.log
+   * @requires @permission fs:write
+   */
+  rotate(virtualPath: VirtualPath, options?: { maxSize?: string | number; keep?: number }): Promise<void>;
 }
 
 /** One aggregated statistics entry returned by `ha.getStatistics()`. */
 interface HAStatisticEntry {
-    /** ISO 8601 timestamp of the bucket start. */
-    start: string;
-    mean?: number;
-    min?: number;
-    max?: number;
-    sum?: number;
+  /** ISO 8601 timestamp of the bucket start. */
+  start: string;
+  mean?: number;
+  min?: number;
+  max?: number;
+  sum?: number;
 }
 
 /** One event returned by `ha.getCalendarEvents()`. */
 interface HACalendarEvent {
-    /** Event title. */
-    summary: string;
-    /** ISO 8601 date or datetime string. */
-    start: string;
-    /** ISO 8601 date or datetime string. */
-    end: string;
-    /** `true` for all-day events (start has no time component). */
-    all_day: boolean;
-    description?: string;
-    location?: string;
+  /** Event title. */
+  summary: string;
+  /** ISO 8601 date or datetime string. */
+  start: string;
+  /** ISO 8601 date or datetime string. */
+  end: string;
+  /** `true` for all-day events (start has no time component). */
+  all_day: boolean;
+  description?: string;
+  location?: string;
 }
 
 /** One item returned by `ha.getTodoItems()`. */
 interface HATodoItem {
-    uid: string;
-    summary: string;
-    status: 'needs_action' | 'completed';
-    due?: string;
-    description?: string;
+  uid: string;
+  summary: string;
+  status: 'needs_action' | 'completed';
+  due?: string;
+  description?: string;
 }
 
 /** A HA label as returned by `ha.getLabels()`. */
 interface HALabel {
-    label_id: string;
-    name: string;
-    color?: string;
-    icon?: string;
+  label_id: string;
+  name: string;
+  color?: string;
+  icon?: string;
 }
 
 /** A HA floor as returned by `ha.getFloors()`. */
 interface HAFloor {
-    floor_id: string;
-    name: string;
-    /** Floor number (e.g. 0 = ground floor, 1 = first floor). */
-    level?: number;
-    icon?: string;
+  floor_id: string;
+  name: string;
+  /** Floor number (e.g. 0 = ground floor, 1 = first floor). */
+  level?: number;
+  icon?: string;
 }
 
 /** An HA event received by `ha.onEvent()` callbacks. */
 interface HACustomEvent {
-    event_type: string;
-    data: Record<string, any>;
-    origin?: string;
-    time_fired?: string;
-    context?: { id: string; parent_id: string | null; user_id: string | null };
+  event_type: string;
+  data: Record<string, any>;
+  origin?: string;
+  time_fired?: string;
+  context?: { id: string; parent_id: string | null; user_id: string | null };
 }
 
 /**
  * Represents a selection of Home Assistant entities for bulk operations.
  */
 declare class EntitySelector {
-    readonly list: HAState[];
-    readonly count: number;
+  readonly list: HAState[];
+  readonly count: number;
 
-    constructor(entities: HAState[], ha: HA);
+  constructor(entities: HAState[], ha: HA);
 
-    /** Filters the current selection using a callback function. */
-    where(callback: (entity: HAState) => boolean): EntitySelector;
-    /** Executes a function for each entity in the selection. */
-    each(callback: (entity: HAState) => void): EntitySelector;
-    /** Calls a service for all entities in the selection. */
-    call(service: string, data?: Record<string, any>): Promise<this>;
-    /** Sets a delay in milliseconds between each entity call in a batch action. */
-    throttle(ms: number): this;
-    /** Waits for the specified amount of time. Useful for chaining actions. */
-    wait(ms: number): Promise<this>;
-    /** Expands groups to their members. */
-    expand(): EntitySelector;
-    /** Returns the raw array of state objects. */
-    toArray(): HAState[];
+  /** Filters the current selection using a callback function. */
+  where(callback: (entity: HAState) => boolean): EntitySelector;
+  /** Executes a function for each entity in the selection. */
+  each(callback: (entity: HAState) => void): EntitySelector;
+  /** Calls a service for all entities in the selection. */
+  call(service: string, data?: Record<string, any>): Promise<this>;
+  /** Sets a delay in milliseconds between each entity call in a batch action. */
+  throttle(ms: number): this;
+  /** Waits for the specified amount of time. Useful for chaining actions. */
+  wait(ms: number): Promise<this>;
+  /** Expands groups to their members. */
+  expand(): EntitySelector;
+  /** Returns the raw array of state objects. */
+  toArray(): HAState[];
 }
 
 /**

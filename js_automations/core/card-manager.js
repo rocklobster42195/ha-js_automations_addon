@@ -14,6 +14,11 @@ const ScriptHeaderParser = require('./script-header-parser');
 const CARD_START = '__JSA_CARD__';
 const CARD_END = '__JSA_CARD_END__';
 const REGISTRY_FILE = 'card-registry.json';
+const ASSET_REGISTRY_FILE = 'asset-cache-registry.json';
+const ASSET_MAX_SIZE_DEFAULT = 5 * 1024 * 1024; // 5MB safety cap when no maxSize is given
+const ASSET_FETCH_TIMEOUT_MS = 15000;
+const ASSET_FAILURE_COOLDOWN_MS = 5 * 60 * 1000; // don't hammer a failing host between calls
+const ASSET_FAILURE_COOLDOWN_MAX_MS = 15 * 60 * 1000; // cap for a server-provided Retry-After
 
 // Injected before the card code at install time.
 // Provides __jsa__.callAction() → HA Event Bus transport back to the addon.
@@ -279,337 +284,525 @@ const __jsa__ = (() => {
 `;
 
 class CardManager {
-    /**
-     * @param {string} storageDir  - Addon storage dir (for registry JSON)
-     * @param {string} wwwCardsDir - config/www/jsa-cards/
-     * @param {object} haConnector - HAConnector instance (may be null until connected)
-     */
-    constructor(storageDir, wwwCardsDir, haConnector) {
-        this.storageDir = storageDir;
-        this.wwwCardsDir = wwwCardsDir;
-        this.haConnector = haConnector;
-        this.registryPath = path.join(storageDir, REGISTRY_FILE);
-        this.registry = this._loadRegistry();
+  /**
+   * @param {string} storageDir  - Addon storage dir (for registry JSON)
+   * @param {string} wwwCardsDir - config/www/jsa-cards/
+   * @param {object} haConnector - HAConnector instance (may be null until connected)
+   */
+  constructor(storageDir, wwwCardsDir, haConnector) {
+    this.storageDir = storageDir;
+    this.wwwCardsDir = wwwCardsDir;
+    this.haConnector = haConnector;
+    this.registryPath = path.join(storageDir, REGISTRY_FILE);
+    this.registry = this._loadRegistry();
+    this.assetsDir = path.join(wwwCardsDir, 'assets');
+    this.assetRegistryPath = path.join(storageDir, ASSET_REGISTRY_FILE);
+    this.assetRegistry = this._loadJson(this.assetRegistryPath);
+    // In-memory only (not persisted) — just needs to survive long enough to stop a
+    // tight retry loop (e.g. a script polling once a second) from hammering a host
+    // that's already failing or rate-limiting us.
+    this.assetFailures = new Map();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Installs the card embedded in a script file.
+   * Called from WorkerManager when a worker sends an 'install_card' message.
+   *
+   * @param {string} scriptFilePath - Absolute path to the .js script file
+   * @param {object} options
+   * @param {boolean} [options.force]  - Overwrite even if hash matches
+   * @param {boolean} [options.devMode] - @card dev — skip file write and Lovelace registration
+   * @returns {Promise<string>} Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
+   */
+  async installCard(scriptFilePath, options = {}) {
+    const cardCode = this._extractCardBlock(scriptFilePath);
+    if (!cardCode) throw new Error('No __JSA_CARD__ block found in script.');
+
+    const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
+    const cardName = `${scriptName}-card`;
+    const hash = this._hash(cardCode);
+    const shortHash = hash.slice(0, 8);
+    const resourceUrl = `/local/jsa-cards/${cardName}.js?v=${shortHash}`;
+
+    if (options.devMode) {
+      // Dev mode: no file write, no Lovelace registration — preview uses live card code
+      return resourceUrl;
     }
 
-    // ---------------------------------------------------------------------------
-    // Public API
-    // ---------------------------------------------------------------------------
-
-    /**
-     * Installs the card embedded in a script file.
-     * Called from WorkerManager when a worker sends an 'install_card' message.
-     *
-     * @param {string} scriptFilePath - Absolute path to the .js script file
-     * @param {object} options
-     * @param {boolean} [options.force]  - Overwrite even if hash matches
-     * @param {boolean} [options.devMode] - @card dev — skip file write and Lovelace registration
-     * @returns {Promise<string>} Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
-     */
-    async installCard(scriptFilePath, options = {}) {
-        const cardCode = this._extractCardBlock(scriptFilePath);
-        if (!cardCode) throw new Error('No __JSA_CARD__ block found in script.');
-
-        const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
-        const cardName = `${scriptName}-card`;
-        const hash = this._hash(cardCode);
-        const shortHash = hash.slice(0, 8);
-        const resourceUrl = `/local/jsa-cards/${cardName}.js?v=${shortHash}`;
-
-        if (options.devMode) {
-            // Dev mode: no file write, no Lovelace registration — preview uses live card code
-            return resourceUrl;
-        }
-
-        const existing = this.registry[scriptName];
-        const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
-        if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
-            return existing.resourceUrl;
-        }
-
-        // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
-        const preamble = JSA_PREAMBLE.replace('{{SCRIPT_ID}}', scriptName);
-
-        const wrappedCode = cardCode;
-
-        const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
-        const pickerEntry =
-            `window.customCards = window.customCards || [];\n` +
-            `window.customCards.push({ type: '${cardName}', name: ${JSON.stringify(scriptMeta.name || scriptName)}, ` +
-            `description: ${JSON.stringify(scriptMeta.description || '')}, preview: true });\n\n`;
-        const finalCode = pickerEntry + preamble + wrappedCode;
-
-        // Write card file
-        this._ensureCardsDir();
-        fs.writeFileSync(cardFilePath, finalCode, 'utf8');
-        console.log(`[CardManager] Card file written: ${cardFilePath}`);
-
-        // Register or update Lovelace resource
-        const resourceId = await this._upsertLovelaceResource(resourceUrl, existing?.resourceId, cardName);
-
-        if (resourceId) {
-            console.log(`[CardManager] Lovelace resource registered: ${resourceUrl} (id=${resourceId})`);
-        } else {
-            console.warn(
-                `[CardManager] Lovelace resource registration failed for "${resourceUrl}". ` +
-                `If Lovelace is in YAML mode, add this to configuration.yaml:\n` +
-                `  lovelace:\n    resources:\n      - url: ${resourceUrl}\n        type: module`
-            );
-        }
-
-        // Persist to registry
-        this.registry[scriptName] = { hash, resourceUrl, resourceId, cardName };
-        this._saveRegistry();
-
-        return resourceUrl;
+    const existing = this.registry[scriptName];
+    const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
+    if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
+      return existing.resourceUrl;
     }
 
-    /**
-     * Removes a script's installed card: deletes the card JS file from www/jsa-cards/,
-     * removes the Lovelace resource, and clears the registry entry.
-     * Called when a Script Pack script is deleted.
-     * @param {string} scriptFilePath - Absolute path to the (now deleted) script file
-     */
-    removeCard(scriptFilePath) {
-        const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
-        const entry = this.registry[scriptName];
-        if (!entry) return;
+    // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
+    const preamble = JSA_PREAMBLE.replace('{{SCRIPT_ID}}', scriptName);
 
-        // Delete the card file if it exists
-        const cardFilePath = path.join(this.wwwCardsDir, `${entry.cardName}.js`);
-        if (fs.existsSync(cardFilePath)) {
-            try { fs.unlinkSync(cardFilePath); } catch (e) {
-                console.error(`[CardManager] Failed to delete card file ${cardFilePath}:`, e.message);
+    const wrappedCode = cardCode;
+
+    const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
+    const pickerEntry =
+      `window.customCards = window.customCards || [];\n` +
+      `window.customCards.push({ type: '${cardName}', name: ${JSON.stringify(scriptMeta.name || scriptName)}, ` +
+      `description: ${JSON.stringify(scriptMeta.description || '')}, preview: true });\n\n`;
+    const finalCode = pickerEntry + preamble + wrappedCode;
+
+    // Write card file
+    this._ensureCardsDir();
+    fs.writeFileSync(cardFilePath, finalCode, 'utf8');
+    console.log(`[CardManager] Card file written: ${cardFilePath}`);
+
+    // Register or update Lovelace resource
+    const resourceId = await this._upsertLovelaceResource(resourceUrl, existing?.resourceId, cardName);
+
+    if (resourceId) {
+      console.log(`[CardManager] Lovelace resource registered: ${resourceUrl} (id=${resourceId})`);
+    } else {
+      console.warn(
+        `[CardManager] Lovelace resource registration failed for "${resourceUrl}". ` +
+          `If Lovelace is in YAML mode, add this to configuration.yaml:\n` +
+          `  lovelace:\n    resources:\n      - url: ${resourceUrl}\n        type: module`
+      );
+    }
+
+    // Persist to registry
+    this.registry[scriptName] = { hash, resourceUrl, resourceId, cardName };
+    this._saveRegistry();
+
+    return resourceUrl;
+  }
+
+  /**
+   * Removes a script's installed card: deletes the card JS file from www/jsa-cards/,
+   * removes the Lovelace resource, and clears the registry entry.
+   * Called when a Script Pack script is deleted.
+   * @param {string} scriptFilePath - Absolute path to the (now deleted) script file
+   */
+  removeCard(scriptFilePath) {
+    const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
+    // Independent of whether a card was ever installed — a script can cache assets
+    // via ha.frontend.cacheAsset() without necessarily having a __JSA_CARD__ block.
+    this.removeAssets(scriptName);
+
+    const entry = this.registry[scriptName];
+    if (!entry) return;
+
+    // Delete the card file if it exists
+    const cardFilePath = path.join(this.wwwCardsDir, `${entry.cardName}.js`);
+    if (fs.existsSync(cardFilePath)) {
+      try {
+        fs.unlinkSync(cardFilePath);
+      } catch (e) {
+        console.error(`[CardManager] Failed to delete card file ${cardFilePath}:`, e.message);
+      }
+    }
+
+    // Remove Lovelace resource (fire-and-forget — HA may be unavailable)
+    if (this.haConnector?.isReady) {
+      if (entry.resourceId) {
+        this.haConnector
+          .sendCommand('lovelace/resources/delete', { resource_id: entry.resourceId }, 15000)
+          .catch((e) => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
+      } else {
+        // resourceId was never persisted — scan all resources to find and delete by URL
+        this.haConnector
+          .sendCommand('lovelace/resources', {}, 15000)
+          .then((all) => {
+            const resources = all?.resources ?? (Array.isArray(all) ? all : []);
+            const match = resources.find((r) => r.url?.includes(`/jsa-cards/${entry.cardName}.js`));
+            if (match) {
+              const rid = match.id ?? match.resource_id;
+              return this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
             }
-        }
-
-        // Remove Lovelace resource (fire-and-forget — HA may be unavailable)
-        if (this.haConnector?.isReady) {
-            if (entry.resourceId) {
-                this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: entry.resourceId }, 15000)
-                    .catch(e => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
-            } else {
-                // resourceId was never persisted — scan all resources to find and delete by URL
-                this.haConnector.sendCommand('lovelace/resources', {}, 15000).then(all => {
-                    const resources = all?.resources ?? (Array.isArray(all) ? all : []);
-                    const match = resources.find(r => r.url?.includes(`/jsa-cards/${entry.cardName}.js`));
-                    if (match) {
-                        const rid = match.id ?? match.resource_id;
-                        return this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
-                    }
-                }).catch(e => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
-            }
-        }
-
-        delete this.registry[scriptName];
-        this._saveRegistry();
+          })
+          .catch((e) => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
+      }
     }
 
-    /**
-     * Removes orphaned card JS files and Lovelace resources that no longer correspond
-     * to a known script with a @card header. Safe to call at startup and after installs.
-     *
-     * Guarded against overlapping runs: this is triggered both once at boot (kernel.js,
-     * deferred) and again after every successful card install (worker-manager.js). During
-     * autostart with multiple card scripts, without this guard each install would kick off
-     * its own concurrent `lovelace/resources` scan (up to 15s each), piling more HA
-     * WebSocket traffic onto the busiest window of the boot instead of settling it.
-     * @param {string[]} knownCardNames  e.g. ['openligadb-card', 'weather-card']
-     */
-    async performStartupCleanup(knownCardNames) {
-        if (this._cleanupInFlight) {
-            return this._cleanupInFlight;
+    delete this.registry[scriptName];
+    this._saveRegistry();
+  }
+
+  /**
+   * Removes orphaned card JS files and Lovelace resources that no longer correspond
+   * to a known script with a @card header. Safe to call at startup and after installs.
+   *
+   * Guarded against overlapping runs: this is triggered both once at boot (kernel.js,
+   * deferred) and again after every successful card install (worker-manager.js). During
+   * autostart with multiple card scripts, without this guard each install would kick off
+   * its own concurrent `lovelace/resources` scan (up to 15s each), piling more HA
+   * WebSocket traffic onto the busiest window of the boot instead of settling it.
+   * @param {string[]} knownCardNames  e.g. ['openligadb-card', 'weather-card']
+   */
+  async performStartupCleanup(knownCardNames) {
+    if (this._cleanupInFlight) {
+      return this._cleanupInFlight;
+    }
+    this._cleanupInFlight = this._performStartupCleanup(knownCardNames).finally(() => {
+      this._cleanupInFlight = null;
+    });
+    return this._cleanupInFlight;
+  }
+
+  async _performStartupCleanup(knownCardNames) {
+    const known = new Set(knownCardNames);
+
+    // 1. Remove orphaned JS files from www/jsa-cards/
+    if (fs.existsSync(this.wwwCardsDir)) {
+      for (const file of fs.readdirSync(this.wwwCardsDir)) {
+        if (!file.endsWith('.js')) continue;
+        const cardName = path.basename(file, '.js');
+        if (!known.has(cardName)) {
+          try {
+            fs.unlinkSync(path.join(this.wwwCardsDir, file));
+            console.log(`[CardManager] Startup cleanup: deleted orphaned file ${file}`);
+          } catch (e) {
+            console.warn(`[CardManager] Startup cleanup: could not delete ${file}: ${e.message}`);
+          }
         }
-        this._cleanupInFlight = this._performStartupCleanup(knownCardNames)
-            .finally(() => { this._cleanupInFlight = null; });
-        return this._cleanupInFlight;
+      }
     }
 
-    async _performStartupCleanup(knownCardNames) {
-        const known = new Set(knownCardNames);
-
-        // 1. Remove orphaned JS files from www/jsa-cards/
-        if (fs.existsSync(this.wwwCardsDir)) {
-            for (const file of fs.readdirSync(this.wwwCardsDir)) {
-                if (!file.endsWith('.js')) continue;
-                const cardName = path.basename(file, '.js');
-                if (!known.has(cardName)) {
-                    try {
-                        fs.unlinkSync(path.join(this.wwwCardsDir, file));
-                        console.log(`[CardManager] Startup cleanup: deleted orphaned file ${file}`);
-                    } catch (e) {
-                        console.warn(`[CardManager] Startup cleanup: could not delete ${file}: ${e.message}`);
-                    }
-                }
-            }
-        }
-
-        // 2. Remove orphaned Lovelace resources
-        if (this.haConnector?.isReady) {
+    // 2. Remove orphaned Lovelace resources
+    if (this.haConnector?.isReady) {
+      try {
+        const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
+        const resources = all?.resources ?? (Array.isArray(all) ? all : []);
+        for (const r of resources) {
+          if (!r.url?.includes('/jsa-cards/')) continue;
+          const isKnown = knownCardNames.some((name) => r.url.includes(`/jsa-cards/${name}.js`));
+          if (!isKnown) {
+            const rid = r.id ?? r.resource_id;
             try {
-                const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
-                const resources = all?.resources ?? (Array.isArray(all) ? all : []);
-                for (const r of resources) {
-                    if (!r.url?.includes('/jsa-cards/')) continue;
-                    const isKnown = knownCardNames.some(name => r.url.includes(`/jsa-cards/${name}.js`));
-                    if (!isKnown) {
-                        const rid = r.id ?? r.resource_id;
-                        try {
-                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
-                            console.log(`[CardManager] Startup cleanup: deleted orphaned resource ${r.url} (id=${rid})`);
-                        } catch (e) {
-                            console.warn(`[CardManager] Startup cleanup: could not delete resource ${rid}: ${e.message}`);
-                        }
-                    }
-                }
+              await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
+              console.log(`[CardManager] Startup cleanup: deleted orphaned resource ${r.url} (id=${rid})`);
             } catch (e) {
-                console.warn(`[CardManager] Startup cleanup: could not list Lovelace resources: ${e.message}`);
+              console.warn(`[CardManager] Startup cleanup: could not delete resource ${rid}: ${e.message}`);
             }
+          }
         }
-
-        // 3. Remove orphaned registry entries
-        let dirty = false;
-        for (const scriptName of Object.keys(this.registry)) {
-            const entry = this.registry[scriptName];
-            if (!known.has(entry.cardName)) {
-                delete this.registry[scriptName];
-                dirty = true;
-            }
-        }
-        if (dirty) this._saveRegistry();
+      } catch (e) {
+        console.warn(`[CardManager] Startup cleanup: could not list Lovelace resources: ${e.message}`);
+      }
     }
 
-    /**
-     * Returns the raw decoded card source for a script (used by dev-mode preview).
-     * @param {string} scriptFilePath
-     * @returns {string|null}
-     */
-    getCardSource(scriptFilePath) {
-        return this._extractCardBlock(scriptFilePath);
+    // 3. Remove orphaned registry entries
+    let dirty = false;
+    for (const scriptName of Object.keys(this.registry)) {
+      const entry = this.registry[scriptName];
+      if (!known.has(entry.cardName)) {
+        delete this.registry[scriptName];
+        dirty = true;
+      }
+    }
+    if (dirty) this._saveRegistry();
+  }
+
+  /**
+   * Returns the raw decoded card source for a script (used by dev-mode preview).
+   * @param {string} scriptFilePath
+   * @returns {string|null}
+   */
+  getCardSource(scriptFilePath) {
+    return this._extractCardBlock(scriptFilePath);
+  }
+
+  /**
+   * Downloads `url` once and caches it under config/www/jsa-cards/assets/<scriptName>/,
+   * returning a stable /local/... URL that's reachable from any device on the HA
+   * instance — not just the addon's own ingress page. Backs `ha.frontend.cacheAsset()`.
+   *
+   * Repeated calls with the same (scriptName, url) are free (served from the on-disk
+   * cache) unless `force` is set or `ttl` has elapsed since the last download.
+   *
+   * A failed download is remembered for a short cooldown (honoring a Retry-After
+   * header when the host sends one) so a caller polling on a short interval can't
+   * turn a single failure into a request flood against a struggling/rate-limiting host.
+   *
+   * @param {string} scriptName - Script base filename (no extension), used as the cache subdir.
+   * @param {string} url - The external URL to download.
+   * @param {object} [options]
+   * @param {string} [options.filename] - Override the cached filename (incl. extension) instead of deriving one.
+   * @param {number} [options.ttl] - Re-download if the cached copy is older than this many ms.
+   * @param {boolean} [options.force] - Skip the cache and re-download unconditionally.
+   * @param {number} [options.maxSize] - Max accepted response size in bytes (default 5MB).
+   * @returns {Promise<string>} The cached asset's /local/... URL.
+   */
+  async cacheAsset(scriptName, url, options = {}) {
+    if (!url || typeof url !== 'string') throw new Error('cacheAsset: url is required');
+    // Keyed by the resolved output filename, not just (scriptName, url) — otherwise a
+    // later call for the same URL with a different `filename` option would just hit the
+    // cache entry written under the first filename and silently ignore the option.
+    const filename = options.filename || this._deriveAssetFilename(url);
+    const cacheKey = `${scriptName}:${filename}`;
+    const existing = this.assetRegistry[cacheKey];
+    const now = Date.now();
+
+    if (existing && !options.force && fs.existsSync(existing.absPath)) {
+      const expired = options.ttl != null && now - existing.downloadedAt > options.ttl;
+      if (!expired) return this._publicAssetUrl(existing.resourceUrl);
     }
 
-    // ---------------------------------------------------------------------------
-    // Private: Block Parsing
-    // ---------------------------------------------------------------------------
-
-    _extractCardBlock(scriptFilePath) {
-        let raw;
-        try {
-            raw = fs.readFileSync(scriptFilePath, 'utf8');
-        } catch {
-            return null;
-        }
-
-        // Search for the block-comment form to avoid matching inline comments
-        // that mention __JSA_CARD__ (e.g. "// Decodes the __JSA_CARD__ block...")
-        const startIdx = raw.indexOf(`/* ${CARD_START}`);
-        if (startIdx === -1) return null;
-
-        // Skip the CARD_START line — the next line is the Base64 content
-        const afterStart = raw.indexOf('\n', startIdx);
-        if (afterStart === -1) return null;
-
-        const endIdx = raw.indexOf(CARD_END, afterStart);
-        if (endIdx === -1) return null;
-
-        const base64 = raw.slice(afterStart + 1, endIdx).trim();
-        if (!base64) return null;
-
-        try {
-            return Buffer.from(base64, 'base64').toString('utf8');
-        } catch {
-            return null;
-        }
+    const lastFailure = this.assetFailures.get(cacheKey);
+    if (lastFailure && now - lastFailure.failedAt < lastFailure.cooldownMs) {
+      throw new Error(lastFailure.error);
     }
 
-    // ---------------------------------------------------------------------------
-    // Private: Lovelace Resource Management
-    // ---------------------------------------------------------------------------
+    try {
+      const maxSize = options.maxSize ?? ASSET_MAX_SIZE_DEFAULT;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'HA-JS-Automations-Addon/1.0 (cacheAsset)' },
+        signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        const retryAfterSec = Number(res.headers.get('retry-after'));
+        const cooldownMs =
+          retryAfterSec > 0 ? Math.min(retryAfterSec * 1000, ASSET_FAILURE_COOLDOWN_MAX_MS) : ASSET_FAILURE_COOLDOWN_MS;
+        throw Object.assign(new Error(`cacheAsset: HTTP ${res.status} for ${url}`), { cooldownMs });
+      }
 
-    async _upsertLovelaceResource(url, existingResourceId, cardName) {
-        if (!this.haConnector?.isReady) {
-            console.warn('[CardManager] HA not connected — skipping Lovelace resource registration.');
-            return null;
-        }
+      const contentLength = Number(res.headers.get('content-length') || 0);
+      if (contentLength && contentLength > maxSize) {
+        throw new Error(`cacheAsset: response too large (${contentLength} > ${maxSize} bytes)`);
+      }
 
-        // Always clean up stale registrations first to prevent duplicates in the picker
-        let foundId = null;
-        if (cardName) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxSize) {
+        throw new Error(`cacheAsset: downloaded content too large (${buf.length} > ${maxSize} bytes)`);
+      }
+
+      const dir = path.join(this.assetsDir, scriptName);
+      fs.mkdirSync(dir, { recursive: true });
+      const absPath = path.join(dir, filename);
+      fs.writeFileSync(absPath, buf);
+
+      const resourceUrl = `/local/jsa-cards/assets/${scriptName}/${filename}`;
+      this.assetRegistry[cacheKey] = { absPath, resourceUrl, downloadedAt: now, size: buf.length };
+      this._saveJson(this.assetRegistryPath, this.assetRegistry);
+      this.assetFailures.delete(cacheKey);
+
+      return this._publicAssetUrl(resourceUrl);
+    } catch (err) {
+      this.assetFailures.set(cacheKey, {
+        failedAt: now,
+        error: err.message,
+        cooldownMs: err.cooldownMs || ASSET_FAILURE_COOLDOWN_MS,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Resolves a `/local/...` path to something the browser can actually load.
+   *
+   * In production the addon UI is served through HA's own ingress, so it shares
+   * an origin with HA core and a root-relative path resolves correctly on its own.
+   * In dev mode the UI is served standalone (e.g. localhost:3000) on a different
+   * origin than the configured HA instance, so a relative path would 404 silently
+   * (a broken <img>, with nothing to report to our own log panel) — prefix it with
+   * the real HA_URL there instead.
+   * @param {string} relativePath - A path starting with '/', e.g. '/local/...'
+   */
+  _publicAssetUrl(relativePath) {
+    if (this.haConnector && !this.haConnector.isAddon && this.haConnector.baseUrl) {
+      return `${this.haConnector.baseUrl}${relativePath}`;
+    }
+    return relativePath;
+  }
+
+  /**
+   * Removes all assets cached for a script — called when its card/script is removed
+   * so orphaned files don't accumulate in config/www/.
+   * @param {string} scriptName
+   */
+  removeAssets(scriptName) {
+    const dir = path.join(this.assetsDir, scriptName);
+    if (fs.existsSync(dir)) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`[CardManager] Failed to remove asset cache for ${scriptName}:`, e.message);
+      }
+    }
+    const prefix = `${scriptName}:`;
+    for (const key of this.assetFailures.keys()) {
+      if (key.startsWith(prefix)) this.assetFailures.delete(key);
+    }
+    let dirty = false;
+    for (const key of Object.keys(this.assetRegistry)) {
+      if (key.startsWith(prefix)) {
+        delete this.assetRegistry[key];
+        dirty = true;
+      }
+    }
+    if (dirty) this._saveJson(this.assetRegistryPath, this.assetRegistry);
+  }
+
+  _deriveAssetFilename(url) {
+    const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
+    let ext = '.bin';
+    try {
+      ext = path.extname(new URL(url).pathname) || '.bin';
+      // Guard against pathological extensions (query-string leakage, overly long, etc.)
+      if (!/^\.[a-zA-Z0-9]{1,8}$/.test(ext)) ext = '.bin';
+    } catch {
+      /* malformed URL — fall back to .bin */
+    }
+    return `${hash}${ext}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: Block Parsing
+  // ---------------------------------------------------------------------------
+
+  _extractCardBlock(scriptFilePath) {
+    let raw;
+    try {
+      raw = fs.readFileSync(scriptFilePath, 'utf8');
+    } catch {
+      return null;
+    }
+
+    // Search for the block-comment form to avoid matching inline comments
+    // that mention __JSA_CARD__ (e.g. "// Decodes the __JSA_CARD__ block...")
+    const startIdx = raw.indexOf(`/* ${CARD_START}`);
+    if (startIdx === -1) return null;
+
+    // Skip the CARD_START line — the next line is the Base64 content
+    const afterStart = raw.indexOf('\n', startIdx);
+    if (afterStart === -1) return null;
+
+    const endIdx = raw.indexOf(CARD_END, afterStart);
+    if (endIdx === -1) return null;
+
+    const base64 = raw.slice(afterStart + 1, endIdx).trim();
+    if (!base64) return null;
+
+    try {
+      return Buffer.from(base64, 'base64').toString('utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: Lovelace Resource Management
+  // ---------------------------------------------------------------------------
+
+  async _upsertLovelaceResource(url, existingResourceId, cardName) {
+    if (!this.haConnector?.isReady) {
+      console.warn('[CardManager] HA not connected — skipping Lovelace resource registration.');
+      return null;
+    }
+
+    // Always clean up stale registrations first to prevent duplicates in the picker
+    let foundId = null;
+    if (cardName) {
+      try {
+        const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
+        const resources = all?.resources ?? (Array.isArray(all) ? all : []);
+        console.log(
+          `[CardManager] Found ${resources.length} total Lovelace resources, existingId=${existingResourceId}`
+        );
+        for (const r of resources) {
+          if (!r.url?.includes(`/jsa-cards/${cardName}.js`)) continue;
+          const rid = r.id ?? r.resource_id;
+          if (rid === existingResourceId && !foundId) {
+            foundId = rid;
+          } else {
             try {
-                const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
-                const resources = all?.resources ?? (Array.isArray(all) ? all : []);
-                console.log(`[CardManager] Found ${resources.length} total Lovelace resources, existingId=${existingResourceId}`);
-                for (const r of resources) {
-                    if (!r.url?.includes(`/jsa-cards/${cardName}.js`)) continue;
-                    const rid = r.id ?? r.resource_id;
-                    if (rid === existingResourceId && !foundId) {
-                        foundId = rid;
-                    } else {
-                        try {
-                            await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
-                            console.log(`[CardManager] Removed stale Lovelace resource: ${r.url} (id=${rid})`);
-                        } catch (delErr) {
-                            console.warn(`[CardManager] Failed to delete stale resource ${rid}: ${delErr.message}`);
-                        }
-                    }
-                }
-            } catch (listErr) {
-                console.warn(`[CardManager] Failed to list Lovelace resources: ${listErr.message}`);
+              await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
+              console.log(`[CardManager] Removed stale Lovelace resource: ${r.url} (id=${rid})`);
+            } catch (delErr) {
+              console.warn(`[CardManager] Failed to delete stale resource ${rid}: ${delErr.message}`);
             }
+          }
         }
-
-        if (foundId) {
-            // Update the URL on the surviving resource (cache-bust)
-            const result = await this.haConnector.sendCommand('lovelace/resources/update', {
-                resource_id: foundId,
-                res_type: 'module',
-                url,
-            }, 15000);
-            if (result?.success !== false) return foundId;
-            console.warn(`[CardManager] Lovelace resource update failed (id=${foundId}), creating new entry.`);
-        }
-
-        // Create a fresh resource
-        const result = await this.haConnector.sendCommand('lovelace/resources/create', {
-            res_type: 'module',
-            url,
-        }, 15000);
-        if (result?.success === false) {
-            console.warn(`[CardManager] lovelace/resources/create failed: ${result.error ?? 'unknown error'}`);
-            return null;
-        }
-        return result?.id ?? result?.resource_id ?? null;
+      } catch (listErr) {
+        console.warn(`[CardManager] Failed to list Lovelace resources: ${listErr.message}`);
+      }
     }
 
-    // ---------------------------------------------------------------------------
-    // Private: Hash & Registry
-    // ---------------------------------------------------------------------------
-
-    _hash(content) {
-        return crypto.createHash('sha256').update(content).digest('hex');
+    if (foundId) {
+      // Update the URL on the surviving resource (cache-bust)
+      const result = await this.haConnector.sendCommand(
+        'lovelace/resources/update',
+        {
+          resource_id: foundId,
+          res_type: 'module',
+          url,
+        },
+        15000
+      );
+      if (result?.success !== false) return foundId;
+      console.warn(`[CardManager] Lovelace resource update failed (id=${foundId}), creating new entry.`);
     }
 
-    _loadRegistry() {
-        try {
-            return JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
-        } catch {
-            return {};
-        }
+    // Create a fresh resource
+    const result = await this.haConnector.sendCommand(
+      'lovelace/resources/create',
+      {
+        res_type: 'module',
+        url,
+      },
+      15000
+    );
+    if (result?.success === false) {
+      console.warn(`[CardManager] lovelace/resources/create failed: ${result.error ?? 'unknown error'}`);
+      return null;
     }
+    return result?.id ?? result?.resource_id ?? null;
+  }
 
-    _saveRegistry() {
-        try {
-            fs.writeFileSync(this.registryPath, JSON.stringify(this.registry, null, 2), 'utf8');
-        } catch (e) {
-            console.error('[CardManager] Failed to save registry:', e.message);
-        }
-    }
+  // ---------------------------------------------------------------------------
+  // Private: Hash & Registry
+  // ---------------------------------------------------------------------------
 
-    _ensureCardsDir() {
-        if (!fs.existsSync(this.wwwCardsDir)) {
-            fs.mkdirSync(this.wwwCardsDir, { recursive: true });
-        }
+  _hash(content) {
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+
+  _loadRegistry() {
+    try {
+      return JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
+    } catch {
+      return {};
     }
+  }
+
+  _saveRegistry() {
+    try {
+      fs.writeFileSync(this.registryPath, JSON.stringify(this.registry, null, 2), 'utf8');
+    } catch (e) {
+      console.error('[CardManager] Failed to save registry:', e.message);
+    }
+  }
+
+  _ensureCardsDir() {
+    if (!fs.existsSync(this.wwwCardsDir)) {
+      fs.mkdirSync(this.wwwCardsDir, { recursive: true });
+    }
+  }
+
+  _loadJson(filePath) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      return {};
+    }
+  }
+
+  _saveJson(filePath, data) {
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      console.error(`[CardManager] Failed to save ${path.basename(filePath)}:`, e.message);
+    }
+  }
 }
 
 module.exports = CardManager;
