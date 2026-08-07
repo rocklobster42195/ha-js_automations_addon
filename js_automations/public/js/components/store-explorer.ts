@@ -378,6 +378,28 @@ export class StoreExplorer extends LitElement {
     if (!window.socket || !window.socket.connected) this._load();
   };
 
+  /** Opens/switches to the "System: Store" tab. Ported from store-modal.js's
+   * openStoreTab() — tab-lifecycle bookkeeping belongs here (this component
+   * already owns the rest of the Store tab's lifecycle), not in
+   * <store-item-modal>, which stays scoped to the create/edit form. */
+  openTab = (): void => {
+    document.getElementById('editor-section')?.classList.remove('hidden');
+
+    const existing = window.openTabs?.find((t) => t.filename === STORE_TAB_ID);
+    if (!existing) {
+      window.openTabs?.push({
+        filename: STORE_TAB_ID,
+        icon: 'mdi:database-search',
+        isDirty: false,
+        type: 'store',
+        model: null,
+      });
+    }
+
+    window.renderTabs?.();
+    window.switchToTab?.(STORE_TAB_ID);
+  };
+
   private _load = async (): Promise<void> => {
     this._loading = true;
     this._loadError = null;
@@ -482,27 +504,31 @@ export class StoreExplorer extends LitElement {
   }
 
   private async _clearAll(): Promise<void> {
-    if (!confirm(this._t('store.messages.confirm_clear'))) return;
+    if (!(await window.confirmDialog!.confirm(this._t('store.messages.confirm_clear')))) return;
     try {
       await window.apiFetch!('api/store', { method: 'DELETE' });
       this.refreshIfSocketDown();
     } catch (e) {
-      alert(this._t('store.messages.generic_error', undefined, { error: e instanceof Error ? e.message : String(e) }));
+      window.alertToast?.show(
+        this._t('store.messages.generic_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
     }
   }
 
   private async _deleteKey(key: string): Promise<void> {
-    if (!confirm(this._t('store.messages.confirm_delete', undefined, { key }))) return;
+    if (!(await window.confirmDialog!.confirm(this._t('store.messages.confirm_delete', undefined, { key })))) return;
     try {
       await window.apiFetch!(`api/store/${key}`, { method: 'DELETE' });
       this.refreshIfSocketDown();
     } catch (e) {
-      alert(this._t('store.messages.delete_error', undefined, { error: e instanceof Error ? e.message : String(e) }));
+      window.alertToast?.show(
+        this._t('store.messages.delete_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
     }
   }
 
   private _editKey(key: string): void {
-    window.openStoreModal?.(key);
+    window.storeItemModal?.open(key);
   }
 
   private async _copyValue(key: string): Promise<void> {
@@ -684,7 +710,7 @@ export class StoreExplorer extends LitElement {
             <i class="mdi mdi-close"></i>
           </button>
         </div>
-        <button title=${this._t('store.actions.add_variable')} @click=${() => window.openStoreModal?.()}>
+        <button title=${this._t('store.actions.add_variable')} @click=${() => window.storeItemModal?.open()}>
           <i class="mdi mdi-plus"></i>
         </button>
         <button

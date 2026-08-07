@@ -641,62 +641,6 @@ function toggleWordWrap() {
   }
 }
 
-function openEntityPicker() {
-  document.getElementById('entity-picker-modal').classList.remove('hidden');
-  const input = document.getElementById('entity-search-input');
-  input.value = '';
-  input.focus();
-  renderEntityList(allEntities);
-}
-
-function closeEntityPicker() {
-  document.getElementById('entity-picker-modal').classList.add('hidden');
-  if (editor) editor.focus();
-}
-
-function renderEntityList(list) {
-  const container = document.getElementById('entity-list');
-  if (!container) return;
-  container.innerHTML = '';
-
-  // Performance: Nur die ersten 200 anzeigen
-  const limit = 200;
-  const slice = list.slice(0, limit);
-
-  slice.forEach((entityId) => {
-    const div = document.createElement('div');
-    div.className = 'entity-row';
-    div.textContent = entityId;
-    div.onclick = () => {
-      insertEntityToEditor(entityId);
-      closeEntityPicker();
-    };
-    container.appendChild(div);
-  });
-
-  if (list.length > limit) {
-    const info = document.createElement('div');
-    info.style.padding = '10px';
-    info.style.textAlign = 'center';
-    info.style.color = '#666';
-    info.textContent = `... ${list.length - limit} more`;
-    container.appendChild(info);
-  }
-}
-
-function filterEntityPicker() {
-  const term = document.getElementById('entity-search-input').value.toLowerCase();
-  const filtered = allEntities.filter((e) => e.toLowerCase().includes(term));
-  renderEntityList(filtered);
-}
-
-function insertEntityToEditor(text) {
-  if (!editor) return;
-  const selection = editor.getSelection();
-  const op = { range: selection, text: text, forceMoveMarkers: true };
-  editor.executeEdits('insert-entity', [op]);
-}
-
 async function loadLibraryDefinitions() {
   if (typeof monaco === 'undefined') return;
   try {
@@ -766,8 +710,5 @@ window.registerCompletionProviders = registerCompletionProviders;
 window.configureMonaco = configureMonaco;
 window.updateIconDecorations = updateIconDecorations;
 window.toggleWordWrap = toggleWordWrap;
-window.openEntityPicker = openEntityPicker;
-window.closeEntityPicker = closeEntityPicker;
-window.filterEntityPicker = filterEntityPicker;
 window.loadLibraryDefinitions = loadLibraryDefinitions;
 window.loadEditorSettings = loadEditorSettings;

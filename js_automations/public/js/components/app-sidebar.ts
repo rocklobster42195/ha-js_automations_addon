@@ -338,11 +338,12 @@ export class AppSidebar extends LitElement {
     if (dependents.length > 0) {
       const depNames = dependents.map((s) => s.name).join(', ');
       const msg = this._t('warn_library_in_use', undefined, { filename, count: dependents.length, scripts: depNames });
-      if (!confirm(msg)) return;
+      if (!(await window.confirmDialog!.confirm(msg))) return;
     } else {
       const shouldConfirm =
         (window.currentSettings?.general as { confirm_delete?: boolean } | undefined)?.confirm_delete ?? true;
-      if (shouldConfirm && !confirm(this._t('confirm_delete_script', undefined, { filename }))) return;
+      if (shouldConfirm && !(await window.confirmDialog!.confirm(this._t('confirm_delete_script', undefined, { filename }))))
+        return;
     }
 
     await window.apiFetch!(`api/scripts/${filename}`, { method: 'DELETE' });
@@ -481,7 +482,7 @@ export class AppSidebar extends LitElement {
           </button>
           <button
             class=${this.expertMode ? '' : 'hidden'}
-            @click=${() => window.openStoreTab?.()}
+            @click=${() => window.storeExplorer?.openTab()}
             title=${this._t('global_store_explorer_title', 'Global Store Explorer')}
           >
             <i class="mdi mdi-database-search"></i>

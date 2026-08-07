@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         contextMenuOrder: 0,
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
         run: () => {
-          if (window.openEntityPicker) window.openEntityPicker();
+          window.entityPickerModal?.open();
         },
       });
 

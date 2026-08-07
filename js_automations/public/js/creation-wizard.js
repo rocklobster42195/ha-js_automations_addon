@@ -916,7 +916,7 @@ async function executeWizardAction() {
       }
     }
   } catch (e) {
-    alert(i18next.t('error_create_failed') + ': ' + e.message);
+    window.alertToast?.show(i18next.t('error_create_failed') + ': ' + e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;

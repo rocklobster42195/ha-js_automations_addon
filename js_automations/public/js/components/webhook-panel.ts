@@ -238,7 +238,7 @@ export class WebhookPanel extends LitElement {
       'Rotate the token for "{{id}}"? External services using the old token must be updated.',
       { id }
     ).replace('{{id}}', id);
-    if (!confirm(confirmMsg)) return;
+    if (!(await window.confirmDialog!.confirm(confirmMsg))) return;
     try {
       const res = await window.apiFetch!(`api/webhooks/${encodeURIComponent(id)}/rotate`, { method: 'POST' });
       const data = await res.json();
@@ -256,7 +256,7 @@ export class WebhookPanel extends LitElement {
       'Permanently delete the webhook "{{id}}"? This cannot be undone.',
       { id }
     ).replace('{{id}}', id);
-    if (!confirm(confirmMsg)) return;
+    if (!(await window.confirmDialog!.confirm(confirmMsg))) return;
     try {
       const res = await window.apiFetch!(`api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) {

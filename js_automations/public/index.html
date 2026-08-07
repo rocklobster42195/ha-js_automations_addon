@@ -20,6 +20,10 @@
     <safe-mode-banner></safe-mode-banner>
     <integration-banner></integration-banner>
     <card-preview></card-preview>
+    <confirm-dialog></confirm-dialog>
+    <alert-toast></alert-toast>
+    <entity-picker-modal></entity-picker-modal>
+    <store-item-modal></store-item-modal>
     <div class="app-wrapper">
       <app-sidebar></app-sidebar>
 
@@ -166,54 +170,6 @@
       </main>
     </div>
 
-    <!-- Modal for Entity Picker -->
-    <div id="entity-picker-modal" class="modal-overlay hidden">
-      <div class="modal" style="height: 80vh; display: flex; flex-direction: column">
-        <h3 data-i18n="modal_insert_entity_title">Entity einfügen</h3>
-        <div class="search-box" style="border: none; padding: 0 0 10px 0">
-          <div class="search-container">
-            <input
-              type="text"
-              id="entity-search-input"
-              data-i18n="entity_search_placeholder"
-              data-i18n-placeholder
-              placeholder="Entity suchen..."
-              oninput="filterEntityPicker()"
-              autocomplete="off"
-            />
-          </div>
-        </div>
-        <div id="entity-list" class="entity-list"></div>
-        <div class="modal-btns">
-          <button class="btn-text" onclick="closeEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal for Settings Entity Picker -->
-    <div id="settings-entity-picker-modal" class="modal-overlay hidden">
-      <div class="modal" style="height: 80vh; display: flex; flex-direction: column">
-        <h3 data-i18n="modal_select_entity_title">Entity auswählen</h3>
-        <div class="search-box" style="border: none; padding: 0 0 10px 0">
-          <div class="search-container">
-            <input
-              type="text"
-              id="settings-entity-search-input"
-              data-i18n="entity_search_placeholder"
-              data-i18n-placeholder
-              placeholder="Entity suchen..."
-              oninput="filterSettingsEntityPicker()"
-              autocomplete="off"
-            />
-          </div>
-        </div>
-        <div id="settings-entity-list" class="entity-list"></div>
-        <div class="modal-btns">
-          <button class="btn-text" onclick="closeSettingsEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Connection Lost Overlay -->
     <div id="connection-lost-overlay" class="hidden">
       <div class="reconnect-spinner"></div>
@@ -230,7 +186,6 @@
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/store-modal.js"></script>
     <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
     <script src="js/repl.js"></script>

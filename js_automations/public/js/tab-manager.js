@@ -285,11 +285,11 @@ function switchToTab(filename) {
   }
 }
 
-function closeTab(filename) {
+async function closeTab(filename) {
   const tabToClose = openTabs.find((t) => t.filename === filename);
   if (!tabToClose) return;
 
-  if (tabToClose.isDirty && !confirm(i18next.t('confirm_discard_changes', { filename }))) {
+  if (tabToClose.isDirty && !(await window.confirmDialog.confirm(i18next.t('confirm_discard_changes', { filename })))) {
     return;
   }
 
@@ -370,11 +370,11 @@ function _updateCardTabBtn(filename) {
  * Toggles the card tab for the currently active script tab open or closed.
  * Called from the #btn-open-card-tab button in the toolbar.
  */
-function toggleCardTab() {
+async function toggleCardTab() {
   if (!activeTabFilename || activeTabFilename.endsWith(CARD_TAB_SUFFIX)) return;
   const cardTabName = activeTabFilename + CARD_TAB_SUFFIX;
   if (openTabs.some((t) => t.filename === cardTabName)) {
-    closeTab(cardTabName);
+    await closeTab(cardTabName);
   } else {
     openCardTab(activeTabFilename);
   }
@@ -609,8 +609,8 @@ async function saveActiveTab() {
   if (typeof loadScripts === 'function') await loadScripts();
 }
 
-function closeAllTabs() {
-  if (openTabs.some((t) => t.isDirty) && !confirm(i18next.t('confirm_discard_all_changes'))) {
+async function closeAllTabs() {
+  if (openTabs.some((t) => t.isDirty) && !(await window.confirmDialog.confirm(i18next.t('confirm_discard_all_changes')))) {
     return;
   }
   openTabs.forEach((t) => {

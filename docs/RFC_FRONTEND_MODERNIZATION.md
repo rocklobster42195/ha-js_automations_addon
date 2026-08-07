@@ -85,28 +85,53 @@ Unverändert aus dem alten RFC übernommen — die Begründung (Vermeidung von M
 
 Solange eine Komponente noch nicht migriert ist, bleibt ihr Vanilla-JS-Pendant unverändert in Betrieb.
 
-## 7. Backend auf TypeScript
+**Neuer Meilenstein, angehängt an Phase A (nicht blockiert durch Item 6, da nur von bereits fertigen Komponenten abhängig):** siehe Abschnitt 7 — Mobile View.
+
+## 7. Mobile View
+
+**Ziel (siehe Abschnitt 0):** Skriptstatus prüfen, Skript starten/stoppen/neustarten, Logs lesen — ohne Editor/volle Desktop-Oberfläche. Ergänzt `<app-sidebar>` (Phase A Item 5, bereits fertig) um einen eigenständigen Mobile-Modus statt eines vollständig responsiven Ports der gesamten App. Läuft als neuer Meilenstein auf demselben Branch (`feature/lint-prettier-ci-foundation`) weiter, kein separates späteres Vorhaben.
+
+**Detection:** `matchMedia('(max-width: 768px)')`, live-reagierend auf Resize/Rotation (kein einmaliges User-Agent-Sniffing).
+
+**Umschalter:** Neuer Header-Actions-Button (mobile ⇄ desktop), Icons `mdi-cellphone`/`mdi-monitor` je nach aktuellem Modus. Sichtbarkeit im Desktop-Modus über neues Setting "Im Desktopmode verbergen" (`<settings-view>`, Default **aus**) steuerbar; im Mobile-Modus immer sichtbar. Manuelle Wahl persistiert in `localStorage`, übersteuert Auto-Detection bis erneut umgeschaltet.
+
+**Zwei Mobile-"Screens"** (Wechsel über eigenen Header-Actions-Button, keine Bottom-Tab-Bar — würde mit der bottom-verankerten `<status-bar>` kollidieren):
+
+1. **Dashboard** — Skriptliste (Start/Stop/Health-Fokus), `<status-bar>` bleibt sichtbar. Tap auf eine Zeile klappt die (heute nur per Hover erreichbaren) Detail-Infos (RAM/Last-Started/Capabilities/Conflicts) inline auf.
+2. **Log** — `<log-viewer>` weitgehend unverändert wiederverwendet (globaler Stream, kein Pro-Skript-Filter in v1). `<status-bar>` hier ausgeblendet, Platz für den Log-Stream.
+
+**Out of scope für v1:** Editor/Tabs, Store Explorer, Event Inspector, MQTT-Monitor, Watch-Panel. Entsprechend sind "New Script" und "Store Explorer" im mobilen Header ausgeblendet; "Settings" bleibt (dort lebt das neue Setting).
+
+**Collapse-all-Button** (neben dem Suchfeld, gilt für Desktop **und** Mobile): klappt alle Skript-Gruppen auf einmal ein (nutzt den bestehenden `js_collapsed_sections`-Mechanismus für alle Gruppen statt einzeln), Zustand persistiert. Icons `mdi-unfold-less-horizontal`/`mdi-unfold-more-horizontal` — bewusst anders als der Pro-Gruppen-Chevron.
+
+**Code-Suche:** Suchfeld matcht zusätzlich zu `name`/`filename`/`description`/`area`/`label` jetzt auch den Skript-Code, über einen neuen Backend-Suchendpoint (kein Client-seitiges Prefetch-all). Kein separater Modus/Toggle — fließt still ins bestehende Suchfeld ein, debounced (~300ms).
+
+**Icon-Rename (Kollateral):** Da es noch keine Nutzer gibt, wird `mdi-view-dashboard-outline` dem neuen Dashboard-Screen zugeordnet; Card-Editor/Card-Capability-Badges (`card-preview.ts`, `script-row.ts`, `tab-manager.js`) wechseln auf `mdi-card-text-outline` (passender: HA-Lovelace-"Cards", kein generisches Dashboard). **Dabei beachten:** `tab-manager.js:362` hat einen toten Ternary (beide Zweige identisch `mdi-view-dashboard-edit-outline`) — beim Rename mit anfassen/entscheiden.
+
+**Details/Herleitung:** volle Diskussion in `notes/2026-08-07-mobile-view-grill.md`.
+
+## 8. Backend auf TypeScript
 
 1. `checkJs` + `allowJs` in `tsconfig.json` aktivieren (M1), bestehendes JS ohne Umbenennung typprüfen lassen, Fehler schrittweise beheben.
 2. Modul für Modul auf `.ts` umstellen (kein Stichtag) — Reihenfolge nach Kritikalität/Änderungshäufigkeit.
 3. `ha-api.d.ts` als Referenz für Nutzerskript-Typen bleibt unverändert bestehen; interner Backend-Code bekommt eigene Typen.
 4. CommonJS-Modulsystem bleibt — kein Umstieg auf ESM als Teil dieses Workstreams.
 
-## 8. Lint & Test
+## 9. Lint & Test
 
 1. **Lint:** ESLint + Prettier-Baseline für `js_automations/` (Backend + Frontend), Konfiguration committen (M0).
 2. **Test — Backend zuerst:** Vitest oder Node-Test-Runner für `core/`, `services/`, `routes/`; Boot-Smoke-Test hat Priorität (M2).
 3. **Test — Frontend danach:** `@open-wc/testing` für neue LIT-Komponenten, sobald vorhanden. Kein nachträgliches Testen des auslaufenden Vanilla-Codes.
 
-## 9. i18n
+## 10. i18n
 
 Keine Änderung nötig — `i18next` bleibt, Übersetzungsdateien (`locales/de|en/translation.json`) weiter pflegen wie bisher, auch wenn Komponenten auf LIT umgestellt werden.
 
-## 10. State-Management (unverändert aus altem RFC)
+## 11. State-Management (unverändert aus altem RFC)
 
 Kein zentraler Store nötig für den Start — bestehende Muster bleiben, nur reaktiv gekapselt. Gemeinsam benötigter State über ein leichtgewichtiges Pub/Sub-Modul (`script-state.js`, kein RxJS). Bei wachsendem Bedarf später evaluierbar: [`@lit/context`](https://lit.dev/docs/data/context/).
 
-## 11. Vorarbeiten (unabhängig vom Zeitpunkt der Komponenten-Migration)
+## 12. Vorarbeiten (unabhängig vom Zeitpunkt der Komponenten-Migration)
 
 - **CSS aufteilen:** `style.css` (2300+ Zeilen) in komponentenausgerichtete Dateien trennen — eigenes Vorhaben, siehe `[[project_css_split]]`-Memory, nicht mit dieser Migration vermischen.
 - **`window.*`-Globals inventarisieren:** aktuell ca. 80 globale Funktionen/Variablen — für jede neue Komponente klären, welche abgelöst werden.

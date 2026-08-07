@@ -121,6 +121,12 @@ export interface JsaStoreExplorerBridge {
   getItem(key: string): unknown;
   hasKey(key: string): boolean;
   refreshIfSocketDown(): void;
+  openTab(): void;
+}
+
+export interface JsaStoreItemModalBridge {
+  open(key?: string): void;
+  close(): void;
 }
 
 export interface JsaTab {
@@ -138,6 +144,22 @@ export interface JsaCardPreviewBridge {
   toggle(scriptFilename: string | null | undefined): void;
   reload(): void;
   isOpen(): boolean;
+}
+
+export interface JsaConfirmDialogBridge {
+  confirm(
+    message: string,
+    opts?: { title?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }
+  ): Promise<boolean>;
+}
+
+export interface JsaAlertToastBridge {
+  show(message: string, opts?: { variant?: 'error' | 'info' | 'success' | 'warning'; duration?: number }): void;
+}
+
+export interface JsaEntityPickerModalBridge {
+  open(): void;
+  close(): void;
 }
 
 declare global {
@@ -166,10 +188,7 @@ declare global {
     storeExplorer?: JsaStoreExplorerBridge;
     loadStoreData?: () => Promise<void>;
     onStoreChanged?: (data: { cleared?: boolean; deleted?: boolean; key?: string; item?: unknown }) => void;
-    /** Opens the create/edit modal (store-modal.js) — omit `key` for create mode. */
-    openStoreModal?: (key?: string) => void;
-    /** Opens/switches to the Store Explorer tab (store-modal.js). */
-    openStoreTab?: () => void;
+    storeItemModal?: JsaStoreItemModalBridge;
     onHaEventStream?: (payload: { t: number; type: string; data: Record<string, any> }) => void;
     /** All known entity IDs, populated by editor-config.js for Monaco completions; also used by the entity-filter dropdowns. */
     allEntities?: string[];
@@ -180,7 +199,7 @@ declare global {
     renderTabs?: () => void;
     switchToTab?: (filename: string) => void;
     updateToolbarUI?: (filename: string, icon: string, isDirty: boolean) => void;
-    closeTab?: (filename: string) => void;
+    closeTab?: (filename: string) => Promise<void>;
     activeTabFilename?: string | null;
     loadSettingsData?: (isBackgroundRefresh?: boolean) => Promise<void>;
     /** Re-checks window.newVersionInfo and refreshes the settings category sidebar's update-available dot. */
@@ -208,6 +227,9 @@ declare global {
     /** editor-config.js: reloads library `.d.ts` IntelliSense after a library script is deleted. */
     loadLibraryDefinitions?: () => Promise<void>;
     CardPreview?: JsaCardPreviewBridge;
+    confirmDialog?: JsaConfirmDialogBridge;
+    alertToast?: JsaAlertToastBridge;
+    entityPickerModal?: JsaEntityPickerModalBridge;
     /** api.js: ingress-aware URL prefix, e.g. '/api/hassio_ingress/<token>/'. */
     BASE_PATH?: string;
     /** Set by tab-manager.js's switchToTab() — the script whose card the preview toggle button controls. */

@@ -166,7 +166,8 @@ export class LogViewer extends LitElement {
   };
 
   clearServerLogs = async (): Promise<void> => {
-    if (!confirm(this._t('confirm_clear_logs', 'Do you really want to delete the entire server log?'))) return;
+    if (!(await window.confirmDialog!.confirm(this._t('confirm_clear_logs', 'Do you really want to delete the entire server log?'))))
+      return;
     await window.apiFetch!('api/logs', { method: 'DELETE' });
     this.clearLogView();
     this._sources = ['System'];
