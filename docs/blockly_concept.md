@@ -321,8 +321,8 @@ This is safe specifically *because* it's Blockly: every capability-using constru
 1. **Create**: Wizard → select "Visual (.blocks)" → Blockly workspace opens with starter trigger block
 2. **Edit**: Click script in sidebar → Blockly editor mounts; entity/service dropdowns populated from HA
 3. **Save** (Ctrl+S or toolbar): Frontend sends JSON workspace as `content` to the existing `POST /:filename/content` endpoint → server compiles → worker restarts
-4. **Show Code**: Toolbar button → read-only Monaco panel showing the compiled JS output (reuses existing Monaco instance)
-5. **Convert to JavaScript**: "Edit as JavaScript" → warning dialog ("The visual editor will no longer be available for this script") → on confirm: compiled JS opens in Monaco as `.js`, `.blocks` file is deleted
+4. **Show Code** (2026-08-08): Toolbar toggle (`#btn-show-code`, occupies the `#toolbar-snippets` slot on `.blocks` tabs) → read-only Monaco view of the code the current (possibly unsaved) workspace would compile to, generated live in the browser via `Blockly.JavaScript.workspaceToCode()` — no server round-trip, reuses the existing shared Monaco instance
+5. **Duplicate as JavaScript** (2026-08-08, superseded the original "Convert to JavaScript" design below): a checkbox in the existing Duplicate dialog, shown only when duplicating a `.blocks` script with a compiled dist already on disk. Checked → creates an independent `.js` copy of the last-compiled output via the same `POST /api/scripts/` (create) endpoint Duplicate always used; the original `.blocks` script is left completely untouched — non-destructive, reversible, no warning dialog needed. Reused rather than a bespoke conversion endpoint, per user request during implementation.
 
 ---
 
@@ -535,9 +535,9 @@ Deliverable: Every `ha.*` API method has a corresponding block. — superseded, 
 
 Deliverable: The Blockly editor feels native to the addon.
 
-- [ ] "Show Code" panel — read-only Monaco synced to compiled JS output (**in scope, must have**)
-- [x] / [ ] Editor toolbar Blockly-aware branch — **partially done (2026-07-10)**: `tab-manager.js`'s `switchToTab()` now empties `#toolbar-snippets` and hides the word-wrap button for `.blocks` tabs (both were showing Monaco-only controls that make no sense on a block canvas), user-verified live. Still open: the Show Code toggle button that's meant to occupy that now-empty slot doesn't exist yet — depends on the "Show Code" panel itself (separate bullet below).
-- [ ] "Convert to JavaScript" — warning dialog + one-way conversion, `.blocks` file deleted (**in scope, must have — this is the escape hatch the whole scoping decision depends on**)
+- [x] "Show Code" panel (2026-08-08) — read-only Monaco toggle synced to the live-generated compiled JS output (**must have**). User-verified live in the browser (including a follow-up fix: the active-state highlight needed `!important` since `.editor-toolbar button` sets `color` with `!important`, which silently beats a plain override regardless of selector specificity — same root cause hit again below for the duplicate-as-JS checkbox's `.hidden` class).
+- [x] Editor toolbar Blockly-aware branch — **done (2026-08-08)**: the Show Code toggle now occupies the `#toolbar-snippets` slot that was left empty since 2026-07-10.
+- [x] "Convert to JavaScript" — **redesigned during implementation (2026-08-08), user request**: not a warning-dialog + destructive one-way conversion as originally planned below, but a non-destructive "duplicate as JavaScript" checkbox in the existing Duplicate dialog (**must have — still satisfies the escape-hatch requirement, just without deleting the original**). See "UI Flow" above for the mechanism and why (reuses the existing create/duplicate plumbing instead of a bespoke conversion endpoint — a dedicated `/convert-to-js` server route was built, verified, then reverted in favor of this simpler approach before ever being wired into the UI).
 - [ ] Block-level error visualization — highlight the block that caused a runtime error (requires error position metadata from compiler) (**in scope, should have — most technically risky item in the should-have tier, first to slip if time is short**)
 - [x] Blockly dark theme (`Blockly.Theme.defineTheme('ha_dark', ...)` in `blockly-editor.js`) — pulled forward into M2 because the default light theme was unusable next to the rest of the (dark-only, no light mode anywhere) UI. Still open for M5: fonts/shadows polish, and the toolbox category colors (currently placeholder hues, not yet the ioBroker scheme)
 - [ ] i18n: all remaining keys (`blockly_show_code`, `blockly_convert_warning`, `blockly_category_*`, error messages)
@@ -559,7 +559,7 @@ Keep blocks atomic. Don't build compound "turn off all lights in area X" mega-bl
 Fetch entity IDs once on workspace mount; cache them in memory for the session. Do not re-fetch on every dropdown open. Show a loading state if HA is still connecting.
 
 ### 5. `.blocks` as single source of truth, lock the compiled output
-Never expose `.storage/dist/script.js` for direct editing when a `.blocks` source exists. The scripts list should not show the compiled output file. M5's "Convert to JavaScript" explicitly and irreversibly breaks this link — make the warning dialog clear.
+Never expose `.storage/dist/script.js` for direct editing when a `.blocks` source exists. The scripts list should not show the compiled output file. **Superseded (2026-08-08)**: the "irreversibly breaks this link" framing assumed the original destructive Convert-to-JavaScript design; the shipped "duplicate as JavaScript" feature creates an independent `.js` copy alongside the `.blocks` source instead of replacing it, so this concern no longer applies to that path — the `.blocks` file's own dist output stays exactly as locked-down as before.
 
 ### 6. Reuse Monaco for "Show Code"
 Monaco is already loaded for JS/TS editing. Open it in `readOnly: true` mode pointing at the compiled output path. No new viewer component needed.
@@ -643,8 +643,8 @@ blockly_no_trigger_warning
 - MQTT subscribe block works end-to-end
 
 **M5**
-- "Show Code" panel opens and shows correct generated JS
-- "Convert to JavaScript" shows warning, converts file, removes `.blocks`, opens Monaco with JS
+- "Show Code" toggle opens and shows correct generated JS, switches back to the canvas cleanly — done, user-verified 2026-08-08
+- "Duplicate as JavaScript" checkbox appears only for `.blocks` scripts with a compiled dist, creates a working independent `.js` copy, original `.blocks` untouched — done, user-verified 2026-08-08
 
 ---
 
