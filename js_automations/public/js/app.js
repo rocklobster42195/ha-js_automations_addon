@@ -1,9 +1,8 @@
 /**
  * JS AUTOMATIONS - Main Entry Point
- * Initializes the application, Monaco Editor, and loads initial data.
+ * Initializes the application and loads initial data. Monaco Editor itself is owned by
+ * components/monaco-editor.ts — see the 'monaco-ready' listener below.
  */
-
-var editor = null; // Global instance for editor-config.js
 
 // Capture console methods immediately to allow restoring/filtering.
 const originalConsole = {
@@ -14,6 +13,27 @@ const originalConsole = {
   error: console.error,
 };
 
+// Monaco Editor itself is now owned by <monaco-editor> (components/monaco-editor.ts) — it
+// dispatches 'monaco-ready' once its own AMD bootstrap + TS typings + completion providers are
+// all set up. Everything below that isn't Monaco-specific but used to be nested inside that
+// callback (purely by historical accident of file load order, not a real dependency on Monaco)
+// waits for the same event so its relative timing is unchanged. Registered here at the top
+// level — outside DOMContentLoaded — because app.js (a classic script) always finishes
+// executing before components.js (a deferred module) upgrades <monaco-editor> and kicks off its
+// (network-bound, so not instant) AMD load; registering inside the async DOMContentLoaded
+// handler below would risk losing the race if that load somehow completed first.
+document.addEventListener(
+  'monaco-ready',
+  () => {
+    loadScripts();
+    initResizer();
+    initLogPaneResizer();
+    initDevPanelTabs();
+    initRepl();
+  },
+  { once: true }
+);
+
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
   // 1. Initialize Internationalization.
@@ -22,86 +42,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Initialize WebSocket Connection.
   initSocket();
 
-  // 3. Initialize Monaco Editor (AMD Loader).
-  if (typeof require !== 'undefined') {
-    const monacoLang = i18next.language.startsWith('de') ? 'de' : '';
-    require.config({
-      paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' },
-      'vs/nls': { availableLanguages: { '*': monacoLang } },
-    });
-
-    require(['vs/editor/editor.main'], () => {
-      // Create Editor Instance.
-      editor = monaco.editor.create(document.getElementById('monaco-container'), {
-        model: null, // No model initially, will be set when a tab is opened
-        language: 'javascript',
-        theme: 'vs-dark',
-        automaticLayout: true,
-        fontSize: 13,
-        minimap: { enabled: true },
-        suggest: { showWords: false },
-      });
-
-      // Restore Word Wrap Setting.
-      const savedWordWrap = localStorage.getItem('js_editor_wordwrap') || 'off';
-      editor.updateOptions({ wordWrap: savedWordWrap });
-
-      // Update UI Button for Word Wrap.
-      const wrapButton = document.getElementById('btn-word-wrap');
-      if (wrapButton) {
-        const icon = wrapButton.querySelector('i');
-        if (icon) {
-          icon.className = `mdi mdi-wrap${savedWordWrap === 'on' ? '' : '-disabled'}`;
-        }
-      }
-
-      // Register Keyboard Shortcuts (Ctrl+S / Cmd+S).
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActiveTab);
-
-      // Initialize TypeScript Typings for Monaco.
-      initMonacoTypeScript();
-
-      // --- SETTINGS INTEGRATION ---
-      window.addEventListener('settings-changed', (e) => {
-        applyEditorSettings(e.detail);
-        applySystemSettings(e.detail);
-      });
-      if (window.currentSettings) {
-        // Apply settings with a short delay to ensure Monaco is fully ready.
-        setTimeout(() => {
-          applyEditorSettings(window.currentSettings);
-          applySystemSettings(window.currentSettings);
-        }, 100);
-      }
-
-      // Add Context Menu Action: Insert Entity.
-      editor.addAction({
-        id: 'insert-entity',
-        label: i18next.t('modal_insert_entity_title', { defaultValue: 'Insert Entity' }),
-        contextMenuGroupId: '90_snippets_general',
-        contextMenuOrder: 0,
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
-        run: () => {
-          window.entityPickerModal?.open();
-        },
-      });
-
-      // --- SNIPPETS: context menu + keybindings from central registry ---
-      registerSnippetContextMenu(editor);
-      registerSnippetKeybindings(editor);
-
-      // --- SNIPPETS: build toolbar buttons from registry ---
-      buildSnippetToolbar(document.getElementById('toolbar-snippets'));
-
-      // Initialize Editor Configuration & Layout.
-      configureMonaco();
-      loadScripts();
-      initResizer();
-      initLogPaneResizer();
-      initDevPanelTabs();
-      initRepl();
-    });
-  }
+  // --- SETTINGS INTEGRATION (system/console part only — the editor part lives in
+  // <monaco-editor> and <editor-view>) ---
+  window.addEventListener('settings-changed', (e) => applySystemSettings(e.detail));
+  if (window.currentSettings) applySystemSettings(window.currentSettings);
 
   // 4. Load Global Data.
   loadHAMetadata();
@@ -175,122 +119,6 @@ function getLanguageBadge(filename) {
 }
 window.getLanguageBadge = getLanguageBadge;
 
-// Storage for compiler errors per file
-const compilerMarkers = new Map();
-
-/**
- * Initializes TypeScript support in Monaco by loading the type definitions bundle from the API.
- */
-async function initMonacoTypeScript() {
-  const compilerOptions = {
-    target: monaco.languages.typescript.ScriptTarget.ES2020,
-    module: monaco.languages.typescript.ModuleKind.Node16,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Node16,
-    allowNonTsExtensions: true,
-    noEmit: true,
-    strict: true,
-    skipLibCheck: true,
-    forceConsistentCasingInFileNames: true,
-    esModuleInterop: true,
-    allowSyntheticDefaultImports: true,
-    baseUrl: 'file:///',
-    paths: { '*': ['file:///node_modules/@types/*'] },
-  };
-
-  // Configure both TypeScript AND JavaScript defaults
-  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
-  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-    ...compilerOptions,
-    checkJs: true,
-    allowJs: true,
-  });
-
-  try {
-    const res = await fetch('api/scripts/typings');
-    if (!res.ok) return;
-
-    const typings = await res.json();
-    typings.forEach((lib) => {
-      const uri = `file:///${lib.filename}`;
-      // Register for TS
-      monaco.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri);
-      // Also register for JS so ha.states etc. work there too
-      monaco.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri);
-    });
-  } catch (err) {
-    console.error('[Monaco] Failed to load typings:', err);
-  }
-
-  // Card-side __jsa__ type defs (available in card tabs for __jsa__.callAction etc.)
-  const jsaCardDefs = `
-declare const __jsa__: {
-  /**
-   * Call a named action handler registered in the parent script via ha.action().
-   * Returns the handler's resolved value.
-   */
-  callAction(action: string, payload?: Record<string, unknown>): Promise<unknown>;
-  /** Filename of the parent script that owns this card (e.g. 'openligadb.js') */
-  scriptName: string;
-};
-`;
-  monaco.languages.typescript.javascriptDefaults.addExtraLib(jsaCardDefs, 'file:///jsa-card-api.d.ts');
-
-  // Reactive update when typings change on server
-  if (window.socket) {
-    window.socket.off('typings_updated').on('typings_updated', () => initMonacoTypeScript());
-  }
-
-  // Listener for compiler signals (for precise markers in the editor)
-  if (window.socket) {
-    window.socket.off('compiler_signal').on('compiler_signal', (data) => {
-      if (data.type === 'TS_OK') {
-        clearCompilerMarkers(data.filename);
-      } else {
-        // Expects object format directly from socket
-        handleCompilerMarker(data.filename, data.line, data.col, data.text, data.code, data.type);
-      }
-    });
-  }
-}
-
-/**
- * Sets or updates markers in the Monaco editor based on compiler feedback.
- */
-function handleCompilerMarker(filename, line, col, message, code, type) {
-  const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(filename));
-  if (!model) return;
-
-  if (!compilerMarkers.has(filename)) {
-    compilerMarkers.set(filename, []);
-  }
-
-  const markers = compilerMarkers.get(filename);
-  markers.push({
-    startLineNumber: line,
-    startColumn: col,
-    endLineNumber: line,
-    endColumn: col + 10, // Rough estimate for marking
-    message: `${code}: ${message}`,
-    severity: type === 'TS_ERR' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
-    source: 'TypeScript Compiler',
-  });
-
-  // Apply markers to editor
-  monaco.editor.setModelMarkers(model, 'compiler', markers);
-}
-
-/**
- * Deletes all compiler markers for a specific file.
- */
-function clearCompilerMarkers(filename) {
-  const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(filename));
-  compilerMarkers.delete(filename);
-
-  if (model) {
-    monaco.editor.setModelMarkers(model, 'compiler', []);
-  }
-}
-
 async function checkSystemStatus() {
   try {
     const res = await fetch('api/system/integration');
@@ -350,35 +178,6 @@ function updateSystemNotifications() {
   }
 }
 window.updateSystemNotifications = updateSystemNotifications;
-
-/**
- * Applies settings to the Monaco Editor instance.
- */
-function applyEditorSettings(settings) {
-  if (!editor || !settings || !settings.editor) return;
-  const conf = settings.editor;
-
-  editor.updateOptions({
-    fontSize: conf.fontSize,
-    wordWrap: conf.wordWrap,
-    minimap: { enabled: conf.minimap },
-  });
-
-  const toolbar = document.querySelector('.editor-toolbar');
-  if (toolbar) {
-    const shouldHide = !conf.showToolbar;
-    if ((toolbar.style.display === 'none') !== shouldHide) {
-      toolbar.style.display = shouldHide ? 'none' : 'flex';
-      setTimeout(() => editor.layout(), 0);
-    }
-  }
-
-  // Sync Toolbar Button UI
-  const wrapButton = document.getElementById('btn-word-wrap');
-  if (wrapButton && wrapButton.querySelector('i')) {
-    wrapButton.querySelector('i').className = `mdi mdi-wrap${conf.wordWrap === 'on' ? '' : '-disabled'}`;
-  }
-}
 
 /**
  * Applies system settings, specifically the log level for the browser console.

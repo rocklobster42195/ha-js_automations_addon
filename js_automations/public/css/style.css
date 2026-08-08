@@ -52,10 +52,13 @@ html {
    *part* of .main-content shows: the log split-pane's .log-section for log,
    or #editor-section (already home to the settings view via the same tab
    machinery desktop uses) for anything else — and for that "anything else"
-   case, #tab-bar (also inside #editor-section) is hidden too, since
-   <settings-view> already renders its own equivalent header/close button and
-   mobile never has more than one tab open at once anyway (Editor/Store are
-   out of scope). */
+   case, <editor-view> (its tab bar lives in its own Shadow DOM as of RFC
+   Phase B item 8, unreachable by an ID selector here — hide the whole host
+   element instead, which is equivalent since its toolbar/editor-body is
+   already conditionally hidden internally whenever a virtual tab like
+   Settings is active) is hidden too, since <settings-view> already renders
+   its own equivalent header/close button and mobile never has more than one
+   tab open at once anyway (Editor/Store are out of scope). */
 body.jsa-mobile .main-content {
   display: none !important;
 }
@@ -75,7 +78,7 @@ body.jsa-mobile.jsa-mobile-fullscreen.jsa-mobile-screen-log .log-pane-right {
 body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) .log-section {
   display: none !important;
 }
-body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) #tab-bar {
+body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) editor-view {
   display: none !important;
 }
 /* #editor-section's height is otherwise a desktop drag-resizer's inline px

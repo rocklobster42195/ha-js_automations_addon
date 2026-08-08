@@ -22,6 +22,8 @@ import './alert-toast';
 import './entity-picker-modal';
 import './store-item-modal';
 import './script-modal';
+import './monaco-editor';
+import './editor-view';
 import { observeTabVisibility } from './tab-visibility';
 
 // repl.js (not yet migrated) still uses this as a bare global — see

@@ -29,12 +29,11 @@ const EMPTY_SCRIPT_CODE = 'const scriptName=ha.getHeader("name");\nha.log(`\'${s
 
 /**
  * Unified script creation/edit/duplicate/upload/import dialog (RFC Phase B item 7). Replaces
- * creation-wizard.js. Reaches into still-vanilla tab-manager.js globals (window.openTabs,
+ * creation-wizard.js. Reaches into `<editor-view>`'s bridge globals (window.openTabs,
  * window.activeTabFilename, window.renderTabs, window.updateToolbarUI,
  * window.loadBlocklyWorkspace) for post-save tab sync, and into window.openOrSwitchToTab /
- * window.loadScripts — same accepted interim-coupling pattern as entity-picker-modal.ts's
- * reach into window.editor, flipped direction. That coupling clears once item 8
- * (`<editor-view>`/`<monaco-editor>`) migrates tab-manager.js.
+ * window.loadScripts — the window.* bridge pattern used throughout this migration for
+ * cross-component calls that aren't worth a dedicated event for.
  */
 @customElement('script-modal')
 export class ScriptModal extends LitElement {

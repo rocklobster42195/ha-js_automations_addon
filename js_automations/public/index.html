@@ -42,108 +42,10 @@
 
       <main class="main-content">
         <div id="editor-section" class="hidden">
-          <div id="tab-bar"></div>
-
           <!-- EDITOR VIEW -->
-          <div id="editor-wrapper" style="display: flex; flex-direction: column; flex: 1; min-height: 0">
-            <div class="editor-toolbar">
-              <div class="toolbar-left">
-                <button
-                  id="btn-script-toggle"
-                  onclick="toggleActiveScript()"
-                  data-i18n="script_action_toggle_title"
-                  data-i18n-title
-                  title="Start / Stop"
-                >
-                  <i class="mdi mdi-play"></i>
-                </button>
-                <button
-                  id="btn-script-restart"
-                  onclick="restartActiveScript()"
-                  data-i18n="script_action_restart_title"
-                  data-i18n-title
-                  title="Neustart"
-                >
-                  <i class="mdi mdi-restart"></i>
-                </button>
-                <div class="toolbar-separator"></div>
-                <button
-                  class="btn-save"
-                  onclick="saveActiveTab()"
-                  data-i18n="save_title"
-                  data-i18n-title
-                  title="Speichern"
-                >
-                  <i class="mdi mdi-content-save"></i>
-                </button>
-                <button id="btn-script-edit" onclick="editActiveScript()" title="Edit Metadata">
-                  <i class="mdi mdi-pencil"></i>
-                </button>
-                <button
-                  id="btn-script-download"
-                  onclick="downloadActiveScript()"
-                  data-i18n="download_script_title"
-                  data-i18n-title
-                  title="Download Script"
-                >
-                  <i class="mdi mdi-download"></i>
-                </button>
-                <button
-                  id="btn-script-duplicate"
-                  onclick="duplicateActiveScript()"
-                  data-i18n="script_action_duplicate_title"
-                  data-i18n-title
-                  title="Duplizieren"
-                >
-                  <i class="mdi mdi-content-duplicate"></i>
-                </button>
-                <button
-                  id="btn-word-wrap"
-                  onclick="toggleWordWrap()"
-                  data-i18n="toggle_word_wrap_title"
-                  data-i18n-title
-                  title="Zeilenumbruch umschalten"
-                >
-                  <i class="mdi mdi-wrap-disabled"></i>
-                </button>
-                <button
-                  type="button"
-                  id="btn-open-card-tab"
-                  onclick="toggleCardTab()"
-                  title="Open / Close Card Tab"
-                  class="hidden"
-                >
-                  <i class="mdi mdi-card-text-outline"></i>
-                </button>
-                <div class="toolbar-separator"></div>
-                <!-- Snippet buttons injected by editor-snippets.js → buildSnippetToolbar() -->
-                <div id="toolbar-snippets"></div>
-                <button
-                  type="button"
-                  id="btn-card-menu"
-                  onclick="_toggleCardPreview()"
-                  data-i18n="card_preview_toggle_title"
-                  data-i18n-title
-                  title="Show / Hide Preview"
-                >
-                  <i class="mdi mdi-monitor-dashboard"></i>
-                </button>
-              </div>
-              <div class="toolbar-right">
-                <button
-                  type="button"
-                  onclick="closeAllTabs()"
-                  data-i18n="close_all_tabs_title"
-                  data-i18n-title
-                  title="Alle Tabs schließen"
-                >
-                  <i class="mdi mdi-close-box-multiple"></i>
-                </button>
-              </div>
-            </div>
-            <div id="monaco-container"></div>
-            <div id="blockly-container" class="hidden"></div>
-          </div>
+          <editor-view>
+            <div id="blockly-container" slot="blockly" class="hidden"></div>
+          </editor-view>
 
           <!-- STORE VIEW -->
           <store-explorer id="store-wrapper" class="hidden"></store-explorer>
@@ -193,15 +95,12 @@
     </div>
 
     <script src="js/api.js"></script>
-    <script src="js/editor-config.js"></script>
-    <script src="js/editor-snippets.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/blockly-blocks.js"></script>
     <script src="js/blockly-blocks-shared.js"></script>
     <script src="js/blockly-mutators.js"></script>
     <script src="js/blockly-fields.js"></script>
     <script src="js/blockly-editor.js"></script>
-    <script src="js/tab-manager.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>

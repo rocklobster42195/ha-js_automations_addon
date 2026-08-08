@@ -6,20 +6,6 @@ import { mdiStylesheetLink } from './mdi';
 const RENDER_LIMIT = 200;
 
 /**
- * Minimal structural shape of the still-vanilla Monaco `editor` global
- * (tab-manager.js, Phase B) — avoids importing the full Monaco types just to
- * insert text at the cursor. Reverse-direction coupling (a migrated
- * component reaching into not-yet-migrated code) is the same accepted
- * pattern already used elsewhere (e.g. tab-manager.js reaching into
- * <app-sidebar>), just flipped.
- */
-interface MinimalMonacoEditor {
-  getSelection(): unknown;
-  executeEdits(id: string, edits: { range: unknown; text: string; forceMoveMarkers: boolean }[]): void;
-  focus(): void;
-}
-
-/**
  * "Insert Entity" modal (Ctrl+E in the editor), RFC Phase A item 6. Ports
  * editor-config.js's openEntityPicker/closeEntityPicker/renderEntityList/
  * filterEntityPicker/insertEntityToEditor as-is (200-row render cap, same
@@ -151,10 +137,6 @@ export class EntityPickerModal extends LitElement {
     return window.i18next?.t(key) ?? fallback;
   }
 
-  private get _editor(): MinimalMonacoEditor | undefined {
-    return (window as unknown as { editor?: MinimalMonacoEditor }).editor;
-  }
-
   connectedCallback() {
     super.connectedCallback();
     window.entityPickerModal = { open: this.open, close: this.close };
@@ -178,7 +160,7 @@ export class EntityPickerModal extends LitElement {
 
   close = (): void => {
     this._open = false;
-    this._editor?.focus();
+    window.monacoEditor?.focus();
   };
 
   private _onFilterInput = (e: InputEvent): void => {
@@ -186,11 +168,7 @@ export class EntityPickerModal extends LitElement {
   };
 
   private _insert(entityId: string): void {
-    const editor = this._editor;
-    if (editor) {
-      const selection = editor.getSelection();
-      editor.executeEdits('insert-entity', [{ range: selection, text: entityId, forceMoveMarkers: true }]);
-    }
+    window.monacoEditor?.insertTextAtCursor(entityId);
     this.close();
   }
 

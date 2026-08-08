@@ -94,9 +94,17 @@ export interface JsaStatusBarSettings {
   header_action_3?: string;
 }
 
+export interface JsaEditorSettings {
+  fontSize?: number;
+  wordWrap?: 'on' | 'off';
+  minimap?: boolean;
+  showToolbar?: boolean;
+}
+
 export interface JsaSettings {
   statusbar?: JsaStatusBarSettings;
   mqtt?: { enabled?: boolean };
+  editor?: JsaEditorSettings;
   [key: string]: unknown;
 }
 
@@ -159,12 +167,21 @@ export interface JsaTab {
   filename: string;
   icon: string;
   isDirty: boolean;
-  type?: string;
+  type?: 'store' | 'settings' | 'reference' | 'blockly' | 'card';
   model: unknown;
   viewState?: unknown;
+  /** Monaco tabs only — last-saved content, compared against the live model to derive isDirty.
+   * null on a not-yet-saved card tab, where every edit is dirty until the first save. */
+  originalContent?: string | null;
+  /** Card tabs only — the parent script's filename (card tab's own filename is
+   * `${parentScript}[card]`). */
+  parentScript?: string;
   /** Only present on `type: 'blockly'` tabs — see openBlocklyTab() in tab-manager.js. */
   jsa?: Record<string, unknown>;
   blocksState?: { blocks: unknown; variables: unknown };
+  /** Blockly tabs only — last-saved workspace JSON, compared against the live workspace to
+   * derive isDirty. */
+  originalBlocksJson?: string;
 }
 
 export interface JsaCardPreviewBridge {
@@ -189,6 +206,28 @@ export interface JsaAlertToastBridge {
 export interface JsaEntityPickerModalBridge {
   open(): void;
   close(): void;
+}
+
+export interface JsaMonacoEditorBridge {
+  /** onContentChange fires on every edit — icon decorations update automatically; the callback
+   * is for caller-side concerns like dirty-tracking. */
+  createModel(content: string, language: string, uriPath: string, onContentChange?: (model: unknown) => void): unknown;
+  disposeModel(model: unknown): void;
+  setModel(model: unknown): void;
+  getValue(): string;
+  /** Reads the value of any model reference, not just the one currently attached to the editor. */
+  getModelValue(model: unknown): string;
+  saveViewState(): unknown;
+  restoreViewState(state: unknown): void;
+  focus(): void;
+  layout(): void;
+  setReadOnly(readOnly: boolean): void;
+  /** Inserts text at the current cursor selection — used by entity-picker-modal.ts instead of it reaching into a raw Monaco editor/selection API. */
+  insertTextAtCursor(text: string): void;
+  updateIconDecorations(model: unknown): void;
+  setMode(mode: 'script' | 'card'): void;
+  loadLibraryDefinitions(): Promise<void>;
+  isReady(): boolean;
 }
 
 export interface JsaLogEntry {
@@ -250,12 +289,35 @@ declare global {
     allEntities?: string[];
     /** repl.js (not yet migrated) still calls this as a bare global — see js/components/index.ts. */
     observeTabVisibility?: (el: HTMLElement, cb: (visible: boolean) => void) => MutationObserver;
-    /** tab-manager.js (not yet migrated) globals for the editor tab strip. */
+    /** <editor-view>'s bridge for the editor tab strip — see components/editor-view.ts. */
     openTabs?: JsaTab[];
     renderTabs?: () => void;
     switchToTab?: (filename: string) => void;
     updateToolbarUI?: (filename: string, icon: string, isDirty: boolean) => void;
     closeTab?: (filename: string) => Promise<void>;
+    openCardTab?: (scriptFilename: string) => Promise<void>;
+    toggleCardTab?: () => Promise<void>;
+    saveActiveTab?: () => Promise<void>;
+    closeAllTabs?: () => Promise<void>;
+    toggleActiveScript?: () => Promise<void>;
+    restartActiveScript?: () => Promise<void>;
+    editActiveScript?: () => Promise<void>;
+    deleteActiveScript?: () => Promise<void>;
+    duplicateActiveScript?: () => Promise<void>;
+    downloadActiveScript?: () => void;
+    toggleShowCode?: () => void;
+    /** blockly-editor.js's workspace-changed listener calls this to mark the active Blockly
+     * tab dirty. */
+    onBlocklyWorkspaceChanged?: () => void;
+    /** blockly-editor.js bridges (Blockly integration stays vanilla — not part of the LIT
+     * migration, see docs/RFC_FRONTEND_MODERNIZATION.md). */
+    ensureBlocklyReady?: () => Promise<void>;
+    isBlocklyReady?: () => boolean;
+    getBlocklyWorkspaceState?: () => { blocks: unknown; variables: unknown };
+    getBlocklyGeneratedCode?: () => string;
+    reapplyBlocklyError?: (scriptId: string) => void;
+    /** app.js: maps a filename extension to a Monaco language id. */
+    getLanguageByFilename?: (filename: string) => string;
     activeTabFilename?: string | null;
     loadSettingsData?: (isBackgroundRefresh?: boolean) => Promise<void>;
     /** Re-checks window.newVersionInfo and refreshes the settings category sidebar's update-available dot. */
@@ -288,6 +350,7 @@ declare global {
     confirmDialog?: JsaConfirmDialogBridge;
     alertToast?: JsaAlertToastBridge;
     entityPickerModal?: JsaEntityPickerModalBridge;
+    monacoEditor?: JsaMonacoEditorBridge;
     logViewer?: JsaLogViewerBridge;
     watchPanel?: JsaWatchPanelBridge;
     /** api.js: ingress-aware URL prefix, e.g. '/api/hassio_ingress/<token>/'. */
