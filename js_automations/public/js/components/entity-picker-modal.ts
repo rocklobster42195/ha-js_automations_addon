@@ -145,6 +145,7 @@ export class EntityPickerModal extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     if (window.entityPickerModal?.open === this.open) delete window.entityPickerModal;
+    document.removeEventListener('keydown', this._onKeydown);
   }
 
   updated(changed: Map<string, unknown>) {
@@ -156,11 +157,17 @@ export class EntityPickerModal extends LitElement {
   open = (): void => {
     this._filter = '';
     this._open = true;
+    document.addEventListener('keydown', this._onKeydown);
   };
 
   close = (): void => {
     this._open = false;
+    document.removeEventListener('keydown', this._onKeydown);
     window.monacoEditor?.focus();
+  };
+
+  private _onKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') this.close();
   };
 
   private _onFilterInput = (e: InputEvent): void => {
