@@ -15,7 +15,7 @@
         global.registerHaBlocks = factory();
     }
 })(typeof self !== 'undefined' ? self : this, function () {
-    return function registerHaBlocks(generator) {
+    function registerHaBlocks(generator) {
         generator.forBlock['ha_trigger_on'] = function (block, gen) {
             // valueToCode() returns already-quoted code (e.g. `"sensor.temp"` from ha_entity's
             // own JSON.stringify), so it's used as-is here, not re-wrapped in JSON.stringify.
@@ -271,5 +271,36 @@
             const optsArg = retain ? ', { retain: true }' : '';
             return `ha.mqtt.publish(${JSON.stringify(topic)}, ${payload}${optsArg});\n`;
         };
-    };
+    }
+
+    /**
+     * Wraps compiled top-level code in an async IIFE only if it actually needs one — a bare
+     * top-level `await` (e.g. a triggerless action-only workspace, or the pre-M5 default of
+     * always wrapping unconditionally) is invalid inside the plain CommonJS module the dist
+     * output gets require()'d as, but most real workspaces don't have one: every trigger-shaped
+     * block's DO stack already runs inside its own `async (e) => {...}` callback (ha_trigger_on,
+     * ha_store_on, ha_mqtt_subscribe, ...), so the *top level* is just a sequence of `ha.on(...)`/
+     * `schedule(...)`/etc. registration calls with nothing to await.
+     *
+     * Detected via `new Function(code)`: a plain (non-async) function body syntactically rejects
+     * a bare top-level `await` — exactly the condition that needs wrapping — while well-formed
+     * generated code (no top-level await) parses there without throwing.
+     *
+     * Shared here rather than duplicated per caller so the server compiler
+     * (core/blockly-compiler.js — the actual runtime dist output), the browser's live "Show Code"
+     * panel (blockly-editor.js), and "Convert to JavaScript" (which reuses the compiled dist
+     * verbatim) can never disagree about whether a given workspace needs wrapping.
+     */
+    function wrapGeneratedCode(code) {
+        let needsWrap = false;
+        try {
+            new Function(code);
+        } catch (e) {
+            needsWrap = true;
+        }
+        return needsWrap ? `(async () => {\n${code}\n})();\n` : code;
+    }
+
+    registerHaBlocks.wrapGeneratedCode = wrapGeneratedCode;
+    return registerHaBlocks;
 });

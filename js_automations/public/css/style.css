@@ -1855,6 +1855,10 @@ input#search-input:focus { border-color: var(--accent) !important; }
 #btn-card-menu { display: none; }
 body.card-tab-active #btn-card-menu { display: flex; }
 #btn-card-menu.preview-active { color: var(--accent, #03a9f4); }
+/* !important needed: .editor-toolbar button sets color with !important (line ~407), which
+   silently wins over a plain (non-!important) override no matter its specificity — the same
+   reason #btn-card-menu.preview-active's color-only rule above never visibly took effect either. */
+#btn-show-code.preview-active { color: var(--accent, #03a9f4) !important; }
 
 /* ── Developer Tools — Split Log Panel ──────────────────────────────────── */
 .log-panes {

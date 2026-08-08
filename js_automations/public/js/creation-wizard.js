@@ -23,6 +23,7 @@ let currentWizardTab = 'new';
 let wizardMode = 'create'; // 'create', 'edit', 'duplicate'
 let wizardOriginalFilename = null; // Für Edit-Mode
 let wizardDuplicateCode = null; // Für Duplicate-Mode
+let wizardDuplicateJsCode = null; // Compiled JS, only set when duplicating a .blocks script
 let wizardNpmModules = [];
 let wizardIncludes = [];
 let wizardImportPreviewed = false; // Two-step import: true after preview shown
@@ -156,6 +157,12 @@ function injectCreationWizard() {
                             <div class="lang-card" onclick="selectWizardLanguage('.blocks')" id="lang-card-blocks" data-i18n="wizard_option_blockly" data-i18n-title title="Visual">BLK</div>
                         </div>
                         <input type="hidden" id="wizard-language" value=".js">
+                    </div>
+                    <div class="form-group hidden" id="wizard-group-duplicate-as-js">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none;">
+                            <input type="checkbox" id="wizard-duplicate-as-js" onchange="onWizardDuplicateAsJsToggle(this.checked)">
+                            <span data-i18n="wizard_duplicate_as_js">Duplicate as JavaScript</span>
+                        </label>
                     </div>
                 </div>
 
@@ -301,7 +308,14 @@ async function openCreationWizard(mode = 'create', data = null) {
     wizardMode = mode;
     wizardOriginalFilename = null;
     wizardDuplicateCode = null;
-    
+    wizardDuplicateJsCode = null;
+    const dupAsJsGroup = document.getElementById('wizard-group-duplicate-as-js');
+    const dupAsJsCheckbox = document.getElementById('wizard-duplicate-as-js');
+    // .hidden is `display: none !important` (style.css) — a plain style.display assignment
+    // can't override !important, has to go through the class instead.
+    if (dupAsJsGroup) dupAsJsGroup.classList.add('hidden');
+    if (dupAsJsCheckbox) dupAsJsCheckbox.checked = false;
+
     // Reset fields
     document.getElementById('wizard-name').value = '';
 
@@ -360,6 +374,13 @@ async function openCreationWizard(mode = 'create', data = null) {
             title.textContent = i18next.t('modal_duplicate_script_title');
             btn.textContent = i18next.t('button_duplicate');
             wizardDuplicateCode = data.code;
+            // Only offer the checkbox when duplicating a .blocks script AND a compiled version
+            // actually exists (duplicateScript() leaves data.jsCode null if nothing's been
+            // compiled yet, e.g. a script that was never saved).
+            if (initialExt === '.blocks' && data.jsCode) {
+                wizardDuplicateJsCode = data.jsCode;
+                if (dupAsJsGroup) dupAsJsGroup.classList.remove('hidden');
+            }
         }
 
         // Felder befüllen
@@ -613,6 +634,13 @@ function handleWizardTypeChange() {
 /**
  * Updates the visual selection of language cards and sets the hidden input value.
  */
+// Only wired up in duplicate mode for a .blocks source (see openCreationWizard()) — flips the
+// hidden #wizard-language field between the original .blocks and .js so executeWizardAction()'s
+// existing extension-based create logic picks the right one without any special-casing there.
+function onWizardDuplicateAsJsToggle(checked) {
+    selectWizardLanguage(checked ? '.js' : '.blocks');
+}
+
 function selectWizardLanguage(ext) {
     document.getElementById('wizard-language').value = ext;
     document.querySelectorAll('.lang-card').forEach(c => c.classList.remove('active'));
@@ -763,7 +791,12 @@ async function executeWizardAction() {
                 }
             } else {
                 // CREATE or DUPLICATE
-                if (wizardMode === 'duplicate' && wizardDuplicateCode) {
+                if (wizardMode === 'duplicate' && extension === '.js' && wizardDuplicateJsCode) {
+                    // "Duplicate as JavaScript" checkbox (.blocks source only) — see
+                    // onWizardDuplicateAsJsToggle(). The original .blocks file is untouched;
+                    // this just creates an independent .js copy of its last-compiled output.
+                    payload.code = wizardDuplicateJsCode;
+                } else if (wizardMode === 'duplicate' && wizardDuplicateCode) {
                     payload.code = wizardDuplicateCode;
                 } else if (extension === '.blocks') {
                     // Let the backend write its own minimal empty-workspace default —

@@ -392,7 +392,19 @@ async function duplicateScript(filename) {
         return;
     }
 
-    if (window.openCreationWizard) window.openCreationWizard('duplicate', { ...script, code });
+    // .blocks scripts additionally offer a "duplicate as JavaScript" checkbox in the wizard —
+    // fetch the last-compiled dist output too, so checking it doesn't need a second round-trip.
+    // Best-effort: if nothing's been compiled yet (script never saved), the checkbox just won't
+    // be offered rather than blocking the whole duplicate flow.
+    let jsCode = null;
+    if (filename.endsWith('.blocks')) {
+        try {
+            const res = await apiFetch(`api/scripts/${filename}/content?compiled=1`);
+            if (res.ok) jsCode = (await res.json()).content;
+        } catch (e) { /* no compiled output yet — checkbox stays hidden */ }
+    }
+
+    if (window.openCreationWizard) window.openCreationWizard('duplicate', { ...script, code, jsCode });
 }
 
 async function toggleScript(f) { await apiFetch('api/scripts/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f, action: 'toggle' }) }); }

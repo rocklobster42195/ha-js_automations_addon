@@ -6,6 +6,12 @@
 var openTabs = [];
 var activeTabFilename = null;
 
+// "Show Code" is a transient view toggle, not per-tab state — always resets to the canvas view
+// on tab switch (see switchToTab()) rather than being remembered per Blockly tab, so there's only
+// ever one of these instead of needing to track it alongside every tab's own blocksState.
+var _showingBlocklyCode = false;
+var _blocklyCodeModel = null;
+
 // Suffix used to identify card tabs (not real files — virtual view of __JSA_CARD__ block)
 const CARD_TAB_SUFFIX = '[card]';
 
@@ -294,6 +300,12 @@ async function openCardTab(scriptFilename) {
 }
 
 function switchToTab(filename) {
+    // Always leave any open "Show Code" view behind when switching tabs — it's a transient
+    // per-session view toggle (see the var declarations above), not state worth persisting per
+    // tab, and leaving Monaco stuck in readOnly mode for the next (non-Blockly) tab would be a
+    // real bug.
+    if (_showingBlocklyCode) _exitBlocklyCodeView();
+
     if (activeTabFilename) {
         const oldTab = openTabs.find(t => t.filename === activeTabFilename);
         if (oldTab && oldTab.type === 'blockly') {
@@ -355,13 +367,12 @@ function switchToTab(filename) {
 
     // Rebuild snippet toolbar to match context (script vs. card). Blockly tabs get neither —
     // JS/TS code snippets make no sense on a block canvas (there's no text cursor to insert
-    // at). A "Show Code" toggle belongs in this slot instead once that panel exists (M5);
-    // until then, just hide it rather than show a JS-snippet menu with nothing to act on.
+    // at) — this slot shows the "Show Code" toggle instead (see _buildShowCodeToggle()).
     const toolbarSnippets = document.getElementById('toolbar-snippets');
     const isBlocklyTab = newTab.type === 'blockly';
     if (toolbarSnippets) {
         if (isBlocklyTab) {
-            toolbarSnippets.innerHTML = '';
+            _buildShowCodeToggle(toolbarSnippets);
         } else if (typeof buildSnippetToolbar === 'function') {
             const snippetMode = newTab.type === 'card' ? 'card' : 'script';
             buildSnippetToolbar(toolbarSnippets, snippetMode);
@@ -389,6 +400,71 @@ function switchToTab(filename) {
     if (cardMenuBtn && typeof CardPreview !== 'undefined') {
         cardMenuBtn.classList.toggle('preview-active', CardPreview.isOpen());
     }
+}
+
+/** Same dynamic-button pattern as buildSnippetToolbar() in editor-snippets.js. */
+function _buildShowCodeToggle(container) {
+    container.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.id = 'btn-show-code';
+    const label = (typeof i18next !== 'undefined')
+        ? i18next.t('blockly_show_code_title', { defaultValue: 'Show Code' })
+        : 'Show Code';
+    btn.title = label;
+    btn.setAttribute('data-i18n', 'blockly_show_code_title');
+    btn.setAttribute('data-i18n-title', '');
+    btn.innerHTML = '<i class="mdi mdi-code-braces"></i>';
+    btn.onclick = () => toggleShowCode();
+    container.appendChild(btn);
+}
+
+/**
+ * Toggles between the Blockly canvas and a read-only Monaco view of the code the current
+ * workspace would compile to (live-generated in the browser, see
+ * blockly-editor.js's getBlocklyGeneratedCode() — no server round-trip, so it reflects unsaved
+ * edits too, unlike the last-compiled dist file).
+ */
+function toggleShowCode() {
+    const tab = openTabs.find(t => t.filename === activeTabFilename);
+    if (!tab || tab.type !== 'blockly') return;
+    if (_showingBlocklyCode) {
+        _exitBlocklyCodeView();
+    } else {
+        _enterBlocklyCodeView();
+    }
+}
+window.toggleShowCode = toggleShowCode;
+
+function _enterBlocklyCodeView() {
+    if (!editor || typeof monaco === 'undefined') return;
+    _showingBlocklyCode = true;
+    document.getElementById('blockly-container').classList.add('hidden');
+    document.getElementById('monaco-container').classList.remove('hidden');
+
+    const code = window.getBlocklyGeneratedCode ? window.getBlocklyGeneratedCode() : '';
+    if (_blocklyCodeModel) _blocklyCodeModel.dispose();
+    _blocklyCodeModel = monaco.editor.createModel(code, 'javascript');
+    editor.setModel(_blocklyCodeModel);
+    editor.updateOptions({ readOnly: true });
+
+    const btn = document.getElementById('btn-show-code');
+    if (btn) btn.classList.add('preview-active');
+}
+
+function _exitBlocklyCodeView() {
+    _showingBlocklyCode = false;
+    if (editor) editor.updateOptions({ readOnly: false });
+    if (_blocklyCodeModel) {
+        _blocklyCodeModel.dispose();
+        _blocklyCodeModel = null;
+    }
+    const blocklyContainer = document.getElementById('blockly-container');
+    const monacoContainer = document.getElementById('monaco-container');
+    if (blocklyContainer) blocklyContainer.classList.remove('hidden');
+    if (monacoContainer) monacoContainer.classList.add('hidden');
+
+    const btn = document.getElementById('btn-show-code');
+    if (btn) btn.classList.remove('preview-active');
 }
 
 function closeTab(filename) {

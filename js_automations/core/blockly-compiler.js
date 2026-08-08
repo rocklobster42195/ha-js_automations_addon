@@ -11,7 +11,8 @@ const { javascriptGenerator } = require('blockly/javascript');
 // Both physically under public/js/ so the browser can also load them via plain <script> tags
 // (no bundler in this project) — see blockly-blocks-shared.js's header comment for why.
 Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
-require('../public/js/blockly-blocks-shared')(javascriptGenerator);
+const registerHaBlocks = require('../public/js/blockly-blocks-shared');
+registerHaBlocks(javascriptGenerator);
 // Registers ha_call_service's mutator (see blockly-mutators.js). Only its saveExtraState/
 // loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
 // still needs those to reconstruct a saved workspace's dynamic ADD0/ADD1/... inputs.
@@ -71,9 +72,9 @@ class BlocklyCompiler extends EventEmitter {
         const targetDir = path.dirname(distPath);
         if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-        // Wrapped in an async IIFE: block-generated code can contain top-level `await` (e.g. a
-        // bare action block with no trigger wrapper), which is invalid in a CommonJS module.
-        fs.writeFileSync(distPath, `(async () => {\n${code}\n})();\n`, 'utf8');
+        // Wrapped in an async IIFE only if actually needed — see wrapGeneratedCode() in
+        // blockly-blocks-shared.js for why (and why it's shared rather than duplicated here).
+        fs.writeFileSync(distPath, registerHaBlocks.wrapGeneratedCode(code), 'utf8');
 
         this.emit('compiler_signal', { type: 'BLOCKLY_OK', filename: path.basename(blocksPath) });
         return true;

@@ -222,7 +222,22 @@ function getBlocklyWorkspaceState() {
     };
 }
 
+/**
+ * Live-generates the same JS BlocklyCompiler would produce server-side, straight from the
+ * current (possibly unsaved) workspace — no round-trip to the server needed. Same generator
+ * object (`Blockly.JavaScript`, registered in ensureBlocklyReady() above) and the same
+ * wrapGeneratedCode() (blockly-blocks-shared.js — only wraps in an async IIFE if the code
+ * actually needs it) BlocklyCompiler.compile() uses, so "Show Code" always matches what actually
+ * runs once saved, not just a visually-similar approximation of it.
+ */
+function getBlocklyGeneratedCode() {
+    if (!blocklyWorkspace) return '';
+    const code = Blockly.JavaScript.workspaceToCode(blocklyWorkspace);
+    return window.registerHaBlocks.wrapGeneratedCode(code);
+}
+
 window.ensureBlocklyReady = ensureBlocklyReady;
 window.isBlocklyReady = isBlocklyReady;
 window.loadBlocklyWorkspace = loadBlocklyWorkspace;
 window.getBlocklyWorkspaceState = getBlocklyWorkspaceState;
+window.getBlocklyGeneratedCode = getBlocklyGeneratedCode;
