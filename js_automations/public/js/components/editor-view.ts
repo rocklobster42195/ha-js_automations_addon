@@ -335,13 +335,22 @@ export class EditorViewElement extends LitElement {
     if (window.currentSettings) {
       setTimeout(() => this._applyToolbarVisibility(window.currentSettings), 100);
     }
+
+    // <card-preview> dispatches this on open/close — see that component's own _syncPreviewBtn()
+    // doc comment for why a window event is needed instead of a direct DOM query.
+    window.addEventListener('card-preview-toggled', this._onCardPreviewToggled);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this._onGlobalKeydown);
     window.removeEventListener('settings-changed', this._onSettingsChanged);
+    window.removeEventListener('card-preview-toggled', this._onCardPreviewToggled);
   }
+
+  private _onCardPreviewToggled = (): void => {
+    this.requestUpdate();
+  };
 
   private _onGlobalKeydown = (e: KeyboardEvent): void => {
     const isSaveShortcut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';

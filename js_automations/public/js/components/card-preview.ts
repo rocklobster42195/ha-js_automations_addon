@@ -544,8 +544,13 @@ export class CardPreview extends LitElement {
     return this.visible;
   }
 
+  /** The toolbar toggle button lives in <editor-view>'s own Shadow DOM (RFC Phase B item 8) and
+   * reads window.CardPreview?.isOpen() reactively, but that read only happens whenever
+   * <editor-view> re-renders for some unrelated reason — nothing ties its render cycle to this
+   * component's own open/close. A window-level event is the trigger for that re-render, same
+   * pattern as <monaco-editor>'s 'word-wrap-changed' event. */
   private _syncPreviewBtn(active: boolean): void {
-    document.getElementById('btn-card-menu')?.classList.toggle('preview-active', active);
+    window.dispatchEvent(new CustomEvent('card-preview-toggled', { detail: { open: active } }));
   }
 
   // ── Panel lifecycle ────────────────────────────────────────────────────
