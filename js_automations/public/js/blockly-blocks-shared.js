@@ -159,6 +159,80 @@
             return `await ha.notify(${message}${optsStr});\n`;
         };
 
+        // ha.ask()'s `action` string is purely an internal identifier the generated code compares
+        // against — never shown to the user — so it's derived from the button's TITLE instead of
+        // making beginners fill in a second field with no visible purpose. Uppercase + non-
+        // alphanumeric runs collapsed to underscores; falls back to 'BUTTON' for an empty title.
+        function slugifyAskActionId(title) {
+            const slug = (title || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+            return slug || 'BUTTON';
+        }
+
+        generator.forBlock['ha_ask'] = function (block, gen) {
+            const message = gen.valueToCode(block, 'MESSAGE', gen.ORDER_NONE) || '""';
+            const title = gen.valueToCode(block, 'TITLE', gen.ORDER_NONE);
+            const target = gen.valueToCode(block, 'TARGET', gen.ORDER_NONE);
+            const useTimeout = block.getFieldValue('USE_TIMEOUT') === 'TRUE';
+            const timeoutMs = block.getFieldValue('TIMEOUT_MS');
+
+            // itemCount_ is set by loadExtraState()/updateShape_() (ha_ask_actions_mutator in
+            // blockly-mutators.js) when the workspace is deserialized — populated correctly by
+            // the time code generation runs, not just interactively (same as ha_call_service's
+            // mutator-added fields above).
+            const itemCount = block.itemCount_ || 0;
+            const buttonTitles = [];
+            for (let i = 0; i < itemCount; i++) {
+                const buttonTitleField = block.getField('TITLE' + i);
+                buttonTitles.push(buttonTitleField ? buttonTitleField.getValue() : '');
+            }
+            // Two buttons titled the same would otherwise derive the same id, making the second
+            // if/else-if branch unreachable — de-duplicated with a numeric suffix so every button
+            // still gets its own working branch even if the user reuses a title.
+            const usedIds = new Set();
+            const actionIds = buttonTitles.map((buttonTitle) => {
+                const base = slugifyAskActionId(buttonTitle);
+                let id = base;
+                let suffix = 2;
+                while (usedIds.has(id)) id = `${base}_${suffix++}`;
+                usedIds.add(id);
+                return id;
+            });
+
+            const actionEntries = buttonTitles.map((buttonTitle, i) => `{ action: ${JSON.stringify(actionIds[i])}, title: ${JSON.stringify(buttonTitle)} }`);
+
+            const optsParts = [];
+            if (title) optsParts.push(`title: ${title}`);
+            if (target) optsParts.push(`target: ${target}`);
+            if (useTimeout) optsParts.push(`timeout: ${timeoutMs}`);
+            if (actionEntries.length > 0) optsParts.push(`actions: [${actionEntries.join(', ')}]`);
+            const optsStr = optsParts.length > 0 ? `, { ${optsParts.join(', ')} }` : '';
+
+            // NO_ANSWER only exists when USE_TIMEOUT is checked (see updateShapeNoAnswer_() in
+            // blockly-mutators.js) — gen.statementToCode() throws if the named input doesn't
+            // exist on the block at all, unlike valueToCode()'s graceful '' for an unplugged
+            // socket, so this has to check first (found via a real Node compile-pipeline test:
+            // an unchecked ha_ask threw "Input \"NO_ANSWER\" doesn't exist on \"ha_ask\"").
+            const noAnswerBody = block.getInput('NO_ANSWER') ? gen.statementToCode(block, 'NO_ANSWER') : '';
+
+            // Wrapped in a bare { } block (not a function) purely to scope `const answer` — two
+            // ha_ask blocks in the same surrounding scope would otherwise collide on the same
+            // const name. No buttons configured -> nothing to branch on, so just await and run
+            // the "no answer" body unconditionally (mirrors ha.ask() resolving to `defaultAction`
+            // when nothing was tapped, with no action string to compare against).
+            if (itemCount === 0) {
+                return `{\n  await ha.ask(${message}${optsStr});\n${noAnswerBody}}\n`;
+            }
+
+            let code = `{\n  const answer = await ha.ask(${message}${optsStr});\n`;
+            for (let i = 0; i < itemCount; i++) {
+                const body = gen.statementToCode(block, 'DO' + i);
+                const kw = i === 0 ? '  if' : '  } else if';
+                code += `${kw} (answer === ${JSON.stringify(actionIds[i])}) {\n${body}`;
+            }
+            code += `  } else {\n${noAnswerBody}  }\n}\n`;
+            return code;
+        };
+
         generator.forBlock['ha_register'] = function (block) {
             const entityId = block.getFieldValue('ENTITY_ID');
             const configParts = [

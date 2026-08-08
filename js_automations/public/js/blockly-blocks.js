@@ -40,6 +40,7 @@
             "args1": [
                 { "type": "input_statement", "name": "DO" }
             ],
+            "inputsInline": true,
             "colour": 210,
             "tooltip": "Runs the attached actions only when the entity changes to this specific state.",
             "helpUrl": ""
@@ -112,6 +113,7 @@
                 ] },
                 { "type": "input_value", "name": "MESSAGE" }
             ],
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 0,
@@ -159,6 +161,7 @@
                 { "type": "field_input", "name": "ATTR_NAME", "text": "temperature" },
                 { "type": "input_value", "name": "ENTITY" }
             ],
+            "inputsInline": true,
             "output": null,
             "colour": 45,
             "tooltip": "A specific attribute of an entity (e.g. \"temperature\" on a climate entity, \"brightness\" on a light).",
@@ -203,23 +206,45 @@
             "args0": [
                 { "type": "input_value", "name": "MESSAGE" }
             ],
-            "message1": "title (optional) %1",
+            "message1": "title (optional) %1 target (optional) %2",
             "args1": [
-                { "type": "input_value", "name": "TITLE" }
-            ],
-            "message2": "target (optional) %1",
-            "args2": [
+                { "type": "input_value", "name": "TITLE" },
                 { "type": "input_value", "name": "TARGET" }
             ],
-            "message3": "show in Home Assistant %1",
-            "args3": [
+            "message2": "show in Home Assistant %1",
+            "args2": [
                 { "type": "field_checkbox", "name": "PERSISTENT", "checked": false }
             ],
-            "inputsInline": false,
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 20,
             "tooltip": "Sends a notification to your Home Assistant companion app. Title and target are optional (leave blank for the default). Check \"show in Home Assistant\" to show it in HA's own notification bell instead — works without a companion app, handy for testing.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_ask",
+            "message0": "ask %1",
+            "args0": [
+                { "type": "input_value", "name": "MESSAGE" }
+            ],
+            "message1": "title (optional) %1 target (optional) %2",
+            "args1": [
+                { "type": "input_value", "name": "TITLE" },
+                { "type": "input_value", "name": "TARGET" }
+            ],
+            "message2": "use timeout %1 (ms) %2",
+            "args2": [
+                { "type": "field_checkbox", "name": "USE_TIMEOUT", "checked": false },
+                { "type": "field_number", "name": "TIMEOUT_MS", "value": 60000, "min": 0 }
+            ],
+            "inputsInline": true,
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 20,
+            "mutator": "ha_ask_actions_mutator",
+            "extensions": ["ha_ask_timeout_toggle"],
+            "tooltip": "Sends an actionable notification with buttons and waits for the user to tap one (requires the HA companion app — does not work in a web browser). Click the gear icon to add buttons — each gets its own \"do\" branch, run when tapped. Checking \"use timeout\" also reveals an \"if no answer\" branch, run if nothing is tapped in time.",
             "helpUrl": ""
         },
         {
@@ -244,6 +269,7 @@
                 { "type": "field_input", "name": "ENTITY_ID", "text": "sensor.my_value" },
                 { "type": "input_value", "name": "STATE" }
             ],
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 65,
@@ -273,6 +299,7 @@
             "args1": [
                 { "type": "field_checkbox", "name": "SECRET", "checked": false }
             ],
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 260,
@@ -338,6 +365,7 @@
             "args1": [
                 { "type": "field_checkbox", "name": "RETAIN", "checked": false }
             ],
+            "inputsInline": true,
             "previousStatement": null,
             "nextStatement": null,
             "colour": 20,

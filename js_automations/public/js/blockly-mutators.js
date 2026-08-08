@@ -356,5 +356,196 @@
                 return newValue;
             });
         });
+
+        // --- ha_ask_timeout_toggle ------------------------------------------------------------
+        // ha.ask() always has *some* timeout (API default 60000ms — there's no "wait forever"
+        // option), so USE_TIMEOUT only decides whether to send a custom value or omit `timeout`
+        // (letting the default apply) — unlike ha_wait_timeout_mutator above, TIMEOUT_MS itself
+        // never needed shape changes, just Field.setVisible(). The "if no answer" branch, though,
+        // is shown/hidden together with it (user call, not a technical requirement — see
+        // updateShapeNoAnswer_() in ha_ask_actions_mutator below for the reasoning) via
+        // block.updateShapeNoAnswer_(), which the *mutator* attaches to the block. Relies on
+        // "mutator" being applied before "extensions" during jsonInit() — verified in Node
+        // (updateShapeNoAnswer_ is already callable the moment this extension's init function
+        // runs); if that Blockly-internal ordering ever changed, this would throw immediately on
+        // every ha_ask block creation, not fail silently.
+        Blockly.Extensions.register('ha_ask_timeout_toggle', function () {
+            const checkbox = this.getField('USE_TIMEOUT');
+            const timeoutField = this.getField('TIMEOUT_MS');
+            const block = this;
+            const sync = (checked) => {
+                timeoutField.setVisible(checked);
+                block.updateShapeNoAnswer_(checked);
+                if (block.rendered) block.render();
+            };
+            sync(checkbox.getValue() === 'TRUE');
+            checkbox.setValidator((newValue) => {
+                sync(newValue === 'TRUE');
+                return newValue;
+            });
+        });
+
+        // --- ha_ask_actions_mutator -------------------------------------------------------------
+        // A free-form list mutator like ha_extra_data_mutator above, but each item contributes
+        // two fields (ACTION<i> id, TITLE<i> button text) plus a whole STATEMENT branch (DO<i>)
+        // instead of one field + one value input — the "if answer is X, run this" behavior the
+        // Ask block is built around. A trailing NO_ANSWER statement branch (timeout / no tap)
+        // is always kept last: not tracked by itemCount_ at all, just unconditionally removed and
+        // re-appended at the very end on every updateShape_() call, so it never needs to be
+        // spliced into the middle of inputList (Blockly's appendStatementInput() only appends at
+        // the end) regardless of how many action rows currently exist above it.
+        define([
+            {
+                "type": "ha_ask_actions_container",
+                "message0": "buttons",
+                "message1": "%1",
+                "args1": [
+                    { "type": "input_statement", "name": "STACK" }
+                ],
+                "colour": 20
+            },
+            {
+                "type": "ha_ask_actions_item",
+                "message0": "button",
+                "previousStatement": null,
+                "nextStatement": null,
+                "colour": 20
+            }
+        ]);
+
+        const ASK_ACTIONS_MUTATOR_MIXIN = {
+            itemCount_: 0,
+
+            saveExtraState: function () {
+                const titles = [];
+                for (let i = 0; i < this.itemCount_; i++) {
+                    const tf = this.getField('TITLE' + i);
+                    titles.push(tf ? tf.getValue() : '');
+                }
+                return { itemCount: this.itemCount_, titles: titles };
+            },
+
+            loadExtraState: function (state) {
+                this.updateShape_(state['itemCount'] || 0);
+                const titles = state['titles'] || [];
+                for (let i = 0; i < this.itemCount_; i++) {
+                    const tf = this.getField('TITLE' + i);
+                    if (tf && titles[i] !== undefined) tf.setValue(titles[i]);
+                }
+            },
+
+            decompose: function (workspace) {
+                const containerBlock = workspace.newBlock('ha_ask_actions_container');
+                containerBlock.initSvg();
+                let connection = containerBlock.getInput('STACK').connection;
+                for (let i = 0; i < this.itemCount_; i++) {
+                    const itemBlock = workspace.newBlock('ha_ask_actions_item');
+                    itemBlock.initSvg();
+                    connection.connect(itemBlock.previousConnection);
+                    connection = itemBlock.nextConnection;
+                }
+                return containerBlock;
+            },
+
+            saveConnections: function (containerBlock) {
+                let itemBlock = containerBlock.getInputTargetBlock('STACK');
+                let i = 0;
+                while (itemBlock) {
+                    const input = this.getInput('DO' + i);
+                    const tf = this.getField('TITLE' + i);
+                    itemBlock.statementConnection_ = input ? input.connection.targetConnection : null;
+                    itemBlock.buttonTitle_ = tf ? tf.getValue() : '';
+                    itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock();
+                    i++;
+                }
+            },
+
+            compose: function (containerBlock) {
+                let itemBlock = containerBlock.getInputTargetBlock('STACK');
+                const connections = [];
+                const titles = [];
+                while (itemBlock && !itemBlock.isInsertionMarker()) {
+                    connections.push(itemBlock.statementConnection_ || null);
+                    titles.push(itemBlock.buttonTitle_ || '');
+                    itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock();
+                }
+                for (let i = 0; i < this.itemCount_; i++) {
+                    const input = this.getInput('DO' + i);
+                    const conn = input && input.connection.targetConnection;
+                    if (conn && connections.indexOf(conn) === -1) conn.disconnect();
+                }
+                this.updateShape_(connections.length);
+                for (let i = 0; i < connections.length; i++) {
+                    // Always set explicitly, same reasoning as ha_extra_data_mutator above — every
+                    // index must reflect the *current* popup order, never a leftover from before.
+                    const tf = this.getField('TITLE' + i);
+                    if (tf) tf.setValue(titles[i] || 'Button');
+                    if (connections[i]) connections[i].reconnect(this, 'DO' + i);
+                }
+            },
+
+            updateShape_: function (targetCount) {
+                // Dynamically-added labels aren't covered by localizeBlockDefinitions() (only the
+                // static message0/1/2 properties) — translated here directly, same pattern as
+                // ha_wait_timeout_mutator's "on success"/"on timeout" above.
+                const t = (key, defaultValue) => (typeof i18next !== 'undefined' ? i18next.t(key, { defaultValue }) : defaultValue);
+
+                // Drop the trailing NO_ANSWER branch first (if present) so action rows are only
+                // ever added or removed at the true end of inputList — re-appended below only if
+                // it existed before, i.e. only updateShapeNoAnswer_() (driven by the USE_TIMEOUT
+                // checkbox, not this button-count mutator) ever adds it in the first place.
+                // Whatever's connected inside it must survive the remove+re-add, though — found
+                // via a real Node round-trip test: removeInput() disconnects the child block
+                // rather than disposing it, so without capturing+reconnecting its connection here,
+                // that block doesn't disappear, it becomes an orphaned free-floating top-level
+                // block in the workspace (silently generated as a stray statement outside the
+                // ha_ask block entirely, instead of inside its "else" branch).
+                const noAnswerInput = this.getInput('NO_ANSWER');
+                const hadNoAnswer = !!noAnswerInput;
+                const noAnswerConnection = noAnswerInput ? noAnswerInput.connection.targetConnection : null;
+                if (hadNoAnswer) this.removeInput('NO_ANSWER');
+
+                // No separate action-id field — ha.ask()'s `action` string is purely an internal
+                // identifier the generated code compares against, never shown to the user, so the
+                // generator derives it from TITLE<i> instead (see slugifyAskActionId() in
+                // blockly-blocks-shared.js) rather than making beginners fill in two fields per
+                // button for one visible piece of information.
+                while (this.itemCount_ < targetCount) {
+                    const i = this.itemCount_;
+                    this.appendDummyInput('LABEL' + i)
+                        .appendField(t('blockly_ask_button', 'button'))
+                        .appendField(new Blockly.FieldTextInput('Button'), 'TITLE' + i);
+                    this.appendStatementInput('DO' + i)
+                        .appendField(t('blockly_ask_do', 'do'));
+                    this.itemCount_++;
+                }
+                while (this.itemCount_ > targetCount) {
+                    this.itemCount_--;
+                    const i = this.itemCount_;
+                    this.removeInput('DO' + i);
+                    this.removeInput('LABEL' + i);
+                }
+
+                if (hadNoAnswer) {
+                    this.appendStatementInput('NO_ANSWER').appendField(t('blockly_ask_no_answer', 'if no answer (timeout)'));
+                    if (noAnswerConnection) noAnswerConnection.reconnect(this, 'NO_ANSWER');
+                }
+            },
+
+            // Adds/removes the trailing "if no answer (timeout)" branch — separate from
+            // updateShape_() above (which only manages button rows) because this is driven by the
+            // USE_TIMEOUT checkbox (see ha_ask_timeout_toggle below), not the gear-icon popup.
+            // ha.ask() always has *some* timeout (API default 60000ms — there's no "wait forever"
+            // option), so unchecking USE_TIMEOUT doesn't mean "never times out", just "don't
+            // bother handling it specially" — user call, not a technical requirement.
+            updateShapeNoAnswer_: function (show) {
+                const t = (key, defaultValue) => (typeof i18next !== 'undefined' ? i18next.t(key, { defaultValue }) : defaultValue);
+                const has = !!this.getInput('NO_ANSWER');
+                if (show && !has) this.appendStatementInput('NO_ANSWER').appendField(t('blockly_ask_no_answer', 'if no answer (timeout)'));
+                else if (!show && has) this.removeInput('NO_ANSWER');
+            }
+        };
+
+        Blockly.Extensions.registerMutator('ha_ask_actions_mutator', ASK_ACTIONS_MUTATOR_MIXIN, null, ['ha_ask_actions_item']);
     };
 });

@@ -35,7 +35,8 @@ const BLOCKLY_MESSAGE_KEYS = {
     ha_get_attribute: { message0: 'blockly_get_attribute_msg0', tooltip: 'blockly_get_attribute_tooltip' },
     ha_wait: { message0: 'blockly_wait_msg0', tooltip: 'blockly_wait_tooltip' },
     ha_wait_for_state: { message0: 'blockly_wait_for_state_msg0', message1: 'blockly_wait_for_state_msg1', tooltip: 'blockly_wait_for_state_tooltip' },
-    ha_notify: { message0: 'blockly_notify_msg0', message1: 'blockly_notify_msg1', message2: 'blockly_notify_msg2', message3: 'blockly_notify_msg3', tooltip: 'blockly_notify_tooltip' },
+    ha_notify: { message0: 'blockly_notify_msg0', message1: 'blockly_notify_msg1', message2: 'blockly_notify_msg2', tooltip: 'blockly_notify_tooltip' },
+    ha_ask: { message0: 'blockly_ask_msg0', message1: 'blockly_ask_msg1', message2: 'blockly_ask_msg2', tooltip: 'blockly_ask_tooltip' },
     ha_register: { message0: 'blockly_register_msg0', tooltip: 'blockly_register_tooltip' },
     ha_update: { message0: 'blockly_update_msg0', tooltip: 'blockly_update_tooltip' },
     ha_store_get: { message0: 'blockly_store_get_msg0', tooltip: 'blockly_store_get_tooltip' },
@@ -58,6 +59,34 @@ const BLOCKLY_CATEGORY_KEYS = {
     'Store': 'blockly_category_store',
     'Script Utilities': 'blockly_category_script',
 };
+
+// blockly-toolbox.json's shadow-block placeholder texts (the greyed-out default text a value
+// socket shows before the user types over it) — keyed the same way as BLOCKLY_CATEGORY_KEYS.
+// Never localized before now (found while translating ha_ask's "Question text"); every other
+// shadow default in the file had the same gap.
+const BLOCKLY_SHADOW_TEXT_KEYS = {
+    'Message text': 'blockly_shadow_message_text',
+    'Question text': 'blockly_shadow_question_text',
+    'value': 'blockly_shadow_value',
+    'message': 'blockly_shadow_message',
+};
+
+/** Recursively walks a toolbox JSON node, translating any `text` shadow block's TEXT field
+ * whose current value matches a known key in BLOCKLY_SHADOW_TEXT_KEYS. Mutates in place. */
+function localizeToolboxShadowTexts(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'text' && node.fields && typeof node.fields.TEXT === 'string') {
+        const key = BLOCKLY_SHADOW_TEXT_KEYS[node.fields.TEXT];
+        if (key) node.fields.TEXT = i18next.t(key, { defaultValue: node.fields.TEXT });
+    }
+    for (const k in node) {
+        if (k === 'fields') continue; // fields objects hold plain strings, not nested nodes
+        const v = node[k];
+        if (!v || typeof v !== 'object') continue;
+        if (Array.isArray(v)) v.forEach(localizeToolboxShadowTexts);
+        else localizeToolboxShadowTexts(v);
+    }
+}
 
 /** Returns a translated copy of HA_BLOCK_DEFINITIONS; the original array is left untouched. */
 function localizeBlockDefinitions(defs) {
@@ -178,6 +207,7 @@ async function ensureBlocklyReady() {
             for (const category of window._blocklyToolbox.contents) {
                 const key = BLOCKLY_CATEGORY_KEYS[category.name];
                 if (key) category.name = i18next.t(key, { defaultValue: category.name });
+                localizeToolboxShadowTexts(category);
             }
         }
     }

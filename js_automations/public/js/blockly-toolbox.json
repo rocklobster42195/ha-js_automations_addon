@@ -21,6 +21,7 @@
             "contents": [
                 { "kind": "block", "type": "ha_call_service", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "light.example" } } } } },
                 { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } },
+                { "kind": "block", "type": "ha_ask", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Question text" } } } } },
                 { "kind": "block", "type": "ha_mqtt_publish", "inputs": { "PAYLOAD": { "shadow": { "type": "text", "fields": { "TEXT": "value" } } } } },
                 { "kind": "block", "type": "ha_mqtt_payload" }
             ]
