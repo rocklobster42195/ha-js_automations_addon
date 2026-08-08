@@ -78,10 +78,7 @@ describe('script-group', () => {
   });
 
   it('renders one script-row per script and passes the active flag correctly', async () => {
-    const scripts = [
-      { filename: 'a.js', name: 'A' } as JsaScript,
-      { filename: 'b.js', name: 'B' } as JsaScript,
-    ];
+    const scripts = [{ filename: 'a.js', name: 'A' } as JsaScript, { filename: 'b.js', name: 'B' } as JsaScript];
     const el = await fixture<ScriptGroup>(
       html`<script-group .scripts=${scripts} active-filename="b.js"></script-group>`
     );

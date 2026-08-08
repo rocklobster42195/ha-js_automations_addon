@@ -15,7 +15,10 @@ declare global {
   interface Window {
     monaco?: Monaco;
     require?: {
-      config: (opts: { paths: Record<string, string>; 'vs/nls'?: { availableLanguages: Record<string, string> } }) => void;
+      config: (opts: {
+        paths: Record<string, string>;
+        'vs/nls'?: { availableLanguages: Record<string, string> };
+      }) => void;
       (deps: string[], callback: () => void): void;
     };
   }
@@ -477,7 +480,7 @@ const SNIPPET_REGISTRY: SnippetDef[] = [
       "    this.shadowRoot.getElementById('back')?.addEventListener('click', () => { this._step = 1; this._query = ''; this._render(); });",
       '  }',
       '',
-      '  static getConfigElement() { return document.createElement(\'${2:my-wizard-card}-editor\'); }',
+      "  static getConfigElement() { return document.createElement('${2:my-wizard-card}-editor'); }",
       '',
       '  getCardSize() { return 3; }',
       '}',
@@ -898,7 +901,9 @@ export class MonacoEditorElement extends LitElement {
    * editor-view listens for to know to re-render. */
   private _setWordWrap(value: 'on' | 'off'): void {
     this._wordWrap = value;
-    this.dispatchEvent(new CustomEvent('word-wrap-changed', { bubbles: true, composed: true, detail: { enabled: value === 'on' } }));
+    this.dispatchEvent(
+      new CustomEvent('word-wrap-changed', { bubbles: true, composed: true, detail: { enabled: value === 'on' } })
+    );
   }
 
   private _toggleWordWrap(): void {
@@ -914,7 +919,9 @@ export class MonacoEditorElement extends LitElement {
     // completeFunctionCalls is a real Monaco/TS-worker suggest option not present in the
     // published 0.44.0 .d.ts (a known lag between monaco-editor's npm types and its bundled
     // TS-language-service version) — cast to preserve behavior without widening the option type.
-    this._editor.updateOptions({ suggest: { completeFunctionCalls: true } as import('monaco-editor').editor.ISuggestOptions });
+    this._editor.updateOptions({
+      suggest: { completeFunctionCalls: true } as import('monaco-editor').editor.ISuggestOptions,
+    });
 
     const savedWrap = localStorage.getItem('js_editor_wordwrap') as 'on' | 'off' | null;
     if (savedWrap) {
@@ -988,7 +995,7 @@ export class MonacoEditorElement extends LitElement {
       'declare const __jsa__: {',
       '  /**',
       '   * Call a named action handler registered in the parent script via ha.action().',
-      '   * Returns the handler\'s resolved value.',
+      "   * Returns the handler's resolved value.",
       '   */',
       '  callAction(action: string, payload?: Record<string, unknown>): Promise<unknown>;',
       "  /** Filename of the parent script that owns this card (e.g. 'openligadb.js') */",
@@ -1075,7 +1082,14 @@ export class MonacoEditorElement extends LitElement {
     });
   }
 
-  private _handleCompilerMarker(filename: string, line: number, col: number, message: string, code: string, type: string): void {
+  private _handleCompilerMarker(
+    filename: string,
+    line: number,
+    col: number,
+    message: string,
+    code: string,
+    type: string
+  ): void {
     const m = this._monaco;
     if (!m) return;
     const model = m.editor.getModels().find((mm) => mm.uri.path.endsWith(filename));
@@ -1110,7 +1124,9 @@ export class MonacoEditorElement extends LitElement {
       const res = await window.apiFetch!('api/scripts');
       if (!res.ok) return;
       const scripts = (await res.json()) as { filename: string; path?: string }[];
-      const libs = scripts.filter((s) => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\')));
+      const libs = scripts.filter(
+        (s) => s.path && (s.path.includes('/libraries/') || s.path.includes('\\libraries\\'))
+      );
 
       this._libDisposables.forEach((d) => d.dispose());
       this._libDisposables = [];
@@ -1159,8 +1175,20 @@ export class MonacoEditorElement extends LitElement {
               window.mdiIcons && window.mdiIcons.length > 0
                 ? window.mdiIcons
                 : [
-                    'account', 'home', 'lightbulb', 'switch', 'bell', 'check', 'alert', 'calendar',
-                    'clock', 'weather-sunny', 'water', 'thermometer', 'battery', 'wifi',
+                    'account',
+                    'home',
+                    'lightbulb',
+                    'switch',
+                    'bell',
+                    'check',
+                    'alert',
+                    'calendar',
+                    'clock',
+                    'weather-sunny',
+                    'water',
+                    'thermometer',
+                    'battery',
+                    'wifi',
                   ];
             return {
               suggestions: icons.map((i) => ({
@@ -1213,7 +1241,10 @@ export class MonacoEditorElement extends LitElement {
                 const domainServices = services[domain] as Record<string, unknown>;
                 for (const service in domainServices) {
                   const id = `${domain}.${service}`;
-                  const serviceObj = domainServices[service] as { description?: string; fields?: Record<string, { required?: boolean }> };
+                  const serviceObj = domainServices[service] as {
+                    description?: string;
+                    fields?: Record<string, { required?: boolean }>;
+                  };
                   const desc = serviceObj.description || '';
                   const fields = serviceObj.fields || {};
                   const fieldNames = Object.keys(fields);
@@ -1225,7 +1256,17 @@ export class MonacoEditorElement extends LitElement {
 
                   if (snippetFields.length === 0) {
                     if (
-                      ['light', 'switch', 'input_boolean', 'automation', 'script', 'scene', 'fan', 'cover', 'lock'].includes(domain)
+                      [
+                        'light',
+                        'switch',
+                        'input_boolean',
+                        'automation',
+                        'script',
+                        'scene',
+                        'fan',
+                        'cover',
+                        'lock',
+                      ].includes(domain)
                     ) {
                       snippetFields = ['entity_id'];
                     }
@@ -1273,7 +1314,8 @@ export class MonacoEditorElement extends LitElement {
           const serviceMatch = textUntilPosition.match(/ha\.callService\(\s*['"]([^'"]+)['"]\s*,\s*['"](?:[^'"]*)$/);
           if (serviceMatch) {
             const domain = serviceMatch[1];
-            const servicesForDomain = window.haData?.services?.[domain] as Record<string, { description?: string }> | undefined;
+            const servicesForDomain = window.haData?.services?.[domain] as
+              Record<string, { description?: string }> | undefined;
             let services: string[];
             let serviceData: Record<string, { description?: string }> = {};
 
@@ -1427,11 +1469,41 @@ export class MonacoEditorElement extends LitElement {
           });
           if (textUntilPosition.match(/device_class["']?\s*:\s*['"]$/)) {
             const classes = [
-              'aqi', 'battery', 'carbon_dioxide', 'carbon_monoxide', 'current', 'date', 'distance',
-              'duration', 'energy', 'frequency', 'gas', 'humidity', 'illuminance', 'monetary',
-              'motion', 'nitrogen_dioxide', 'occupancy', 'opening', 'ozone', 'pm1', 'pm10', 'pm25',
-              'power', 'power_factor', 'pressure', 'signal_strength', 'smoke', 'speed',
-              'temperature', 'timestamp', 'voltage', 'volume', 'water', 'weight', 'wind_speed',
+              'aqi',
+              'battery',
+              'carbon_dioxide',
+              'carbon_monoxide',
+              'current',
+              'date',
+              'distance',
+              'duration',
+              'energy',
+              'frequency',
+              'gas',
+              'humidity',
+              'illuminance',
+              'monetary',
+              'motion',
+              'nitrogen_dioxide',
+              'occupancy',
+              'opening',
+              'ozone',
+              'pm1',
+              'pm10',
+              'pm25',
+              'power',
+              'power_factor',
+              'pressure',
+              'signal_strength',
+              'smoke',
+              'speed',
+              'temperature',
+              'timestamp',
+              'voltage',
+              'volume',
+              'water',
+              'weight',
+              'wind_speed',
             ];
             return {
               suggestions: classes.map((c) => ({
@@ -1463,7 +1535,10 @@ export class MonacoEditorElement extends LitElement {
                 kind: m.languages.CompletionItemKind.Field,
                 insertText: item.key,
                 detail: item.type,
-                documentation: { value: `**Store Key:** \`${item.key}\`\n\n**Type:** \`${item.type}\``, isTrusted: true },
+                documentation: {
+                  value: `**Store Key:** \`${item.key}\`\n\n**Type:** \`${item.type}\``,
+                  isTrusted: true,
+                },
                 range: undefined as unknown as import('monaco-editor').IRange,
               })),
             };
@@ -1591,7 +1666,9 @@ export class MonacoEditorElement extends LitElement {
     if (!template) return;
 
     this._editor.focus();
-    const contribution = this._editor.getContribution('snippetController2') as unknown as { insert(template: string): void };
+    const contribution = this._editor.getContribution('snippetController2') as unknown as {
+      insert(template: string): void;
+    };
     contribution.insert(template);
   }
 

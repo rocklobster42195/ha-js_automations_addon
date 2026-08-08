@@ -29,9 +29,7 @@ describe('status-bar-header-actions', () => {
   });
 
   it('renders no buttons when no header actions are configured', async () => {
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     expect(el.shadowRoot!.querySelectorAll('button').length).to.equal(0);
   });
 
@@ -40,9 +38,7 @@ describe('status-bar-header-actions', () => {
     window.cachedEntities = [
       { entity_id: 'switch.garage_light', state: 'on', attributes: { friendly_name: 'Garage Light' } },
     ];
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     await aTimeout(0);
     await el.updateComplete;
 
@@ -56,9 +52,7 @@ describe('status-bar-header-actions', () => {
     window.cachedEntities = [
       { entity_id: 'button.doorbell', state: 'unknown', attributes: { friendly_name: 'Doorbell' } },
     ];
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
 
     window.dispatchEvent(
       new CustomEvent('settings-changed', { detail: { statusbar: { header_action_1: 'button.doorbell' } } })
@@ -72,9 +66,7 @@ describe('status-bar-header-actions', () => {
 
   it('updates an already-rendered button on a live ha_state_changed event', async () => {
     window.cachedEntities = [{ entity_id: 'switch.fan', state: 'off', attributes: {} }];
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     window.dispatchEvent(
       new CustomEvent('settings-changed', { detail: { statusbar: { header_action_1: 'switch.fan' } } })
     );
@@ -94,12 +86,8 @@ describe('status-bar-header-actions', () => {
   });
 
   it('uses attributes.icon_color for an active entity with no rgb_color', async () => {
-    window.cachedEntities = [
-      { entity_id: 'light.desk', state: 'on', attributes: { icon_color: '#ff8800' } },
-    ];
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    window.cachedEntities = [{ entity_id: 'light.desk', state: 'on', attributes: { icon_color: '#ff8800' } }];
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     window.dispatchEvent(
       new CustomEvent('settings-changed', { detail: { statusbar: { header_action_1: 'light.desk' } } })
     );
@@ -118,9 +106,7 @@ describe('status-bar-header-actions', () => {
     const apiFetch = sinon.stub().returns(fetchPromise);
     window.apiFetch = apiFetch;
 
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     window.dispatchEvent(
       new CustomEvent('settings-changed', { detail: { statusbar: { header_action_1: 'switch.fan' } } })
     );
@@ -149,9 +135,7 @@ describe('status-bar-header-actions', () => {
     const apiFetch = sinon.stub().resolves({});
     window.apiFetch = apiFetch;
 
-    const el = await fixture<StatusBarHeaderActions>(
-      html`<status-bar-header-actions></status-bar-header-actions>`
-    );
+    const el = await fixture<StatusBarHeaderActions>(html`<status-bar-header-actions></status-bar-header-actions>`);
     window.dispatchEvent(
       new CustomEvent('settings-changed', { detail: { statusbar: { header_action_1: 'button.doorbell' } } })
     );

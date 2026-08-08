@@ -520,14 +520,21 @@ export class EditorViewElement extends LitElement {
         originalContent: data.isNew ? null : data.content,
         viewState: null,
       };
-      newTab.model = window.monacoEditor.createModel(initialContent, 'javascript', `card__${scriptFilename}`, (model) => {
-        const isNowDirty =
-          newTab.originalContent === null ? true : window.monacoEditor!.getModelValue(model) !== newTab.originalContent;
-        if (newTab.isDirty !== isNowDirty) {
-          newTab.isDirty = isNowDirty;
-          this._renderTabs();
+      newTab.model = window.monacoEditor.createModel(
+        initialContent,
+        'javascript',
+        `card__${scriptFilename}`,
+        (model) => {
+          const isNowDirty =
+            newTab.originalContent === null
+              ? true
+              : window.monacoEditor!.getModelValue(model) !== newTab.originalContent;
+          if (newTab.isDirty !== isNowDirty) {
+            newTab.isDirty = isNowDirty;
+            this._renderTabs();
+          }
         }
-      });
+      );
 
       // Insert card tab directly after its parent script tab
       const parentIndex = this._openTabs.findIndex((t) => t.filename === scriptFilename);
@@ -707,7 +714,11 @@ export class EditorViewElement extends LitElement {
         if (!proceed) return;
       }
       activeTab.blocksState = blocksState;
-      const content = JSON.stringify({ jsa: activeTab.jsa, blocks: blocksState.blocks, variables: blocksState.variables }, null, 2);
+      const content = JSON.stringify(
+        { jsa: activeTab.jsa, blocks: blocksState.blocks, variables: blocksState.variables },
+        null,
+        2
+      );
 
       await window.apiFetch!(`api/scripts/${this._activeTabFilename}/content`, {
         method: 'POST',
@@ -750,7 +761,10 @@ export class EditorViewElement extends LitElement {
   };
 
   closeAllTabs = async (): Promise<void> => {
-    if (this._openTabs.some((t) => t.isDirty) && !(await window.confirmDialog?.confirm(this._t('confirm_discard_all_changes')))) {
+    if (
+      this._openTabs.some((t) => t.isDirty) &&
+      !(await window.confirmDialog?.confirm(this._t('confirm_discard_all_changes')))
+    ) {
       return;
     }
     this._openTabs.forEach((t) => window.monacoEditor?.disposeModel(t.model));
@@ -870,9 +884,9 @@ export class EditorViewElement extends LitElement {
             const badge = !isCardTab && window.getLanguageBadge ? window.getLanguageBadge(tab.filename) : '';
             return html`
               <div
-                class="tab ${tab.filename === this._activeTabFilename ? 'active' : ''} ${tab.isDirty
-                  ? 'dirty'
-                  : ''} ${isCardTab ? 'card-tab' : ''}"
+                class="tab ${tab.filename === this._activeTabFilename ? 'active' : ''} ${
+                  tab.isDirty ? 'dirty' : ''
+                } ${isCardTab ? 'card-tab' : ''}"
                 draggable="true"
                 data-filename=${tab.filename}
                 @click=${() => this.switchToTab(tab.filename)}
@@ -945,7 +959,8 @@ export class EditorViewElement extends LitElement {
   private _renderToolbar(activeTab: JsaTab | undefined) {
     const filename = this._activeTabFilename;
     const isCardTab = !!filename?.endsWith(CARD_TAB_SUFFIX);
-    const isSystemTab = filename === 'System: Store' || filename === 'System: Settings' || filename === 'System: Reference';
+    const isSystemTab =
+      filename === 'System: Store' || filename === 'System: Settings' || filename === 'System: Reference';
     const isBlocklyTab = activeTab?.type === 'blockly';
     const isDirty = !!activeTab?.isDirty;
 
@@ -1012,60 +1027,68 @@ export class EditorViewElement extends LitElement {
           >
             <i class="mdi mdi-content-duplicate"></i>
           </button>
-          ${isBlocklyTab
-            ? nothing
-            : html`
-                <button
-                  title=${this._t('toggle_word_wrap_title', 'Toggle word wrap')}
-                  @click=${() => this._monacoEditorEl?.toggleWordWrap()}
-                >
-                  <i class="mdi mdi-wrap${this._monacoEditorEl?.wordWrapEnabled ? '' : '-disabled'}"></i>
-                </button>
-              `}
-          ${hasCard
-            ? html`
-                <button
-                  class=${cardTabOpen ? 'preview-active' : ''}
-                  title=${cardTabOpen ? 'Close Card Tab' : 'Open Card Tab'}
-                  @click=${() => this.toggleCardTab()}
-                >
-                  <i class="mdi mdi-card-text${cardTabOpen ? '' : '-outline'}"></i>
-                </button>
-              `
-            : nothing}
+          ${
+            isBlocklyTab
+              ? nothing
+              : html`
+                  <button
+                    title=${this._t('toggle_word_wrap_title', 'Toggle word wrap')}
+                    @click=${() => this._monacoEditorEl?.toggleWordWrap()}
+                  >
+                    <i class="mdi mdi-wrap${this._monacoEditorEl?.wordWrapEnabled ? '' : '-disabled'}"></i>
+                  </button>
+                `
+          }
+          ${
+            hasCard
+              ? html`
+                  <button
+                    class=${cardTabOpen ? 'preview-active' : ''}
+                    title=${cardTabOpen ? 'Close Card Tab' : 'Open Card Tab'}
+                    @click=${() => this.toggleCardTab()}
+                  >
+                    <i class="mdi mdi-card-text${cardTabOpen ? '' : '-outline'}"></i>
+                  </button>
+                `
+              : nothing
+          }
           <div class="toolbar-separator"></div>
-          ${isBlocklyTab
-            ? html`
-                <button
-                  class=${this._showingBlocklyCode ? 'preview-active' : ''}
-                  title=${this._t('blockly_show_code_title', 'Show Code')}
-                  @click=${() => this._toggleShowCode()}
-                >
-                  <i class="mdi mdi-code-braces"></i>
-                </button>
-              `
-            : html`
-                <button
-                  title=${this._t('snippet_toolbar_title', 'Insert snippet')}
-                  @click=${(e: Event) => {
-                    e.stopPropagation();
-                    this._monacoEditorEl?.openSnippetMenu(e.currentTarget as HTMLElement);
-                  }}
-                >
-                  <i class="mdi mdi-puzzle-outline"></i>
-                </button>
-              `}
-          ${!isBlocklyTab && (isCardTab || hasCard)
-            ? html`
-                <button
-                  class=${window.CardPreview?.isOpen() ? 'preview-active' : ''}
-                  title=${this._t('card_preview_toggle_title', 'Show / Hide Preview')}
-                  @click=${() => window._toggleCardPreview?.()}
-                >
-                  <i class="mdi mdi-monitor-dashboard"></i>
-                </button>
-              `
-            : nothing}
+          ${
+            isBlocklyTab
+              ? html`
+                  <button
+                    class=${this._showingBlocklyCode ? 'preview-active' : ''}
+                    title=${this._t('blockly_show_code_title', 'Show Code')}
+                    @click=${() => this._toggleShowCode()}
+                  >
+                    <i class="mdi mdi-code-braces"></i>
+                  </button>
+                `
+              : html`
+                  <button
+                    title=${this._t('snippet_toolbar_title', 'Insert snippet')}
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      this._monacoEditorEl?.openSnippetMenu(e.currentTarget as HTMLElement);
+                    }}
+                  >
+                    <i class="mdi mdi-puzzle-outline"></i>
+                  </button>
+                `
+          }
+          ${
+            !isBlocklyTab && (isCardTab || hasCard)
+              ? html`
+                  <button
+                    class=${window.CardPreview?.isOpen() ? 'preview-active' : ''}
+                    title=${this._t('card_preview_toggle_title', 'Show / Hide Preview')}
+                    @click=${() => window._toggleCardPreview?.()}
+                  >
+                    <i class="mdi mdi-monitor-dashboard"></i>
+                  </button>
+                `
+              : nothing
+          }
         </div>
         <div class="toolbar-right">
           <button title=${this._t('close_all_tabs_title', 'Close all tabs')} @click=${() => this.closeAllTabs()}>
@@ -1084,8 +1107,7 @@ export class EditorViewElement extends LitElement {
     const showEditorBody = !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card';
 
     return html`
-      ${mdiStylesheetLink}
-      ${this._renderTabBar()}
+      ${mdiStylesheetLink} ${this._renderTabBar()}
       <div class="editor-panel" style=${showEditorBody ? '' : 'display:none'}>
         ${this._renderToolbar(activeTab)} ${this._renderModeBanner(activeTab)}
         <div class="editor-body">
