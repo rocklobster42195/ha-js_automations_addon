@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "typecheck:frontend": "tsc --noEmit -p js_automations/public/tsconfig.json",
     "build": "esbuild js_automations/public/js/components/index.ts --bundle --format=esm --outfile=js_automations/public/js/dist/components.js",
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "node --test \"test/**/*.test.js\"",
+    "test:frontend": "web-test-runner --config web-test-runner.config.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -45,7 +47,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@open-wc/testing": "^5.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^26.0.0",
+    "@types/sinon": "^22.0.0",
+    "@web/dev-server-esbuild": "^2.0.0",
+    "@web/test-runner": "^1.0.0",
+    "@web/test-runner-playwright": "^1.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
@@ -53,6 +61,7 @@
     "monaco-editor": "^0.44.0",
     "nodemon": "^3.1.11",
     "playwright": "^1.62.1",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "sinon": "^22.1.0"
   }
 }

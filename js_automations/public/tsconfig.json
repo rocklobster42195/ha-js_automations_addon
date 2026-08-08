@@ -9,7 +9,8 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["mocha"]
   },
   "include": ["js/components/**/*.ts"]
 }
