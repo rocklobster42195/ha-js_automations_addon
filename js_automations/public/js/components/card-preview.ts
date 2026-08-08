@@ -429,6 +429,8 @@ export class CardPreview extends LitElement {
   private _resizeObserver?: ResizeObserver;
   private _resizeSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private _pollStatesInterval?: ReturnType<typeof setInterval>;
+  private _draggableHandle: HTMLElement | null = null;
+  private _observedWrap: HTMLElement | null = null;
 
   private _t(key: string, fallback: string): string {
     return window.i18next?.t(key) ?? fallback;
@@ -457,7 +459,6 @@ export class CardPreview extends LitElement {
   }
 
   firstUpdated() {
-    this._makeDraggable();
     this._resizeObserver = new ResizeObserver((entries) => {
       if (this._width !== 'free') return;
       const width = entries[0]?.contentRect.width;
@@ -468,8 +469,25 @@ export class CardPreview extends LitElement {
         localStorage.setItem('jsa_preview_free_width_px', String(this._freeWidthPx));
       }, 300);
     });
-    const wrap = this.renderRoot.querySelector('.preview-iframe-wrap');
-    if (wrap) this._resizeObserver.observe(wrap);
+  }
+
+  /** render() returns `nothing` entirely while closed (see render()'s own early return), so
+   * .preview-titlebar/.preview-iframe-wrap don't exist on the very first update — firstUpdated()
+   * (which only ever fires once) is too early to bind either. Re-checking every update() instead,
+   * guarded so re-attaching is a no-op unless the element is a genuinely new DOM node — which it
+   * is, every time the panel closes and reopens, since the `nothing` branch tears the whole
+   * subtree down. */
+  updated() {
+    const handle = this.renderRoot.querySelector<HTMLElement>('.preview-titlebar');
+    if (handle && handle !== this._draggableHandle) {
+      this._draggableHandle = handle;
+      this._makeDraggable(handle);
+    }
+    const wrap = this.renderRoot.querySelector<HTMLElement>('.preview-iframe-wrap');
+    if (wrap && wrap !== this._observedWrap) {
+      this._observedWrap = wrap;
+      this._resizeObserver?.observe(wrap);
+    }
   }
 
   private _waitForSocket = (): void => {
@@ -902,9 +920,7 @@ export class CardPreview extends LitElement {
 
   // ── Drag & position ────────────────────────────────────────────────────
 
-  private _makeDraggable(): void {
-    const handle = this.renderRoot.querySelector<HTMLElement>('.preview-titlebar');
-    if (!handle) return;
+  private _makeDraggable(handle: HTMLElement): void {
     let sx = 0,
       sy = 0,
       sl = 0,
