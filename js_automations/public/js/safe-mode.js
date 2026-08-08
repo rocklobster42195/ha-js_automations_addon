@@ -114,6 +114,19 @@
             if (isActive) showSafeModeBanner();
             else hideSafeModeBanner();
         });
+
+        // The 'safe_mode' event above only fires once, at the exact moment Safe Mode is
+        // detected during boot — a client connecting/reloading afterwards would never see
+        // it. Query the current status explicitly on every (re)connect as a fallback.
+        window.socket.on('connect', () => {
+            if (!window.socket || !window.socket.connected) return;
+            window.socket.emit('get_integration_status', (response) => {
+                if (response && !response.error) {
+                    if (response.safe_mode) showSafeModeBanner();
+                    else hideSafeModeBanner();
+                }
+            });
+        });
     };
 
     if (document.readyState === 'loading') {

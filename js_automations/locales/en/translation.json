@@ -161,6 +161,7 @@
   "snippet_state": "Read State ha.getState()",
   "snippet_update_state": "Update Entity ha.update()",
   "snippet_register": "Register Entity ha.register()",
+  "snippet_unregister": "Unregister Entity ha.unregister()",
   "snippet_select": "Select Multiple ha.select()",
   "snippet_store_set": "Store: Save Value ha.store.set()",
   "snippet_store_get": "Store: Read Value ha.store.get()",
@@ -226,6 +227,10 @@
   "safe_mode_btn": "Exit Safe Mode",
   "safe_mode_deactivated": "Safe Mode deactivated. You can now start scripts manually.",
   "safe_mode_failed": "Failed to resolve Safe Mode.",
+  "sibling_guard_title": "Waiting for sibling add-on",
+  "sibling_guard_msg": "\"{{sibling}}\" is currently running. Both add-ons share the same scripts, data, and webhook port, so they must never run at the same time.",
+  "sibling_guard_hint": "Stop \"{{sibling}}\" in the add-on view — this add-on will then activate automatically (checked every 15 seconds).",
+  "sibling_guard_waiting": "Waiting…",
   "settings_title": "Settings",
   "settings": {
     "categories": {
@@ -270,6 +275,9 @@
     "statusbar": {
       "show_statusbar": "Show Status Bar",
       "show_statusbar_desc": "Displays the status bar at the bottom of the application.",
+      "none": "Empty",
+      "cpu_usage": "CPU Usage",
+      "ram_usage": "RAM Usage",
       "slot1": "Slot 1 (Left)",
       "slot2": "Slot 2 (Center)",
       "slot3": "Slot 3 (Right)",
@@ -281,7 +289,14 @@
       "header_action_1": "Header Action 1",
       "header_action_2": "Header Action 2",
       "header_action_3": "Header Action 3",
-      "header_action_desc": "HA entity to show as a quick-action button in the sidebar header (switch or button)."
+      "header_action_desc": "HA entity to show as a quick-action button in the sidebar header (switch or button).",
+      "tooltip_heap": "Node Heap: {{value}} MB (Scripts)",
+      "tooltip_rss": "Node RSS: {{value}} MB (Total)",
+      "tooltip_system": "System: {{used}} / {{total}} ({{pct}}%)",
+      "tooltip_scripts": "Active Scripts: {{count}}",
+      "tooltip_limit": "Container Limit: {{value}} MB",
+      "tooltip_leak_warning": "⚠ Rising memory trend (possible leak)",
+      "tooltip_pressure_warning": "⚠ High memory pressure"
     },
     "mqtt": {
       "enabled": "Enable MQTT",
@@ -291,9 +306,11 @@
       "username": "Username",
       "password": "Password",
       "mqtt_test_btn": "Test Connection",
+      "mqtt_testing": "Testing...",
       "mqtt_test_success": "Connection successful!",
       "mqtt_test_error": "Connection failed: {{error}}",
       "mqtt_autodetect_btn": "Auto-detect from HA",
+      "mqtt_detecting": "Detecting...",
       "mqtt_autodetect_success": "MQTT settings successfully imported from Home Assistant.",
       "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant.",
       "mqtt_autodetect_password_hint": "Host and port have been imported. Please enter your password manually.",
@@ -301,10 +318,8 @@
       "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>."
     },
     "webhook": {
-      "port": "Port",
-      "port_desc": "Port the webhook server listens on. Only active while at least one script has an active ha.onWebhook() registration.",
       "external_url": "External URL",
-      "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy.",
+      "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy. The webhook server always listens on port 3001 (fixed, see add-on network configuration).",
       "trust_proxy": "Trust Reverse Proxy",
       "trust_proxy_desc": "Reads the real caller IP from X-Forwarded-For. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP."
     },

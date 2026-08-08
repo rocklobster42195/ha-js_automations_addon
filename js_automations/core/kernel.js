@@ -58,6 +58,7 @@ class Kernel extends EventEmitter {
         this.cardManager = null;
         this.lastStats = null; // Cache for the latest system metrics
         this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
+        this._startupCompleted = false; // Post-connect startup (autostart etc.) has run
     }
 
     /**
@@ -79,7 +80,10 @@ class Kernel extends EventEmitter {
             is_connected: isConnected,
             display_version: config.VERSION,
             mqtt: mqttStatus,
-            stats: this.lastStats // Include stats for immediate status bar population
+            stats: this.lastStats, // Include stats for immediate status bar population
+            // Lets clients that (re)connect after the boot-time 'safe_mode' event fired
+            // still learn the current state, instead of only reacting to that one broadcast.
+            safe_mode: this.systemService?.isSafeMode || false
         };
     }
 
@@ -322,7 +326,38 @@ class Kernel extends EventEmitter {
                 this.logManager.add('error', 'System', '🚨 SAFE MODE ACTIVATED: Excessive restarts detected. Scripts are disabled.');
             }
 
-            await this.haConnector.connect();
+            // If HA is not reachable yet (e.g. the addon boots alongside HA and
+            // the Supervisor proxy answers 502), don't abort the whole startup —
+            // the reconnect loop calls _finishStartup() once HA comes up, so
+            // event subscriptions and script autostart still happen.
+            try {
+                await this.haConnector.connect();
+            } catch (err) {
+                console.error('⚠️ Initial HA connection failed:', err.message);
+                this.logManager.add('warn', 'System', `Initial HA connection failed: ${err.message} — startup will complete once HA is reachable.`);
+                return;
+            }
+
+            await this._finishStartup();
+        } catch (err) {
+            console.error(err);
+            this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
+        }
+    }
+
+    /**
+     * Completes the startup once a HA connection exists: MQTT, entities, event
+     * listeners, and script autostart. Runs exactly once — either directly from
+     * start(), or from handleReconnection() if the initial connect failed.
+     * @private
+     */
+    async _finishStartup() {
+        if (this._startupCompleted) return;
+        this._startupCompleted = true;
+
+        const { SCRIPTS_DIR } = config;
+
+        try {
             await this.mqttManager.connect();
 
             // Update System Language from HA Config
@@ -340,34 +375,25 @@ class Kernel extends EventEmitter {
             this._updateWorkerManagerSettings(currentSettings);
 
             await this.entityManager.createExposedEntities();
-            
-            this._setupSystemEventListeners();
 
-            // Card startup cleanup: remove orphaned Lovelace resources and card files
-            // for scripts that no longer exist or no longer carry a @card header.
-            try {
-                const knownCardNames = this.workerManager.getScripts()
-                    .map(p => {
-                        const meta = ScriptHeaderParser.parse(p);
-                        if (!meta.card) return null;
-                        return path.basename(p, path.extname(p)) + '-card';
-                    })
-                    .filter(Boolean);
-                await this.cardManager.performStartupCleanup(knownCardNames);
-            } catch (e) {
-                console.warn('[Kernel] Card startup cleanup failed:', e.message);
-            }
+            this._setupSystemEventListeners();
 
             // Autostart scripts
             if (!this.systemService.isSafeMode) {
                 const enabled = this.stateManager.getEnabledScripts();
+                // Stagger starts: with many scripts, firing every ha.register() (MQTT
+                // discovery) and HA service call in the same tick can overwhelm HA's own
+                // boot, causing ACK timeouts and "Service Call Timeout" errors across the
+                // board. A small gap spreads the burst out instead of front-loading it all.
+                const AUTOSTART_STAGGER_MS = 300;
                 for (const file of enabled) {
                     let fullPath = path.join(SCRIPTS_DIR, file);
-                    
+
                     if (fs.existsSync(fullPath)) {
                         const meta = ScriptHeaderParser.parse(fullPath);
                         if (meta.dependencies.length > 0) await this.depManager.install(meta.dependencies, false);
                         this.workerManager.startScript(file);
+                        await new Promise(r => setTimeout(r, AUTOSTART_STAGGER_MS));
                     }
                 }
             }
@@ -380,6 +406,25 @@ class Kernel extends EventEmitter {
             // Start periodic cleanup (every hour)
             setInterval(() => this.performGlobalCleanup(), 3600000);
             this.logManager.add('debug', 'System', 'Kernel background maintenance loops started.');
+
+            // Card startup cleanup: remove orphaned Lovelace resources and card files
+            // for scripts that no longer exist or no longer carry a @card header.
+            // Deliberately not awaited and delayed a few seconds — this is pure
+            // housekeeping, not required for scripts to run. Awaiting it inline used to
+            // block script autostart behind slow Lovelace WebSocket round-trips (up to
+            // their full 15s timeout) during the busiest window of the boot, when the
+            // event loop is also handling the initial state flood and MQTT discovery.
+            setTimeout(() => {
+                const knownCardNames = this.workerManager.getScripts()
+                    .map(p => {
+                        const meta = ScriptHeaderParser.parse(p);
+                        if (!meta.card) return null;
+                        return path.basename(p, path.extname(p)) + '-card';
+                    })
+                    .filter(Boolean);
+                this.cardManager.performStartupCleanup(knownCardNames)
+                    .catch(e => console.warn('[Kernel] Card startup cleanup failed:', e.message));
+            }, 10000);
         } catch (err) {
             console.error(err);
             this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
@@ -509,8 +554,19 @@ class Kernel extends EventEmitter {
             // new worker (restart/hot-reload/rename/dependency update) or the whole addon is
             // going down and should resume the script on its next start.
             const transientReasons = ['restarting', 'restarted by script', 'hot-reload', 'renaming/moving', 'library update', 'system shutdown'];
-            const isPermanentStop = !transientReasons.includes(d.reason);
-            if (isPermanentStop) {
+
+            if (d.type === 'error') {
+                // Crashed (uncaught exception), not an explicit stop — most crashes are
+                // transient (e.g. an unhandled HA call failure during a HA/Supervisor
+                // restart), so try to recover automatically instead of giving up right
+                // away. startScript()'s own restart-rate safeguard (Settings > Danger
+                // Zone) caps how many times this can happen in a row, so a script that's
+                // actually broken still ends up stopped instead of looping forever.
+                const restarted = this.workerManager.startScript(d.filename);
+                if (!restarted) {
+                    this.stateManager.saveScriptStopped(d.filename);
+                }
+            } else if (!transientReasons.includes(d.reason)) {
                 this.stateManager.saveScriptStopped(d.filename);
             }
         }
@@ -519,6 +575,17 @@ class Kernel extends EventEmitter {
         const level = d.type === 'success' ? 'debug' : (d.type || 'info');
         this.logManager.add(level, 'System', `${path.basename(d.filename)} ${d.reason}`);
         this.emit('status_update');
+    }
+
+    /**
+     * Tells running scripts that the HA connection was lost or restored, so scripts
+     * that care can react (e.g. pause their own logic) via ha.onConnectionChange().
+     * @param {boolean} connected
+     */
+    _notifyConnectionChange(connected) {
+        if (this.workerManager) {
+            this.workerManager.broadcastToWorkers({ type: 'ha_connection_changed', connected });
+        }
     }
 
     _onWorkerLog(data) {
@@ -542,6 +609,7 @@ class Kernel extends EventEmitter {
                 this._reconnectState = { attempts: 0, startedAt: Date.now() };
                 console.log("⚠️ HA Connection lost. Attempting to reconnect...");
                 this.logManager.add('warn', 'System', 'HA Connection lost. Attempting to reconnect...');
+                this._notifyConnectionChange(false);
             }
             const state = this._reconnectState;
             state.attempts++;
@@ -552,6 +620,17 @@ class Kernel extends EventEmitter {
                 console.log(`✅ HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this.logManager.add('info', 'System', `HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`);
                 this._reconnectState = null;
+                this._notifyConnectionChange(true);
+
+                // If the initial connect during start() failed, the whole
+                // post-connect startup (event subscriptions, autostart, MQTT)
+                // is still pending — run it now instead of the plain
+                // reconnect refresh below.
+                if (!this._startupCompleted) {
+                    this.logManager.add('info', 'System', 'Completing deferred startup after first successful HA connection...');
+                    await this._finishStartup();
+                    return;
+                }
 
                 // Update System Language
                 const haConfig = await this.haConnector.getHAConfig();
@@ -584,8 +663,14 @@ class Kernel extends EventEmitter {
      */
     shutdown() {
         console.log('🛑 Kernel shutting down...');
+        // A graceful shutdown (SIGTERM/SIGINT) shouldn't count toward the bootloop
+        // window — only unexpected crashes/kills should be able to trip Safe Mode.
+        if (this.systemService) this.systemService.markCleanShutdown();
         if (this.workerManager) this.workerManager.shutdown();
-        if (this.haConnector) this.haConnector.disconnect();
+        // HAConnector has no disconnect() method — close the raw WebSocket
+        if (this.haConnector?.ws) {
+            try { this.haConnector.ws.close(); } catch { /* already closed */ }
+        }
         this.emit('shutdown');
     }
 }

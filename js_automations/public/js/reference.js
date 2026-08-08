@@ -170,7 +170,7 @@ const referenceManager = {
         // 3. Categorize
         const categories = {
             'Logging': ['ha.log', 'ha.warn', 'ha.error', 'ha.debug'],
-            'Events & Triggers': ['ha.on', 'ha.onStop', 'ha.onError', 'schedule'],
+            'Events & Triggers': ['ha.on', 'ha.onStop', 'ha.onError', 'ha.isConnected', 'ha.onConnectionChange', 'schedule'],
             'State Management': ['ha.getState', 'ha.update', 'ha.register', 'ha.getAttr', 'ha.getStateValue'],
             'Services': ['ha.callService'],
             'Data Store': ['ha.store'],

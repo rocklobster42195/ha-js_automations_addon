@@ -118,32 +118,21 @@ function renderMmEntry(entry) {
         <span class="mm-dir ${dirClass}">${dirLabel}</span>
         <span class="mm-topic" title="${_mmEsc(topic)}">${_mmEsc(topic)}</span>
         <span class="mm-payload" title="${_mmEsc(payload)}">${_mmEsc(short)}</span>
-        <button class="mm-remove-btn" onclick="mmRemoveRow(this, ${id})" title="Remove"><i class="mdi mdi-close"></i></button>
     `;
 
-    if (payload.length > 80) {
-        row.querySelector('.mm-payload').addEventListener('click', () => {
-            const existing = row.nextSibling;
-            if (existing?.classList?.contains('mm-raw')) { existing.remove(); return; }
-            const pre = document.createElement('pre');
-            pre.className = 'mm-raw';
-            try { pre.textContent = JSON.stringify(JSON.parse(payload), null, 2); }
-            catch { pre.textContent = payload; }
-            row.after(pre);
-        });
-    }
+    row.addEventListener('click', () => {
+        const existing = row.nextSibling;
+        if (existing?.classList?.contains('mm-raw')) { existing.remove(); return; }
+        const pre = document.createElement('pre');
+        pre.className = 'mm-raw';
+        try { pre.textContent = JSON.stringify(JSON.parse(payload), null, 2); }
+        catch { pre.textContent = payload; }
+        row.after(pre);
+    });
 
     list.prepend(row);
 
     while (list.children.length > MQTT_MONITOR_MAX * 2) list.removeChild(list.lastChild);
-}
-
-function mmRemoveRow(btn, id) {
-    const row = btn.closest('.mm-row');
-    const next = row?.nextSibling;
-    if (next?.classList?.contains('mm-raw')) next.remove();
-    row?.remove();
-    _mmBuffer = _mmBuffer.filter(e => e.id !== id);
 }
 
 function mmPublish() {
@@ -240,4 +229,3 @@ window.mmPublish       = mmPublish;
 window.mmSetFilter     = mmSetFilter;
 window.mmTogglePause   = mmTogglePause;
 window.mmClear         = mmClear;
-window.mmRemoveRow     = mmRemoveRow;

@@ -1,6 +1,6 @@
 {
   "name": "ha-js-automations",
-  "version": "2.57.2",
+  "version": "2.57.9",
   "description": "",
   "main": "js_automations/server.js",
   "scripts": {
@@ -10,7 +10,10 @@
     "release": "node tools/release.js",
     "ship:patch": "npm version patch && npm run release",
     "ship:minor": "npm version minor && npm run release",
-    "ship:major": "npm version major && npm run release"
+    "ship:major": "npm version major && npm run release",
+    "ship:beta": "npm version prerelease --preid=beta && npm run release",
+    "ship:beta:minor": "npm version preminor --preid=beta && npm run release",
+    "ship:beta:major": "npm version premajor --preid=beta && npm run release"
   },
   "keywords": [],
   "author": "",

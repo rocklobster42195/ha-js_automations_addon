@@ -28,6 +28,7 @@ class HAConnector {
 
     connect() {
         this._subscribed = false; // reset per-connection subscription guard
+        this._iconsCache = null; // re-fetch icon translations in case HA core was updated
         return new Promise((resolve, reject) => {
             console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
             this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
@@ -81,12 +82,21 @@ class HAConnector {
 
     /**
      * Fetches the complete entity registry from Home Assistant.
+     *
+     * Coalesced: EntityManager's post-registration ACK poll calls this once per
+     * entity every 500ms while confirming it appeared in HA. With many entities
+     * registering at boot (e.g. ~30 across a dozen scripts), that used to mean
+     * dozens of full-registry-list round-trips per second — a self-inflicted
+     * flood that visibly overwhelmed both HA and this addon for minutes at a
+     * time. Concurrent callers now share a single in-flight request instead of
+     * each firing their own.
      */
     async getEntityRegistry() {
         if (!this.isReady) return [];
+        if (this._entityRegistryInFlight) return this._entityRegistryInFlight;
         const id = this.msgId++;
         this.send({ id, type: 'config/entity_registry/list' });
-        return new Promise((resolve) => {
+        this._entityRegistryInFlight = new Promise((resolve) => {
             const handler = (data) => {
                 const msg = JSON.parse(data);
                 if (msg.id === id) {
@@ -96,7 +106,8 @@ class HAConnector {
             };
             this.ws.on('message', handler);
             setTimeout(() => { this.ws.removeListener('message', handler); resolve([]); }, 5000);
-        });
+        }).finally(() => { this._entityRegistryInFlight = null; });
+        return this._entityRegistryInFlight;
     }
 
     /**
@@ -378,6 +389,24 @@ class HAConnector {
      */
     fireEvent(eventType, eventData = {}) {
         return this.sendCommand('fire_event', { event_type: eventType, event_data: eventData });
+    }
+
+    /**
+     * Fetches HA's own entity_component icon translations (domain → device_class → {default, state, range}).
+     * Used by the WATCH tab to mirror HA's real device_class icons instead of guessing them.
+     * Cached per connection since these only change on an HA core update/restart.
+     */
+    async getIcons() {
+        if (!this.isReady) return {};
+        if (this._iconsCache) return this._iconsCache;
+        if (this._iconsInFlight) return this._iconsInFlight;
+        this._iconsInFlight = this.sendCommand('frontend/get_icons', { category: 'entity_component' })
+            .then(result => {
+                this._iconsCache = (result && result.resources) || {};
+                return this._iconsCache;
+            })
+            .finally(() => { this._iconsInFlight = null; });
+        return this._iconsInFlight;
     }
 
     /**

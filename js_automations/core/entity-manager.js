@@ -52,6 +52,7 @@ class EntityManager {
         this.workerManager.on('update_entity_state', (data) => this.handleEntityStateUpdate(data));
         this.workerManager.on('request_device_cleanup', (name) => this.checkDeviceCleanup(name));
         this.workerManager.on('sweep_entity_removed', (entityId) => {
+            this.stateManager.unregisterEntity(entityId);
             if (this.haConnection.isReady) {
                 this.haConnection.removeEntity(entityId).catch(err => {
                     this.workerManager.emit('log', { source: 'System', message: `[EntityManager] Could not remove swept entity ${entityId} from HA registry: ${err.message}`, level: 'warn' });
@@ -191,10 +192,14 @@ class EntityManager {
             // Two-level availability: global addon status + per-script status.
             // When the script stops, jsa/script/<slug>/status → "offline" → entity unavailable.
             // The retained state value is kept in the broker so restart restores the last value.
-            availability: [
-                { topic: 'jsa/status' },
-                { topic: `jsa/script/${scriptSlug}/status` },
-            ],
+            // `stale_ok` opts out of the per-script topic, so the entity stays available
+            // (showing its last value) even while its script is stopped.
+            availability: config.stale_ok
+                ? [{ topic: 'jsa/status' }]
+                : [
+                    { topic: 'jsa/status' },
+                    { topic: `jsa/script/${scriptSlug}/status` },
+                ],
             availability_mode: 'all',
             unit_of_measurement: config.unit_of_measurement,
             device_class: config.device_class,
@@ -242,7 +247,7 @@ class EntityManager {
             'name', 'friendly_name', 'icon', 'unit_of_measurement', 'unit',
             'device_class', 'state_class', 'entity_category', 'options',
             'min', 'max', 'step', 'mode', 'suggested_display_precision',
-            'enabled_by_default', 'expire_after', 'initial_state', 'attributes',
+            'enabled_by_default', 'expire_after', 'stale_ok', 'initial_state', 'attributes',
             'area_id', 'area', 'suggested_area', 'labels', 'device', 'action',
         ]);
         for (const [key, value] of Object.entries(config)) {
@@ -395,7 +400,11 @@ class EntityManager {
 
         // Stagger to avoid thundering herd when many entities register simultaneously.
         const stagger = Math.floor(Math.random() * 500);
-        const MAX_ATTEMPTS = 20;
+        // 40 attempts @ 500ms = ~20s. A cold boot with many scripts registering
+        // entities simultaneously can leave HA's MQTT/registry pipeline backed up
+        // well past the previous 10s budget, silently skipping area/label assignment
+        // for every entity still unconfirmed at that point.
+        const MAX_ATTEMPTS = 40;
         const POLL_INTERVAL = 500;
 
         const applyPostRegistration = async (haEntry) => {

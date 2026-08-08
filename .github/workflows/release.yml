@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, aarch64, armv7]
+        arch: [amd64, aarch64]
         include:
           - arch: amd64
             platform: linux/amd64
@@ -20,26 +20,23 @@ jobs:
           - arch: aarch64
             platform: linux/aarch64
             build_from: ghcr.io/home-assistant/aarch64-base:latest
-          - arch: armv7
-            platform: linux/armv7
-            build_from: ghcr.io/home-assistant/armv7-base:latest
     permissions:
       contents: read
       packages: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         id: buildx
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -47,7 +44,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }}/${{ matrix.arch }}
           tags: |
@@ -56,7 +53,7 @@ jobs:
             type=semver,pattern={{major}}
 
       - name: Build and push architecture specific Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}

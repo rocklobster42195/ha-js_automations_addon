@@ -41,11 +41,16 @@ class Bridge {
             const status = await this.kernel.getSystemStatus();
             socket.emit('integration_status', status);
 
-            // Replay current watch state so the WATCH tab isn't empty after reconnect
-            watchTileCache.forEach((data) => socket.emit('watch_update', data));
-            inspectSnapshotCache.forEach((snapshots) => {
-                // Replay oldest-first so the UI (which inserts at top) ends up newest-at-top
-                snapshots.slice().reverse().forEach((data) => socket.emit('inspect_snapshot', data));
+            // Replayed on-demand (not blindly here) — at raw 'connection' time the WATCH
+            // tab's DOM (initWatch()) may not exist yet (e.g. Monaco still loading), so
+            // onWatchUpdate() would silently drop the replay. Mirrors the
+            // subscribe_mqtt_monitor ready-signal pattern below.
+            socket.on('subscribe_watch', () => {
+                watchTileCache.forEach((data) => socket.emit('watch_update', data));
+                inspectSnapshotCache.forEach((snapshots) => {
+                    // Replay oldest-first so the UI (which inserts at top) ends up newest-at-top
+                    snapshots.slice().reverse().forEach((data) => socket.emit('inspect_snapshot', data));
+                });
             });
 
             socket.on('subscribe_event_inspector', () => eventInspectorClients.add(socket.id));

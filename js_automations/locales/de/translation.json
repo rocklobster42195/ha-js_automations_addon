@@ -161,6 +161,7 @@
   "snippet_state": "Zustand lesen ha.getState()",
   "snippet_update_state": "Entität aktualisieren ha.update()",
   "snippet_register": "Entität registrieren ha.register()",
+  "snippet_unregister": "Entität entfernen ha.unregister()",
   "snippet_select": "Mehrfachauswahl ha.select()",
   "snippet_store_set": "Store: Wert speichern ha.store.set()",
   "snippet_store_get": "Store: Wert lesen ha.store.get()",
@@ -226,6 +227,10 @@
   "safe_mode_btn": "Abgesicherten Modus verlassen",
   "safe_mode_deactivated": "Abgesicherter Modus deaktiviert. Du kannst Skripte nun wieder manuell starten.",
   "safe_mode_failed": "Fehler beim Verlassen des Abgesicherten Modus.",
+  "sibling_guard_title": "Warte auf Geschwister-Add-on",
+  "sibling_guard_msg": "\"{{sibling}}\" läuft gerade. Beide Add-ons teilen sich dieselben Skripte, Daten und den Webhook-Port und dürfen daher nie gleichzeitig laufen.",
+  "sibling_guard_hint": "Stoppe \"{{sibling}}\" in der Add-on-Ansicht — dieses Add-on aktiviert sich dann automatisch (Prüfung alle 15 Sekunden).",
+  "sibling_guard_waiting": "Warte…",
   "settings_title": "Einstellungen",
   "banner_close_tooltip": "Schließen",
   "settings": {
@@ -285,7 +290,14 @@
       "header_action_1": "Header-Aktion 1",
       "header_action_2": "Header-Aktion 2",
       "header_action_3": "Header-Aktion 3",
-      "header_action_desc": "HA-Entity als Schnellzugriff-Button im Sidebar-Header (switch oder button)."
+      "header_action_desc": "HA-Entity als Schnellzugriff-Button im Sidebar-Header (switch oder button).",
+      "tooltip_heap": "Node Heap: {{value}} MB (Skripte)",
+      "tooltip_rss": "Node RSS: {{value}} MB (Gesamt)",
+      "tooltip_system": "System: {{used}} / {{total}} ({{pct}}%)",
+      "tooltip_scripts": "Aktive Skripte: {{count}}",
+      "tooltip_limit": "Container-Limit: {{value}} MB",
+      "tooltip_leak_warning": "⚠ Steigender Speichertrend (möglicher Leak)",
+      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck"
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",
@@ -295,9 +307,11 @@
       "username": "Benutzername",
       "password": "Passwort",
       "mqtt_test_btn": "Verbindung testen",
+      "mqtt_testing": "Teste Verbindung...",
       "mqtt_test_success": "Verbindung erfolgreich!",
       "mqtt_test_error": "Verbindung fehlgeschlagen: {{error}}",
       "mqtt_autodetect_btn": "Einstellungen aus HA übernehmen",
+      "mqtt_detecting": "Suche läuft...",
       "mqtt_autodetect_success": "MQTT-Einstellungen erfolgreich aus Home Assistant übernommen.",
       "mqtt_autodetect_not_found": "Keine MQTT-Konfiguration in Home Assistant gefunden.",
       "mqtt_autodetect_password_hint": "Host und Port wurden übernommen. Bitte trage dein Passwort manuell ein.",
@@ -305,10 +319,8 @@
       "mosquitto_hint": "<b>Mosquitto-Addon (HA):</b> Verwende <code>core-mosquitto</code> als Host.<br>Der Broker erwartet einen echten Home-Assistant-Benutzer als Zugangsdaten.<br>Empfehlung: Lege einen dedizierten MQTT-Nutzer an unter <b>Einstellungen → Personen → Benutzer hinzufügen</b>."
     },
     "webhook": {
-      "port": "Port",
-      "port_desc": "Port, auf dem der Webhook-Server lauscht. Nur aktiv, solange mindestens ein Skript eine aktive ha.onWebhook()-Registrierung hat.",
       "external_url": "Externe URL",
-      "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig.",
+      "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig. Der Webhook-Server lauscht immer auf Port 3001 (fix, siehe Netzwerk-Konfiguration des Add-ons).",
       "trust_proxy": "Reverse Proxy vertrauen",
       "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem Webhook-Port steht — sonst können Aufrufer ihre IP fälschen."
     },

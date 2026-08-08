@@ -20,6 +20,13 @@ function initWebhookPanel() {
         _whWebhooks = webhooks;
         _whRender();
     });
+    // 'webhook_registry_changed' is only broadcast at the moment a script (re-)registers.
+    // If that happens while this client's socket is still reconnecting after an addon
+    // restart, the broadcast is missed and the panel is stuck showing pre-restart state
+    // until a full page reload. Re-fetch on every (re)connect as a fallback.
+    window.socket?.on('connect', () => {
+        _whLoad();
+    });
     window.socket?.on('webhook_call_logged', ({ id, ts, status }) => {
         const entry = _whWebhooks.find(w => w.id === id);
         if (entry) {
@@ -36,7 +43,7 @@ function initWebhookPanel() {
 
 async function _whLoad() {
     try {
-        const res = await fetch('/api/webhooks');
+        const res = await apiFetch('api/webhooks');
         const data = await res.json();
         _whPort = data.port;
         _whExternalUrl = data.externalUrl;
@@ -125,7 +132,7 @@ function _whRenderEntry(w) {
 
 async function whRevealToken(id) {
     try {
-        const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}/token`);
+        const res = await apiFetch(`api/webhooks/${encodeURIComponent(id)}/token`);
         const data = await res.json();
         if (data.token) {
             _whRevealedTokens.set(id, data.token);
@@ -141,7 +148,7 @@ async function whCopyToken(id) {
     let token = _whRevealedTokens.get(id);
     if (!token) {
         try {
-            const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}/token`);
+            const res = await apiFetch(`api/webhooks/${encodeURIComponent(id)}/token`);
             token = (await res.json()).token;
         } catch (e) { return; }
     }
@@ -156,7 +163,7 @@ async function whRotateToken(id) {
     const confirmMsg = _t('devtools.webhook_rotate_confirm', 'Rotate the token for "{{id}}"? External services using the old token must be updated.').replace('{{id}}', id);
     if (!confirm(confirmMsg)) return;
     try {
-        const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}/rotate`, { method: 'POST' });
+        const res = await apiFetch(`api/webhooks/${encodeURIComponent(id)}/rotate`, { method: 'POST' });
         const data = await res.json();
         if (data.token) {
             _whRevealedTokens.set(id, data.token);
@@ -172,7 +179,7 @@ async function whDelete(id) {
     const confirmMsg = _t('devtools.webhook_delete_confirm', 'Permanently delete the webhook "{{id}}"? This cannot be undone.').replace('{{id}}', id);
     if (!confirm(confirmMsg)) return;
     try {
-        const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const res = await apiFetch(`api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             alert(data.error || 'Failed to delete webhook.');

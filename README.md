@@ -1,7 +1,7 @@
 # JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-2.57.2-darkgreen)
+![Version](https://img.shields.io/badge/version-2.57.9-darkgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 [![Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rocklobster42195)
 
@@ -27,7 +27,7 @@
 
 - **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys. Updated automatically as your home changes.
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
-- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
+- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped, unless opted out via `stale_ok`. Remove one at runtime with `ha.unregister()`. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
 - **Direct MQTT Access (`ha.mqtt`)** — Subscribe to any broker topic and publish messages directly — no HA entity required. Supports `+` and `#` wildcards. Payloads are auto-parsed as JSON. Ideal for raw Tasmota/Shelly/Zigbee2MQTT events, inter-script messaging, and building custom HA devices with complex domains.
 - **Webhook Receiver (`ha.onWebhook`)** — Let external services push data into your scripts and get a real response back. Unlike HA's built-in webhook automations (fire-and-forget, always an empty `200 OK`), JSA webhooks are fully bidirectional: your handler receives the complete request and returns any HTTP status code and body. Tokens are auto-generated and managed by JSA, never in script code. A dedicated Webhook Panel (Developer Tools) shows all active endpoints with copy-ready URLs and token management (reveal / rotate). Requires a dedicated port; does not work through the Nabu Casa tunnel.
 - **Fluent & Awaitable API** — Interact with entities naturally: `await ha.entity('light.kitchen').turn_on({ brightness: 200 })`. Chain commands, wait for confirmations, build readable sequential logic.
@@ -41,7 +41,7 @@
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
 - **Developer Tools (Expert Mode)** — Enable **Settings → General → Expert Mode** to reveal a split developer panel next to the log console with three tools: **Event Inspector** (live HA event stream with entity filter), **Live REPL** (run ad-hoc JavaScript with full `ha` API access against your live instance), and **Breakpoints** (`ha.breakpoint('label', { vars })` pauses execution and displays variables in a built-in variable inspector — click Continue to resume).
-- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic *and* a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed.
+- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic _and_ a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed. `ha.frontend.cacheAsset(url)` downloads and caches external images/assets (team logos, album art, ...) under `config/www/` once, returning a stable local URL — no more hotlinked images breaking on flaky dashboard devices when the source is slow or unreachable.
 
 ---
 
@@ -95,19 +95,19 @@ Every script starts with a JSDoc-style header that configures the engine's behav
  */
 ```
 
-| Tag | Description |
-|---|---|
-| `@name` | Human-readable script name shown in the sidebar |
-| `@icon` | MDI icon for the script and its exposed entity |
-| `@description` | Short description (shown in the UI) |
-| `@loglevel` | Minimum log level: `debug`, `info`, `warn`, `error` |
-| `@npm` | Auto-installed npm packages (space or comma separated) |
-| `@include` | Library files to load (from the `libraries/` folder) |
-| `@area` | Home Assistant area to assign the exposed entity to |
-| `@label` | HA Label for sidebar grouping — inherits icon and color from the HA Label Registry |
-| `@expose` | Expose as `switch` or `button` entity in HA |
-| `@permission` | Declare required capabilities: `network`, `fs:read`, `fs:write`, `exec` (comma-separated) |
-| `@card` | Mark script as a Script Pack. Use `@card dev` during development (preview only, no Lovelace install) |
+| Tag            | Description                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| `@name`        | Human-readable script name shown in the sidebar                                                      |
+| `@icon`        | MDI icon for the script and its exposed entity                                                       |
+| `@description` | Short description (shown in the UI)                                                                  |
+| `@loglevel`    | Minimum log level: `debug`, `info`, `warn`, `error`                                                  |
+| `@npm`         | Auto-installed npm packages (space or comma separated)                                               |
+| `@include`     | Library files to load (from the `libraries/` folder)                                                 |
+| `@area`        | Home Assistant area to assign the exposed entity to                                                  |
+| `@label`       | HA Label for sidebar grouping — inherits icon and color from the HA Label Registry                   |
+| `@expose`      | Expose as `switch` or `button` entity in HA                                                          |
+| `@permission`  | Declare required capabilities: `network`, `fs:read`, `fs:write`, `exec` (comma-separated)            |
+| `@card`        | Mark script as a Script Pack. Use `@card dev` during development (preview only, no Lovelace install) |
 
 ---
 
@@ -141,9 +141,12 @@ TypeScript support is built-in and requires zero configuration.
 - **Strict Mode:** Catches potential `null` and `undefined` errors before your script runs.
 
 ```typescript
-interface WeatherData { temp: number; condition: string; }
+interface WeatherData {
+  temp: number;
+  condition: string;
+}
 
-const weather = ha.persistent<WeatherData>("weather_cache", { temp: 0, condition: "unknown" });
+const weather = ha.persistent<WeatherData>('weather_cache', { temp: 0, condition: 'unknown' });
 ha.log(weather.temp); // TypeScript knows this is a number
 ```
 
@@ -157,17 +160,17 @@ Register Home Assistant entities via MQTT Discovery. They appear in HA's entity 
 
 ```javascript
 ha.register('sensor.outside_temp', {
-    name: 'Outside Temperature',
-    icon: 'mdi:thermometer',
-    unit: '°C',
-    device_class: 'temperature',
-    state_class: 'measurement',
-    initial_state: 0,
+  name: 'Outside Temperature',
+  icon: 'mdi:thermometer',
+  unit: '°C',
+  device_class: 'temperature',
+  state_class: 'measurement',
+  initial_state: 0,
 });
 
 ha.register('select.heating_mode', {
-    name: 'Heating Mode',
-    options: ['Off', 'Auto', 'Eco', 'Guest'],
+  name: 'Heating Mode',
+  options: ['Off', 'Auto', 'Eco', 'Guest'],
 });
 ```
 
@@ -185,21 +188,21 @@ Use the `device` option to group multiple entities under a shared device card in
 
 ```javascript
 ha.register('sensor.weather_temp', {
-    name: 'Temperature',
-    unit: '°C',
-    device_class: 'temperature',
-    device: {
-        name: 'Weather Station',
-        manufacturer: 'AcmeCorp',
-        model: 'v2',
-    },
+  name: 'Temperature',
+  unit: '°C',
+  device_class: 'temperature',
+  device: {
+    name: 'Weather Station',
+    manufacturer: 'AcmeCorp',
+    model: 'v2',
+  },
 });
 
 ha.register('sensor.weather_humidity', {
-    name: 'Humidity',
-    unit: '%',
-    device_class: 'humidity',
-    device: { name: 'Weather Station' }, // same name → same device
+  name: 'Humidity',
+  unit: '%',
+  device_class: 'humidity',
+  device: { name: 'Weather Station' }, // same name → same device
 });
 ```
 
@@ -208,6 +211,31 @@ Supported device fields: `name`, `manufacturer`, `model`, `sw_version`, `hw_vers
 > **Entity ID note:** When `device` is set, HA generates the entity_id from the device and entity name slugs, ignoring the path you specified. Omit `device` for exact entity_id control.
 
 > **Mark-and-Sweep:** Entities that are no longer registered by a script are automatically removed from Home Assistant when the script runs again.
+
+### Staying Available While Stopped
+
+By default, an entity becomes `unavailable` in HA the moment its script stops. For values that are still meaningful after the script exits (a last measured temperature, a counter), set `stale_ok: true` to keep the entity available — tied only to the addon's global status instead of the per-script one:
+
+```javascript
+ha.register('sensor.outside_temp', {
+  name: 'Outside Temperature',
+  unit: '°C',
+  stale_ok: true,
+  expire_after: 3600, // fall back to unavailable after 1h without an update
+});
+```
+
+Combine with `expire_after` if the value should eventually be flagged stale on its own.
+
+### Removing Entities at Runtime (`ha.unregister`)
+
+Mark-and-Sweep only cleans up on script restart. For scripts that manage a changing set of dynamically-created entities (e.g. one per discovered device), remove a single one immediately with:
+
+```javascript
+ha.unregister('sensor.device_123_battery');
+```
+
+This tears down the entity's MQTT Discovery config and clears its retained state, without restarting the script. Entities declared via the `@expose` header are managed automatically and can't be unregistered this way.
 
 ---
 
@@ -219,32 +247,32 @@ Send notifications via any configured HA notify service. `ha.ask()` sends an **a
 
 ```javascript
 // Simple notification
-ha.notify("Motion detected!", {
-    title: "Security",
-    target: "notify.mobile_app_my_phone",
+ha.notify('Motion detected!', {
+  title: 'Security',
+  target: 'notify.mobile_app_my_phone',
 });
 
 // Persistent notification (visible in HA Web UI/Browser)
-ha.notify("Backup completed successfully", {
-    title: "System",
-    persistent: true
+ha.notify('Backup completed successfully', {
+  title: 'System',
+  persistent: true,
 });
 
 // Actionable notification — waits for user response
-const answer = await ha.ask("Garage door is open. Close it?", {
-    title: "Garage Alert",
-    target: "notify.mobile_app_my_phone",
-    timeout: 60000,
-    defaultAction: "SNOOZE",
-    actions: [
-        { action: "CLOSE",  title: "Close now" },
-        { action: "SNOOZE", title: "Remind in 30 min" },
-        { action: "IGNORE", title: "Ignore" },
-    ],
+const answer = await ha.ask('Garage door is open. Close it?', {
+  title: 'Garage Alert',
+  target: 'notify.mobile_app_my_phone',
+  timeout: 60000,
+  defaultAction: 'SNOOZE',
+  actions: [
+    { action: 'CLOSE', title: 'Close now' },
+    { action: 'SNOOZE', title: 'Remind in 30 min' },
+    { action: 'IGNORE', title: 'Ignore' },
+  ],
 });
 
-if (answer === "CLOSE") ha.entity('cover.garage_door').close_cover();
-if (answer === "SNOOZE" || answer === null) setTimeout(checkGarage, 30 * 60 * 1000);
+if (answer === 'CLOSE') ha.entity('cover.garage_door').close_cover();
+if (answer === 'SNOOZE' || answer === null) setTimeout(checkGarage, 30 * 60 * 1000);
 ```
 
 Requires the Home Assistant Companion App on at least one device.
@@ -254,6 +282,7 @@ Requires the Home Assistant Companion App on at least one device.
 ## Unified Creation Wizard
 
 The **+** button opens the creation wizard with three modes:
+
 1. **New:** Start from scratch (JavaScript or TypeScript) or pick a template.
 2. **Upload:** Drag & drop `.js` / `.ts` files directly into the editor.
 3. **Import:** Paste a raw URL (GitHub/Gist) to fetch code from the web.
@@ -294,7 +323,7 @@ A Script Pack is a single `.js` (or `.ts`) file that contains:
 2. **Frontend card** — a standard Web Component (no framework required) embedded in a `__JSA_CARD__` block. The add-on extracts and installs it automatically as a Lovelace resource.
 3. **The `__jsa__` bridge** — injected by the add-on at install time, lets the card call named script actions directly: `await __jsa__.callAction('refresh')`. The result flows back as a Promise.
 
-The result is a **deployable mini-integration**: one URL pasted into the import wizard gives you a running script with native HA entities *and* a ready-to-use dashboard card — no HACS, no manual resource management, no copy-pasting between files.
+The result is a **deployable mini-integration**: one URL pasted into the import wizard gives you a running script with native HA entities _and_ a ready-to-use dashboard card — no HACS, no manual resource management, no copy-pasting between files.
 
 ### What this enables
 
@@ -322,7 +351,7 @@ Add `@card` (or `@card dev` for development mode) to the script header, then app
 ha.register('sensor.bundesliga_score', { name: 'BL Score' });
 
 ha.action('refresh', async () => {
-    // fetch and update entity
+  // fetch and update entity
 });
 
 /* __JSA_CARD__
@@ -338,15 +367,15 @@ The add-on injects a `__jsa__` object into every installed card:
 
 ```javascript
 class MyCard extends HTMLElement {
-    set hass(h) {
-        __jsa__.connect(h); // one-time setup
-        this.render(h.states['sensor.bundesliga_score']);
-    }
+  set hass(h) {
+    __jsa__.connect(h); // one-time setup
+    this.render(h.states['sensor.bundesliga_score']);
+  }
 
-    async onRefreshClick() {
-        await __jsa__.callAction('refresh');
-        // hass will be pushed again automatically after the action completes
-    }
+  async onRefreshClick() {
+    await __jsa__.callAction('refresh');
+    // hass will be pushed again automatically after the action completes
+  }
 }
 customElements.define('my-card', MyCard);
 ```
@@ -356,6 +385,7 @@ customElements.define('my-card', MyCard);
 ### Card States in the Script List
 
 The script list icon (`mdi:view-dashboard-outline`) reflects the card's install state:
+
 - **Orange** — `@card dev`: card block exists, dev-mode preview only, not installed
 - **Dark gray** — card block exists but not yet installed to Lovelace
 - **Light gray** — card is installed and active
@@ -365,14 +395,15 @@ The script list icon (`mdi:view-dashboard-outline`) reflects the card's install 
 ## Internationalization
 
 ### UI Language
+
 The user interface is available in German and English, auto-detected from your browser. Override via add-on settings.
 
 ### Script Language (`ha.localize`)
 
 ```javascript
 const message = ha.localize({
-    en: "The washing machine is finished.",
-    de: "Die Waschmaschine ist fertig.",
+  en: 'The washing machine is finished.',
+  de: 'Die Waschmaschine ist fertig.',
 });
 ha.notify(message);
 ```

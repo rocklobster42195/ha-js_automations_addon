@@ -22,9 +22,27 @@ const { execSync } = require('child_process');
 
 const rootDir     = path.resolve(__dirname, '..');
 const configPath  = path.join(rootDir, 'config.yaml');
+const betaConfigPath = path.join(rootDir, 'js_automations_beta', 'config.yaml');
+const betaChangelogPath = path.join(rootDir, 'js_automations_beta', 'CHANGELOG.md');
 const readmePath  = path.join(rootDir, 'README.md');
 const changelogPath = path.join(rootDir, 'CHANGELOG.md');
 const packagePath = path.join(rootDir, 'package.json');
+
+/**
+ * Finds the most recent git tag reachable from HEAD, optionally excluding
+ * beta tags (x.y.z-beta.n). Filtering is done in JS rather than via
+ * `git describe --exclude="<glob>"` — the shell-quoted glob is fragile across
+ * shells (this previously produced an empty/wrong result on Windows, silently
+ * swallowed by the surrounding try/catch, leaving release notes empty).
+ * @param {boolean} excludeBeta
+ * @returns {string|null} tag name, or null if none found
+ */
+function findPreviousTag(excludeBeta) {
+    const tags = execSync('git for-each-ref --sort=-creatordate --format=%(refname:short) refs/tags/v*', { stdio: 'pipe' })
+        .toString().trim().split('\n').filter(Boolean);
+    const match = tags.find(t => !excludeBeta || !t.includes('-beta.'));
+    return match || null;
+}
 
 // --- Helpers ---
 
@@ -45,8 +63,58 @@ function today() {
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const newVersion = pkg.version;
 const license    = pkg.license || 'MIT';
+const isBeta     = newVersion.includes('-beta.');
 
-console.log(`\n🔄 Synchronizing version ${newVersion}...\n`);
+console.log(`\n🔄 Synchronizing version ${newVersion}${isBeta ? ' (beta channel)' : ''}...\n`);
+
+// --- 0. Beta release: only bump the beta addon's config.yaml ---
+// The stable config.yaml, README badge, and CHANGELOG (incl. the <!-- NEXT -->
+// release gate) stay untouched so the pending release notes survive until the
+// version is promoted to stable.
+if (isBeta) {
+    let content = fs.readFileSync(betaConfigPath, 'utf8');
+    content = content.replace(/^version:.*$/m, `version: "${newVersion}"`);
+    fs.writeFileSync(betaConfigPath, content);
+    assertContains(betaConfigPath, newVersion, 'js_automations_beta/config.yaml');
+    console.log(`  ✅ beta config.yaml   → ${newVersion}`);
+
+    // Prepend an entry to the beta addon's own CHANGELOG.md so HA has a
+    // changelog to show for the beta addon (the root CHANGELOG.md is
+    // reserved for the stable channel). Body = commits since the last tag,
+    // same content the GitHub pre-release gets.
+    try {
+        let body = '';
+        try {
+            const prevTag = execSync('git describe --tags --abbrev=0', { stdio: 'pipe' }).toString().trim();
+            const log     = execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+            if (log) {
+                body = log.split('\n')
+                    .map(l => l.replace(/^[a-f0-9]+ /, ''))
+                    .filter(l => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(l)) // skip version bump commits
+                    .map(l => `- ${l}`)
+                    .join('\n');
+            }
+        } catch {
+            // no previous tag → leave body empty
+        }
+        const entry = `## [${newVersion}] - ${today()}\n\n${body || '- (no commit messages collected)'}\n\n---\n\n`;
+        const existing = fs.existsSync(betaChangelogPath) ? fs.readFileSync(betaChangelogPath, 'utf8') : '';
+        fs.writeFileSync(betaChangelogPath, entry + existing);
+        console.log(`  ✅ beta CHANGELOG.md  → [${newVersion}]`);
+    } catch (e) {
+        console.warn(`  ⚠️  beta CHANGELOG update failed: ${e.message}`);
+    }
+
+    try {
+        execSync(`git add "${betaConfigPath}" "${betaChangelogPath}" "${packagePath}"`);
+        console.log(`  ➕ Staged: js_automations_beta/config.yaml, js_automations_beta/CHANGELOG.md, package.json`);
+    } catch (e) {
+        console.error(`  ⚠️  git add failed: ${e.message}`);
+    }
+
+    console.log(`\n✔  Beta version ${newVersion} ready. Run "npm run release" to publish.\n`);
+    process.exit(0);
+}
 
 // --- 1. config.yaml ---
 let archs = [];
@@ -70,6 +138,18 @@ if (fs.existsSync(configPath)) {
     console.log(`  ✅ config.yaml        → ${newVersion}`);
 }
 
+// --- 1b. Beta config.yaml: sync to the stable version ---
+// After a stable release all beta images of the previous cycle are deleted
+// (see tools/release.js), so the beta addon must point at the stable image
+// until the next beta cycle starts.
+if (fs.existsSync(betaConfigPath)) {
+    let content = fs.readFileSync(betaConfigPath, 'utf8');
+    content = content.replace(/^version:.*$/m, `version: "${newVersion}"`);
+    fs.writeFileSync(betaConfigPath, content);
+    assertContains(betaConfigPath, newVersion, 'js_automations_beta/config.yaml');
+    console.log(`  ✅ beta config.yaml   → ${newVersion} (synced to stable)`);
+}
+
 // --- 2. README.md ---
 if (fs.existsSync(readmePath)) {
     let content = fs.readFileSync(readmePath, 'utf8');
@@ -89,7 +169,14 @@ if (fs.existsSync(readmePath)) {
 
 // --- 3. CHANGELOG.md ---
 if (fs.existsSync(changelogPath)) {
-    let content = fs.readFileSync(changelogPath, 'utf8');
+    // Normalize CRLF → LF: on Windows with core.autocrlf=true, the working-tree
+    // copy is fully CRLF-normalized after checkout. The PLACEHOLDER/SEP markers
+    // below are pure-LF patterns, so "\n\n" (needed to find the boundary) never
+    // occurs in a fully-CRLF file — sepIdx silently comes back -1, body swallows
+    // the *entire* rest of the file, and the intended entry ends up malformed.
+    // Writing plain LF back out is safe — git re-normalizes to CRLF on the next
+    // checkout via core.autocrlf, same as it always has.
+    let content = fs.readFileSync(changelogPath, 'utf8').replace(/\r\n/g, '\n');
     const dateStr = today();
     const PLACEHOLDER = '<!-- NEXT -->';
     const SEP = '\n\n---\n';
@@ -107,12 +194,13 @@ if (fs.existsSync(changelogPath)) {
         // Auto-collect commits if body is empty (patch with no written notes)
         if (!body) {
             try {
-                const prevTag = execSync('git describe --tags --abbrev=0', { stdio: 'pipe' }).toString().trim();
-                const log     = execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim();
+                // Exclude beta tags: a stable release covers everything since the last stable
+                const prevTag = findPreviousTag(true);
+                const log     = prevTag ? execSync(`git log ${prevTag}..HEAD --oneline --no-decorate`, { stdio: 'pipe' }).toString().trim() : '';
                 if (log) {
                     const lines = log.split('\n')
                         .map(l => l.replace(/^[a-f0-9]+ /, ''))
-                        .filter(l => !/^\d+\.\d+\.\d+$/.test(l))
+                        .filter(l => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(l)) // skip version bump commits (incl. beta)
                         .map(l => `- ${l}`);
                     if (lines.length > 0) body = lines.join('\n');
                 }
@@ -136,18 +224,24 @@ if (fs.existsSync(changelogPath)) {
 
     fs.writeFileSync(changelogPath, content);
     assertContains(changelogPath, newVersion, 'CHANGELOG.md');
+
+    // Mirror the stable CHANGELOG into the beta addon folder: the beta addon
+    // points at the stable image between beta cycles, so its changelog tab
+    // in HA should show the stable history instead of stale beta entries.
+    fs.copyFileSync(changelogPath, betaChangelogPath);
+    console.log(`  ✅ beta CHANGELOG.md  → mirrored from stable`);
 }
 
 // --- 4. Stage all modified files ---
 // npm will create the commit + tag after this script exits.
 // All staged files are included in that single commit automatically.
 try {
-    const filesToStage = [configPath, readmePath, changelogPath, packagePath]
+    const filesToStage = [configPath, betaConfigPath, betaChangelogPath, readmePath, changelogPath, packagePath]
         .filter(fs.existsSync)
         .map(f => `"${f}"`)
         .join(' ');
     execSync(`git add ${filesToStage}`);
-    console.log(`  ➕ Staged: config.yaml, README.md, CHANGELOG.md, package.json`);
+    console.log(`  ➕ Staged: config.yaml, beta config.yaml + CHANGELOG, README.md, CHANGELOG.md, package.json`);
 } catch (e) {
     console.error(`  ⚠️  git add failed: ${e.message}`);
 }
