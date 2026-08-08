@@ -133,6 +133,28 @@ export interface JsaStoreItemModalBridge {
   close(): void;
 }
 
+export interface JsaOpenScriptModalData {
+  filename?: string;
+  name?: string;
+  icon?: string;
+  expose?: string | null;
+  path?: string;
+  area?: string;
+  label?: string;
+  loglevel?: string;
+  description?: string;
+  dependencies?: string[];
+  includes?: string[];
+  /** Duplicate mode: the source script's raw content. */
+  code?: string;
+  /** Duplicate mode, .blocks source only: last-compiled JS, for the "duplicate as JavaScript" checkbox. */
+  jsCode?: string | null;
+}
+
+export interface JsaScriptModalBridge {
+  open(mode?: 'create' | 'edit' | 'duplicate', data?: JsaOpenScriptModalData | null): Promise<void> | void;
+}
+
 export interface JsaTab {
   filename: string;
   icon: string;
@@ -140,6 +162,9 @@ export interface JsaTab {
   type?: string;
   model: unknown;
   viewState?: unknown;
+  /** Only present on `type: 'blockly'` tabs — see openBlocklyTab() in tab-manager.js. */
+  jsa?: Record<string, unknown>;
+  blocksState?: { blocks: unknown; variables: unknown };
 }
 
 export interface JsaCardPreviewBridge {
@@ -242,9 +267,11 @@ declare global {
     loadHAMetadata?: (retryCount?: number) => Promise<void>;
     getLanguageBadge?: (filename: string) => string;
     loadVersion?: () => Promise<void>;
-    openCreationWizard?: (mode?: string, data?: unknown) => Promise<void> | void;
     openReferenceTab?: () => void;
     openOrSwitchToTab?: (filename: string, icon?: string) => Promise<void> | void;
+    /** blockly-editor.js — (re)loads the given workspace state into the Blockly canvas. */
+    loadBlocklyWorkspace?: (state: { jsa: Record<string, unknown>; blocks: unknown; variables: unknown }) => void;
+    scriptModal?: JsaScriptModalBridge;
     /** app-sidebar.ts bridges — replace the old script-list.js globals. */
     loadScripts?: () => Promise<void>;
     renderScripts?: (scripts: JsaScript[], updateGlobal?: boolean) => void;

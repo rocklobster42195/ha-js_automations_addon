@@ -26,7 +26,7 @@ interface ScriptGroupData {
  * stay separate, already-migrated components nested inside.
  *
  * `window.allScripts` stays populated exactly as before — tab-manager.js,
- * editor-config.js, creation-wizard.js, and integration-banner.ts all read it
+ * editor-config.js, script-modal.ts, and integration-banner.ts all read it
  * directly regardless of this component's internals.
  */
 @customElement('app-sidebar')
@@ -439,7 +439,7 @@ export class AppSidebar extends LitElement {
   private _editScript = async (filename: string): Promise<void> => {
     const script = this._scripts.find((s) => s.filename === filename);
     if (!script) return;
-    await window.openCreationWizard?.('edit', script);
+    await window.scriptModal?.open('edit', script);
   };
 
   private _duplicateScript = async (filename: string): Promise<void> => {
@@ -472,7 +472,7 @@ export class AppSidebar extends LitElement {
       }
     }
 
-    await window.openCreationWizard?.('duplicate', { ...script, code, jsCode });
+    await window.scriptModal?.open('duplicate', { ...script, code, jsCode });
   };
 
   private _deleteScript = async (filename: string): Promise<void> => {
@@ -702,7 +702,7 @@ export class AppSidebar extends LitElement {
                   </button>
                 `
               : html`
-                  <button @click=${() => window.openCreationWizard?.()} title=${this._t('new_script_title', 'New Script')}>
+                  <button @click=${() => window.scriptModal?.open()} title=${this._t('new_script_title', 'New Script')}>
                     <i class="mdi mdi-plus"></i>
                   </button>
                   <button

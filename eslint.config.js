@@ -8,6 +8,7 @@ module.exports = [
   {
     ignores: [
       'node_modules/**',
+      '.claude/**',
       'scripts/**',
       'js_automations_beta/**',
       'js_automations/public/js/vendor/**',

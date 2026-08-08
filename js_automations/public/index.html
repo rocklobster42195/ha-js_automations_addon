@@ -17,9 +17,15 @@
     <!-- Monaco's AMD loader defines a global define() with .amd set. Blockly's UMD wrapper checks
          that first and would register itself as an anonymous AMD module instead of setting
          window.Blockly if we don't hide it here. -->
-    <script>window._jsaAmdDefine = window.define; window.define = undefined;</script>
+    <script>
+      window._jsaAmdDefine = window.define;
+      window.define = undefined;
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/blockly@11.2.2/blockly.min.js"></script>
-    <script>window.define = window._jsaAmdDefine; delete window._jsaAmdDefine;</script>
+    <script>
+      window.define = window._jsaAmdDefine;
+      delete window._jsaAmdDefine;
+    </script>
   </head>
 
   <body>
@@ -30,6 +36,7 @@
     <alert-toast></alert-toast>
     <entity-picker-modal></entity-picker-modal>
     <store-item-modal></store-item-modal>
+    <script-modal></script-modal>
     <div class="app-wrapper">
       <app-sidebar></app-sidebar>
 
@@ -198,7 +205,6 @@
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
     <script src="js/repl.js"></script>
     <!-- LIT components bundle (built by `npm run build`, see docs/RFC_FRONTEND_MODERNIZATION.md) -->

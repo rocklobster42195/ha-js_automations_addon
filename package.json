@@ -51,6 +51,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.8.0",
     "nodemon": "^3.1.11",
+    "playwright": "^1.62.1",
     "prettier": "^3.9.6"
   }
 }
