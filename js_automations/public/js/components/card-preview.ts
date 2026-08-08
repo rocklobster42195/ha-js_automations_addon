@@ -439,6 +439,7 @@ export class CardPreview extends LitElement {
     window.CardPreview = this;
     window._toggleCardPreview = () => this.toggle(window._activeCardParentScript);
     window.addEventListener('message', this._onIframeMessage);
+    window.addEventListener('resize', this._onWindowResize);
     this._waitForSocket();
 
     this._pollStatesInterval = setInterval(() => {
@@ -450,6 +451,7 @@ export class CardPreview extends LitElement {
     super.disconnectedCallback();
     if (window.CardPreview === this) delete window.CardPreview;
     window.removeEventListener('message', this._onIframeMessage);
+    window.removeEventListener('resize', this._onWindowResize);
     if (this._pollStatesInterval) clearInterval(this._pollStatesInterval);
     this._resizeObserver?.disconnect();
   }
@@ -614,6 +616,51 @@ export class CardPreview extends LitElement {
       wrap.style.resize = 'none';
       wrap.style.overflow = '';
     }
+    // .preview-iframe-wrap's width change is CSS-transitioned (200ms) — getBoundingClientRect()
+    // read synchronously here would still report the pre-transition box. Once a drag (or a
+    // stale localStorage(jsa_preview_pos)) has switched the host to explicit left-positioning
+    // (see _makeDraggable/_restorePosition), growing the width has nothing keeping its right
+    // edge on-screen, since only :host's own right:20px default does that — and once off-screen,
+    // the titlebar becomes unreachable too, so this single clamp fixes both symptoms.
+    setTimeout(() => this._clampToViewport(), 220);
+  }
+
+  private _onWindowResize = (): void => {
+    if (!this.visible) return;
+    this._clampToViewport();
+  };
+
+  /** Pulls the panel back on-screen if its current position+size would place any edge outside
+   * the viewport — a no-op otherwise, so the default right-anchored CSS positioning is left
+   * untouched unless something has actually gone wrong. */
+  private _clampToViewport(): void {
+    const margin = 8;
+    const rect = this.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.top;
+    let changed = false;
+    if (rect.right > window.innerWidth - margin) {
+      left = window.innerWidth - rect.width - margin;
+      changed = true;
+    }
+    if (rect.bottom > window.innerHeight - margin) {
+      top = window.innerHeight - rect.height - margin;
+      changed = true;
+    }
+    if (left < margin) {
+      left = margin;
+      changed = true;
+    }
+    if (top < margin) {
+      top = margin;
+      changed = true;
+    }
+    if (!changed) return;
+    this.style.left = `${left}px`;
+    this.style.top = `${top}px`;
+    this.style.right = 'auto';
+    this.style.bottom = 'auto';
+    this._savePosition();
   }
 
   // ── Mock hass ──────────────────────────────────────────────────────────
@@ -881,6 +928,7 @@ export class CardPreview extends LitElement {
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        this._clampToViewport();
         this._savePosition();
       };
       document.addEventListener('mousemove', onMove);
@@ -898,12 +946,13 @@ export class CardPreview extends LitElement {
     if (stored) {
       const { left, top } = this._tryParse<{ left?: number; top?: number }>(stored, {});
       if (left !== undefined) {
-        const minTop = 60;
-        const maxLeft = window.innerWidth - 100;
-        this.style.left = `${Math.min(Math.max(0, left), maxLeft)}px`;
-        this.style.top = `${Math.max(minTop, top ?? minTop)}px`;
+        this.style.left = `${Math.max(0, left)}px`;
+        this.style.top = `${Math.max(0, top ?? 60)}px`;
         this.style.right = 'auto';
         this.style.bottom = 'auto';
+        // The stored position was only ever valid for whatever width preset was active when it
+        // was saved — re-clamp against the current box (see _setWidth's own call site comment).
+        setTimeout(() => this._clampToViewport(), 0);
       }
     } else {
       this.style.right = '20px';
