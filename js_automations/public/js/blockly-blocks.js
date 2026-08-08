@@ -182,6 +182,32 @@
             "helpUrl": ""
         },
         {
+            "type": "ha_time_since",
+            "message0": "time since %1 last changed to %2",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" },
+                { "type": "field_input", "name": "STATE", "text": "" }
+            ],
+            "inputsInline": true,
+            "output": null,
+            "colour": 45,
+            "tooltip": "Milliseconds since the entity last changed. Leave \"to\" blank for the last change to any value; fill it in to instead find the last time it changed specifically to that state (e.g. \"on\").",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_trend",
+            "message0": "trend of %1 over %2 (optional)",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" },
+                { "type": "field_input", "name": "PERIOD", "text": "" }
+            ],
+            "inputsInline": true,
+            "output": null,
+            "colour": 45,
+            "tooltip": "Whether a numeric sensor is \"rising\", \"falling\", or \"stable\" over a time window (default 1 hour) — e.g. \"1h\", \"30m\", \"2d\". Leave blank for the default.",
+            "helpUrl": ""
+        },
+        {
             "type": "ha_get_entities_in_area",
             "message0": "entities in area %1",
             "args0": [
@@ -442,6 +468,28 @@
             "nextStatement": null,
             "colour": 210,
             "tooltip": "Sends the reply back to whatever called this webhook — only valid inside a \"when webhook ... is called\" block. Add one at the end of your actions, or the caller waits until the request times out.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_calendar_events",
+            "message0": "calendar events from %1",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" }
+            ],
+            "output": null,
+            "colour": 165,
+            "tooltip": "Upcoming events on this calendar (default window: now through 7 days from now), as objects ({ summary, start, end, all_day, ... }).",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_todo_items",
+            "message0": "todo items from %1",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" }
+            ],
+            "output": null,
+            "colour": 165,
+            "tooltip": "All items on this todo list, as objects ({ uid, summary, status, ... }) — status is \"needs_action\" or \"completed\".",
             "helpUrl": ""
         }
     ];

@@ -120,6 +120,24 @@
             return [`ha.getAttr(${entityCode}, ${JSON.stringify(attrName)})`, gen.ORDER_NONE];
         };
 
+        // First value blocks in the library backed by an async API — `await` is valid anywhere
+        // inside an expression within an async function, so this works inline exactly like the
+        // synchronous getters above; wrapGeneratedCode() (blockly-blocks-shared.js's own
+        // top-level export) still correctly detects and wraps the rare bare-top-level-use case.
+        generator.forBlock['ha_time_since'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            const state = block.getFieldValue('STATE');
+            const stateArg = state ? `, ${JSON.stringify(state)}` : '';
+            return [`await ha.history.timeSince(${entityCode}${stateArg})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_trend'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            const period = block.getFieldValue('PERIOD');
+            const optsArg = period ? `, { period: ${JSON.stringify(period)} }` : '';
+            return [`await ha.history.trend(${entityCode}${optsArg})`, gen.ORDER_NONE];
+        };
+
         generator.forBlock['ha_get_entities_in_area'] = function (block, gen) {
             const areaId = block.getFieldValue('AREA_ID');
             return [`ha.getEntitiesInArea(${JSON.stringify(areaId)})`, gen.ORDER_NONE];
@@ -383,6 +401,16 @@
         generator.forBlock['ha_webhook_respond'] = function (block, gen) {
             const value = gen.valueToCode(block, 'VALUE', gen.ORDER_NONE) || '{}';
             return `res.json(${value});\n`;
+        };
+
+        generator.forBlock['ha_get_calendar_events'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            return [`await ha.getCalendarEvents(${entityCode})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_todo_items'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            return [`await ha.getTodoItems(${entityCode})`, gen.ORDER_NONE];
         };
     }
 

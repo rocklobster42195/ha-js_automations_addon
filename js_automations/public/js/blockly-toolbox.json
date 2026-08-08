@@ -36,7 +36,18 @@
             "contents": [
                 { "kind": "block", "type": "ha_entity" },
                 { "kind": "block", "type": "ha_get_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
-                { "kind": "block", "type": "ha_get_attribute", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "climate.living_room" } } } } }
+                { "kind": "block", "type": "ha_get_attribute", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "climate.living_room" } } } } },
+                { "kind": "block", "type": "ha_time_since", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "binary_sensor.front_door" } } } } },
+                { "kind": "block", "type": "ha_trend", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.temperature" } } } } }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Calendar & Todo",
+            "colour": "165",
+            "contents": [
+                { "kind": "block", "type": "ha_get_calendar_events", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "calendar.family" } } } } },
+                { "kind": "block", "type": "ha_get_todo_items", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "todo.shopping_list" } } } } }
             ]
         },
         {
