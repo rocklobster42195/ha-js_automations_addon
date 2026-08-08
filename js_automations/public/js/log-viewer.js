@@ -85,6 +85,13 @@ function appendLog(entry, autoScroll = true) {
     }
     logEntries.push(entry);
 
+    // Block-level error visualization (docs/blockly_concept.md M5, should-have) — only if the
+    // .blocks script that threw is the currently active tab; a background script's error
+    // wouldn't have anywhere sensible to highlight anyway (its canvas isn't the one on screen).
+    if (entry.blockId && entry.scriptId && typeof window.highlightBlocklyError === 'function') {
+        window.highlightBlocklyError(entry.scriptId, entry.blockId, entry.message);
+    }
+
     const source = entry.source || 'System';
     if (!knownSources.has(source)) {
         knownSources.add(source);

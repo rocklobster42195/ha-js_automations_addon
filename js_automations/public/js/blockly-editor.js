@@ -196,6 +196,13 @@ function initBlocklyEditor() {
         if (typeof window.onBlocklyWorkspaceChanged === 'function') {
             window.onBlocklyWorkspaceChanged();
         }
+        // Dismisses a block-level error highlight the moment you actually start editing again —
+        // "you're addressing it" is a more useful signal than making the user hunt for an
+        // explicit clear button. Safe from self-triggering: verified against the compiled
+        // Blockly bundle that neither setWarningText() nor highlightBlock()/setHighlighted()
+        // fire any event at all (both are pure rendering-icon/pathObject operations), so this
+        // listener only ever reacts to genuine user edits, never to the highlight being applied.
+        if (typeof window.clearBlocklyErrorHighlight === 'function') window.clearBlocklyErrorHighlight();
     });
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -237,6 +244,11 @@ function loadBlocklyWorkspace(parsedFile) {
     Blockly.Events.disable();
     try {
         blocklyWorkspace.clear();
+        // clear() disposes whatever block _highlightedErrorBlockId pointed at — reset the
+        // tracking variable directly rather than via clearBlocklyErrorHighlight() (which would
+        // just try to mutate an about-to-be-destroyed block); events are disabled in this whole
+        // block anyway, so the change-listener-driven auto-clear wouldn't fire here regardless.
+        _highlightedErrorBlockId = null;
         if (parsedFile && parsedFile.blocks) {
             Blockly.serialization.workspaces.load(parsedFile, blocklyWorkspace);
         }
@@ -244,6 +256,90 @@ function loadBlocklyWorkspace(parsedFile) {
         Blockly.Events.enable();
     }
     Blockly.svgResize(blocklyWorkspace);
+}
+
+// scriptId -> { blockId, message } for the most recent error a *background* .blocks script hit
+// while its tab wasn't the one on screen — e.g. a store/MQTT/webhook-triggered script, where
+// actually causing the error means navigating away to Store Explorer/etc. first, so the tab is
+// essentially never still active at the exact moment the error fires. Found live: an error that
+// worked correctly for a bare triggerless script (already on-screen when it ran at script start)
+// silently did nothing for the exact same error once the code moved inside a store trigger,
+// because setting the store key requires leaving the Blockly tab first. Consumed (and cleared)
+// by reapplyBlocklyError() the next time that script's tab is loaded — a one-time "you missed
+// this" surfacing, not a persistent banner, so it doesn't resurface as a stale ghost days later.
+const _pendingBlocklyErrors = {};
+
+/**
+ * Block-level error visualization (docs/blockly_concept.md M5, should-have). Called from
+ * log-viewer.js's appendLog() whenever a log entry carries a blockId — traced back to the exact
+ * block that threw via BlocklyCompiler's scrub_() instrumentation (blockly-compiler.js) and
+ * threaded through worker-wrapper.js -> worker-manager.js -> kernel.js -> log-manager.js ->
+ * bridge.js's socket 'log' event. Always records the error for reapplyBlocklyError() to pick up
+ * later; also applies it immediately if that script's tab already happens to be the active one.
+ */
+function highlightBlocklyError(scriptId, blockId, message) {
+    _pendingBlocklyErrors[scriptId] = { blockId, message };
+    _applyBlocklyErrorHighlight(scriptId, blockId, message);
+}
+
+/**
+ * Re-shows the most recent background error for `scriptId`, if any — call after loading a
+ * Blockly tab's workspace (tab-manager.js's switchToTab()) so an error that happened while this
+ * script's canvas wasn't on screen still gets surfaced once you come back to look at it. Clears
+ * the pending entry either way: shown once, not re-shown on every future visit to this tab.
+ */
+function reapplyBlocklyError(scriptId) {
+    const pending = _pendingBlocklyErrors[scriptId];
+    if (!pending) return;
+    delete _pendingBlocklyErrors[scriptId];
+    _applyBlocklyErrorHighlight(scriptId, pending.blockId, pending.message);
+}
+
+// Tracks the block currently showing an error highlight (if any), so clearBlocklyErrorHighlight()
+// knows what to undo. Also gets a fresh, implicit clear "for free" whenever the workspace is
+// torn down and rebuilt (any tab switch, including away-and-back to the same tab) — loadBlocklyWorkspace()'s
+// workspace.clear() disposes the old block instance the warning/highlight was attached to
+// entirely, but doesn't reset this tracking variable itself, so it's reset explicitly there too.
+let _highlightedErrorBlockId = null;
+
+/**
+ * The actual workspace mutation — safe to call speculatively (from either of the two functions
+ * above); no-ops unless `scriptId` is the tab currently on screen. Silently mutating a workspace
+ * that isn't even the active one would be confusing if the user later switches to it expecting a
+ * fresh, unannotated canvas.
+ */
+function _applyBlocklyErrorHighlight(scriptId, blockId, message) {
+    if (!blocklyWorkspace) return;
+    if (typeof activeTabFilename === 'undefined' || activeTabFilename !== scriptId) return;
+    const block = blocklyWorkspace.getBlockById(blockId);
+    // The block may no longer exist — the script could have been edited (and the dist
+    // recompiled from a newer workspace) since the error was thrown from an older run.
+    if (!block) return;
+    block.setWarningText(message || 'Runtime error');
+    // WorkspaceSvg.prototype.highlightBlock(id) — found by grepping the compiled Blockly bundle
+    // rather than assumed: it's the real, complete API (also clears any *previously* highlighted
+    // block first when called, verified against the bundle's own implementation), not something
+    // hand-rolled from a bare Block.prototype.setHighlighted() call.
+    if (typeof blocklyWorkspace.highlightBlock === 'function') blocklyWorkspace.highlightBlock(blockId);
+    if (typeof blocklyWorkspace.centerOnBlock === 'function') blocklyWorkspace.centerOnBlock(blockId);
+    _highlightedErrorBlockId = blockId;
+}
+
+/**
+ * Dismisses the currently-shown error highlight, if any — called automatically the moment the
+ * user makes a real edit (see the workspace change listener in initBlocklyEditor()) rather than
+ * needing a dedicated button; also called by loadBlocklyWorkspace() since a full workspace
+ * rebuild there already discards the old block instance the warning was attached to, so the
+ * tracking variable needs to follow suit. Safe to call with nothing currently highlighted.
+ */
+function clearBlocklyErrorHighlight() {
+    if (!_highlightedErrorBlockId) return;
+    if (blocklyWorkspace) {
+        const block = blocklyWorkspace.getBlockById(_highlightedErrorBlockId);
+        if (block) block.setWarningText(null);
+        if (typeof blocklyWorkspace.highlightBlock === 'function') blocklyWorkspace.highlightBlock(null);
+    }
+    _highlightedErrorBlockId = null;
 }
 
 /**
@@ -283,5 +379,8 @@ function getBlocklyGeneratedCode() {
 window.ensureBlocklyReady = ensureBlocklyReady;
 window.isBlocklyReady = isBlocklyReady;
 window.loadBlocklyWorkspace = loadBlocklyWorkspace;
+window.highlightBlocklyError = highlightBlocklyError;
+window.reapplyBlocklyError = reapplyBlocklyError;
+window.clearBlocklyErrorHighlight = clearBlocklyErrorHighlight;
 window.getBlocklyWorkspaceState = getBlocklyWorkspaceState;
 window.getBlocklyGeneratedCode = getBlocklyGeneratedCode;

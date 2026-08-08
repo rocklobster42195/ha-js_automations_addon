@@ -522,7 +522,7 @@ class Kernel extends EventEmitter {
     }
 
     _onWorkerLog(data) {
-        this.logManager.add(data.level || 'info', data.source, data.message);
+        this.logManager.add(data.level || 'info', data.source, data.message, { blockId: data.blockId, scriptId: data.scriptId });
     }
     
     /**

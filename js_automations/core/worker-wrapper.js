@@ -143,12 +143,14 @@ process.on('uncaughtException', (err) => {
     };
     
     if (parentPort) {
-        parentPort.postMessage({
+        const payload = {
             type: 'log',
             level: 'error',
             source: workerData.name || 'System',
             message: `🔥 CRASH: ${err.message}\n${err.stack}`
-        });
+        };
+        if (err.blockId) payload.blockId = err.blockId;
+        parentPort.postMessage(payload);
     } else {
         console.error("🔥 CRASH:", err);
     }
@@ -157,7 +159,15 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason) => {
-    if (parentPort) parentPort.postMessage({ type: 'log', level: 'error', source: workerData.name || 'System', message: `⚠️ Unhandled Rejection: ${reason}` });
+    // A bare top-level .blocks script (no trigger block) compiles to an unawaited async IIFE
+    // (see wrapGeneratedCode() in blockly-blocks-shared.js) — an error thrown in there becomes
+    // an unhandled rejection, not a caught exception, so this is the actual arrival point for
+    // that case's blockId, not the top-level require() try/catch below.
+    if (!parentPort) return;
+    const message = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
+    const payload = { type: 'log', level: 'error', source: workerData.name || 'System', message: `⚠️ Unhandled Rejection: ${message}` };
+    if (reason && reason.blockId) payload.blockId = reason.blockId;
+    parentPort.postMessage(payload);
 });
 
 // 🛡️ GLOBAL SIGNAL HANDLER
@@ -170,11 +180,18 @@ process.on('SIGTERM', () => {
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;
 
-const sendLog = (level, msg) => {
+// `meta.blockId` — set by BlocklyCompiler's scrub_() instrumentation (blockly-compiler.js) on
+// any error thrown from a .blocks script, tagging it with the exact block that threw. Threaded
+// through here rather than baked into the message string so the frontend can act on it
+// structurally (highlight the block on the Blockly canvas) without parsing log text. Always
+// undefined/absent for .js/.ts scripts — harmless no-op there.
+const sendLog = (level, msg, meta) => {
     if (LOG_LEVELS[level] >= scriptLevel) {
         let finalMessage = msg;
+        let blockId = meta && meta.blockId;
         if (msg instanceof Error) {
             finalMessage = msg.stack || msg.toString();
+            if (blockId === undefined) blockId = msg.blockId;
         } else if (typeof msg === 'object' && msg !== null) {
             try {
                 // Pretty-print for better readability in logs
@@ -183,7 +200,9 @@ const sendLog = (level, msg) => {
                 finalMessage = '[Unserializable Object]';
             }
         }
-        parentPort.postMessage({ type: 'log', level, message: String(finalMessage) });
+        const payload = { type: 'log', level, message: String(finalMessage) };
+        if (blockId) payload.blockId = blockId;
+        parentPort.postMessage(payload);
     }
 };
 
@@ -396,7 +415,7 @@ function ensureMessageListener() {
             for (const sub of eventTypeCallbacks) {
                 if (sub.eventType === msg.event.event_type) {
                     try { sub.callback(msg.event); }
-                    catch (e) { ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`); }
+                    catch (e) { ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`, { blockId: e.blockId }); }
                 }
             }
             return;
@@ -435,7 +454,7 @@ function ensureMessageListener() {
                     try { 
                         cb(msg.value, oldValue); 
                     } catch (e) { 
-                        ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`); 
+                        ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
                     }
                 });
             }
@@ -509,7 +528,7 @@ function ensureMessageListener() {
                         attributes: msg.state.attributes
                     });
                 } catch (e) {
-                    ha.error(`Error in ha.on callback for ${msg.entity_id}: ${e.message}\n${e.stack}`);
+                    ha.error(`Error in ha.on callback for ${msg.entity_id}: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 }
             });
         }
@@ -526,7 +545,7 @@ function ensureMessageListener() {
                 try {
                     sub.callback({ entity_id: msg.entityId, state: msg.payload, old_state: null, attributes: {} });
                 } catch (e) {
-                    ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`);
+                    ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 }
             });
 
@@ -534,7 +553,7 @@ function ensureMessageListener() {
             const linkedAction = entityActionMap.get(msg.entityId);
             if (linkedAction && actionHandlers.has(linkedAction)) {
                 Promise.resolve().then(() => actionHandlers.get(linkedAction)({})).catch(e => {
-                    ha.error(`ha.action('${linkedAction}') error: ${e.message}\n${e.stack}`);
+                    ha.error(`ha.action('${linkedAction}') error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 });
             }
 
@@ -554,7 +573,7 @@ function ensureMessageListener() {
                 const result = await handler(msg.payload ?? {});
                 parentPort.postMessage({ type: 'action_response', callId: msg.callId, result: result ?? null });
             } catch (e) {
-                ha.error(`ha.action('${msg.action}') error: ${e.message}\n${e.stack}`);
+                ha.error(`ha.action('${msg.action}') error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 parentPort.postMessage({ type: 'action_response', callId: msg.callId, error: e.message });
             }
             return;
@@ -576,7 +595,7 @@ function ensureMessageListener() {
                 let payload = msg.payload;
                 try { payload = JSON.parse(payload); } catch (e) { /* keep as string */ }
                 try { cb(msg.topic, payload); }
-                catch (e) { ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`); }
+                catch (e) { ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`, { blockId: e.blockId }); }
             }
             return;
         }
@@ -611,7 +630,7 @@ function ensureMessageListener() {
                 await handler(msg.req, res);
                 if (!responded) respond(undefined, false);
             } catch (e) {
-                ha.error(`ha.onWebhook('${msg.id}') handler error: ${e.message}\n${e.stack}`);
+                ha.error(`ha.onWebhook('${msg.id}') handler error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 if (!responded) {
                     responded = true;
                     parentPort.postMessage({ type: 'webhook_response', correlationId: msg.correlationId, response: { error: e.message } });
@@ -626,7 +645,7 @@ function ensureMessageListener() {
                 try {
                     await cb();
                 } catch (e) {
-                    ha.error(`onStop Error: ${e.message}\n${e.stack}`);
+                    ha.error(`onStop Error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
                 }
             }
             // Flush any pending ha.persistent() debounced saves before exiting.
@@ -674,7 +693,7 @@ const ha = {
     debug: (m) => sendLog('debug', m),
     log: (m) => sendLog('info', m),
     warn: (m) => sendLog('warn', m),
-    error: (m) => sendLog('error', m),
+    error: (m, meta) => sendLog('error', m, meta),
     stop: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'stop', reason }),
     restart: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'restart', reason }),
 
@@ -1646,7 +1665,7 @@ global.schedule = (exp, cb) => {
         try {
             await cb();
         } catch (e) {
-            ha.error(`Scheduled Task Error (${exp}): ${e.message}\n${e.stack}`);
+            ha.error(`Scheduled Task Error (${exp}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
         }
     });
 };

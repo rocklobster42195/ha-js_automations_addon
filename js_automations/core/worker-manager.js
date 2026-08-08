@@ -737,7 +737,17 @@ class WorkerManager extends EventEmitter {
             try {
                 // 1. Logging
                 if (msg.type === 'log') {
-                    this.emit('log', { source: name, message: msg.message, level: msg.level || 'info' });
+                    // msg.blockId (worker-wrapper.js's sendLog()) traces a .blocks script's
+                    // runtime error back to the exact block that threw — see
+                    // blockly-compiler.js's scrub_() instrumentation for where it's tagged.
+                    // scriptId (this.filename below) is needed alongside it since the frontend
+                    // only acts on it when that exact .blocks file is the currently open tab.
+                    const logEntry = { source: name, message: msg.message, level: msg.level || 'info' };
+                    if (msg.blockId) {
+                        logEntry.blockId = msg.blockId;
+                        logEntry.scriptId = scriptMeta.filename;
+                    }
+                    this.emit('log', logEntry);
                 }
 
                 if (msg.type === 'breakpoint') {

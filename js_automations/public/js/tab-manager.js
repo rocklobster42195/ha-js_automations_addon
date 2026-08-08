@@ -343,6 +343,11 @@ function switchToTab(filename) {
 
         if (window.isBlocklyReady && window.isBlocklyReady()) {
             window.loadBlocklyWorkspace({ jsa: newTab.jsa, blocks: newTab.blocksState.blocks, variables: newTab.blocksState.variables });
+            // Surfaces an error that happened while this script's tab wasn't the one on screen —
+            // the common case for any trigger you can only fire from elsewhere in the UI (Store
+            // Explorer, MQTT devtools, an external webhook call, ...). See
+            // reapplyBlocklyError()'s own comment in blockly-editor.js for why this was needed.
+            if (typeof window.reapplyBlocklyError === 'function') window.reapplyBlocklyError(newTab.filename);
         }
     } else {
         document.getElementById('store-wrapper').classList.add('hidden');

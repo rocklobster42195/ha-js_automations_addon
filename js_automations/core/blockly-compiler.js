@@ -13,6 +13,45 @@ const { javascriptGenerator } = require('blockly/javascript');
 Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
 const registerHaBlocks = require('../public/js/blockly-blocks-shared');
 registerHaBlocks(javascriptGenerator);
+
+// Block-level error visualization (docs/blockly_concept.md M5, should-have): wraps every
+// individual statement block's own generated code in a try/catch that tags a thrown error with
+// `.blockId` before rethrowing, so a runtime error can be traced back to the exact block that
+// caused it (not just "somewhere in this script") — surfaced to the editor via
+// worker-manager.js/bridge.js and highlighted in blockly-editor.js if that .blocks tab is open.
+//
+// Implemented via scrub_(), Blockly's own per-block code-generation hook (called once for every
+// block in a statement chain — top-level or nested inside any DO/ELSE/etc. input — with just
+// that block's own code fragment; the default implementation handles appending the next
+// chained block's code, which is preserved here by delegating to it after wrapping). This
+// applies uniformly to every block type, built-in or custom, without touching individual
+// forBlock generator functions.
+//
+// Deliberately only overridden on THIS (Node-side) javascriptGenerator instance, used solely by
+// BlocklyCompiler for the real runtime dist output — the browser's own separate Blockly.JavaScript
+// instance (loaded via CDN for "Show Code") is never touched, so Show Code stays clean and
+// readable, without try/catch noise the user never asked to see.
+//
+// `if (!__e.blockId)` only sets it once: an error from a deeply-nested block (e.g. inside a
+// loop, itself inside a trigger's DO stack) passes through several of these wrappers as it
+// propagates up — the innermost (most specific) block's id must win, not get overwritten by a
+// less-specific outer one.
+//
+// Verified in Node (not just node --check on the syntax): a real thrown error is caught with
+// exactly the id of the block that threw, propagation still correctly aborts the rest of the
+// statement chain, and — the actual risk with wrapping arbitrary generated code in try/catch —
+// `break`/`continue` inside a wrapped loop body (Blockly's own controls_flow_statements block)
+// still terminates the loop after the expected number of iterations, not looping forever, so
+// bare `break`/`continue` remains valid *and* semantically correct when it ends up inside a
+// try block like this.
+const _origScrub = javascriptGenerator.scrub_.bind(javascriptGenerator);
+javascriptGenerator.scrub_ = function (block, code, opt_thisOnly) {
+    let wrapped = code;
+    if (code && code.trim() && block.previousConnection) {
+        wrapped = `try {\n${code}} catch (__e) { if (!__e.blockId) __e.blockId = ${JSON.stringify(block.id)}; throw __e; }\n`;
+    }
+    return _origScrub(block, wrapped, opt_thisOnly);
+};
 // Registers ha_call_service's mutator (see blockly-mutators.js). Only its saveExtraState/
 // loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
 // still needs those to reconstruct a saved workspace's dynamic ADD0/ADD1/... inputs.
