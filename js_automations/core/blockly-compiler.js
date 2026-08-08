@@ -94,7 +94,8 @@ class BlocklyCompiler extends EventEmitter {
 
         let parsed;
         try {
-            const raw = fs.readFileSync(blocksPath, 'utf8').replace(/^﻿/, '');
+            const rawFile = fs.readFileSync(blocksPath, 'utf8');
+            const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
             parsed = JSON.parse(raw);
         } catch (e) {
             this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: `Invalid JSON: ${e.message}` });
@@ -103,8 +104,8 @@ class BlocklyCompiler extends EventEmitter {
         }
 
         const workspace = new Blockly.Workspace();
-        let code = '';
-        let derivedPermissions = [];
+        let code;
+        let derivedPermissions;
         try {
             // Pass the whole parsed file, not parsed.blocks — workspaces.load() reads its own
             // top-level `blocks` key internally; unrelated keys like `jsa` are ignored.

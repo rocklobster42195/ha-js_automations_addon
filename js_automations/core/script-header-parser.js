@@ -133,7 +133,8 @@ class ScriptHeaderParser {
   // Reads and JSON.parses a .blocks file. Returns null on missing/invalid file.
   static _readBlocksFile(filePath) {
     try {
-      const raw = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '');
+      const rawFile = fs.readFileSync(filePath, 'utf8');
+      const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
       return JSON.parse(raw);
     } catch (e) {
       return null;
