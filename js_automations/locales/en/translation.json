@@ -189,6 +189,7 @@
   "modal_edit_script_title": "Edit Script",
   "modal_duplicate_script_title": "Duplicate Script",
   "entity_search_placeholder": "Search entity...",
+  "entity_picker_show_states_title": "Show current states",
   "group_global_libraries": "Global Libraries",
   "status_passive_library": "Passive Library",
   "library_cannot_start": "Libraries cannot be started directly",
