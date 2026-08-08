@@ -85,6 +85,10 @@ export class ScriptRow extends LitElement {
       background-color: #3178c6;
       color: #fff;
     }
+    .lang-badge-blocks {
+      background-color: #4caf50;
+      color: #fff;
+    }
     .card-badge-icon {
       font-size: 0.9rem;
       vertical-align: middle;
