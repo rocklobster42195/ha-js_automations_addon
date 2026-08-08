@@ -21,7 +21,16 @@ class EntityManager {
    * @param {object} compilerManager - The TypeScript compiler manager.
    * @param {object} blocklyCompiler - The Blockly (.blocks) compiler.
    */
-  constructor(haConnection, workerManager, stateManager, depManager, systemService, mqttManager, compilerManager, blocklyCompiler) {
+  constructor(
+    haConnection,
+    workerManager,
+    stateManager,
+    depManager,
+    systemService,
+    mqttManager,
+    compilerManager,
+    blocklyCompiler
+  ) {
     this.haConnection = haConnection;
     this.workerManager = workerManager;
     this.stateManager = stateManager;
@@ -68,12 +77,20 @@ class EntityManager {
       this.workerManager.storeManager.on('changed', () => this.typings.schedule());
     }
 
-    this.watcher = new ScriptWatcher(workerManager, stateManager, mqttManager, haConnection, compilerManager, blocklyCompiler, {
-      resolveId: this.resolveId.bind(this),
-      checkDeviceCleanup: this.checkDeviceCleanup.bind(this),
-      warnIconConflict: this._warnIconConflict.bind(this),
-      onTypingsNeeded: () => this.typings.schedule(),
-    });
+    this.watcher = new ScriptWatcher(
+      workerManager,
+      stateManager,
+      mqttManager,
+      haConnection,
+      compilerManager,
+      blocklyCompiler,
+      {
+        resolveId: this.resolveId.bind(this),
+        checkDeviceCleanup: this.checkDeviceCleanup.bind(this),
+        warnIconConflict: this._warnIconConflict.bind(this),
+        onTypingsNeeded: () => this.typings.schedule(),
+      }
+    );
     this.watcher.start();
   }
 

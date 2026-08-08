@@ -29,198 +29,218 @@
 // widgetCreate_ etc. only ever run in the browser (Node's BlocklyCompiler never opens a field
 // editor), so none of this ever touches Node's code path.
 (function (global, factory) {
-    if (typeof module === 'object' && module.exports) {
-        module.exports = factory();
-    } else {
-        global.registerHaFields = factory();
-    }
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    global.registerHaFields = factory();
+  }
 })(typeof self !== 'undefined' ? self : this, function () {
-    return function registerHaFields(Blockly) {
-        const MAX_SUGGESTIONS = 50; // keep filtering cheap and the list scrollable, not a 1000-row DOM dump
+  return function registerHaFields(Blockly) {
+    const MAX_SUGGESTIONS = 50; // keep filtering cheap and the list scrollable, not a 1000-row DOM dump
 
-        class FieldHaCombobox extends Blockly.FieldTextInput {
-            constructor(value, getLiveOptions) {
-                super(value);
-                this.getLiveOptions_ = getLiveOptions;
-                this.suggestionsEl_ = null;
-            }
+    class FieldHaCombobox extends Blockly.FieldTextInput {
+      constructor(value, getLiveOptions) {
+        super(value);
+        this.getLiveOptions_ = getLiveOptions;
+        this.suggestionsEl_ = null;
+      }
 
-            widgetCreate_() {
-                const input = super.widgetCreate_();
-                const getLiveOptions = this.getLiveOptions_;
-                if (!getLiveOptions) return input;
+      widgetCreate_() {
+        const input = super.widgetCreate_();
+        const getLiveOptions = this.getLiveOptions_;
+        if (!getLiveOptions) return input;
 
-                // Light, not dark: Blockly's own field editor <input> always renders with a
-                // light background/dark text regardless of workspace theme (standard Blockly
-                // behavior, not something this project's dark theme overrides) — the dark list
-                // from the first pass clashed with the field it's attached to.
-                const list = document.createElement('div');
-                Object.assign(list.style, {
-                    position: 'fixed', zIndex: '10000', display: 'none',
-                    background: '#fff', color: '#1e1e1e', border: '1px solid #bbb',
-                    maxHeight: '240px', overflowY: 'auto', overflowX: 'hidden',
-                    whiteSpace: 'nowrap', font: '13px sans-serif',
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                });
-                document.body.appendChild(list);
-                this.suggestionsEl_ = list;
+        // Light, not dark: Blockly's own field editor <input> always renders with a
+        // light background/dark text regardless of workspace theme (standard Blockly
+        // behavior, not something this project's dark theme overrides) — the dark list
+        // from the first pass clashed with the field it's attached to.
+        const list = document.createElement('div');
+        Object.assign(list.style, {
+          position: 'fixed',
+          zIndex: '10000',
+          display: 'none',
+          background: '#fff',
+          color: '#1e1e1e',
+          border: '1px solid #bbb',
+          maxHeight: '240px',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          whiteSpace: 'nowrap',
+          font: '13px sans-serif',
+          boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+        });
+        document.body.appendChild(list);
+        this.suggestionsEl_ = list;
 
-                const render = () => {
-                    const term = input.value.toLowerCase();
-                    const all = getLiveOptions() || [];
-                    const matches = (term ? all.filter(([, v]) => v.toLowerCase().includes(term)) : all)
-                        .slice(0, MAX_SUGGESTIONS);
-                    list.innerHTML = '';
-                    if (matches.length === 0) {
-                        list.style.display = 'none';
-                        return;
-                    }
-                    matches.forEach(([, value]) => {
-                        const item = document.createElement('div');
-                        item.textContent = value;
-                        Object.assign(item.style, {
-                            padding: '4px 8px', cursor: 'pointer',
-                            overflow: 'hidden', textOverflow: 'ellipsis',
-                        });
-                        item.addEventListener('mouseenter', () => { item.style.background = '#e8f0fe'; });
-                        item.addEventListener('mouseleave', () => { item.style.background = ''; });
-                        // mousedown (not click) + preventDefault: fires before the input's blur,
-                        // and keeps focus on the input so selecting an item doesn't close the editor.
-                        item.addEventListener('mousedown', (e) => {
-                            e.preventDefault();
-                            input.value = value;
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            list.style.display = 'none';
-                        });
-                        list.appendChild(item);
-                    });
-                    // Deferred to the next frame: on the very first open of a field, Blockly's
-                    // WidgetDiv hasn't necessarily finished positioning the <input> yet at the
-                    // instant 'focus' fires — reading getBoundingClientRect() synchronously here
-                    // could catch it mid-move (still at its stale/previous position), which is
-                    // what made the list jump to the top-left corner on some opens. By the next
-                    // animation frame Blockly's own positioning has always settled.
-                    requestAnimationFrame(() => {
-                        // Blockly's field <input> is often narrow (just wide enough for the
-                        // current text) — sizing the list to match it clips longer entity/service
-                        // IDs. Auto-size to content instead, only using the field's width as a
-                        // lower bound.
-                        const rect = input.getBoundingClientRect();
-                        Object.assign(list.style, {
-                            left: rect.left + 'px', top: rect.bottom + 'px',
-                            width: 'auto', minWidth: Math.max(rect.width, 240) + 'px', maxWidth: '420px',
-                            display: 'block',
-                        });
-                    });
-                };
+        const render = () => {
+          const term = input.value.toLowerCase();
+          const all = getLiveOptions() || [];
+          const matches = (term ? all.filter(([, v]) => v.toLowerCase().includes(term)) : all).slice(
+            0,
+            MAX_SUGGESTIONS
+          );
+          list.innerHTML = '';
+          if (matches.length === 0) {
+            list.style.display = 'none';
+            return;
+          }
+          matches.forEach(([, value]) => {
+            const item = document.createElement('div');
+            item.textContent = value;
+            Object.assign(item.style, {
+              padding: '4px 8px',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            });
+            item.addEventListener('mouseenter', () => {
+              item.style.background = '#e8f0fe';
+            });
+            item.addEventListener('mouseleave', () => {
+              item.style.background = '';
+            });
+            // mousedown (not click) + preventDefault: fires before the input's blur,
+            // and keeps focus on the input so selecting an item doesn't close the editor.
+            item.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              input.value = value;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              list.style.display = 'none';
+            });
+            list.appendChild(item);
+          });
+          // Deferred to the next frame: on the very first open of a field, Blockly's
+          // WidgetDiv hasn't necessarily finished positioning the <input> yet at the
+          // instant 'focus' fires — reading getBoundingClientRect() synchronously here
+          // could catch it mid-move (still at its stale/previous position), which is
+          // what made the list jump to the top-left corner on some opens. By the next
+          // animation frame Blockly's own positioning has always settled.
+          requestAnimationFrame(() => {
+            // Blockly's field <input> is often narrow (just wide enough for the
+            // current text) — sizing the list to match it clips longer entity/service
+            // IDs. Auto-size to content instead, only using the field's width as a
+            // lower bound.
+            const rect = input.getBoundingClientRect();
+            Object.assign(list.style, {
+              left: rect.left + 'px',
+              top: rect.bottom + 'px',
+              width: 'auto',
+              minWidth: Math.max(rect.width, 240) + 'px',
+              maxWidth: '420px',
+              display: 'block',
+            });
+          });
+        };
 
-                input.addEventListener('input', render);
-                input.addEventListener('focus', render);
-                input.addEventListener('blur', () => { list.style.display = 'none'; });
-                return input;
-            }
+        input.addEventListener('input', render);
+        input.addEventListener('focus', render);
+        input.addEventListener('blur', () => {
+          list.style.display = 'none';
+        });
+        return input;
+      }
 
-            widgetDispose_() {
-                super.widgetDispose_();
-                if (this.suggestionsEl_) {
-                    this.suggestionsEl_.remove();
-                    this.suggestionsEl_ = null;
-                }
-            }
+      widgetDispose_() {
+        super.widgetDispose_();
+        if (this.suggestionsEl_) {
+          this.suggestionsEl_.remove();
+          this.suggestionsEl_ = null;
         }
+      }
+    }
 
-        class FieldEntityDropdown extends FieldHaCombobox {
-            constructor(value) {
-                super(value, () => this.getFilteredEntities_());
-            }
+    class FieldEntityDropdown extends FieldHaCombobox {
+      constructor(value) {
+        super(value, () => this.getFilteredEntities_());
+      }
 
-            // Domain awareness: an `ha_entity` block plugged into `ha_call_service`'s ENTITY
-            // socket can infer a domain filter from that same block's SERVICE field (e.g.
-            // "light.turn_on" implies light.* entities) — no separate mechanism needed, just a
-            // refinement on top of the existing picker (per the concept doc's open item). Only
-            // wired up for `ha_call_service` since it's the only block where both the domain hint
-            // (SERVICE) and the entity picker live on the same parent block; other sockets
-            // (ha_trigger_on, ha_get_state, ...) have no such hint and fall through to the
-            // unfiltered list below.
-            getFilteredEntities_() {
-                if (typeof allEntities === 'undefined' || !allEntities || allEntities.length === 0) return null;
-                const domain = this.inferDomainFromContext_();
-                if (!domain) return allEntities.map(id => [id, id]);
-                const filtered = allEntities.filter(id => id.startsWith(domain + '.'));
-                // Falls back to the unfiltered list rather than an empty suggestion list when the
-                // guess doesn't pan out (e.g. a cross-domain service like homeassistant.turn_on).
-                const list = filtered.length > 0 ? filtered : allEntities;
-                return list.map(id => [id, id]);
-            }
+      // Domain awareness: an `ha_entity` block plugged into `ha_call_service`'s ENTITY
+      // socket can infer a domain filter from that same block's SERVICE field (e.g.
+      // "light.turn_on" implies light.* entities) — no separate mechanism needed, just a
+      // refinement on top of the existing picker (per the concept doc's open item). Only
+      // wired up for `ha_call_service` since it's the only block where both the domain hint
+      // (SERVICE) and the entity picker live on the same parent block; other sockets
+      // (ha_trigger_on, ha_get_state, ...) have no such hint and fall through to the
+      // unfiltered list below.
+      getFilteredEntities_() {
+        if (typeof allEntities === 'undefined' || !allEntities || allEntities.length === 0) return null;
+        const domain = this.inferDomainFromContext_();
+        if (!domain) return allEntities.map((id) => [id, id]);
+        const filtered = allEntities.filter((id) => id.startsWith(domain + '.'));
+        // Falls back to the unfiltered list rather than an empty suggestion list when the
+        // guess doesn't pan out (e.g. a cross-domain service like homeassistant.turn_on).
+        const list = filtered.length > 0 ? filtered : allEntities;
+        return list.map((id) => [id, id]);
+      }
 
-            inferDomainFromContext_() {
-                const sourceBlock = this.getSourceBlock && this.getSourceBlock();
-                const parentConn = sourceBlock && sourceBlock.outputConnection && sourceBlock.outputConnection.targetConnection;
-                const parentBlock = parentConn && parentConn.getSourceBlock();
-                if (!parentBlock || parentBlock.type !== 'ha_call_service') return null;
-                const service = parentBlock.getFieldValue('SERVICE');
-                return service && service.includes('.') ? service.split('.')[0] : null;
-            }
+      inferDomainFromContext_() {
+        const sourceBlock = this.getSourceBlock && this.getSourceBlock();
+        const parentConn = sourceBlock && sourceBlock.outputConnection && sourceBlock.outputConnection.targetConnection;
+        const parentBlock = parentConn && parentConn.getSourceBlock();
+        if (!parentBlock || parentBlock.type !== 'ha_call_service') return null;
+        const service = parentBlock.getFieldValue('SERVICE');
+        return service && service.includes('.') ? service.split('.')[0] : null;
+      }
 
-            static fromJson(options) {
-                return new FieldEntityDropdown(options['entityId']);
-            }
-        }
+      static fromJson(options) {
+        return new FieldEntityDropdown(options['entityId']);
+      }
+    }
 
-        class FieldServiceDropdown extends FieldHaCombobox {
-            constructor(value) {
-                super(value, () => {
-                    if (typeof haData === 'undefined' || !haData.services) return null;
-                    const opts = [];
-                    for (const domain in haData.services) {
-                        for (const service in haData.services[domain]) {
-                            const id = `${domain}.${service}`;
-                            opts.push([id, id]);
-                        }
-                    }
-                    if (opts.length === 0) return null;
-                    return opts.sort((a, b) => a[0].localeCompare(b[0]));
-                });
+    class FieldServiceDropdown extends FieldHaCombobox {
+      constructor(value) {
+        super(value, () => {
+          if (typeof haData === 'undefined' || !haData.services) return null;
+          const opts = [];
+          for (const domain in haData.services) {
+            for (const service in haData.services[domain]) {
+              const id = `${domain}.${service}`;
+              opts.push([id, id]);
             }
-            static fromJson(options) {
-                return new FieldServiceDropdown(options['service']);
-            }
-        }
+          }
+          if (opts.length === 0) return null;
+          return opts.sort((a, b) => a[0].localeCompare(b[0]));
+        });
+      }
+      static fromJson(options) {
+        return new FieldServiceDropdown(options['service']);
+      }
+    }
 
-        class FieldAreaDropdown extends FieldHaCombobox {
-            constructor(value) {
-                super(value, () => {
-                    if (typeof haData === 'undefined' || !haData.areas || haData.areas.length === 0) return null;
-                    // ha.getEntitiesInArea() strictly requires the area_id (a slug like
-                    // "living_room"), not the display name — unlike labels below, there's no
-                    // name-based fallback in the API, so this has to be the id even though it's
-                    // less immediately readable than "Living Room" would be.
-                    return haData.areas.map((a) => [a.area_id, a.area_id]).sort((x, y) => x[1].localeCompare(y[1]));
-                });
-            }
-            static fromJson(options) {
-                return new FieldAreaDropdown(options['areaId']);
-            }
-        }
+    class FieldAreaDropdown extends FieldHaCombobox {
+      constructor(value) {
+        super(value, () => {
+          if (typeof haData === 'undefined' || !haData.areas || haData.areas.length === 0) return null;
+          // ha.getEntitiesInArea() strictly requires the area_id (a slug like
+          // "living_room"), not the display name — unlike labels below, there's no
+          // name-based fallback in the API, so this has to be the id even though it's
+          // less immediately readable than "Living Room" would be.
+          return haData.areas.map((a) => [a.area_id, a.area_id]).sort((x, y) => x[1].localeCompare(y[1]));
+        });
+      }
+      static fromJson(options) {
+        return new FieldAreaDropdown(options['areaId']);
+      }
+    }
 
-        class FieldLabelDropdown extends FieldHaCombobox {
-            constructor(value) {
-                super(value, () => {
-                    if (typeof haData === 'undefined' || !haData.labels || haData.labels.length === 0) return null;
-                    // Unlike areas, ha.getEntitiesWithLabel() explicitly accepts the label's name
-                    // as an alternative to its id — using the (friendlier, human-chosen) name here
-                    // is both correct and more beginner-appropriate than an id would be.
-                    return haData.labels.map((l) => [l.name, l.name]).sort((x, y) => x[1].localeCompare(y[1]));
-                });
-            }
-            static fromJson(options) {
-                return new FieldLabelDropdown(options['labelName']);
-            }
-        }
+    class FieldLabelDropdown extends FieldHaCombobox {
+      constructor(value) {
+        super(value, () => {
+          if (typeof haData === 'undefined' || !haData.labels || haData.labels.length === 0) return null;
+          // Unlike areas, ha.getEntitiesWithLabel() explicitly accepts the label's name
+          // as an alternative to its id — using the (friendlier, human-chosen) name here
+          // is both correct and more beginner-appropriate than an id would be.
+          return haData.labels.map((l) => [l.name, l.name]).sort((x, y) => x[1].localeCompare(y[1]));
+        });
+      }
+      static fromJson(options) {
+        return new FieldLabelDropdown(options['labelName']);
+      }
+    }
 
-        Blockly.fieldRegistry.register('field_entity_dropdown', FieldEntityDropdown);
-        Blockly.fieldRegistry.register('field_service_dropdown', FieldServiceDropdown);
-        Blockly.fieldRegistry.register('field_area_dropdown', FieldAreaDropdown);
-        Blockly.fieldRegistry.register('field_label_dropdown', FieldLabelDropdown);
-    };
+    Blockly.fieldRegistry.register('field_entity_dropdown', FieldEntityDropdown);
+    Blockly.fieldRegistry.register('field_service_dropdown', FieldServiceDropdown);
+    Blockly.fieldRegistry.register('field_area_dropdown', FieldAreaDropdown);
+    Blockly.fieldRegistry.register('field_label_dropdown', FieldLabelDropdown);
+  };
 });

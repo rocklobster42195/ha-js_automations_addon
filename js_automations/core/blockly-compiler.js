@@ -46,11 +46,11 @@ registerHaBlocks(javascriptGenerator);
 // try block like this.
 const _origScrub = javascriptGenerator.scrub_.bind(javascriptGenerator);
 javascriptGenerator.scrub_ = function (block, code, opt_thisOnly) {
-    let wrapped = code;
-    if (code && code.trim() && block.previousConnection) {
-        wrapped = `try {\n${code}} catch (__e) { if (!__e.blockId) __e.blockId = ${JSON.stringify(block.id)}; throw __e; }\n`;
-    }
-    return _origScrub(block, wrapped, opt_thisOnly);
+  let wrapped = code;
+  if (code && code.trim() && block.previousConnection) {
+    wrapped = `try {\n${code}} catch (__e) { if (!__e.blockId) __e.blockId = ${JSON.stringify(block.id)}; throw __e; }\n`;
+  }
+  return _origScrub(block, wrapped, opt_thisOnly);
 };
 // Registers ha_call_service's mutator (see blockly-mutators.js). Only its saveExtraState/
 // loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
@@ -67,96 +67,106 @@ require('../public/js/blockly-fields')(Blockly);
 // (see the concept doc's "Out of Scope"), so 'network' has no entry here — only add one if an
 // HTTP block is ever actually built.
 const BLOCK_PERMISSION_MAP = {
-    ha_on_webhook: 'webhook',
+  ha_on_webhook: 'webhook',
 };
 
 class BlocklyCompiler extends EventEmitter {
-    constructor(scriptsDir, distDir) {
-        super();
-        this.scriptsDir = scriptsDir;
-        this.distDir = distDir;
+  constructor(scriptsDir, distDir) {
+    super();
+    this.scriptsDir = scriptsDir;
+    this.distDir = distDir;
+  }
+
+  _getDistPath(blocksPath) {
+    const relativePath = path.relative(this.scriptsDir, blocksPath);
+    return path.join(this.distDir, relativePath.replace(/\.blocks$/, '.js'));
+  }
+
+  /**
+   * Compiles a .blocks file to its dist/*.js counterpart.
+   * @param {string} blocksPath Absolute path to the .blocks file.
+   * @returns {Promise<boolean>} true on success.
+   */
+  async compile(blocksPath) {
+    if (!blocksPath.endsWith('.blocks')) return false;
+
+    this.emit('log', { level: 'debug', message: `Compiling ${path.basename(blocksPath)}...` });
+
+    let parsed;
+    try {
+      const rawFile = fs.readFileSync(blocksPath, 'utf8');
+      const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      this.emit('compiler_signal', {
+        type: 'BLOCKLY_ERR',
+        filename: path.basename(blocksPath),
+        text: `Invalid JSON: ${e.message}`,
+      });
+      this.emit('log', {
+        level: 'error',
+        message: `[${path.basename(blocksPath)}] Invalid .blocks JSON: ${e.message}`,
+      });
+      return false;
     }
 
-    _getDistPath(blocksPath) {
-        const relativePath = path.relative(this.scriptsDir, blocksPath);
-        return path.join(this.distDir, relativePath.replace(/\.blocks$/, '.js'));
+    const workspace = new Blockly.Workspace();
+    let code;
+    let derivedPermissions;
+    try {
+      // Pass the whole parsed file, not parsed.blocks — workspaces.load() reads its own
+      // top-level `blocks` key internally; unrelated keys like `jsa` are ignored.
+      Blockly.serialization.workspaces.load(parsed, workspace);
+      code = javascriptGenerator.workspaceToCode(workspace);
+      const usedTypes = new Set(workspace.getAllBlocks(false).map((b) => b.type));
+      const permSet = new Set();
+      for (const type of usedTypes) {
+        if (BLOCK_PERMISSION_MAP[type]) permSet.add(BLOCK_PERMISSION_MAP[type]);
+      }
+      derivedPermissions = [...permSet].sort();
+    } catch (e) {
+      this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: e.message });
+      this.emit('log', {
+        level: 'error',
+        message: `[${path.basename(blocksPath)}] Blockly compile failed: ${e.message}`,
+      });
+      return false;
+    } finally {
+      workspace.dispose();
     }
 
-    /**
-     * Compiles a .blocks file to its dist/*.js counterpart.
-     * @param {string} blocksPath Absolute path to the .blocks file.
-     * @returns {Promise<boolean>} true on success.
-     */
-    async compile(blocksPath) {
-        if (!blocksPath.endsWith('.blocks')) return false;
-
-        this.emit('log', { level: 'debug', message: `Compiling ${path.basename(blocksPath)}...` });
-
-        let parsed;
-        try {
-            const rawFile = fs.readFileSync(blocksPath, 'utf8');
-            const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
-            parsed = JSON.parse(raw);
-        } catch (e) {
-            this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: `Invalid JSON: ${e.message}` });
-            this.emit('log', { level: 'error', message: `[${path.basename(blocksPath)}] Invalid .blocks JSON: ${e.message}` });
-            return false;
-        }
-
-        const workspace = new Blockly.Workspace();
-        let code;
-        let derivedPermissions;
-        try {
-            // Pass the whole parsed file, not parsed.blocks — workspaces.load() reads its own
-            // top-level `blocks` key internally; unrelated keys like `jsa` are ignored.
-            Blockly.serialization.workspaces.load(parsed, workspace);
-            code = javascriptGenerator.workspaceToCode(workspace);
-            const usedTypes = new Set(workspace.getAllBlocks(false).map((b) => b.type));
-            const permSet = new Set();
-            for (const type of usedTypes) {
-                if (BLOCK_PERMISSION_MAP[type]) permSet.add(BLOCK_PERMISSION_MAP[type]);
-            }
-            derivedPermissions = [...permSet].sort();
-        } catch (e) {
-            this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: e.message });
-            this.emit('log', { level: 'error', message: `[${path.basename(blocksPath)}] Blockly compile failed: ${e.message}` });
-            return false;
-        } finally {
-            workspace.dispose();
-        }
-
-        // Write the derived permissions back into the .blocks source (not just used internally)
-        // so ScriptHeaderParser/CapabilityAnalyzer see it exactly like a hand-written @permission
-        // tag would for .js/.ts. Only writes when it actually changed: this file write itself
-        // re-triggers ScriptWatcher's .blocks change handler, which calls compile() again — an
-        // unconditional write would loop forever (each write triggering another identical write);
-        // guarded like this, the second pass finds nothing left to change and the loop ends there.
-        const currentPermissions = [...(parsed.jsa && parsed.jsa.permission || [])].sort();
-        if (JSON.stringify(currentPermissions) !== JSON.stringify(derivedPermissions)) {
-            parsed.jsa = parsed.jsa || {};
-            parsed.jsa.permission = derivedPermissions;
-            fs.writeFileSync(blocksPath, JSON.stringify(parsed, null, 2), 'utf8');
-        }
-
-        const distPath = this._getDistPath(blocksPath);
-        const targetDir = path.dirname(distPath);
-        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-        // Wrapped in an async IIFE only if actually needed — see wrapGeneratedCode() in
-        // blockly-blocks-shared.js for why (and why it's shared rather than duplicated here).
-        fs.writeFileSync(distPath, registerHaBlocks.wrapGeneratedCode(code), 'utf8');
-
-        this.emit('compiler_signal', { type: 'BLOCKLY_OK', filename: path.basename(blocksPath) });
-        return true;
+    // Write the derived permissions back into the .blocks source (not just used internally)
+    // so ScriptHeaderParser/CapabilityAnalyzer see it exactly like a hand-written @permission
+    // tag would for .js/.ts. Only writes when it actually changed: this file write itself
+    // re-triggers ScriptWatcher's .blocks change handler, which calls compile() again — an
+    // unconditional write would loop forever (each write triggering another identical write);
+    // guarded like this, the second pass finds nothing left to change and the loop ends there.
+    const currentPermissions = [...((parsed.jsa && parsed.jsa.permission) || [])].sort();
+    if (JSON.stringify(currentPermissions) !== JSON.stringify(derivedPermissions)) {
+      parsed.jsa = parsed.jsa || {};
+      parsed.jsa.permission = derivedPermissions;
+      fs.writeFileSync(blocksPath, JSON.stringify(parsed, null, 2), 'utf8');
     }
 
-    /**
-     * Removes the compiled JS file when a .blocks file is deleted.
-     */
-    cleanup(blocksPath) {
-        const distPath = this._getDistPath(blocksPath);
-        if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
-    }
+    const distPath = this._getDistPath(blocksPath);
+    const targetDir = path.dirname(distPath);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    // Wrapped in an async IIFE only if actually needed — see wrapGeneratedCode() in
+    // blockly-blocks-shared.js for why (and why it's shared rather than duplicated here).
+    fs.writeFileSync(distPath, registerHaBlocks.wrapGeneratedCode(code), 'utf8');
+
+    this.emit('compiler_signal', { type: 'BLOCKLY_OK', filename: path.basename(blocksPath) });
+    return true;
+  }
+
+  /**
+   * Removes the compiled JS file when a .blocks file is deleted.
+   */
+  cleanup(blocksPath) {
+    const distPath = this._getDistPath(blocksPath);
+    if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
+  }
 }
 
 module.exports = BlocklyCompiler;

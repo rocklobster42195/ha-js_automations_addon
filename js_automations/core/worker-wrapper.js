@@ -444,7 +444,9 @@ function ensureMessageListener() {
           try {
             sub.callback(msg.event);
           } catch (e) {
-            ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`, { blockId: e.blockId });
+            ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`, {
+              blockId: e.blockId,
+            });
           }
         }
       }
@@ -603,7 +605,9 @@ function ensureMessageListener() {
         try {
           sub.callback({ entity_id: msg.entityId, state: msg.payload, old_state: null, attributes: {} });
         } catch (e) {
-          ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`, { blockId: e.blockId });
+          ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`, {
+            blockId: e.blockId,
+          });
         }
       });
 
@@ -665,7 +669,9 @@ function ensureMessageListener() {
         try {
           cb(msg.topic, payload);
         } catch (e) {
-          ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
+          ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`, {
+            blockId: e.blockId,
+          });
         }
       }
       return;
