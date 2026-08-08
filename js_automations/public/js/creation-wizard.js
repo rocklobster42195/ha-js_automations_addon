@@ -23,6 +23,7 @@ let currentWizardTab = 'new';
 let wizardMode = 'create'; // 'create', 'edit', 'duplicate'
 let wizardOriginalFilename = null; // Für Edit-Mode
 let wizardDuplicateCode = null; // Für Duplicate-Mode
+let wizardDuplicateJsCode = null; // Compiled JS, only set when duplicating a .blocks script
 let wizardNpmModules = [];
 let wizardIncludes = [];
 let wizardImportPreviewed = false; // Two-step import: true after preview shown
@@ -97,6 +98,7 @@ function injectCreationWizard() {
         .lang-card.active { color: #fff; }
         .lang-card.active#lang-card-js { border-color: #f7df1e; color: #f7df1e; background: rgba(247, 223, 30, 0.1); }
         .lang-card.active#lang-card-ts { border-color: #3178c6; color: #3178c6; background: rgba(49, 120, 198, 0.1); }
+        .lang-card.active#lang-card-blocks { border-color: #4caf50; color: #4caf50; background: rgba(76, 175, 80, 0.1); }
 
         /* Capability Preview Panel */
         .cap-preview-panel { margin-top: 14px; padding: 10px 12px; background: rgba(255,255,255,0.04); border: 1px solid #333; border-radius: 6px; font-size: 0.85rem; }
@@ -152,8 +154,15 @@ function injectCreationWizard() {
                         <div class="lang-selection-container">
                             <div class="lang-card active" onclick="selectWizardLanguage('.js')" id="lang-card-js">JS</div>
                             <div class="lang-card" onclick="selectWizardLanguage('.ts')" id="lang-card-ts">TS</div>
+                            <div class="lang-card" onclick="selectWizardLanguage('.blocks')" id="lang-card-blocks" data-i18n="wizard_option_blockly" data-i18n-title title="Visual">BLK</div>
                         </div>
                         <input type="hidden" id="wizard-language" value=".js">
+                    </div>
+                    <div class="form-group hidden" id="wizard-group-duplicate-as-js">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; text-transform:none;">
+                            <input type="checkbox" id="wizard-duplicate-as-js" onchange="onWizardDuplicateAsJsToggle(this.checked)">
+                            <span data-i18n="wizard_duplicate_as_js">Duplicate as JavaScript</span>
+                        </label>
                     </div>
                 </div>
 
@@ -299,12 +308,23 @@ async function openCreationWizard(mode = 'create', data = null) {
     wizardMode = mode;
     wizardOriginalFilename = null;
     wizardDuplicateCode = null;
-    
+    wizardDuplicateJsCode = null;
+    const dupAsJsGroup = document.getElementById('wizard-group-duplicate-as-js');
+    const dupAsJsCheckbox = document.getElementById('wizard-duplicate-as-js');
+    // .hidden is `display: none !important` (style.css) — a plain style.display assignment
+    // can't override !important, has to go through the class instead.
+    if (dupAsJsGroup) dupAsJsGroup.classList.add('hidden');
+    if (dupAsJsCheckbox) dupAsJsCheckbox.checked = false;
+
     // Reset fields
     document.getElementById('wizard-name').value = '';
 
-    // Fix: Detect extension from existing data if editing or duplicating to preserve TS status
-    const initialExt = (data && data.filename && data.filename.endsWith('.ts')) ? '.ts' : '.js';
+    // Fix: Detect extension from existing data if editing or duplicating to preserve TS/Blockly status
+    let initialExt = '.js';
+    if (data && data.filename) {
+        if (data.filename.endsWith('.ts')) initialExt = '.ts';
+        else if (data.filename.endsWith('.blocks')) initialExt = '.blocks';
+    }
     selectWizardLanguage(initialExt);
 
     document.getElementById('wizard-icon').value = '';
@@ -354,6 +374,13 @@ async function openCreationWizard(mode = 'create', data = null) {
             title.textContent = i18next.t('modal_duplicate_script_title');
             btn.textContent = i18next.t('button_duplicate');
             wizardDuplicateCode = data.code;
+            // Only offer the checkbox when duplicating a .blocks script AND a compiled version
+            // actually exists (duplicateScript() leaves data.jsCode null if nothing's been
+            // compiled yet, e.g. a script that was never saved).
+            if (initialExt === '.blocks' && data.jsCode) {
+                wizardDuplicateJsCode = data.jsCode;
+                if (dupAsJsGroup) dupAsJsGroup.classList.remove('hidden');
+            }
         }
 
         // Felder befüllen
@@ -607,6 +634,13 @@ function handleWizardTypeChange() {
 /**
  * Updates the visual selection of language cards and sets the hidden input value.
  */
+// Only wired up in duplicate mode for a .blocks source (see openCreationWizard()) — flips the
+// hidden #wizard-language field between the original .blocks and .js so executeWizardAction()'s
+// existing extension-based create logic picks the right one without any special-casing there.
+function onWizardDuplicateAsJsToggle(checked) {
+    selectWizardLanguage(checked ? '.js' : '.blocks');
+}
+
 function selectWizardLanguage(ext) {
     document.getElementById('wizard-language').value = ext;
     document.querySelectorAll('.lang-card').forEach(c => c.classList.remove('active'));
@@ -740,11 +774,37 @@ async function executeWizardAction() {
                             tab.originalContent = cData.content;
                             tab.isDirty = false;
                         }
+                    } else if (tab && tab.type === 'blockly') {
+                        // Metadata edits only touch the file's `jsa` key server-side — pull that in
+                        // without clobbering unsaved visual edits sitting in tab.blocksState.
+                        const cRes = await apiFetch(`api/scripts/${newFilename}/content?_t=${Date.now()}`);
+                        if (cRes.ok) {
+                            const cData = await cRes.json();
+                            try {
+                                tab.jsa = (JSON.parse(cData.content || '{}')).jsa || {};
+                            } catch (e) { /* keep existing jsa on parse failure */ }
+                            if (activeTabFilename === newFilename && window.loadBlocklyWorkspace) {
+                                window.loadBlocklyWorkspace({ jsa: tab.jsa, blocks: tab.blocksState.blocks, variables: tab.blocksState.variables });
+                            }
+                        }
                     }
                 }
             } else {
                 // CREATE or DUPLICATE
-                payload.code = (wizardMode === 'duplicate' && wizardDuplicateCode) ? wizardDuplicateCode : (SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '');
+                if (wizardMode === 'duplicate' && extension === '.js' && wizardDuplicateJsCode) {
+                    // "Duplicate as JavaScript" checkbox (.blocks source only) — see
+                    // onWizardDuplicateAsJsToggle(). The original .blocks file is untouched;
+                    // this just creates an independent .js copy of its last-compiled output.
+                    payload.code = wizardDuplicateJsCode;
+                } else if (wizardMode === 'duplicate' && wizardDuplicateCode) {
+                    payload.code = wizardDuplicateCode;
+                } else if (extension === '.blocks') {
+                    // Let the backend write its own minimal empty-workspace default —
+                    // the JS templates below don't apply to a JSON block file.
+                    payload.code = '';
+                } else {
+                    payload.code = SCRIPT_TEMPLATES['empty'] ? SCRIPT_TEMPLATES['empty'].code : '';
+                }
                 
                 const res = await apiFetch('api/scripts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) { const err = await res.json(); throw new Error(err.error || i18next.t('error_create_failed', { defaultValue: 'Creation failed' })); }

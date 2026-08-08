@@ -461,7 +461,7 @@ class WorkerManager extends EventEmitter {
     // 1. Automations (Root)
     const files = fs
       .readdirSync(this.scriptsDir)
-      .filter((f) => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
+      .filter((f) => (f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.blocks')) && !f.endsWith('.d.ts'));
 
     // Prioritize TS over JS for same-named files to avoid duplicates
     const tsBasenames = new Set(files.filter((f) => f.endsWith('.ts')).map((f) => path.basename(f, '.ts')));
@@ -479,7 +479,7 @@ class WorkerManager extends EventEmitter {
     if (fs.existsSync(libDir)) {
       const libs = fs
         .readdirSync(libDir)
-        .filter((f) => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
+        .filter((f) => (f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.blocks')) && !f.endsWith('.d.ts'));
       const libTsBasenames = new Set(libs.filter((f) => f.endsWith('.ts')).map((f) => path.basename(f, '.ts')));
       const filteredLibs = libs.filter((f) => {
         if (f.endsWith('.js')) return !libTsBasenames.has(path.basename(f, '.js'));
@@ -680,6 +680,7 @@ class WorkerManager extends EventEmitter {
   startScript(filename) {
     let fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
     const isTypeScript = fullPath.endsWith('.ts');
+    const isBlockly = fullPath.endsWith('.blocks');
     let executionPath = fullPath;
 
     if (!fs.existsSync(fullPath)) {
@@ -687,15 +688,16 @@ class WorkerManager extends EventEmitter {
       return false;
     }
 
-    if (isTypeScript) {
+    if (isTypeScript || isBlockly) {
+      const sourceExt = isTypeScript ? '.ts' : '.blocks';
       const relativePath = path.relative(this.scriptsDir, fullPath);
-      const compiledPath = path.join(this.distDir, relativePath.replace(/\.ts$/, '.js'));
+      const compiledPath = path.join(this.distDir, relativePath.slice(0, -sourceExt.length) + '.js');
 
       if (!fs.existsSync(compiledPath)) {
         const displayFile = path.basename(filename);
         this.emit('log', {
           source: 'System',
-          message: `Compiled version for ${displayFile} not found in dist. Was it transpiled? Check logs for Compiler errors.`,
+          message: `Compiled version for ${displayFile} not found in dist. Was it transpiled/compiled? Check logs for Compiler errors.`,
           level: 'error',
         });
         return false;
@@ -822,7 +824,17 @@ class WorkerManager extends EventEmitter {
       try {
         // 1. Logging
         if (msg.type === 'log') {
-          this.emit('log', { source: name, message: msg.message, level: msg.level || 'info' });
+          // msg.blockId (worker-wrapper.js's sendLog()) traces a .blocks script's
+          // runtime error back to the exact block that threw — see
+          // blockly-compiler.js's scrub_() instrumentation for where it's tagged.
+          // scriptId (this.filename below) is needed alongside it since the frontend
+          // only acts on it when that exact .blocks file is the currently open tab.
+          const logEntry = { source: name, message: msg.message, level: msg.level || 'info' };
+          if (msg.blockId) {
+            logEntry.blockId = msg.blockId;
+            logEntry.scriptId = scriptMeta.filename;
+          }
+          this.emit('log', logEntry);
         }
 
         if (msg.type === 'breakpoint') {

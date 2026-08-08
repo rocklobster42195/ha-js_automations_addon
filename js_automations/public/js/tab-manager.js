@@ -6,8 +6,40 @@
 var openTabs = [];
 var activeTabFilename = null;
 
+// "Show Code" is a transient view toggle, not per-tab state — always resets to the canvas view
+// on tab switch (see switchToTab()) rather than being remembered per Blockly tab, so there's only
+// ever one of these instead of needing to track it alongside every tab's own blocksState.
+var _showingBlocklyCode = false;
+var _blocklyCodeModel = null;
+
 // Suffix used to identify card tabs (not real files — virtual view of __JSA_CARD__ block)
 const CARD_TAB_SUFFIX = '[card]';
+
+// "Hat" block types (no previous/next connection) that start a run — a workspace with none of
+// these compiles to valid but inert code (nothing ever calls into it). Kept in sync by hand
+// with blockly-blocks.js's trigger block definitions; there's no single source of truth to
+// derive this list from without also loading Blockly itself in this file.
+const BLOCKLY_TRIGGER_TYPES = ['ha_trigger_on', 'ha_trigger_on_state', 'ha_schedule_interval', 'ha_schedule_daily', 'ha_schedule_cron', 'ha_store_on', 'ha_mqtt_subscribe', 'ha_on_webhook'];
+
+function blocklyWorkspaceHasTrigger(blocksState) {
+    const topBlocks = (blocksState && blocksState.blocks && blocksState.blocks.blocks) || [];
+    return topBlocks.some(b => BLOCKLY_TRIGGER_TYPES.includes(b.type));
+}
+
+// Ctrl+S for Monaco tabs is handled by editor.addCommand() in app.js, which only fires while
+// Monaco itself has focus. Blockly tabs have no Monaco focus target (the workspace is an SVG
+// canvas), so that binding never sees the keypress — without this, the browser's native
+// "Save Page As" dialog opens instead. Scoped to Blockly tabs only so Monaco's own handling
+// (and its focus-aware behavior) is untouched for .js/.ts tabs.
+document.addEventListener('keydown', (e) => {
+    const isSaveShortcut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
+    if (!isSaveShortcut) return;
+    const activeTab = openTabs.find(t => t.filename === activeTabFilename);
+    if (activeTab && activeTab.type === 'blockly') {
+        e.preventDefault();
+        saveActiveTab();
+    }
+});
 
 function renderTabs() {
     const tabBar = document.getElementById('tab-bar');
@@ -106,9 +138,14 @@ async function openOrSwitchToTab(filename, icon) {
         const res = await apiFetch(`api/scripts/${filename}/content`);
         const data = await res.json();
 
+        if (filename.endsWith('.blocks')) {
+            await openBlocklyTab(filename, icon, data.content);
+            return;
+        }
+
         const language = window.getLanguageByFilename ? window.getLanguageByFilename(filename) : 'javascript';
         const uri = monaco.Uri.parse(`file:///${filename}`);
-        
+
         const newTab = {
             filename: filename,
             icon: icon,
@@ -143,6 +180,59 @@ async function openOrSwitchToTab(filename, icon) {
         document.getElementById('editor-section').classList.add('hidden');
     }
 }
+
+/**
+ * Opens a `.blocks` file in the Blockly editor. Unlike Monaco tabs, there is no persistent
+ * per-tab model — the tab keeps its own serialized state (jsa + blocks JSON) and the single
+ * shared workspace is loaded/saved from it on every switch. See blockly-editor.js.
+ */
+async function openBlocklyTab(filename, icon, rawContent) {
+    await window.ensureBlocklyReady();
+
+    let parsed;
+    try {
+        parsed = JSON.parse(rawContent || '{}');
+    } catch (e) {
+        parsed = {};
+    }
+    // { blocks, variables } — see blockly-editor.js's getBlocklyWorkspaceState() for why both
+    // top-level keys are needed (a variable block only serializes its ID into `blocks`; the
+    // name lives in `variables`).
+    const blocksState = {
+        blocks: parsed.blocks || { languageVersion: 0, blocks: [] },
+        variables: parsed.variables || [],
+    };
+
+    const newTab = {
+        filename,
+        icon,
+        type: 'blockly',
+        jsa: parsed.jsa || {},
+        blocksState,
+        isDirty: false,
+        originalBlocksJson: JSON.stringify(blocksState),
+        viewState: null,
+    };
+
+    openTabs.push(newTab);
+    switchToTab(filename);
+}
+
+/**
+ * Called by blockly-editor.js's workspace change listener. Marks the active Blockly tab dirty
+ * when the workspace differs from its last-saved state (ignores UI-only events like selection).
+ */
+function onBlocklyWorkspaceChanged() {
+    const tab = openTabs.find(t => t.filename === activeTabFilename);
+    if (!tab || tab.type !== 'blockly') return;
+    const current = JSON.stringify(window.getBlocklyWorkspaceState());
+    const isNowDirty = current !== tab.originalBlocksJson;
+    if (tab.isDirty !== isNowDirty) {
+        tab.isDirty = isNowDirty;
+        setDirtyUI(tab.filename, isNowDirty);
+    }
+}
+window.onBlocklyWorkspaceChanged = onBlocklyWorkspaceChanged;
 
 /**
  * Opens a virtual card tab for a Script Pack script.
@@ -210,9 +300,19 @@ async function openCardTab(scriptFilename) {
 }
 
 function switchToTab(filename) {
-    if (activeTabFilename && editor) {
+    // Always leave any open "Show Code" view behind when switching tabs — it's a transient
+    // per-session view toggle (see the var declarations above), not state worth persisting per
+    // tab, and leaving Monaco stuck in readOnly mode for the next (non-Blockly) tab would be a
+    // real bug.
+    if (_showingBlocklyCode) _exitBlocklyCodeView();
+
+    if (activeTabFilename) {
         const oldTab = openTabs.find(t => t.filename === activeTabFilename);
-        if (oldTab && oldTab.type !== 'store') {
+        if (oldTab && oldTab.type === 'blockly') {
+            // No persistent Monaco-style model for Blockly — snapshot the live workspace into
+            // the tab before swapping it out, so in-progress edits survive the tab switch.
+            if (window.getBlocklyWorkspaceState) oldTab.blocksState = window.getBlocklyWorkspaceState();
+        } else if (oldTab && oldTab.type !== 'store' && editor) {
             oldTab.viewState = editor.saveViewState();
         }
     }
@@ -233,12 +333,30 @@ function switchToTab(filename) {
         const settingsWrapper = document.getElementById('settings-wrapper');
         if (settingsWrapper) settingsWrapper.classList.remove('hidden');
         if (typeof window.loadSettingsData === 'function') window.loadSettingsData();
+    } else if (newTab.type === 'blockly') {
+        document.getElementById('store-wrapper').classList.add('hidden');
+        const settingsWrapper = document.getElementById('settings-wrapper');
+        if (settingsWrapper) settingsWrapper.classList.add('hidden');
+        document.getElementById('editor-wrapper').classList.remove('hidden');
+        document.getElementById('monaco-container').classList.add('hidden');
+        document.getElementById('blockly-container').classList.remove('hidden');
+
+        if (window.isBlocklyReady && window.isBlocklyReady()) {
+            window.loadBlocklyWorkspace({ jsa: newTab.jsa, blocks: newTab.blocksState.blocks, variables: newTab.blocksState.variables });
+            // Surfaces an error that happened while this script's tab wasn't the one on screen —
+            // the common case for any trigger you can only fire from elsewhere in the UI (Store
+            // Explorer, MQTT devtools, an external webhook call, ...). See
+            // reapplyBlocklyError()'s own comment in blockly-editor.js for why this was needed.
+            if (typeof window.reapplyBlocklyError === 'function') window.reapplyBlocklyError(newTab.filename);
+        }
     } else {
         document.getElementById('store-wrapper').classList.add('hidden');
         const settingsWrapper = document.getElementById('settings-wrapper');
         if (settingsWrapper) settingsWrapper.classList.add('hidden');
         document.getElementById('editor-wrapper').classList.remove('hidden');
-        
+        document.getElementById('blockly-container').classList.add('hidden');
+        document.getElementById('monaco-container').classList.remove('hidden');
+
         if (editor) {
             editor.setModel(newTab.model);
             if (newTab.viewState) {
@@ -252,12 +370,23 @@ function switchToTab(filename) {
     updateToolbarUI(newTab.filename, newTab.icon, newTab.isDirty);
     updateEditorMode(newTab.filename);
 
-    // Rebuild snippet toolbar to match context (script vs. card)
+    // Rebuild snippet toolbar to match context (script vs. card). Blockly tabs get neither —
+    // JS/TS code snippets make no sense on a block canvas (there's no text cursor to insert
+    // at) — this slot shows the "Show Code" toggle instead (see _buildShowCodeToggle()).
     const toolbarSnippets = document.getElementById('toolbar-snippets');
-    if (toolbarSnippets && typeof buildSnippetToolbar === 'function') {
-        const snippetMode = newTab.type === 'card' ? 'card' : 'script';
-        buildSnippetToolbar(toolbarSnippets, snippetMode);
+    const isBlocklyTab = newTab.type === 'blockly';
+    if (toolbarSnippets) {
+        if (isBlocklyTab) {
+            _buildShowCodeToggle(toolbarSnippets);
+        } else if (typeof buildSnippetToolbar === 'function') {
+            const snippetMode = newTab.type === 'card' ? 'card' : 'script';
+            buildSnippetToolbar(toolbarSnippets, snippetMode);
+        }
     }
+
+    // Word wrap is a Monaco text-editor concept — meaningless on a Blockly canvas.
+    const wordWrapBtn = document.getElementById('btn-word-wrap');
+    if (wordWrapBtn) wordWrapBtn.classList.toggle('hidden', isBlocklyTab);
 
     // Show preview button for card tabs AND for script tabs that have a @card header
     const isCardTab = newTab.type === 'card';
@@ -276,6 +405,71 @@ function switchToTab(filename) {
     if (cardMenuBtn && typeof CardPreview !== 'undefined') {
         cardMenuBtn.classList.toggle('preview-active', CardPreview.isOpen());
     }
+}
+
+/** Same dynamic-button pattern as buildSnippetToolbar() in editor-snippets.js. */
+function _buildShowCodeToggle(container) {
+    container.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.id = 'btn-show-code';
+    const label = (typeof i18next !== 'undefined')
+        ? i18next.t('blockly_show_code_title', { defaultValue: 'Show Code' })
+        : 'Show Code';
+    btn.title = label;
+    btn.setAttribute('data-i18n', 'blockly_show_code_title');
+    btn.setAttribute('data-i18n-title', '');
+    btn.innerHTML = '<i class="mdi mdi-code-braces"></i>';
+    btn.onclick = () => toggleShowCode();
+    container.appendChild(btn);
+}
+
+/**
+ * Toggles between the Blockly canvas and a read-only Monaco view of the code the current
+ * workspace would compile to (live-generated in the browser, see
+ * blockly-editor.js's getBlocklyGeneratedCode() — no server round-trip, so it reflects unsaved
+ * edits too, unlike the last-compiled dist file).
+ */
+function toggleShowCode() {
+    const tab = openTabs.find(t => t.filename === activeTabFilename);
+    if (!tab || tab.type !== 'blockly') return;
+    if (_showingBlocklyCode) {
+        _exitBlocklyCodeView();
+    } else {
+        _enterBlocklyCodeView();
+    }
+}
+window.toggleShowCode = toggleShowCode;
+
+function _enterBlocklyCodeView() {
+    if (!editor || typeof monaco === 'undefined') return;
+    _showingBlocklyCode = true;
+    document.getElementById('blockly-container').classList.add('hidden');
+    document.getElementById('monaco-container').classList.remove('hidden');
+
+    const code = window.getBlocklyGeneratedCode ? window.getBlocklyGeneratedCode() : '';
+    if (_blocklyCodeModel) _blocklyCodeModel.dispose();
+    _blocklyCodeModel = monaco.editor.createModel(code, 'javascript');
+    editor.setModel(_blocklyCodeModel);
+    editor.updateOptions({ readOnly: true });
+
+    const btn = document.getElementById('btn-show-code');
+    if (btn) btn.classList.add('preview-active');
+}
+
+function _exitBlocklyCodeView() {
+    _showingBlocklyCode = false;
+    if (editor) editor.updateOptions({ readOnly: false });
+    if (_blocklyCodeModel) {
+        _blocklyCodeModel.dispose();
+        _blocklyCodeModel = null;
+    }
+    const blocklyContainer = document.getElementById('blockly-container');
+    const monacoContainer = document.getElementById('monaco-container');
+    if (blocklyContainer) blocklyContainer.classList.remove('hidden');
+    if (monacoContainer) monacoContainer.classList.add('hidden');
+
+    const btn = document.getElementById('btn-show-code');
+    if (btn) btn.classList.remove('preview-active');
 }
 
 function closeTab(filename) {
@@ -540,6 +734,32 @@ async function saveActiveTab() {
     if (!activeTabFilename) return;
     const activeTab = openTabs.find(t => t.filename === activeTabFilename);
     if (!activeTab || !activeTab.isDirty) return;
+
+    if (activeTab.type === 'blockly') {
+        const blocksState = window.getBlocklyWorkspaceState();
+        // A script exposed as a switch/button (@expose) is legitimately trigger-less — toggling
+        // it in HA calls startScript() directly, running the top-level blocks once. Only warn
+        // when there's neither a trigger block nor any other way for the script to ever run.
+        const isExposed = !!(activeTab.jsa && activeTab.jsa.expose);
+        if (!blocklyWorkspaceHasTrigger(blocksState) && !isExposed) {
+            const proceed = confirm(i18next.t('blockly_no_trigger_warning',
+                { defaultValue: 'This script has no trigger block, so it will never actually run when enabled. Save anyway?' }));
+            if (!proceed) return;
+        }
+        activeTab.blocksState = blocksState;
+        const content = JSON.stringify({ jsa: activeTab.jsa, blocks: blocksState.blocks, variables: blocksState.variables }, null, 2);
+
+        await apiFetch(`api/scripts/${activeTabFilename}/content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+
+        activeTab.originalBlocksJson = JSON.stringify(blocksState);
+        setDirtyUI(activeTabFilename, false);
+        if (typeof loadScripts === 'function') await loadScripts();
+        return;
+    }
 
     const content = activeTab.model.getValue();
 

@@ -217,6 +217,20 @@ module.exports = (
 
     if (!fullPath) return res.status(404).json({ error: 'File not found' });
 
+    // ?compiled=1 on a .blocks script returns the last-compiled dist JS instead of the raw
+    // workspace JSON — used by duplicateScript()'s "duplicate as JavaScript" checkbox so it
+    // can offer a plain-JS copy without touching the original .blocks file at all.
+    if (req.query.compiled && filename.endsWith('.blocks')) {
+      const relative = path.relative(SCRIPTS_DIR, fullPath);
+      const distPath = path.join(STORAGE_DIR, 'dist', relative.replace(/\.blocks$/, '.js'));
+      try {
+        const content = fs.readFileSync(distPath, 'utf8');
+        return res.json({ content });
+      } catch (e) {
+        return res.status(404).json({ error: 'No compiled output yet — save the script first.' });
+      }
+    }
+
     try {
       const content = fs.readFileSync(fullPath, 'utf8');
       res.json({ content });
@@ -811,9 +825,13 @@ module.exports = (
     const fullPath = path.join(targetDir, filename);
 
     // 1. Create file with initial code
-    fs.writeFileSync(fullPath, code || 'ha.log("Ready.");\n', 'utf8');
+    const defaultCode =
+      ext === '.blocks'
+        ? JSON.stringify({ jsa: {}, blocks: { languageVersion: 0, blocks: [] } }, null, 2)
+        : 'ha.log("Ready.");\n';
+    fs.writeFileSync(fullPath, code || defaultCode, 'utf8');
 
-    // 2. Use the central parser to write the metadata header
+    // 2. Use the central parser to write the metadata header (or, for .blocks, the `jsa` JSON key)
     ScriptHeaderParser.updateMetadata(fullPath, req.body);
 
     res.json({ filename });
