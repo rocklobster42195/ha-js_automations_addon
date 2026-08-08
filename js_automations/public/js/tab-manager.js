@@ -19,7 +19,7 @@ const CARD_TAB_SUFFIX = '[card]';
 // these compiles to valid but inert code (nothing ever calls into it). Kept in sync by hand
 // with blockly-blocks.js's trigger block definitions; there's no single source of truth to
 // derive this list from without also loading Blockly itself in this file.
-const BLOCKLY_TRIGGER_TYPES = ['ha_trigger_on', 'ha_trigger_on_state', 'ha_schedule_interval', 'ha_schedule_daily', 'ha_schedule_cron', 'ha_store_on', 'ha_mqtt_subscribe'];
+const BLOCKLY_TRIGGER_TYPES = ['ha_trigger_on', 'ha_trigger_on_state', 'ha_schedule_interval', 'ha_schedule_daily', 'ha_schedule_cron', 'ha_store_on', 'ha_mqtt_subscribe', 'ha_on_webhook'];
 
 function blocklyWorkspaceHasTrigger(blocksState) {
     const topBlocks = (blocksState && blocksState.blocks && blocksState.blocks.blocks) || [];

@@ -31,6 +31,16 @@
             return `ha.on(${entityCode}, e => e.state === ${JSON.stringify(toState)}, async (e) => {\n${body}});\n`;
         };
 
+        generator.forBlock['ha_on_webhook'] = function (block, gen) {
+            const id = block.getFieldValue('ID');
+            const body = gen.statementToCode(block, 'DO');
+            // async — same reasoning as ha_store_on/ha_mqtt_subscribe above (the DO stack can
+            // contain awaiting blocks, e.g. ha_call_service). Default auth, POST only — the
+            // 3-arg options-object overload (noAuth/allowlist/method) is out of scope, see the
+            // block's own tooltip.
+            return `ha.onWebhook(${JSON.stringify(id)}, async (req, res) => {\n${body}});\n`;
+        };
+
         generator.forBlock['ha_schedule_interval'] = function (block, gen) {
             const n = block.getFieldValue('N');
             const unit = block.getFieldValue('UNIT');
@@ -108,6 +118,24 @@
             const attrName = block.getFieldValue('ATTR_NAME');
             const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
             return [`ha.getAttr(${entityCode}, ${JSON.stringify(attrName)})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_entities_in_area'] = function (block, gen) {
+            const areaId = block.getFieldValue('AREA_ID');
+            return [`ha.getEntitiesInArea(${JSON.stringify(areaId)})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_entities_with_label'] = function (block, gen) {
+            const labelName = block.getFieldValue('LABEL_NAME');
+            return [`ha.getEntitiesWithLabel(${JSON.stringify(labelName)})`, gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_areas'] = function (block, gen) {
+            return ['ha.getAreas()', gen.ORDER_NONE];
+        };
+
+        generator.forBlock['ha_get_labels'] = function (block, gen) {
+            return ['ha.getLabels()', gen.ORDER_NONE];
         };
 
         generator.forBlock['ha_wait'] = function (block) {
@@ -344,6 +372,17 @@
             const retain = block.getFieldValue('RETAIN') === 'TRUE';
             const optsArg = retain ? ', { retain: true }' : '';
             return `ha.mqtt.publish(${JSON.stringify(topic)}, ${payload}${optsArg});\n`;
+        };
+
+        // Only meaningful nested inside ha_on_webhook's DO stack, where the generated callback's
+        // own `req` parameter (see above) is in scope — mirrors ha_mqtt_payload's own reasoning.
+        generator.forBlock['ha_webhook_data'] = function (block, gen) {
+            return ['req.body', gen.ORDER_MEMBER];
+        };
+
+        generator.forBlock['ha_webhook_respond'] = function (block, gen) {
+            const value = gen.valueToCode(block, 'VALUE', gen.ORDER_NONE) || '{}';
+            return `res.json(${value});\n`;
         };
     }
 

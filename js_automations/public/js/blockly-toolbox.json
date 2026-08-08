@@ -11,7 +11,8 @@
                 { "kind": "block", "type": "ha_schedule_interval" },
                 { "kind": "block", "type": "ha_schedule_daily" },
                 { "kind": "block", "type": "ha_schedule_cron" },
-                { "kind": "block", "type": "ha_mqtt_subscribe" }
+                { "kind": "block", "type": "ha_mqtt_subscribe" },
+                { "kind": "block", "type": "ha_on_webhook" }
             ]
         },
         {
@@ -23,7 +24,9 @@
                 { "kind": "block", "type": "ha_notify", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Message text" } } } } },
                 { "kind": "block", "type": "ha_ask", "inputs": { "MESSAGE": { "shadow": { "type": "text", "fields": { "TEXT": "Question text" } } } } },
                 { "kind": "block", "type": "ha_mqtt_publish", "inputs": { "PAYLOAD": { "shadow": { "type": "text", "fields": { "TEXT": "value" } } } } },
-                { "kind": "block", "type": "ha_mqtt_payload" }
+                { "kind": "block", "type": "ha_mqtt_payload" },
+                { "kind": "block", "type": "ha_webhook_respond", "inputs": { "VALUE": { "shadow": { "type": "text", "fields": { "TEXT": "ok" } } } } },
+                { "kind": "block", "type": "ha_webhook_data" }
             ]
         },
         {
@@ -34,6 +37,17 @@
                 { "kind": "block", "type": "ha_entity" },
                 { "kind": "block", "type": "ha_get_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "sensor.example" } } } } },
                 { "kind": "block", "type": "ha_get_attribute", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "climate.living_room" } } } } }
+            ]
+        },
+        {
+            "kind": "category",
+            "name": "Areas & Labels",
+            "colour": "180",
+            "contents": [
+                { "kind": "block", "type": "ha_get_entities_in_area" },
+                { "kind": "block", "type": "ha_get_entities_with_label" },
+                { "kind": "block", "type": "ha_get_areas" },
+                { "kind": "block", "type": "ha_get_labels" }
             ]
         },
         {

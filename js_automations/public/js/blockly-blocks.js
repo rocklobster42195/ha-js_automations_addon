@@ -46,6 +46,20 @@
             "helpUrl": ""
         },
         {
+            "type": "ha_on_webhook",
+            "message0": "when webhook %1 is called",
+            "args0": [
+                { "type": "field_input", "name": "ID", "text": "my-webhook" }
+            ],
+            "message1": "do %1",
+            "args1": [
+                { "type": "input_statement", "name": "DO" }
+            ],
+            "colour": 210,
+            "tooltip": "Runs the attached actions whenever an external service sends a request to this webhook's URL (shown in the Webhook Panel once saved). A secret token is generated and verified automatically — no extra setup needed for the common case. Use \"webhook data\" to read what was sent, and \"respond to webhook\" to send a reply (add one, or the request hangs until it times out). Advanced options (no-auth public endpoints, IP allowlists, signature verification, GET instead of POST) aren't available here — use \"Duplicate as JavaScript\" for those.",
+            "helpUrl": ""
+        },
+        {
             "type": "ha_schedule_interval",
             "message0": "every %1 %2",
             "args0": [
@@ -165,6 +179,44 @@
             "output": null,
             "colour": 45,
             "tooltip": "A specific attribute of an entity (e.g. \"temperature\" on a climate entity, \"brightness\" on a light).",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_entities_in_area",
+            "message0": "entities in area %1",
+            "args0": [
+                { "type": "field_area_dropdown", "name": "AREA_ID", "areaId": "living_room" }
+            ],
+            "output": null,
+            "colour": 180,
+            "tooltip": "The entity IDs of everything assigned to this area (e.g. \"everything in the living room\"). Fetched once on startup — restart the script if area assignments change.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_entities_with_label",
+            "message0": "entities with label %1",
+            "args0": [
+                { "type": "field_label_dropdown", "name": "LABEL_NAME", "labelName": "outdoor" }
+            ],
+            "output": null,
+            "colour": 180,
+            "tooltip": "The entity IDs carrying this label. Fetched once on startup — restart the script if label assignments change.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_areas",
+            "message0": "all areas",
+            "output": null,
+            "colour": 180,
+            "tooltip": "The full list of areas registered in Home Assistant, as objects ({ area_id, name, ... }) — mainly useful for debugging (e.g. plug into \"log\") or counting with \"length of\". For working with the entities inside an area, use \"entities in area\" instead.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_get_labels",
+            "message0": "all labels",
+            "output": null,
+            "colour": 180,
+            "tooltip": "The full list of labels registered in Home Assistant, as objects ({ label_id, name, color }) — mainly useful for debugging (e.g. plug into \"log\") or counting with \"length of\". For working with the entities carrying a label, use \"entities with label\" instead.",
             "helpUrl": ""
         },
         {
@@ -370,6 +422,26 @@
             "nextStatement": null,
             "colour": 20,
             "tooltip": "Publishes a message to an MQTT topic. Objects are automatically sent as JSON. Check \"retain\" so new subscribers immediately get the last published value.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_webhook_data",
+            "message0": "webhook data",
+            "output": null,
+            "colour": 210,
+            "tooltip": "The body of the request that triggered this webhook — only valid inside a \"when webhook ... is called\" block. Automatically parsed as JSON when possible.",
+            "helpUrl": ""
+        },
+        {
+            "type": "ha_webhook_respond",
+            "message0": "respond to webhook with %1",
+            "args0": [
+                { "type": "input_value", "name": "VALUE" }
+            ],
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 210,
+            "tooltip": "Sends the reply back to whatever called this webhook — only valid inside a \"when webhook ... is called\" block. Add one at the end of your actions, or the caller waits until the request times out.",
             "helpUrl": ""
         }
     ];

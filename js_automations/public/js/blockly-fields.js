@@ -187,7 +187,40 @@
             }
         }
 
+        class FieldAreaDropdown extends FieldHaCombobox {
+            constructor(value) {
+                super(value, () => {
+                    if (typeof haData === 'undefined' || !haData.areas || haData.areas.length === 0) return null;
+                    // ha.getEntitiesInArea() strictly requires the area_id (a slug like
+                    // "living_room"), not the display name — unlike labels below, there's no
+                    // name-based fallback in the API, so this has to be the id even though it's
+                    // less immediately readable than "Living Room" would be.
+                    return haData.areas.map((a) => [a.area_id, a.area_id]).sort((x, y) => x[1].localeCompare(y[1]));
+                });
+            }
+            static fromJson(options) {
+                return new FieldAreaDropdown(options['areaId']);
+            }
+        }
+
+        class FieldLabelDropdown extends FieldHaCombobox {
+            constructor(value) {
+                super(value, () => {
+                    if (typeof haData === 'undefined' || !haData.labels || haData.labels.length === 0) return null;
+                    // Unlike areas, ha.getEntitiesWithLabel() explicitly accepts the label's name
+                    // as an alternative to its id — using the (friendlier, human-chosen) name here
+                    // is both correct and more beginner-appropriate than an id would be.
+                    return haData.labels.map((l) => [l.name, l.name]).sort((x, y) => x[1].localeCompare(y[1]));
+                });
+            }
+            static fromJson(options) {
+                return new FieldLabelDropdown(options['labelName']);
+            }
+        }
+
         Blockly.fieldRegistry.register('field_entity_dropdown', FieldEntityDropdown);
         Blockly.fieldRegistry.register('field_service_dropdown', FieldServiceDropdown);
+        Blockly.fieldRegistry.register('field_area_dropdown', FieldAreaDropdown);
+        Blockly.fieldRegistry.register('field_label_dropdown', FieldLabelDropdown);
     };
 });

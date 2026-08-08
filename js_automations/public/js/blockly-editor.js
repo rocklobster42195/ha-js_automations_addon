@@ -24,6 +24,9 @@ function isBlocklyReady() {
 const BLOCKLY_MESSAGE_KEYS = {
     ha_trigger_on: { message0: 'blockly_trigger_on_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_trigger_on_tooltip' },
     ha_trigger_on_state: { message0: 'blockly_trigger_on_state_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_trigger_on_state_tooltip' },
+    ha_on_webhook: { message0: 'blockly_on_webhook_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_on_webhook_tooltip' },
+    ha_webhook_data: { message0: 'blockly_webhook_data_msg0', tooltip: 'blockly_webhook_data_tooltip' },
+    ha_webhook_respond: { message0: 'blockly_webhook_respond_msg0', tooltip: 'blockly_webhook_respond_tooltip' },
     ha_schedule_interval: { message0: 'blockly_schedule_interval_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_schedule_interval_tooltip' },
     ha_schedule_daily: { message0: 'blockly_schedule_daily_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_schedule_daily_tooltip' },
     ha_schedule_cron: { message0: 'blockly_schedule_cron_msg0', message1: 'blockly_do_msg', tooltip: 'blockly_schedule_cron_tooltip' },
@@ -33,6 +36,10 @@ const BLOCKLY_MESSAGE_KEYS = {
     ha_entity: { message0: 'blockly_entity_msg0', tooltip: 'blockly_entity_tooltip' },
     ha_get_state: { message0: 'blockly_get_state_msg0', tooltip: 'blockly_get_state_tooltip' },
     ha_get_attribute: { message0: 'blockly_get_attribute_msg0', tooltip: 'blockly_get_attribute_tooltip' },
+    ha_get_entities_in_area: { message0: 'blockly_get_entities_in_area_msg0', tooltip: 'blockly_get_entities_in_area_tooltip' },
+    ha_get_entities_with_label: { message0: 'blockly_get_entities_with_label_msg0', tooltip: 'blockly_get_entities_with_label_tooltip' },
+    ha_get_areas: { message0: 'blockly_get_areas_msg0', tooltip: 'blockly_get_areas_tooltip' },
+    ha_get_labels: { message0: 'blockly_get_labels_msg0', tooltip: 'blockly_get_labels_tooltip' },
     ha_wait: { message0: 'blockly_wait_msg0', tooltip: 'blockly_wait_tooltip' },
     ha_wait_for_state: { message0: 'blockly_wait_for_state_msg0', message1: 'blockly_wait_for_state_msg1', tooltip: 'blockly_wait_for_state_tooltip' },
     ha_notify: { message0: 'blockly_notify_msg0', message1: 'blockly_notify_msg1', message2: 'blockly_notify_msg2', tooltip: 'blockly_notify_tooltip' },
@@ -54,6 +61,7 @@ const BLOCKLY_CATEGORY_KEYS = {
     'Triggers': 'blockly_category_triggers',
     'Actions': 'blockly_category_actions',
     'State': 'blockly_category_state',
+    'Areas & Labels': 'blockly_category_areas',
     'Wait': 'blockly_category_wait',
     'Register/Update': 'blockly_category_register',
     'Store': 'blockly_category_store',
@@ -69,6 +77,7 @@ const BLOCKLY_SHADOW_TEXT_KEYS = {
     'Question text': 'blockly_shadow_question_text',
     'value': 'blockly_shadow_value',
     'message': 'blockly_shadow_message',
+    'ok': 'blockly_shadow_ok',
 };
 
 /** Recursively walks a toolbox JSON node, translating any `text` shadow block's TEXT field

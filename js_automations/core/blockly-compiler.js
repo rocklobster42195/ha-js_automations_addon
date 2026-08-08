@@ -21,6 +21,16 @@ require('../public/js/blockly-mutators')(Blockly);
 // data to populate the menu with — it only needs to read back whatever value was serialized.
 require('../public/js/blockly-fields')(Blockly);
 
+// Block-type -> permission derivation (docs/blockly_concept.md "Permissions" section). Every
+// capability-using construct in a .blocks script is one of our own known block types, so
+// "declared" can always be computed exactly from "used" — unlike free-form JS/TS, there's no way
+// to reach a capability through an untracked code path. HTTP blocks are cut from scope entirely
+// (see the concept doc's "Out of Scope"), so 'network' has no entry here — only add one if an
+// HTTP block is ever actually built.
+const BLOCK_PERMISSION_MAP = {
+    ha_on_webhook: 'webhook',
+};
+
 class BlocklyCompiler extends EventEmitter {
     constructor(scriptsDir, distDir) {
         super();
@@ -55,17 +65,37 @@ class BlocklyCompiler extends EventEmitter {
 
         const workspace = new Blockly.Workspace();
         let code = '';
+        let derivedPermissions = [];
         try {
             // Pass the whole parsed file, not parsed.blocks — workspaces.load() reads its own
             // top-level `blocks` key internally; unrelated keys like `jsa` are ignored.
             Blockly.serialization.workspaces.load(parsed, workspace);
             code = javascriptGenerator.workspaceToCode(workspace);
+            const usedTypes = new Set(workspace.getAllBlocks(false).map((b) => b.type));
+            const permSet = new Set();
+            for (const type of usedTypes) {
+                if (BLOCK_PERMISSION_MAP[type]) permSet.add(BLOCK_PERMISSION_MAP[type]);
+            }
+            derivedPermissions = [...permSet].sort();
         } catch (e) {
             this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: e.message });
             this.emit('log', { level: 'error', message: `[${path.basename(blocksPath)}] Blockly compile failed: ${e.message}` });
             return false;
         } finally {
             workspace.dispose();
+        }
+
+        // Write the derived permissions back into the .blocks source (not just used internally)
+        // so ScriptHeaderParser/CapabilityAnalyzer see it exactly like a hand-written @permission
+        // tag would for .js/.ts. Only writes when it actually changed: this file write itself
+        // re-triggers ScriptWatcher's .blocks change handler, which calls compile() again — an
+        // unconditional write would loop forever (each write triggering another identical write);
+        // guarded like this, the second pass finds nothing left to change and the loop ends there.
+        const currentPermissions = [...(parsed.jsa && parsed.jsa.permission || [])].sort();
+        if (JSON.stringify(currentPermissions) !== JSON.stringify(derivedPermissions)) {
+            parsed.jsa = parsed.jsa || {};
+            parsed.jsa.permission = derivedPermissions;
+            fs.writeFileSync(blocksPath, JSON.stringify(parsed, null, 2), 'utf8');
         }
 
         const distPath = this._getDistPath(blocksPath);
