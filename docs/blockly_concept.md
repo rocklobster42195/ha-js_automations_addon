@@ -344,6 +344,40 @@ Verified against the installed package: Blockly 11's root entry point (`require(
 
 ---
 
+## Final Scope (decided 2026-08-07)
+
+Guiding principle: Blockly is for **beginners composing straightforward automations**. Anyone who needs something more complex should write JavaScript/TypeScript directly — the "Convert to JavaScript" escape hatch (below) exists specifically so that's never a dead end, just a natural next step. This is why the remaining M3–M5 work below was deliberately narrowed rather than building out the full API surface as blocks.
+
+**In scope, must have:**
+- Wait blocks (`ha.waitFor()`, with/without timeout) — core control flow, needed even in simple automations
+- Area/Label blocks — "everything in the living room" is one of the single most common beginner requests; dropdown-driven, no regex
+- "Show Code" panel — read-only view of the compiled JS; builds trust and is the on-ramp to "Convert to JavaScript"
+- "Convert to JavaScript" — the actual escape hatch this whole scoping decision depends on; without it, "just code it" isn't a real option
+- `BlocklyCompiler` permission-map (`network`/`webhook` → `jsa.permission`) — not a user-facing block, but required infrastructure the moment any network/webhook block ships, or the capability/permission system silently drifts out of sync
+
+**In scope, should have:**
+- Webhook block (`ha.onWebhook()`, default auth only — the extended options were already out of scope, see below)
+- Calendar/Todo blocks
+- A couple of History blocks (`timeSince`, `trend` — not the full six `ha.history` helpers)
+- Block-level error visualization (highlights the block that threw) — valuable, but flagged as the one item here with real technical risk (needs the compiler to emit position metadata); slips first if time runs short
+
+**In scope, nice to have (only this one kept):**
+- Ask block (`ha.ask()` with action buttons)
+
+**Explicitly cut — see "Out of Scope" below for the reasoning on each:** Floor blocks, Bulk ops (`ha.select(pattern)`), Event bus blocks, `ha.onError()`, `ha.localize()`, `ha.restart()` block, `ha.getHeader()` block, HTTP blocks, `ha.action()`.
+
+### Merge sequencing (decided 2026-08-07 — read this before starting a merge)
+
+This branch is a **separate git worktree** (`C:\dev\ha-js_automations_addon-blockly`) from the main working directory (`C:\dev\ha-js_automations_addon`, currently on `feature/lint-prettier-ci-foundation` — the LIT/TS frontend migration). As of 2026-08-07, `feature/blockly-integration` is **62 commits behind `main`** (only 10 of its own ahead of the merge-base `631d75d`) and the drift is real, not cosmetic: `main` has since gone through the entire LIT migration, and `script-list.js` — a file this branch still modifies — **no longer exists on `main`** (replaced by `<app-sidebar>`/`<script-row>`/`<script-group>`). The longer this branch sits before merging, the worse that gets.
+
+Agreed order:
+1. Finish the scoped Blockly work above, here, on `feature/blockly-integration`.
+2. Merge `main` into `feature/blockly-integration` — don't defer this further once the scoped work above is done.
+3. Merge `feature/blockly-integration` into `main`.
+4. Only then start LIT "Phase B" (`<script-modal>` from `creation-wizard.js`, `<editor-view>`/`<monaco-editor>` from `tab-manager.js`) on the other branch — those are the same two files this branch's own diff touches significantly; doing Phase B before this merge would mean reworking them twice.
+
+---
+
 ## Milestones
 
 ### M1 — Foundation
@@ -465,40 +499,40 @@ Still open (implementation questions, not blocked on the above):
 
 Deliverable: Scripts with `waitFor`, persistent counters, and MQTT triggers are buildable.
 
-- [ ] Wait blocks: `ha.waitFor()` with and without timeout
-- [ ] Ask block: `ha.ask()` with action buttons
+- [ ] Wait blocks: `ha.waitFor()` with and without timeout (**in scope, must have**)
+- [ ] Ask block: `ha.ask()` with action buttons (**in scope, the one nice-to-have we kept**)
 - [x] Store blocks (2026-07-10): `ha_store_get` (value block, `ha.store.get(key)`), `ha_store_set` (`ha.store.set(key, value[, true])` — SECRET checkbox maps to the `isSecret` param), `ha_store_delete` (`ha.store.delete(key)`), `ha_store_on` (hat/trigger block, `ha.store.on(key, (newValue, oldValue) => {...})`, registered in `tab-manager.js`'s `BLOCKLY_TRIGGER_TYPES` — it's a legitimate top-level trigger, same as `ha.on()`). New "Store" toolbox category, hue 260 as already planned above. `ha.persistent()` deliberately **not** built — its ref-wrapper return shape (`{ value }` for primitives, direct proxy object for `GlobalStoreSchema` keys) doesn't map onto an atomic block/generator pair the way `ha.store.*` does; would need its own variable-binding mechanic, deferred. KEY is a plain `field_input` (not a value socket) on all four — store keys are typically fixed strings chosen by the author, consistent with e.g. `ha_get_attribute`'s `ATTR_NAME`. Verified in Node against the real compile pipeline (all four, including a save/load round-trip on `ha_store_set`'s SECRET checkbox); not yet verified live in the browser.
 - [x] MQTT blocks (2026-07-10): `ha_mqtt_subscribe` (hat/trigger block, Triggers category — `ha.mqtt.subscribe(topic, async (topic, payload) => {...})`, registered as a trigger type), `ha_mqtt_publish` (Actions category — `ha.mqtt.publish(topic, payload[, { retain: true }])`), plus `ha_mqtt_payload` (Actions category, value block emitting the bare `payload` identifier — only meaningful nested inside `ha_mqtt_subscribe`'s DO stack, mirrors `ha_trigger_on`'s callback parameter `e`, which has no matching value block either; without it "when MQTT message" would have no way to read the incoming payload at all). Verified in Node against the real compile pipeline; not yet verified live in the browser.
 - **`ha_store_on`/`ha_mqtt_subscribe` callbacks weren't `async` (found + fixed 2026-07-10)**: caught while building a test script (`scripts/blockly.blocks`, see below) that plugged an `ha_notify` block into both DO stacks — `ha_notify`'s generator always emits `await ha.notify(...)`, but both new trigger generators wrapped their DO body in a plain (non-`async`) arrow function, which makes `await` a JavaScript **syntax error** at runtime. `javascriptGenerator.workspaceToCode()` doesn't parse or execute the string it produces, so this passed silent through every earlier "compiles without throwing" check — only caught because the compiled output was additionally run through a real `node --check` syntax check this time, not just Node's Blockly deserializer. `ha_trigger_on`/`ha_trigger_on_state` already had this right (`async (e) => {...}`); `ha_store_on`/`ha_mqtt_subscribe` now match. Worth remembering for any future trigger-shaped block: the callback wrapper must be `async` if the DO stack can contain any awaiting block.
 - **Test script added: `scripts/blockly.blocks` (2026-07-10)** — built programmatically in Node (via the real `Blockly`/`javascriptGenerator` API, not hand-typed JSON: a `chain()` helper links DO-stack blocks by array order instead of hand-nested `next` keys, which is what caught the async-callback bug above rather than silently truncating a stack the way a first, hand-nested attempt at this same file did — a `next` object nested one level too shallow is dropped by Blockly's loader without any error). Two independent triggers, both **manual/inert by design** (no schedule, no real `ha_call_service`) so the file is safe to leave enabled: `ha_store_on('blockly_test_run')` exercises `variables_set`/`variables_get`, `controls_repeat_ext`, `math_arithmetic`, `lists_create_with`/`lists_length`, `ha_store_set`, `ha_mqtt_publish`, and `ha_notify`; `ha_mqtt_subscribe('jsa/blockly_test')` exercises `ha_mqtt_payload` and a second `ha_store_set`. Verified end to end through the real `BlocklyCompiler` class and a `node --check` syntax check of the resulting dist file, then **user-verified live (2026-07-10)**: the `ha_store_on` trigger fired exactly once (Store Explorer → set `blockly_test_run`) and produced the exact expected log sequence (`counter = 1/2/3`, `colors length = 3`) plus a correctly-typed numeric `blockly_test_result` (`3`, not `"3"`) in the Store Explorer — confirms the variable-name persistence fix, Loops, Lists, and Store blocks all work correctly together in a real run, not just in Node. The `ha_mqtt_subscribe` trigger fired **three times** for one publish (Store trigger fired once for comparison) — consistent with orphaned MQTT subscriptions surviving repeated nodemon restarts during this session's live edits, not a code bug; re-verify after a clean server restart before trusting it.
-- [ ] Bulk ops block: `ha.select(pattern)`
-- [ ] Event bus blocks: `ha.onEvent()`, `ha.fireEvent()`
+- ~~Bulk ops block: `ha.select(pattern)`~~ — **out of scope** (2026-08-07): a regex pattern typed into a block field isn't a beginner win over just writing `ha.select()` in code; if you can write the pattern, you can write the call.
+- ~~Event bus blocks: `ha.onEvent()`, `ha.fireEvent()`~~ — **out of scope** (2026-08-07): decoupled cross-script event-bus communication requires architectural thinking beyond "compose one automation," not a beginner concept.
 
 ### M4 — Extended API Blocks
-**Goal**: Full API surface coverage for power users.
+**Goal**: ~~Full API surface coverage for power users.~~ **Revised 2026-08-07: only the beginner-relevant subset — see "Final Scope" above.** Power users needing the rest use "Convert to JavaScript."
 
-Deliverable: Every `ha.*` API method has a corresponding block.
+Deliverable: Every `ha.*` API method has a corresponding block. — superseded, see above.
 
-- [ ] Area/Label/Floor blocks
-- [ ] HTTP blocks: `ha.http.get/post`
-- [ ] Webhook block: `ha.onWebhook()` (basic, default auth — see Out of Scope)
+- [ ] Area/Label blocks (**in scope**) — ~~/Floor~~ **Floor out of scope** (2026-08-07): a newer, less-used HA organizational concept than areas; lower priority for a beginner-focused set.
+- ~~HTTP blocks: `ha.http.get/post`~~ — **out of scope** (2026-08-07): arbitrary auth headers/JSON payloads/error handling make this either too limited to be useful as a block or too complex to still be "a block." The textbook "just code it" case.
+- [ ] Webhook block: `ha.onWebhook()` (basic, default auth — see Out of Scope) — **in scope**
 - [x] ~~Register/Update blocks (MQTT Discovery)~~ — done, pulled forward into M2 (`ha_register`/`ha_update`)
-- [ ] Calendar/Todo blocks
-- [ ] History/Statistics/Template blocks
-- [ ] Lifecycle blocks: `ha.onStop()`, `ha.onError()`, `ha.action()`, `ha.restart()`
-- [ ] `ha.getHeader()` block
-- [ ] `ha.localize()` block
-- [ ] `BlocklyCompiler`: block-type → permission map (`network`, `webhook`) — write derived permissions into `jsa.permission` on compile (see Permissions section)
+- [ ] Calendar/Todo blocks (**in scope**)
+- History/Statistics/Template blocks — **narrowed 2026-08-07**: only `timeSince`/`trend` from `ha.history` are in scope (**should have**); the rest of the six history helpers, all of Statistics, and Template blocks are **out of scope** — same reasoning as Bulk ops, and Template's scope was never well-defined enough to commit to.
+- ~~Lifecycle blocks: `ha.onStop()`, `ha.onError()`, `ha.action()`, `ha.restart()`~~ — **all out of scope** (2026-08-07): cleanup/error-handling/custom-action hooks are resilience features for already-somewhat-advanced authors managing external state, not core beginner automation-building. `ha.restart()` specifically is also just redundant with the existing UI restart button.
+- ~~`ha.getHeader()` block~~ — **out of scope** (2026-08-07): introspective (script reads its own metadata), narrow audience.
+- ~~`ha.localize()` block~~ — **out of scope** (2026-08-07): only relevant if you're building multi-language user-facing text yourself — narrow audience, and that audience can code.
+- [ ] `BlocklyCompiler`: block-type → permission map (`network`, `webhook`) — write derived permissions into `jsa.permission` on compile (see Permissions section) — **in scope, must have** (required the moment any network/webhook block ships)
 
 ### M5 — UX Polish
 **Goal**: Production-quality editing experience.
 
 Deliverable: The Blockly editor feels native to the addon.
 
-- [ ] "Show Code" panel — read-only Monaco synced to compiled JS output
+- [ ] "Show Code" panel — read-only Monaco synced to compiled JS output (**in scope, must have**)
 - [x] / [ ] Editor toolbar Blockly-aware branch — **partially done (2026-07-10)**: `tab-manager.js`'s `switchToTab()` now empties `#toolbar-snippets` and hides the word-wrap button for `.blocks` tabs (both were showing Monaco-only controls that make no sense on a block canvas), user-verified live. Still open: the Show Code toggle button that's meant to occupy that now-empty slot doesn't exist yet — depends on the "Show Code" panel itself (separate bullet below).
-- [ ] "Convert to JavaScript" — warning dialog + one-way conversion, `.blocks` file deleted
-- [ ] Block-level error visualization — highlight the block that caused a runtime error (requires error position metadata from compiler)
+- [ ] "Convert to JavaScript" — warning dialog + one-way conversion, `.blocks` file deleted (**in scope, must have — this is the escape hatch the whole scoping decision depends on**)
+- [ ] Block-level error visualization — highlight the block that caused a runtime error (requires error position metadata from compiler) (**in scope, should have — most technically risky item in the should-have tier, first to slip if time is short**)
 - [x] Blockly dark theme (`Blockly.Theme.defineTheme('ha_dark', ...)` in `blockly-editor.js`) — pulled forward into M2 because the default light theme was unusable next to the rest of the (dark-only, no light mode anywhere) UI. Still open for M5: fonts/shadows polish, and the toolbox category colors (currently placeholder hues, not yet the ioBroker scheme)
 - [ ] i18n: all remaining keys (`blockly_show_code`, `blockly_convert_warning`, `blockly_category_*`, error messages)
 
@@ -617,3 +651,15 @@ blockly_no_trigger_warning
 - Filesystem (`ha.fs.*`) blocks — rarely needed in visual automations
 - Advanced `ha.onWebhook()` options (`noAuth`, `allowlist`, method override, HMAC signature verification) — the M4 block covers the default-auth POST case only; scripts needing the rest use "Edit as JavaScript"
 - `@card` companion Lovelace cards for `.blocks` scripts — requires hand-written JS unrelated to block logic; use "Convert to JavaScript" instead
+
+**Cut in the 2026-08-07 final-scope pass** (guiding principle: Blockly targets beginners composing straightforward automations; anyone needing more writes JS via "Convert to JavaScript" — see "Final Scope" above):
+
+- Floor blocks — newer, less-used HA organizational concept than areas; Area/Label blocks alone cover the common case
+- Bulk ops block (`ha.select(pattern)`) — a regex pattern typed into a block field isn't a beginner win over writing `ha.select()` in code
+- Event bus blocks (`ha.onEvent()`, `ha.fireEvent()`) — decoupled cross-script communication requires architectural thinking beyond "compose one automation"
+- HTTP blocks (`ha.http.get/post`) — arbitrary auth headers/JSON payloads/error handling make this either too limited to be useful as a block or too complex to still be "a block"
+- Lifecycle blocks: `ha.onStop()`, `ha.onError()`, `ha.action()` — cleanup/error-handling/custom-action hooks are resilience features for already-somewhat-advanced authors managing external state, not core beginner automation-building
+- `ha.restart()` block — redundant with the existing UI restart button; not something you need inside automation logic itself
+- `ha.getHeader()` block — introspective (script reads its own metadata), narrow audience
+- `ha.localize()` block — only relevant if you're building multi-language user-facing text yourself
+- Four of the six `ha.history` helper blocks (`derivative`, `integral`, `stats`, `timeInState`) — only `timeSince`/`trend` made the should-have cut; Statistics and Template blocks (from the original "History/Statistics/Template" grouping) cut entirely, Template's scope was never well-defined enough to commit to
