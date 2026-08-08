@@ -280,5 +280,81 @@
         // No opt_blockList (4th arg) — there's no flyout item block type to restrict, unlike
         // ha_extra_data_mutator's draggable field list.
         Blockly.Extensions.registerMutator('ha_register_options_mutator', REGISTER_OPTIONS_MIXIN, null, []);
+
+        // --- ha_wait_timeout_mutator / ha_wait_timeout_toggle --------------------------------
+        // ha_wait_for_state's USE_TIMEOUT checkbox drives two things at once: (1) TIMEOUT_MS
+        // field visibility (plain UI state, no serialization needed — same technique as the
+        // simple toggle this replaced) and (2) two whole statement inputs, SUCCESS/TIMEOUT_BRANCH
+        // ("on success" / "on timeout" branches, generated as a try/catch — see
+        // blockly-blocks-shared.js), which — being real inputs a user can plug blocks into — do
+        // need saveExtraState/loadExtraState so a reload recreates them before the deserializer
+        // tries to attach whatever's connected inside.
+        //
+        // No gear icon: the checkbox lives on the main block already, so there's no decompose/
+        // compose popup — verified in Node that Extensions.registerMutator() tolerates their
+        // absence (no gear icon appears; every other mutator in this file has a popup, so this
+        // combination had no precedent here before).
+        //
+        // Why two separate registrations (registerMutator + register) instead of one: Blockly
+        // refuses to let saveExtraState/loadExtraState be introduced by a plain, non-mutator
+        // extension — verified in Node, throws "Error when applying extension ...: mutation
+        // properties changed when applying a non-mutator extension" even via
+        // Extensions.registerMixin(). Only the dedicated "mutator" JSON key + registerMutator()
+        // is allowed to add them; the second, ordinary extension (which only wires the checkbox's
+        // validator and touches the field, not the mutator properties) is layered on top via the
+        // block's "extensions" array and is fine.
+        //
+        // Also verified in Node: Input.setVisible() — the obvious alternative to adding/removing
+        // SUCCESS/TIMEOUT_BRANCH — throws "c.stopTrackingAll is not a function" on a plain
+        // (non-rendered) Connection; that tracking machinery only exists on a real browser
+        // RenderedConnection, unlike Field.setVisible() (used for TIMEOUT_MS), which works
+        // headless. That's the actual reason this uses add/remove instead of show/hide for the
+        // branches, not just consistency with the other mutators above.
+        const WAIT_TIMEOUT_MIXIN = {
+            saveExtraState: function () {
+                return { useTimeout: !!this.getInput('SUCCESS') };
+            },
+            loadExtraState: function (state) {
+                this.updateShape_(!!(state && state.useTimeout));
+            },
+            updateShape_: function (useTimeout) {
+                // Dynamically-added mutator labels aren't covered by localizeBlockDefinitions()
+                // (that only rewrites the static message0/1/2/3 properties before the block type
+                // is defined) — translated here directly instead, same i18next.t(key, {
+                // defaultValue }) pattern, guarded for Node (no i18next global there; Node only
+                // ever reads back already-serialized values, never renders these labels).
+                const t = (key, defaultValue) => (typeof i18next !== 'undefined' ? i18next.t(key, { defaultValue }) : defaultValue);
+                const has = !!this.getInput('SUCCESS');
+                if (useTimeout && !has) {
+                    this.appendStatementInput('SUCCESS').appendField(t('blockly_wait_on_success', 'on success'));
+                    this.appendStatementInput('TIMEOUT_BRANCH').appendField(t('blockly_wait_on_timeout', 'on timeout'));
+                } else if (!useTimeout && has) {
+                    this.removeInput('SUCCESS');
+                    this.removeInput('TIMEOUT_BRANCH');
+                }
+            },
+        };
+        Blockly.Extensions.registerMutator('ha_wait_timeout_mutator', WAIT_TIMEOUT_MIXIN, null, []);
+
+        // Verified in Node (full round-trip: fresh block starts with TIMEOUT_MS hidden and no
+        // branches; checking the box shows the field and adds both branches; a block saved with
+        // USE_TIMEOUT checked, TIMEOUT_MS=5000, and content in both branches restores all of it —
+        // including the branch contents — correctly after a save/load round-trip; a fresh
+        // unchecked block round-trips with no branches too).
+        Blockly.Extensions.register('ha_wait_timeout_toggle', function () {
+            const checkbox = this.getField('USE_TIMEOUT');
+            const timeoutField = this.getField('TIMEOUT_MS');
+            const block = this;
+            const sync = (checked) => {
+                timeoutField.setVisible(checked);
+                block.updateShape_(checked);
+                if (block.rendered) block.render();
+            };
+            sync(checkbox.getValue() === 'TRUE');
+            checkbox.setValidator((newValue) => {
+                sync(newValue === 'TRUE');
+                return newValue;
+            });
+        });
     };
 });

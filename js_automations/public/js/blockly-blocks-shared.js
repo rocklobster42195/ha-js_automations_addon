@@ -115,6 +115,29 @@
             return `await sleep(${seconds * 1000});\n`;
         };
 
+        generator.forBlock['ha_wait_for_state'] = function (block, gen) {
+            const entityCode = gen.valueToCode(block, 'ENTITY', gen.ORDER_NONE) || '""';
+            const toState = block.getFieldValue('TO_STATE');
+            // 'eq' is ha.waitFor()'s ChangeFilter for exact-match — matches ha_trigger_on_state's
+            // own "when X changes to Y" semantics, so the two Wait/Trigger blocks read consistently.
+            const waitCall = (opts) => `ha.waitFor(${entityCode}, 'eq', ${JSON.stringify(toState)}${opts})`;
+
+            const useTimeout = block.getFieldValue('USE_TIMEOUT') === 'TRUE';
+            if (!useTimeout) {
+                return `await ${waitCall('')};\n`;
+            }
+
+            // With a timeout, SUCCESS/TIMEOUT_BRANCH (added by ha_wait_timeout_mutator in
+            // blockly-mutators.js) become a real try/catch — the exact pattern already used by
+            // hand-written TS/JS in this project (examples/sequential_logic.js), not a new
+            // convention invented for Blockly. A bare `catch {` (no binding) matches that example;
+            // there's no ha_wait_timeout_error value block to expose the caught error to blocks.
+            const timeoutMs = block.getFieldValue('TIMEOUT_MS');
+            const successBody = gen.statementToCode(block, 'SUCCESS');
+            const timeoutBody = gen.statementToCode(block, 'TIMEOUT_BRANCH');
+            return `try {\n  await ${waitCall(`, { timeout: ${timeoutMs} }`)};\n${successBody}} catch {\n${timeoutBody}}\n`;
+        };
+
         generator.forBlock['ha_notify'] = function (block, gen) {
             const message = gen.valueToCode(block, 'MESSAGE', gen.ORDER_NONE) || '""';
             // TITLE/TARGET are optional value sockets, left unplugged by default (no shadow) —

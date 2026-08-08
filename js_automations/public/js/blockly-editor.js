@@ -34,6 +34,7 @@ const BLOCKLY_MESSAGE_KEYS = {
     ha_get_state: { message0: 'blockly_get_state_msg0', tooltip: 'blockly_get_state_tooltip' },
     ha_get_attribute: { message0: 'blockly_get_attribute_msg0', tooltip: 'blockly_get_attribute_tooltip' },
     ha_wait: { message0: 'blockly_wait_msg0', tooltip: 'blockly_wait_tooltip' },
+    ha_wait_for_state: { message0: 'blockly_wait_for_state_msg0', message1: 'blockly_wait_for_state_msg1', tooltip: 'blockly_wait_for_state_tooltip' },
     ha_notify: { message0: 'blockly_notify_msg0', message1: 'blockly_notify_msg1', message2: 'blockly_notify_msg2', message3: 'blockly_notify_msg3', tooltip: 'blockly_notify_tooltip' },
     ha_register: { message0: 'blockly_register_msg0', tooltip: 'blockly_register_tooltip' },
     ha_update: { message0: 'blockly_update_msg0', tooltip: 'blockly_update_tooltip' },

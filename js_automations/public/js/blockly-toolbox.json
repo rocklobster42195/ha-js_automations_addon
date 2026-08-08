@@ -40,7 +40,8 @@
             "name": "Wait",
             "colour": "300",
             "contents": [
-                { "kind": "block", "type": "ha_wait" }
+                { "kind": "block", "type": "ha_wait" },
+                { "kind": "block", "type": "ha_wait_for_state", "inputs": { "ENTITY": { "shadow": { "type": "ha_entity", "fields": { "ENTITY_ID": "cover.example" } } } } }
             ]
         },
         {

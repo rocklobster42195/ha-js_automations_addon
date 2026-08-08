@@ -177,6 +177,27 @@
             "helpUrl": ""
         },
         {
+            "type": "ha_wait_for_state",
+            "message0": "wait for %1 to become %2",
+            "args0": [
+                { "type": "input_value", "name": "ENTITY" },
+                { "type": "field_input", "name": "TO_STATE", "text": "on" }
+            ],
+            "message1": "use timeout %1 (ms) %2",
+            "args1": [
+                { "type": "field_checkbox", "name": "USE_TIMEOUT", "checked": false },
+                { "type": "field_number", "name": "TIMEOUT_MS", "value": 10000, "min": 0 }
+            ],
+            "inputsInline": true,
+            "previousStatement": null,
+            "nextStatement": null,
+            "colour": 300,
+            "mutator": "ha_wait_timeout_mutator",
+            "extensions": ["ha_wait_timeout_toggle"],
+            "tooltip": "Pauses until the entity's state becomes this value. Without a timeout, waits indefinitely and simply continues once reached. With a timeout, two branches appear: \"on success\" runs if the state was reached in time, \"on timeout\" runs if it wasn't — the wait itself never raises a script error in that case.",
+            "helpUrl": ""
+        },
+        {
             "type": "ha_notify",
             "message0": "notify %1",
             "args0": [
