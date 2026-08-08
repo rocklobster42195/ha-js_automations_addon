@@ -1046,13 +1046,17 @@ export class EditorViewElement extends LitElement {
                   <i class="mdi mdi-puzzle-outline"></i>
                 </button>
               `}
-          <button
-            class=${window.CardPreview?.isOpen() ? 'preview-active' : ''}
-            title=${this._t('card_preview_toggle_title', 'Show / Hide Preview')}
-            @click=${() => window._toggleCardPreview?.()}
-          >
-            <i class="mdi mdi-monitor-dashboard"></i>
-          </button>
+          ${!isBlocklyTab && (isCardTab || hasCard)
+            ? html`
+                <button
+                  class=${window.CardPreview?.isOpen() ? 'preview-active' : ''}
+                  title=${this._t('card_preview_toggle_title', 'Show / Hide Preview')}
+                  @click=${() => window._toggleCardPreview?.()}
+                >
+                  <i class="mdi mdi-monitor-dashboard"></i>
+                </button>
+              `
+            : nothing}
         </div>
         <div class="toolbar-right">
           <button title=${this._t('close_all_tabs_title', 'Close all tabs')} @click=${() => this.closeAllTabs()}>
