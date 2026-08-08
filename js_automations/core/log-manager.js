@@ -57,9 +57,12 @@ class LogManager extends EventEmitter {
    * @param {string} level - 'info', 'warn', 'error', 'debug'
    * @param {string} source - 'System' or script name
    * @param {string} message - The log message
+   * @param {object} [meta] - Optional extra fields, currently just { blockId, scriptId } —
+   *   traces a .blocks script's runtime error back to the exact block that threw it (see
+   *   blockly-compiler.js's scrub_() instrumentation and worker-manager.js's log handler).
    * @returns {object} The created log entry
    */
-  add(level, source, message) {
+  add(level, source, message, meta) {
     const lvl = (level || 'info').toLowerCase();
 
     // Apply global system log level filter only to 'System' messages
@@ -75,6 +78,10 @@ class LogManager extends EventEmitter {
       source: source,
       message: message,
     };
+    if (meta && meta.blockId) {
+      entry.blockId = meta.blockId;
+      entry.scriptId = meta.scriptId;
+    }
 
     this.buffer.push(entry);
 

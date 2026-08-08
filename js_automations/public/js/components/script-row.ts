@@ -360,7 +360,7 @@ export class ScriptRow extends LitElement {
    * kept as one source so the two never drift apart. */
   private _detailFields(): { text: string; sectionBreak?: boolean }[] {
     const s = this.script;
-    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : 'JavaScript';
+    const lang = s.filename.endsWith('.ts') ? 'TypeScript' : s.filename.endsWith('.blocks') ? 'Blockly' : 'JavaScript';
     const fields: { text: string; sectionBreak?: boolean }[] = [
       { text: `File: ${s.filename} (${lang})` },
       { text: `State: ${s.running ? 'Running' : 'Stopped'}` },

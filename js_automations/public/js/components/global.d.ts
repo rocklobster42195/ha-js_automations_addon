@@ -171,6 +171,9 @@ export interface JsaLogEntry {
   level?: string;
   source?: string;
   message: string;
+  /** Present only for .blocks scripts — see blockly-compiler.js's scrub_() instrumentation. */
+  blockId?: string;
+  scriptId?: string;
 }
 
 export interface JsaLogViewerBridge {
@@ -200,6 +203,8 @@ declare global {
     hideIntegrationBanner?: () => void;
     initLogs?: () => Promise<void>;
     appendLog?: (entry: any, autoScroll?: boolean) => void;
+    /** blockly-editor.js — highlights the block on the active .blocks canvas that threw. */
+    highlightBlocklyError?: (scriptId: string, blockId: string, message: string) => void;
     currentSettings?: JsaSettings | null;
     getHAStates?: () => Promise<JsaHaState[]>;
     cachedEntities?: JsaHaState[];

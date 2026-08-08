@@ -84,7 +84,7 @@ class CompilerManager extends EventEmitter {
   }
 
   /**
-   * Removes all .js files in the dist folder that don't have a corresponding .ts source file.
+   * Removes all .js files in the dist folder that don't have a corresponding .ts or .blocks source file.
    */
   async pruneDist() {
     const scanAndPrune = (dir) => {
@@ -98,9 +98,10 @@ class CompilerManager extends EventEmitter {
           if (fs.readdirSync(fullPath).length === 0) fs.rmdirSync(fullPath);
         } else if (entry.name.endsWith('.js')) {
           const relativePath = path.relative(this.distDir, fullPath);
-          const sourcePath = path.join(this.scriptsDir, relativePath.replace(/\.js$/, '.ts'));
+          const tsSourcePath = path.join(this.scriptsDir, relativePath.replace(/\.js$/, '.ts'));
+          const blocksSourcePath = path.join(this.scriptsDir, relativePath.replace(/\.js$/, '.blocks'));
 
-          if (!fs.existsSync(sourcePath)) {
+          if (!fs.existsSync(tsSourcePath) && !fs.existsSync(blocksSourcePath)) {
             fs.unlinkSync(fullPath);
             this.emit('log', { level: 'debug', message: `Deleted orphaned compiled file: ${relativePath}` });
           }

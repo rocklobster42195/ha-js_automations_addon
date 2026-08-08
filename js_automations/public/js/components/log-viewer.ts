@@ -7,6 +7,9 @@ interface LogEntry {
   level?: string;
   source?: string;
   message: string;
+  /** Present only for .blocks scripts — see blockly-compiler.js's scrub_() instrumentation. */
+  blockId?: string;
+  scriptId?: string;
 }
 
 /** Caps in-memory retention for getEntriesForSource() (mobile per-script inline
@@ -204,6 +207,13 @@ export class LogViewer extends LitElement {
     this._entries.push(e);
     if (this._entries.length > MAX_RETAINED_ENTRIES)
       this._entries.splice(0, this._entries.length - MAX_RETAINED_ENTRIES);
+
+    // Block-level error visualization (docs/blockly_concept.md M5, should-have) — only if the
+    // .blocks script that threw is the currently active tab; a background script's error
+    // wouldn't have anywhere sensible to highlight anyway (its canvas isn't the one on screen).
+    if (e.blockId && e.scriptId && typeof window.highlightBlocklyError === 'function') {
+      window.highlightBlocklyError(e.scriptId, e.blockId, e.message);
+    }
 
     const consoleEl = this._consoleEl;
     if (!consoleEl) return;

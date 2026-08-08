@@ -457,7 +457,22 @@ export class AppSidebar extends LitElement {
       console.error('Failed to fetch script content for duplication', e);
       return;
     }
-    await window.openCreationWizard?.('duplicate', { ...script, code });
+
+    // .blocks scripts additionally offer a "duplicate as JavaScript" checkbox in the wizard —
+    // fetch the last-compiled dist output too, so checking it doesn't need a second round-trip.
+    // Best-effort: if nothing's been compiled yet (script never saved), the checkbox just won't
+    // be offered rather than blocking the whole duplicate flow.
+    let jsCode: string | null = null;
+    if (filename.endsWith('.blocks')) {
+      try {
+        const res = await window.apiFetch!(`api/scripts/${filename}/content?compiled=1`);
+        if (res.ok) jsCode = (await res.json()).content;
+      } catch (e) {
+        // no compiled output yet — checkbox stays hidden
+      }
+    }
+
+    await window.openCreationWizard?.('duplicate', { ...script, code, jsCode });
   };
 
   private _deleteScript = async (filename: string): Promise<void> => {

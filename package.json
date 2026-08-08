@@ -1,6 +1,6 @@
 {
   "name": "ha-js-automations",
-  "version": "2.57.9-beta.2",
+  "version": "2.57.9",
   "description": "",
   "main": "js_automations/server.js",
   "scripts": {
@@ -29,6 +29,7 @@
   "type": "commonjs",
   "dependencies": {
     "archiver": "^8.0.0",
+    "blockly": "^11.2.2",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "home-assistant-js-websocket": "^9.6.0",

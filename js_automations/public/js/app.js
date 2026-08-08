@@ -127,7 +127,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 function getLanguageByFilename(filename) {
   if (!filename) return 'javascript';
   const ext = filename.split('.').pop().toLowerCase();
-  return ext === 'ts' ? 'typescript' : 'javascript';
+  if (ext === 'ts') return 'typescript';
+  // .blocks scripts open in the dedicated Blockly editor (#blockly-container), not Monaco —
+  // this only matters if Monaco is ever asked to render one directly (e.g. future raw-source
+  // view), where the raw JSON is at least readable in the JSON language mode.
+  if (ext === 'blocks') return 'json';
+  return 'javascript';
 }
 window.getLanguageByFilename = getLanguageByFilename;
 
@@ -162,6 +167,7 @@ window.detectLanguageFromContent = detectLanguageFromContent;
  */
 function getLanguageBadge(filename) {
   if (!filename || filename.startsWith('System: ')) return '';
+  if (filename.endsWith('.blocks')) return `<span class="lang-badge lang-badge-blocks">BLK</span>`;
   const lang = getLanguageByFilename(filename);
   const label = lang === 'typescript' ? 'TS' : 'JS';
   const cssClass = lang === 'typescript' ? 'lang-badge-ts' : 'lang-badge-js';
