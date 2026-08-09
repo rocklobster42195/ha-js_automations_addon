@@ -1,26 +1,30 @@
 'use strict';
 
-const path = require('path');
-const nodeFs = require('fs');
-const fsp = require('fs/promises');
+import * as path from 'path';
+import * as nodeFs from 'fs';
+import * as fsp from 'fs/promises';
 
 // Virtual root → real path mapping.
 // internal:// is resolved at runtime from workerData.fsDataDir.
-const FIXED_ROOTS = {
+const FIXED_ROOTS: Record<string, string> = {
   shared: '/share',
   media: '/media',
 };
+
+interface ResolvedPath {
+  absPath: string;
+  rootDir: string;
+}
 
 /**
  * Resolves a virtual path (e.g. 'internal://logs/app.log') to an absolute
  * filesystem path, enforcing sandbox boundaries.
  *
- * @param {string} virtualPath - e.g. 'internal://foo/bar.json'
- * @param {string} dataDir     - Absolute path for internal:// root
- * @returns {{ absPath: string, rootDir: string }}
- * @throws {Error} on unknown root or path traversal
+ * @param virtualPath - e.g. 'internal://foo/bar.json'
+ * @param dataDir     - Absolute path for internal:// root
+ * @throws on unknown root or path traversal
  */
-function resolvePath(virtualPath, dataDir) {
+function resolvePath(virtualPath: string, dataDir: string): ResolvedPath {
   const match = virtualPath.match(/^(internal|shared|media):\/\/(.*)/s);
   if (!match) {
     throw new Error(`ha.fs: Invalid path "${virtualPath}" — must start with internal://, shared://, or media://`);
@@ -44,25 +48,22 @@ function resolvePath(virtualPath, dataDir) {
 
 /**
  * Parses a human-readable size string ('5MB', '512KB', '2GB') into bytes.
- * @param {string|number} str
- * @returns {number}
  */
-function parseMaxSize(str) {
+function parseMaxSize(str: string | number): number {
   if (typeof str === 'number') return str;
   const m = String(str).match(/^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)?$/i);
   if (!m) return 5 * 1024 * 1024; // default 5 MB
   const n = parseFloat(m[1]);
   const unit = (m[2] || 'B').toUpperCase();
-  const factors = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3 };
+  const factors: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3 };
   return Math.floor(n * (factors[unit] ?? 1));
 }
 
 /**
  * Recursively computes the total size of a directory in bytes.
- * @param {string} dir - Absolute path
- * @returns {Promise<number>}
+ * @param dir - Absolute path
  */
-async function getDirSize(dir) {
+async function getDirSize(dir: string): Promise<number> {
   let total = 0;
   try {
     const entries = await fsp.readdir(dir, { withFileTypes: true });
@@ -84,20 +85,51 @@ async function getDirSize(dir) {
   return total;
 }
 
+interface FsStat {
+  size: number;
+  modified: Date;
+  isDirectory: boolean;
+}
+
+interface RotateOptions {
+  maxSize?: string | number;
+  keep?: number;
+}
+
+interface HaFsQuotas {
+  internal?: number;
+  shared?: number;
+  media?: number;
+}
+
+interface BuildHaFsOptions {
+  dataDir: string;
+  capabilityEnforcement: boolean;
+  permissions: string[];
+  quotas?: HaFsQuotas;
+}
+
+interface HaFs {
+  read(virtualPath: string, encoding?: 'utf8'): Promise<string>;
+  read(virtualPath: string, encoding: 'binary'): Promise<Buffer>;
+  write(virtualPath: string, data: string | Buffer): Promise<void>;
+  append(virtualPath: string, data: string | Buffer): Promise<void>;
+  exists(virtualPath: string): Promise<boolean>;
+  list(virtualPath: string): Promise<string[]>;
+  stat(virtualPath: string): Promise<FsStat>;
+  move(srcVirtual: string, destVirtual: string): Promise<void>;
+  delete(virtualPath: string): Promise<void>;
+  watch(virtualPath: string, callback: (event: string, filename: string | null) => void): () => void;
+  rotate(virtualPath: string, options?: RotateOptions): Promise<void>;
+}
+
 /**
  * Builds the ha.fs API object for use inside a Worker.
- *
- * @param {object} opts
- * @param {string}   opts.dataDir             - Absolute path for internal://
- * @param {boolean}  opts.capabilityEnforcement
- * @param {string[]} opts.permissions          - Declared @permission tokens
- * @param {object}   opts.quotas              - Max bytes per root: { internal, shared, media } (0 = unlimited)
- * @returns {object} ha.fs
  */
-function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} }) {
+function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} }: BuildHaFsOptions): HaFs {
   const perms = new Set(permissions || []);
 
-  function checkRead() {
+  function checkRead(): void {
     if (capabilityEnforcement && !perms.has('fs:read') && !perms.has('fs:write')) {
       throw new Error(
         'PermissionDeniedError: ha.fs read operations require @permission fs:read in your script header.'
@@ -105,7 +137,7 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
     }
   }
 
-  function checkWrite() {
+  function checkWrite(): void {
     if (capabilityEnforcement && !perms.has('fs:write')) {
       throw new Error(
         'PermissionDeniedError: ha.fs write operations require @permission fs:write in your script header.'
@@ -113,10 +145,10 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
     }
   }
 
-  const resolve = (p) => resolvePath(p, dataDir).absPath;
+  const resolve = (p: string): string => resolvePath(p, dataDir).absPath;
 
   /** Maps a resolved rootDir to the configured quota in bytes (0 = unlimited). */
-  function getQuotaBytes(rootDir) {
+  function getQuotaBytes(rootDir: string): number {
     if (rootDir === dataDir) return quotas.internal || 0;
     if (rootDir === FIXED_ROOTS.shared) return quotas.shared || 0;
     if (rootDir === FIXED_ROOTS.media) return quotas.media || 0;
@@ -127,7 +159,7 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
    * Throws if writing `newData` to `virtualPath` would exceed the root quota.
    * For overwrites, the existing file size is subtracted from the current total.
    */
-  async function assertWriteQuota(virtualPath, newData) {
+  async function assertWriteQuota(virtualPath: string, newData: string | Buffer): Promise<void> {
     const { absPath, rootDir } = resolvePath(virtualPath, dataDir);
     const limit = getQuotaBytes(rootDir);
     if (!limit) return;
@@ -145,7 +177,7 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
   }
 
   /** Throws if appending `newData` to `virtualPath` would exceed the root quota. */
-  async function assertAppendQuota(virtualPath, newData) {
+  async function assertAppendQuota(virtualPath: string, newData: string | Buffer): Promise<void> {
     const { rootDir } = resolvePath(virtualPath, dataDir);
     const limit = getQuotaBytes(rootDir);
     if (!limit) return;
@@ -159,10 +191,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
   return {
     /**
      * Reads a file. Returns a string by default; pass 'binary' for a Buffer.
-     * @param {string} virtualPath
-     * @param {string} [encoding='utf8'] — 'utf8' | 'binary'
      */
-    async read(virtualPath, encoding = 'utf8') {
+    async read(virtualPath: string, encoding: 'utf8' | 'binary' = 'utf8'): Promise<any> {
       checkRead();
       const abs = resolve(virtualPath);
       return encoding === 'binary' ? fsp.readFile(abs) : fsp.readFile(abs, 'utf8');
@@ -170,10 +200,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Writes (or overwrites) a file. Creates parent directories if needed.
-     * @param {string} virtualPath
-     * @param {string|Buffer} data
      */
-    async write(virtualPath, data) {
+    async write(virtualPath: string, data: string | Buffer): Promise<void> {
       checkWrite();
       await assertWriteQuota(virtualPath, data);
       const abs = resolve(virtualPath);
@@ -183,10 +211,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Appends data to a file. Creates the file and parent directories if needed.
-     * @param {string} virtualPath
-     * @param {string|Buffer} data
      */
-    async append(virtualPath, data) {
+    async append(virtualPath: string, data: string | Buffer): Promise<void> {
       checkWrite();
       await assertAppendQuota(virtualPath, data);
       const abs = resolve(virtualPath);
@@ -196,9 +222,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Returns true if the path exists (file or directory).
-     * @param {string} virtualPath
      */
-    async exists(virtualPath) {
+    async exists(virtualPath: string): Promise<boolean> {
       checkRead();
       const abs = resolve(virtualPath);
       return nodeFs.existsSync(abs);
@@ -206,10 +231,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Lists entries in a directory. Directories are suffixed with '/'.
-     * @param {string} virtualPath
-     * @returns {Promise<string[]>}
      */
-    async list(virtualPath) {
+    async list(virtualPath: string): Promise<string[]> {
       checkRead();
       const abs = resolve(virtualPath);
       const entries = await fsp.readdir(abs, { withFileTypes: true });
@@ -218,10 +241,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Returns file/directory metadata.
-     * @param {string} virtualPath
-     * @returns {Promise<{ size: number, modified: Date, isDirectory: boolean }>}
      */
-    async stat(virtualPath) {
+    async stat(virtualPath: string): Promise<FsStat> {
       checkRead();
       const abs = resolve(virtualPath);
       const s = await fsp.stat(abs);
@@ -230,10 +251,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Moves or renames a file. Both paths must be within the same or different virtual roots.
-     * @param {string} srcVirtual
-     * @param {string} destVirtual
      */
-    async move(srcVirtual, destVirtual) {
+    async move(srcVirtual: string, destVirtual: string): Promise<void> {
       checkWrite();
       const { absPath: src, rootDir: srcRoot } = resolvePath(srcVirtual, dataDir);
       const { absPath: dest, rootDir: destRoot } = resolvePath(destVirtual, dataDir);
@@ -246,9 +265,8 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Deletes a file or directory (recursively).
-     * @param {string} virtualPath
      */
-    async delete(virtualPath) {
+    async delete(virtualPath: string): Promise<void> {
       checkWrite();
       const abs = resolve(virtualPath);
       const s = await fsp.stat(abs);
@@ -261,11 +279,9 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
 
     /**
      * Watches a file or directory for changes.
-     * @param {string} virtualPath
-     * @param {(event: string, filename: string|null) => void} callback
-     * @returns {() => void} Unsubscribe function — call it to stop watching.
+     * @returns Unsubscribe function — call it to stop watching.
      */
-    watch(virtualPath, callback) {
+    watch(virtualPath: string, callback: (event: string, filename: string | null) => void): () => void {
       checkRead();
       const abs = resolve(virtualPath);
       const watcher = nodeFs.watch(abs, { recursive: false }, (event, filename) => {
@@ -281,13 +297,11 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
     /**
      * Log rotation helper. Trims the file when it exceeds maxSize,
      * keeping up to `keep` numbered backup files.
-     * @param {string} virtualPath
-     * @param {{ maxSize?: string|number, keep?: number }} [options]
      * @example
      * await ha.fs.rotate('internal://app.log', { maxSize: '5MB', keep: 3 });
      * // Produces: app.log, app.1.log, app.2.log, app.3.log (oldest deleted)
      */
-    async rotate(virtualPath, options = {}) {
+    async rotate(virtualPath: string, options: RotateOptions = {}): Promise<void> {
       checkWrite();
       const { maxSize = '5MB', keep = 3 } = options;
       const maxBytes = parseMaxSize(maxSize);
@@ -326,4 +340,4 @@ function buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas = {} })
   };
 }
 
-module.exports = { resolvePath, buildHaFs };
+export = { resolvePath, buildHaFs };
