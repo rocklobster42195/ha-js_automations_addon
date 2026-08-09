@@ -2,14 +2,92 @@
  * JS AUTOMATIONS - Worker Manager (v2.16.x)
  * Handles lifecycle, message routing, and event subscriptions.
  */
-const { Worker } = require('worker_threads');
-const path = require('path');
-const os = require('os');
-const EventEmitter = require('events');
-const fs = require('fs');
-const ScriptHeaderParser = require('./script-header-parser');
+import { Worker } from 'worker_threads';
+import * as path from 'path';
+import * as os from 'os';
+import { EventEmitter } from 'events';
+import * as fs from 'fs';
+import ScriptHeaderParser from './script-header-parser';
+import type HAConnector from './ha-connection';
+import type MqttManager from './mqtt-manager';
+import type WebhookManager from './webhook-manager';
+import type StoreManager from './store-manager';
+import type CardManager from './card-manager';
+
+interface WorkerManagerSettings {
+  restart_protection_count: number;
+  restart_protection_time: number;
+  node_memory: number;
+  ui_language: string;
+  default_throttle: number;
+  capability_enforcement?: boolean;
+  filesystem_enabled?: boolean;
+  quota_internal?: number;
+  quota_shared?: number;
+  quota_media?: number;
+}
+
+interface EntityConflict {
+  expected: string;
+  actual: string;
+}
+
+interface ScriptStats {
+  ram_usage: number;
+  rss: number;
+}
+
+interface ActiveBreakpoint {
+  flag: Int32Array;
+  label: string;
+  vars: unknown;
+}
+
+interface PendingActionCall {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  worker: Worker;
+}
 
 class WorkerManager extends EventEmitter {
+  workers: Map<string, Worker>;
+  stopReasons: Map<string, string>;
+  lastExitState: Map<string, string>;
+  stats: Map<string, ScriptStats>;
+  restartTracker: Map<string, number[]>;
+  startTimes: Map<string, number>;
+  private _activeBreakpoints: Map<string, ActiveBreakpoint>;
+  dirtyStore: Map<string, Map<string, number>>;
+  haConnector: HAConnector | null;
+  mqttManager: MqttManager | null;
+  webhookManager: WebhookManager | null;
+  storeManager: StoreManager | null;
+  settings: WorkerManagerSettings;
+  subscriptions: Map<string, unknown[]>;
+  storageDir: string;
+  scriptsDir: string;
+  distDir: string;
+  systemLanguage: string;
+  nativeEntities: Map<string, any>;
+  activeRunEntities: Map<string, Set<string>>;
+  protectedEntities: Map<string, Set<string>>;
+  scriptEntityMap: Map<string, Set<string>>;
+  entityIdAliases: Map<string, string>;
+  entityConflicts: Map<string, EntityConflict[]>;
+  registryPath: string;
+  saveRegistryTimer: ReturnType<typeof setTimeout> | null;
+  pendingAsks: Map<string, Worker>;
+  pendingActionCalls: Map<string, PendingActionCall>;
+  private _actionCallCounter: number;
+  private _notificationListenerActive: boolean;
+  cardManager: CardManager | null;
+  cachedAreas: unknown[];
+  cachedEntityRegistry: unknown[];
+  cachedDeviceRegistry: unknown[];
+  cachedLabels: unknown[];
+  cachedFloors: unknown[];
+  eventTypeSubscriptions: Map<string, Set<string>>;
+
   constructor() {
     super();
     this.workers = new Map();
@@ -65,9 +143,8 @@ class WorkerManager extends EventEmitter {
   /**
    * Subscribes to HA mobile_app_notification_action events (lazy, once).
    * Called automatically on the first ha.ask() from any worker.
-   * @private
    */
-  _ensureNotificationListener() {
+  private _ensureNotificationListener(): void {
     if (this._notificationListenerActive || !this.haConnector) return;
     this._notificationListenerActive = true;
 
@@ -91,13 +168,13 @@ class WorkerManager extends EventEmitter {
   /**
    * Loads the persistent registry of dynamic entities from storage.
    */
-  loadRegistry() {
+  loadRegistry(): void {
     this.registryPath = path.join(this.storageDir, 'entity_registry.json');
     this.emit('log', { source: 'System', message: 'Loading entity registry...', level: 'debug' });
     if (fs.existsSync(this.registryPath)) {
       try {
         const data = JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
-        for (const [file, entitiesObj] of Object.entries(data)) {
+        for (const [file, entitiesObj] of Object.entries(data) as [string, Record<string, any>][]) {
           const entityIds = Object.keys(entitiesObj);
           this.scriptEntityMap.set(file, new Set(entityIds));
 
@@ -109,7 +186,7 @@ class WorkerManager extends EventEmitter {
       } catch (e) {
         this.emit('log', {
           source: 'System',
-          message: `Failed to load entity_registry.json: ${e.message}`,
+          message: `Failed to load entity_registry.json: ${(e as Error).message}`,
           level: 'error',
         });
       }
@@ -118,12 +195,11 @@ class WorkerManager extends EventEmitter {
 
   /**
    * Performs the physical save operation of the registry.
-   * @private
    */
-  _performSaveRegistry() {
+  private _performSaveRegistry(): void {
     if (!this.registryPath) return;
     try {
-      const data = {};
+      const data: Record<string, Record<string, unknown>> = {};
       for (const [file, entityIds] of this.scriptEntityMap.entries()) {
         data[file] = {};
         for (const id of entityIds) {
@@ -142,7 +218,7 @@ class WorkerManager extends EventEmitter {
   /**
    * Persists the current entity registry to a JSON file.
    */
-  saveRegistry() {
+  saveRegistry(): void {
     if (!this.registryPath) return;
 
     // Debounce: Cancel existing timer and restart to protect disk
@@ -154,7 +230,7 @@ class WorkerManager extends EventEmitter {
     }, 1000); // Wait 1 second before saving
   }
 
-  setConnector(connector) {
+  setConnector(connector: HAConnector | null): void {
     this.haConnector = connector;
     if (connector) {
       // Automatically sync services once connected
@@ -164,7 +240,7 @@ class WorkerManager extends EventEmitter {
     }
   }
 
-  async _syncAreaAndEntityRegistry() {
+  private async _syncAreaAndEntityRegistry(): Promise<void> {
     if (!this.haConnector || !this.haConnector.isReady) return;
     try {
       const [areas, entityRegistry, deviceRegistry, labels, floors] = await Promise.all([
@@ -185,11 +261,11 @@ class WorkerManager extends EventEmitter {
         message: `Registry sync: ${this.cachedAreas.length} areas, ${this.cachedLabels.length} labels, ${this.cachedFloors.length} floors`,
       });
     } catch (e) {
-      this.emit('log', { source: 'System', level: 'warn', message: `Registry sync failed: ${e.message}` });
+      this.emit('log', { source: 'System', level: 'warn', message: `Registry sync failed: ${(e as Error).message}` });
     }
   }
 
-  setMqttManager(manager) {
+  setMqttManager(manager: MqttManager): void {
     this.mqttManager = manager;
   }
 
@@ -198,7 +274,7 @@ class WorkerManager extends EventEmitter {
    * Called when the script *file* is deleted — must work regardless of whether
    * the script currently has a running worker (stopScript() is a no-op if not).
    */
-  purgeWebhooksForScript(filename) {
+  purgeWebhooksForScript(filename: string): void {
     if (this.webhookManager) this.webhookManager.purgeAllForScript(filename);
   }
 
@@ -207,9 +283,9 @@ class WorkerManager extends EventEmitter {
    * owning script's worker. The manager itself holds the Express server, registry,
    * token persistence, and the pending-request/`res` map; this only bridges IPC.
    */
-  setWebhookManager(manager) {
+  setWebhookManager(manager: WebhookManager): void {
     this.webhookManager = manager;
-    manager.on('request', ({ scriptFilename, id, correlationId, req }) => {
+    manager.on('request', ({ scriptFilename, id, correlationId, req }: any) => {
       const worker = this.workers.get(scriptFilename);
       if (!worker) {
         manager.rejectRequest(correlationId, 'Script not running');
@@ -222,20 +298,20 @@ class WorkerManager extends EventEmitter {
   /**
    * Fetches all available services from HA and generates a services.d.ts for IntelliSense.
    */
-  async syncServiceDefinitions() {
+  async syncServiceDefinitions(): Promise<void> {
     if (!this.haConnector || !this.haConnector.isReady) return;
 
     try {
       this.emit('log', { source: 'System', message: 'Syncing HA services...', level: 'debug' });
-      const services = (await this.haConnector.getServices()) || {};
+      const services: Record<string, any> = (await this.haConnector.getServices()) || {};
 
       // Escapes a value for safe interpolation into a double-quoted TS string literal
       // or a `//` line comment — HA service/field descriptions and names are free-text
       // from integrations and can otherwise break the generated file's syntax (e.g. a
       // stray `"` or newline), which would break Monaco's whole type-checking program
       // via ha-api.d.ts's reference to this file.
-      const escStr = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      const escComment = (s) =>
+      const escStr = (s: unknown): string => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const escComment = (s: unknown): string =>
         String(s)
           .replace(/\*\//g, '* /')
           .replace(/[\r\n]+/g, ' ');
@@ -244,12 +320,12 @@ class WorkerManager extends EventEmitter {
 
       for (const [domain, domainServices] of Object.entries(services)) {
         dts += `  "${escStr(domain)}": {\n`;
-        for (const [service, details] of Object.entries(domainServices)) {
+        for (const [service, details] of Object.entries(domainServices as Record<string, any>)) {
           const cleanDesc = escComment((details.description || '').replace(/\*/g, ''));
           dts += `    /** ${cleanDesc} */\n`;
           dts += `    "${escStr(service)}": {\n`;
           if (details.fields) {
-            for (const [field, fDetails] of Object.entries(details.fields)) {
+            for (const [field, fDetails] of Object.entries(details.fields as Record<string, any>)) {
               const type = this._mapHaTypeToTs(fDetails);
               const fieldDesc = escComment((fDetails.description || '').replace(/\*/g, ''));
               const isOptional = fDetails.required ? '' : '?';
@@ -274,11 +350,11 @@ class WorkerManager extends EventEmitter {
         level: 'debug',
       });
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to sync services: ${e.message}`, level: 'error' });
+      this.emit('log', { source: 'System', message: `Failed to sync services: ${(e as Error).message}`, level: 'error' });
     }
   }
 
-  _mapHaTypeToTs(field) {
+  private _mapHaTypeToTs(field: any): string {
     if (field.selector?.boolean !== undefined) return 'boolean';
     if (field.selector?.number !== undefined) return 'number';
     if (field.selector?.select !== undefined) {
@@ -288,7 +364,7 @@ class WorkerManager extends EventEmitter {
         // containing a stray `'` would otherwise break the generated union type.
         return options
           .map(
-            (o) =>
+            (o: any) =>
               `'${String(o.value ?? o)
                 .replace(/\\/g, '\\\\')
                 .replace(/'/g, "\\'")}'`
@@ -301,10 +377,11 @@ class WorkerManager extends EventEmitter {
     return 'any';
   }
 
-  setStore(store) {
+  setStore(store: StoreManager): void {
     this.storeManager = store;
   }
-  setSettings(newSettings) {
+
+  setSettings(newSettings: Partial<WorkerManagerSettings>): void {
     this.settings = { ...this.settings, ...newSettings };
     this.emit('log', {
       source: 'System',
@@ -312,7 +389,8 @@ class WorkerManager extends EventEmitter {
       level: 'debug',
     });
   }
-  setStorageDir(dir) {
+
+  setStorageDir(dir: string): void {
     this.storageDir = dir;
     this.distDir = path.join(dir, 'dist');
     this.loadRegistry();
@@ -325,7 +403,7 @@ class WorkerManager extends EventEmitter {
    * Ensures that the ha-api.d.ts entry point exists in the storage directory
    * so that the browser editor can resolve types correctly.
    */
-  ensureApiDefinitions() {
+  ensureApiDefinitions(): void {
     if (!this.storageDir) return;
     try {
       const masterPath = path.join(__dirname, 'types', 'ha-api.d.ts');
@@ -335,7 +413,7 @@ class WorkerManager extends EventEmitter {
         fs.copyFileSync(masterPath, targetPath);
       }
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to sync ha-api.d.ts: ${e.message}`, level: 'error' });
+      this.emit('log', { source: 'System', message: `Failed to sync ha-api.d.ts: ${(e as Error).message}`, level: 'error' });
     }
   }
 
@@ -343,7 +421,7 @@ class WorkerManager extends EventEmitter {
    * Ensures that a modern tsconfig.json exists in the storage directory
    * to avoid deprecation warnings regarding legacy module resolution.
    */
-  ensureTsConfig() {
+  ensureTsConfig(): void {
     if (!this.storageDir) return;
     const targetPath = path.join(this.storageDir, 'tsconfig.json');
 
@@ -389,14 +467,15 @@ class WorkerManager extends EventEmitter {
     try {
       fs.writeFileSync(targetPath, JSON.stringify(defaultConfig, null, 2));
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to create tsconfig.json: ${e.message}`, level: 'error' });
+      this.emit('log', { source: 'System', message: `Failed to create tsconfig.json: ${(e as Error).message}`, level: 'error' });
     }
   }
-  setScriptsDir(dir) {
+
+  setScriptsDir(dir: string): void {
     this.scriptsDir = dir;
   }
 
-  setSystemLanguage(lang) {
+  setSystemLanguage(lang: string): void {
     this.systemLanguage = lang;
   }
 
@@ -404,7 +483,7 @@ class WorkerManager extends EventEmitter {
    * Defines which entities are "protected" (e.g. from @expose header).
    * These will be ignored by the Mark-and-Sweep cleanup.
    */
-  setProtectedEntities(filename, entityIds) {
+  setProtectedEntities(filename: string, entityIds: string[]): void {
     this.protectedEntities.set(filename, new Set(entityIds));
   }
 
@@ -412,19 +491,19 @@ class WorkerManager extends EventEmitter {
    * Registers an entity in the central registry.
    * Used by EntityManager for exposed entities and internally for dynamic ones.
    */
-  registerEntity(filename, entityId, payload) {
+  registerEntity(filename: string, entityId: string, payload: unknown): void {
     this.nativeEntities.set(entityId, payload);
     if (!this.scriptEntityMap.has(filename)) {
       this.scriptEntityMap.set(filename, new Set());
     }
-    this.scriptEntityMap.get(filename).add(entityId);
+    this.scriptEntityMap.get(filename)!.add(entityId);
     this.saveRegistry();
   }
 
   /**
    * Removes a specific entity from HA and the registry.
    */
-  async unregisterEntity(filename, entityId) {
+  async unregisterEntity(filename: string, entityId: string): Promise<void> {
     const payload = this.nativeEntities.get(entityId);
     if (this.mqttManager && this.mqttManager.isConnected) {
       this.emit('log', {
@@ -444,7 +523,7 @@ class WorkerManager extends EventEmitter {
     }
     this.nativeEntities.delete(entityId);
     if (this.scriptEntityMap.has(filename)) {
-      this.scriptEntityMap.get(filename).delete(entityId);
+      this.scriptEntityMap.get(filename)!.delete(entityId);
     }
     this.saveRegistry();
     const scriptName = path.basename(filename, path.extname(filename));
@@ -454,9 +533,9 @@ class WorkerManager extends EventEmitter {
     this.emit('sweep_entity_removed', entityId);
   }
 
-  getScripts() {
+  getScripts(): string[] {
     if (!this.scriptsDir) return [];
-    const results = [];
+    const results: string[] = [];
 
     // 1. Automations (Root)
     const files = fs
@@ -490,15 +569,18 @@ class WorkerManager extends EventEmitter {
     return results;
   }
 
-  getScriptStats(filename) {
+  getScriptStats(filename: string): ScriptStats | undefined {
     return this.stats.get(filename);
   }
 
   /**
    * Re-publishes all registered native entities to MQTT.
-   * @param {boolean} onlyIfMissing - If true, existing entities are skipped (integrity check).
+   * @param onlyIfMissing - If true, entities HA already knows about (present in
+   *   haConnector.states) are skipped - used for the periodic integrity-check pass
+   *   that recreates entities manually deleted in HA, without spamming the broker
+   *   with a full republish of everything that's already fine.
    */
-  async republishNativeEntities(onlyIfMissing = false) {
+  async republishNativeEntities(onlyIfMissing = false): Promise<void> {
     if (!this.mqttManager || !this.mqttManager.isConnected || this.nativeEntities.size === 0) return;
 
     let count = 0;
@@ -509,15 +591,16 @@ class WorkerManager extends EventEmitter {
     }
 
     for (const [entityId, payload] of this.nativeEntities) {
+      // Integrity-check mode: skip entities HA already has. Retained MQTT discovery
+      // means republishing an unchanged payload is otherwise a harmless no-op, but
+      // skipping avoids needless broker traffic on this periodic pass.
+      if (onlyIfMissing && this.haConnector?.states[entityId]) {
+        continue;
+      }
+
       const domain = entityId.split('.')[0];
       const topicId = payload.object_id || payload.unique_id;
       const configTopic = `${this.mqttManager.discoveryPrefix}/${domain}/${topicId}/config`;
-
-      // Integrity check for MQTT relies on checking local status, but since we use retained
-      // messages, we usually just republish everything on reconnect.
-      if (onlyIfMissing) {
-        // For MQTT, we could check if HA is online before skipping, but republishing is safer.
-      }
 
       this.mqttManager.publish(configTopic, payload, { retain: true });
 
@@ -553,7 +636,7 @@ class WorkerManager extends EventEmitter {
   /**
    * Removes all native entities created by a specific script.
    */
-  async removeScriptEntities(filename) {
+  async removeScriptEntities(filename: string): Promise<void> {
     this.lastExitState.delete(filename);
     this.restartTracker.delete(filename);
     this.stopReasons.delete(filename);
@@ -578,7 +661,7 @@ class WorkerManager extends EventEmitter {
 
     // Clean up entities if any exist
     if (this.scriptEntityMap.has(actualKey)) {
-      const entities = this.scriptEntityMap.get(actualKey);
+      const entities = this.scriptEntityMap.get(actualKey)!;
       this.emit('log', {
         source: 'System',
         message: `Cleaning up ${entities.size} dynamic entities for script: ${path.basename(filename)}`,
@@ -614,10 +697,11 @@ class WorkerManager extends EventEmitter {
   /**
    * Removes dynamic entities that were previously registered but are no longer present in the script code.
    * This is part of the Mark-and-Sweep logic triggered after script start.
-   * @param {string} filename The script filename.
-   * @private
    */
-  async _sweepOrphanedDynamicEntities(filename, { skipWorkerCheck = false } = {}) {
+  private async _sweepOrphanedDynamicEntities(
+    filename: string,
+    { skipWorkerCheck = false }: { skipWorkerCheck?: boolean } = {}
+  ): Promise<void> {
     // Skip if the script is no longer running — unless this sweep was triggered by the exit itself.
     if (!skipWorkerCheck && !this.workers.has(filename)) return;
 
@@ -674,10 +758,10 @@ class WorkerManager extends EventEmitter {
 
   /**
    * Starts a script in an isolated thread.
-   * @returns {boolean} True if the worker was actually started, false if aborted
+   * @returns True if the worker was actually started, false if aborted
    *   (script not found, not compiled yet, or excessive restart rate).
    */
-  startScript(filename) {
+  startScript(filename: string): boolean {
     let fullPath = path.isAbsolute(filename) ? filename : path.join(this.scriptsDir, filename);
     const isTypeScript = fullPath.endsWith('.ts');
     const isBlockly = fullPath.endsWith('.blocks');
@@ -705,7 +789,7 @@ class WorkerManager extends EventEmitter {
       executionPath = compiledPath;
     }
 
-    const scriptMeta = ScriptHeaderParser.parse(fullPath);
+    const scriptMeta: any = ScriptHeaderParser.parse(fullPath);
     const { name } = scriptMeta;
     const scriptId = scriptMeta.filename;
 
@@ -748,9 +832,9 @@ class WorkerManager extends EventEmitter {
     setTimeout(() => this._sweepOrphanedDynamicEntities(scriptId), 10000);
 
     // Prepare initial data dump for the worker
-    const initialStoreValues = {};
+    const initialStoreValues: Record<string, unknown> = {};
     if (this.storeManager) {
-      for (let k in this.storeManager.data) {
+      for (const k in this.storeManager.data) {
         initialStoreValues[k] = this.storeManager.data[k].value;
       }
     }
@@ -785,7 +869,7 @@ class WorkerManager extends EventEmitter {
         initialStates: (() => {
           const raw = this.haConnector ? this.haConnector.states : {};
           // Add alias entries so ha.getState(userEntityId) works from the first line
-          const states = { ...raw };
+          const states: Record<string, any> = { ...raw };
           for (const [haId, userId] of this.entityIdAliases.entries()) {
             if (states[haId] && !states[userId]) {
               states[userId] = { ...states[haId], entity_id: userId };
@@ -820,7 +904,7 @@ class WorkerManager extends EventEmitter {
       execArgv: ['--enable-source-maps'],
     });
 
-    worker.on('message', async (msg) => {
+    worker.on('message', async (msg: any) => {
       try {
         // 1. Logging
         if (msg.type === 'log') {
@@ -829,7 +913,7 @@ class WorkerManager extends EventEmitter {
           // blockly-compiler.js's scrub_() instrumentation for where it's tagged.
           // scriptId (this.filename below) is needed alongside it since the frontend
           // only acts on it when that exact .blocks file is the currently open tab.
-          const logEntry = { source: name, message: msg.message, level: msg.level || 'info' };
+          const logEntry: any = { source: name, message: msg.message, level: msg.level || 'info' };
           if (msg.blockId) {
             logEntry.blockId = msg.blockId;
             logEntry.scriptId = scriptMeta.filename;
@@ -857,11 +941,11 @@ class WorkerManager extends EventEmitter {
             const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
             if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
           } catch (err) {
-            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
+            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
             else
               this.emit('log', {
                 source: name,
-                message: `Service call ${msg.domain}.${msg.service} failed: ${err.message}`,
+                message: `Service call ${msg.domain}.${msg.service} failed: ${(err as Error).message}`,
                 level: 'error',
               });
           }
@@ -890,7 +974,7 @@ class WorkerManager extends EventEmitter {
           this.emit('create_entity', { filename: scriptMeta.filename, entityId: msg.entityId, config: msg.config });
 
           if (this.activeRunEntities.has(scriptMeta.filename)) {
-            this.activeRunEntities.get(scriptMeta.filename).add(msg.entityId);
+            this.activeRunEntities.get(scriptMeta.filename)!.add(msg.entityId);
           }
         }
 
@@ -914,7 +998,7 @@ class WorkerManager extends EventEmitter {
 
         // 3. Subscriptions (ha.on)
         if (msg.type === 'subscribe') {
-          this.subscriptions.get(scriptMeta.filename).push(msg.pattern);
+          this.subscriptions.get(scriptMeta.filename)!.push(msg.pattern);
         }
 
         // 4. Store Operations
@@ -943,7 +1027,7 @@ class WorkerManager extends EventEmitter {
         // 6. Dirty store tracking for ha.persistent()
         if (msg.type === 'store_dirty') {
           if (!this.dirtyStore.has(scriptMeta.filename)) this.dirtyStore.set(scriptMeta.filename, new Map());
-          this.dirtyStore.get(scriptMeta.filename).set(msg.key, msg.dirtyAt);
+          this.dirtyStore.get(scriptMeta.filename)!.set(msg.key, msg.dirtyAt);
         }
         if (msg.type === 'store_clean') {
           this.dirtyStore.get(scriptMeta.filename)?.delete(msg.key);
@@ -998,12 +1082,12 @@ class WorkerManager extends EventEmitter {
                 // so dev iterations don't accumulate stale Lovelace entries.
                 const knownCardNames = this.getScripts()
                   .map((p) => {
-                    const meta = ScriptHeaderParser.parse(p);
+                    const meta: any = ScriptHeaderParser.parse(p);
                     if (!meta.card) return null;
                     return path.basename(p, path.extname(p)) + '-card';
                   })
-                  .filter(Boolean);
-                this.cardManager.performStartupCleanup(knownCardNames).catch(() => {});
+                  .filter(Boolean) as string[];
+                this.cardManager!.performStartupCleanup(knownCardNames).catch(() => {});
               }
               worker.postMessage({ type: 'install_card_response', callId: msg.callId, url });
             })
@@ -1101,7 +1185,7 @@ class WorkerManager extends EventEmitter {
         if (msg.type === 'subscribe_event_type') {
           if (!this.eventTypeSubscriptions.has(msg.eventType))
             this.eventTypeSubscriptions.set(msg.eventType, new Set());
-          this.eventTypeSubscriptions.get(msg.eventType).add(scriptMeta.filename);
+          this.eventTypeSubscriptions.get(msg.eventType)!.add(scriptMeta.filename);
         }
 
         // ha.fireEvent()
@@ -1164,8 +1248,8 @@ class WorkerManager extends EventEmitter {
                 scriptFilename: scriptMeta.filename,
               });
             } catch (e) {
-              this.emit('log', { source: name, level: 'error', message: `[Webhook] ${e.message}` });
-              worker.postMessage({ type: 'webhook_register_error', id: msg.id, error: e.message });
+              this.emit('log', { source: name, level: 'error', message: `[Webhook] ${(e as Error).message}` });
+              worker.postMessage({ type: 'webhook_register_error', id: msg.id, error: (e as Error).message });
             }
           }
         }
@@ -1188,11 +1272,11 @@ class WorkerManager extends EventEmitter {
           }
         }
       } catch (err) {
-        this.emit('log', { source: name, message: `Service call execution failed: ${err.message}`, level: 'error' });
+        this.emit('log', { source: name, message: `Service call execution failed: ${(err as Error).message}`, level: 'error' });
       }
     });
 
-    worker.on('error', (err) => {
+    worker.on('error', (err: Error) => {
       this.emit('log', { source: name, message: `❌ CRITICAL: ${err.message}`, level: 'error' });
       this.lastExitState.set(scriptMeta.filename, 'error');
     });
@@ -1226,7 +1310,7 @@ class WorkerManager extends EventEmitter {
           this.mqttManager.unsubscribeAllRawByScript(scriptMeta.filename);
         }
 
-        let reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
+        const reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
         const type = code !== 0 && !this.stopReasons.has(scriptMeta.filename) ? 'error' : 'success';
 
         // Deactivate (not delete) this script's ha.onWebhook() registrations —
@@ -1278,7 +1362,7 @@ class WorkerManager extends EventEmitter {
   /**
    * Sends a message to all running workers.
    */
-  broadcastToWorkers(payload, exceptWorker = null) {
+  broadcastToWorkers(payload: unknown, exceptWorker: Worker | null = null): void {
     for (const worker of this.workers.values()) {
       if (worker === exceptWorker) continue;
       worker.postMessage(payload);
@@ -1287,9 +1371,8 @@ class WorkerManager extends EventEmitter {
 
   /**
    * Resumes a script paused at a breakpoint.
-   * @param {string} filename
    */
-  continueBreakpoint(filename) {
+  continueBreakpoint(filename: string): boolean {
     const bp = this._activeBreakpoints.get(filename);
     if (!bp) return false;
     Atomics.store(bp.flag, 0, 1);
@@ -1303,9 +1386,9 @@ class WorkerManager extends EventEmitter {
    * Runs a code snippet in a short-lived worker with the full ha API available.
    * Resolves with { logs: [{level, message}], error: string|null } after completion or 5s timeout.
    */
-  runRepl(code) {
+  runRepl(code: string): Promise<{ logs: { level: string; message: string }[]; error: string | null }> {
     const tmpFile = path.join(os.tmpdir(), `jsa_repl_${Date.now()}.js`);
-    const logs = [];
+    const logs: { level: string; message: string }[] = [];
 
     // Wrapped in an async IIFE so snippets can use top-level `await` (e.g. `await ha.call(...)`)
     // without making the file an ES module — a synchronous require() can't load ESM with
@@ -1318,10 +1401,10 @@ class WorkerManager extends EventEmitter {
       try {
         fs.writeFileSync(tmpFile, wrapped, 'utf8');
       } catch (e) {
-        return resolve({ logs: [], error: `Write error: ${e.message}` });
+        return resolve({ logs: [], error: `Write error: ${(e as Error).message}` });
       }
 
-      const initialStoreValues = {};
+      const initialStoreValues: Record<string, unknown> = {};
       if (this.storeManager) {
         for (const k in this.storeManager.data) {
           initialStoreValues[k] = this.storeManager.data[k].value;
@@ -1332,7 +1415,7 @@ class WorkerManager extends EventEmitter {
           ? this.settings.ui_language
           : this.systemLanguage || 'en';
 
-      let worker;
+      let worker: Worker;
       try {
         worker = new Worker(path.join(__dirname, 'worker-wrapper.js'), {
           resourceLimits: { maxOldGenerationSizeMb: 64 },
@@ -1366,11 +1449,11 @@ class WorkerManager extends EventEmitter {
         } catch {
           /* best-effort cleanup */
         }
-        return resolve({ logs: [], error: `Worker start error: ${e.message}` });
+        return resolve({ logs: [], error: `Worker start error: ${(e as Error).message}` });
       }
 
       let done = false;
-      const finish = (error = null) => {
+      const finish = (error: string | null = null): void => {
         if (done) return;
         done = true;
         clearTimeout(timer);
@@ -1387,7 +1470,7 @@ class WorkerManager extends EventEmitter {
         finish('Timeout: REPL execution exceeded 5 seconds.');
       }, 5000);
 
-      worker.on('message', async (msg) => {
+      worker.on('message', async (msg: any) => {
         if (msg.type === 'log') {
           logs.push({ level: msg.level || 'info', message: msg.message });
         }
@@ -1399,7 +1482,7 @@ class WorkerManager extends EventEmitter {
             const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
             if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
           } catch (err) {
-            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: err.message });
+            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
           }
         }
         if (msg.type === 'update_state') {
@@ -1501,7 +1584,7 @@ class WorkerManager extends EventEmitter {
         }
       });
       worker.on('exit', () => finish());
-      worker.on('error', (err) => finish(err.message));
+      worker.on('error', (err: Error) => finish(err.message));
     });
   }
 
@@ -1510,12 +1593,11 @@ class WorkerManager extends EventEmitter {
    * Resolves with the handler's return value, or rejects if the script is not running,
    * the action is not registered, or the handler throws.
    *
-   * @param {string} filename - Script filename (e.g. 'openligadb.js')
-   * @param {string} action   - Action name registered via ha.action()
-   * @param {object} payload  - Optional payload passed to the handler
-   * @returns {Promise<any>}
+   * @param filename - Script filename (e.g. 'openligadb.js')
+   * @param action   - Action name registered via ha.action()
+   * @param payload  - Optional payload passed to the handler
    */
-  callAction(filename, action, payload = {}) {
+  callAction(filename: string, action: string, payload: unknown = {}): Promise<unknown> {
     const base = filename.replace(/\.(js|ts)$/, '');
     const worker =
       this.workers.get(filename) ??
@@ -1535,7 +1617,7 @@ class WorkerManager extends EventEmitter {
    * Registers a mapping between HA's generated entity_id and the user's entity_id.
    * Needed when device: true causes HA to prefix the entity_id with the device name.
    */
-  setEntityIdAlias(haEntityId, userEntityId) {
+  setEntityIdAlias(haEntityId: string, userEntityId: string): void {
     if (haEntityId && userEntityId && haEntityId !== userEntityId) {
       this.entityIdAliases.set(haEntityId, userEntityId);
       this.emit('log', {
@@ -1548,7 +1630,7 @@ class WorkerManager extends EventEmitter {
       for (const [file, entityIds] of this.scriptEntityMap.entries()) {
         if (entityIds.has(userEntityId)) {
           if (!this.entityConflicts.has(file)) this.entityConflicts.set(file, []);
-          const list = this.entityConflicts.get(file);
+          const list = this.entityConflicts.get(file)!;
           if (!list.some((c) => c.expected === userEntityId)) {
             list.push({ expected: userEntityId, actual: haEntityId });
           }
@@ -1563,7 +1645,7 @@ class WorkerManager extends EventEmitter {
    * Called by the ACK poll when an entity successfully lands on the correct entity_id,
    * clearing any stale alias that was registered before cleanup completed.
    */
-  clearEntityIdAlias(userEntityId) {
+  clearEntityIdAlias(userEntityId: string): void {
     for (const [haId, userId] of this.entityIdAliases.entries()) {
       if (userId === userEntityId) {
         this.entityIdAliases.delete(haId);
@@ -1588,8 +1670,8 @@ class WorkerManager extends EventEmitter {
   /**
    * Returns a plain object mapping filename → conflict list for the UI.
    */
-  getEntityConflicts() {
-    const result = {};
+  getEntityConflicts(): Record<string, EntityConflict[]> {
+    const result: Record<string, EntityConflict[]> = {};
     for (const [file, conflicts] of this.entityConflicts.entries()) {
       if (conflicts.length > 0) result[file] = conflicts;
     }
@@ -1600,7 +1682,7 @@ class WorkerManager extends EventEmitter {
    * Routes state changes from HA to interested workers.
    * If HA generated a different entity_id (device prefix), dispatches under the user's entity_id.
    */
-  dispatchStateChange(entityId, newState, oldState) {
+  dispatchStateChange(entityId: string, newState: unknown, oldState: unknown): void {
     // Resolve alias: if HA uses a device-prefixed entity_id, translate to user's entity_id
     const userEntityId = this.entityIdAliases.get(entityId) || entityId;
 
@@ -1621,9 +1703,8 @@ class WorkerManager extends EventEmitter {
 
   /**
    * Forwards a non-state HA event to all workers that subscribed via ha.onEvent().
-   * @param {{ event_type: string, data: object }} event
    */
-  dispatchCustomEvent(event) {
+  dispatchCustomEvent(event: { event_type: string; data: unknown }): void {
     const subscribers = this.eventTypeSubscriptions.get(event.event_type);
     if (!subscribers) return;
     for (const filename of subscribers) {
@@ -1635,7 +1716,7 @@ class WorkerManager extends EventEmitter {
   /**
    * Helper for wildcard/regex/string matching.
    */
-  matches(entityId, pattern) {
+  matches(entityId: string, pattern: unknown): boolean {
     if (typeof pattern === 'string') {
       if (pattern === entityId) return true;
       if (pattern.includes('*')) {
@@ -1644,8 +1725,9 @@ class WorkerManager extends EventEmitter {
       }
     }
     if (Array.isArray(pattern)) return pattern.includes(entityId);
-    if (pattern instanceof RegExp || (typeof pattern === 'object' && pattern.source)) {
-      const r = pattern instanceof RegExp ? pattern : new RegExp(pattern.source, pattern.flags);
+    if (pattern instanceof RegExp || (typeof pattern === 'object' && pattern !== null && 'source' in pattern)) {
+      const p = pattern as RegExp;
+      const r = pattern instanceof RegExp ? pattern : new RegExp(p.source, p.flags);
       return r.test(entityId);
     }
     return false;
@@ -1654,14 +1736,14 @@ class WorkerManager extends EventEmitter {
   /**
    * Clears the error state for a crashed script so it appears as "stopped".
    */
-  clearErrorState(filename) {
+  clearErrorState(filename: string): void {
     this.lastExitState.delete(filename);
   }
 
   /**
    * Stops a script gracefully.
    */
-  stopScript(filename, reason = 'stopped by user') {
+  stopScript(filename: string, reason = 'stopped by user'): void {
     const worker = this.workers.get(filename);
     if (worker) {
       this.stopReasons.set(filename, reason);
@@ -1702,7 +1784,7 @@ class WorkerManager extends EventEmitter {
   /**
    * Shuts down the manager, saves pending data, and stops all workers.
    */
-  shutdown() {
+  shutdown(): void {
     // 1. Force Save Registry if timer is running
     if (this.saveRegistryTimer) {
       clearTimeout(this.saveRegistryTimer);
@@ -1721,4 +1803,4 @@ class WorkerManager extends EventEmitter {
   }
 }
 
-module.exports = new WorkerManager();
+export = new WorkerManager();

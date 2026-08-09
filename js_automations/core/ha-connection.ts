@@ -14,7 +14,10 @@ interface HAState {
 
 interface HAEvent {
   event_type: string;
-  data: { entity_id?: string; new_state?: HAState };
+  // Generic: subscribeToEvents() is a listener for any HA event type, not just
+  // state_changed (e.g. mobile_app_notification_action carries a `.data.action`
+  // field instead), so this can't be narrowed to one event's specific shape.
+  data: Record<string, any>;
 }
 
 interface CommandResult {
