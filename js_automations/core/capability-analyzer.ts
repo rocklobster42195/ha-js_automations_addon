@@ -67,7 +67,7 @@ class CapabilityAnalyzer {
    * Strips the leading JSDoc block and inline comments from source to
    * avoid false positives from example code in @description or commented-out lines.
    */
-  static _preprocess(source) {
+  static _preprocess(source: string): string {
     // Remove leading JSDoc block
     let s = source.replace(/^\s*\/\*\*([\s\S]*?)\*\//, '');
     // Remove inline // comments (not inside strings — best-effort)
@@ -77,12 +77,11 @@ class CapabilityAnalyzer {
 
   /**
    * Analyzes script source and returns detected capability tokens.
-   * @param {string} source - Raw script source (UTF-8)
-   * @returns {{ detected: string[] }}
+   * @param source - Raw script source (UTF-8)
    */
-  static analyze(source) {
+  static analyze(source: string): { detected: string[] } {
     const s = CapabilityAnalyzer._preprocess(source);
-    const detected = [];
+    const detected: string[] = [];
 
     if (NETWORK_PATTERNS.some((p) => p.test(s))) detected.push('network');
     if (WEBHOOK_PATTERNS.some((p) => p.test(s))) detected.push('webhook');
@@ -97,16 +96,15 @@ class CapabilityAnalyzer {
 
   /**
    * Compares declared permissions against detected capabilities.
-   * @param {string[]} declared - From @permission tag
-   * @param {string[]} detected - From analyze()
-   * @returns {{ undeclared: string[], unused: string[] }}
-   *   undeclared: detected but not in declared → warning badge
-   *   unused:     declared but not detected → dimmed badge
+   * @param declared - From @permission tag
+   * @param detected - From analyze()
+   * @returns undeclared: detected but not in declared → warning badge;
+   *   unused: declared but not detected → dimmed badge
    */
-  static diff(declared, detected) {
+  static diff(declared: string[], detected: string[]): { undeclared: string[]; unused: string[] } {
     // Normalize: expand 'fs' alias and deduplicate
-    const norm = (arr) => {
-      const out = new Set();
+    const norm = (arr: string[]): string[] => {
+      const out = new Set<string>();
       for (const t of arr) {
         if (t === 'fs') {
           out.add('fs:read');
@@ -122,4 +120,4 @@ class CapabilityAnalyzer {
   }
 }
 
-module.exports = CapabilityAnalyzer;
+export = CapabilityAnalyzer;

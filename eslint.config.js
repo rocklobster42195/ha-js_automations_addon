@@ -25,6 +25,7 @@ module.exports = [
       'js_automations/core/script-command-router.js',
       'js_automations/core/sibling-guard.js',
       'js_automations/core/type-definition-generator.js',
+      'js_automations/core/capability-analyzer.js',
     ],
   },
   js.configs.recommended,
