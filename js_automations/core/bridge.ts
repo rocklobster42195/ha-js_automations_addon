@@ -4,11 +4,56 @@
  * events emitted by the various managers and translates them into socket events
  * for the frontend, thus decoupling the core logic from the transport layer.
  */
+import type { Server as SocketIOServer, Socket } from 'socket.io';
+
+interface MqttManagerLike {
+  isConnected: boolean;
+  startMonitoring(): void;
+  stopMonitoring(): void;
+  publish(topic: string, payload: unknown, opts: { retain: boolean }): void;
+}
+
+interface StoreManagerLike {
+  on(event: 'changed', listener: (data: unknown) => void): void;
+}
+
+interface HaConnectorLike {
+  fireEvent(eventType: string, data: unknown): void;
+}
+
+interface WorkerManagerLike {
+  continueBreakpoint(filename: string): void;
+}
+
+interface LogManagerLike {
+  on(event: 'log_added', listener: (entry: unknown) => void): void;
+}
+
+interface SystemServiceLike {
+  on(event: 'system_stats_updated', listener: (stats: unknown) => void): void;
+  on(event: 'safe_mode_changed', listener: (isSafeMode: boolean) => void): void;
+}
+
+interface KernelLike {
+  io: SocketIOServer;
+  logManager: LogManagerLike;
+  mqttManager?: MqttManagerLike;
+  storeManager?: StoreManagerLike;
+  haConnector: HaConnectorLike;
+  workerManager: WorkerManagerLike;
+  systemService: SystemServiceLike;
+  getSystemStatus(): Promise<unknown>;
+  on(event: string, listener: (...args: any[]) => void): void;
+}
+
 class Bridge {
+  kernel: KernelLike;
+  io: SocketIOServer;
+
   /**
-   * @param {import('./kernel')} kernel The application kernel.
+   * @param kernel - The application kernel.
    */
-  constructor(kernel) {
+  constructor(kernel: KernelLike) {
     this.kernel = kernel;
     this.io = kernel.io;
   }
@@ -17,27 +62,27 @@ class Bridge {
    * Connects the internal manager events to the external socket.io events.
    * This is where all the event relaying logic resides.
    */
-  connect() {
+  connect(): void {
     const { logManager } = this.kernel;
 
     // Tracks which sockets have the Event Inspector open
-    const eventInspectorClients = new Set();
+    const eventInspectorClients = new Set<string>();
 
     // Tracks which sockets have the MQTT Monitor open
-    const mqttMonitorClients = new Set();
+    const mqttMonitorClients = new Set<string>();
 
     // Ring buffer of recent MQTT messages — replayed to clients on re-subscribe
-    const mqttMessageCache = [];
+    const mqttMessageCache: unknown[] = [];
     const MQTT_CACHE_MAX = 100;
 
     // Cache for watch tiles and inspect snapshots so reconnecting clients get current state.
     // watch tiles: filename::label → data; inspect snapshots: per-filename array (capped at 50)
-    const watchTileCache = new Map();
-    const inspectSnapshotCache = new Map(); // filename → data[]
+    const watchTileCache = new Map<string, any>();
+    const inspectSnapshotCache = new Map<string, any[]>(); // filename → data[]
 
     // --- Socket Lifecycle ---
     // Sync current system status whenever a client connects (e.g. after a restart or reload)
-    this.io.on('connection', async (socket) => {
+    this.io.on('connection', async (socket: Socket) => {
       const status = await this.kernel.getSystemStatus();
       socket.emit('integration_status', status);
 
@@ -75,17 +120,17 @@ class Bridge {
         if (mqttMonitorClients.size === 0) this.kernel.mqttManager?.stopMonitoring();
       });
 
-      socket.on('debug_continue', (filename) => {
+      socket.on('debug_continue', (filename: string) => {
         this.kernel.workerManager.continueBreakpoint(filename);
       });
 
-      socket.on('mqtt_ui_publish', ({ topic, payload, retain }) => {
+      socket.on('mqtt_ui_publish', ({ topic, payload, retain }: { topic: unknown; payload: unknown; retain: unknown }) => {
         if (typeof topic === 'string' && topic.trim() && this.kernel.mqttManager?.isConnected) {
           this.kernel.mqttManager.publish(topic.trim(), payload ?? '', { retain: !!retain });
         }
       });
 
-      socket.on('fire_ha_event', ({ event_type, data }) => {
+      socket.on('fire_ha_event', ({ event_type, data }: { event_type: unknown; data: unknown }) => {
         if (typeof event_type === 'string' && event_type.trim()) {
           try {
             this.kernel.haConnector.fireEvent(event_type.trim(), data ?? {});
@@ -97,20 +142,20 @@ class Bridge {
     });
 
     // Breakpoint / watch / inspect events → all connected clients
-    this.kernel.on('breakpoint_hit', (data) => this.io.emit('breakpoint_hit', data));
-    this.kernel.on('breakpoint_continued', (data) => this.io.emit('breakpoint_continued', data));
-    this.kernel.on('watch_update', (data) => {
+    this.kernel.on('breakpoint_hit', (data: unknown) => this.io.emit('breakpoint_hit', data));
+    this.kernel.on('breakpoint_continued', (data: unknown) => this.io.emit('breakpoint_continued', data));
+    this.kernel.on('watch_update', (data: { filename: string; label: string }) => {
       watchTileCache.set(`${data.filename}::${data.label}`, data);
       this.io.emit('watch_update', data);
     });
-    this.kernel.on('inspect_snapshot', (data) => {
+    this.kernel.on('inspect_snapshot', (data: { filename: string }) => {
       if (!inspectSnapshotCache.has(data.filename)) inspectSnapshotCache.set(data.filename, []);
-      const list = inspectSnapshotCache.get(data.filename);
+      const list = inspectSnapshotCache.get(data.filename)!;
       list.unshift(data);
       if (list.length > 50) list.length = 50;
       this.io.emit('inspect_snapshot', data);
     });
-    this.kernel.on('watch_clear', (data) => {
+    this.kernel.on('watch_clear', (data: { filename: string }) => {
       const prefix = `${data.filename}::`;
       for (const key of Array.from(watchTileCache.keys())) {
         if (key.startsWith(prefix)) watchTileCache.delete(key);
@@ -123,7 +168,7 @@ class Bridge {
     this.kernel.storeManager?.on('changed', (data) => this.io.emit('store_changed', data));
 
     // MQTT traffic → ring buffer + subscribed MQTT Monitor clients only
-    this.kernel.on('mqtt_traffic', (data) => {
+    this.kernel.on('mqtt_traffic', (data: unknown) => {
       mqttMessageCache.push(data);
       if (mqttMessageCache.length > MQTT_CACHE_MAX) mqttMessageCache.shift();
       if (mqttMonitorClients.size === 0) return;
@@ -140,12 +185,12 @@ class Bridge {
 
     // --- HA Events ---
     // Relays Home Assistant state changes to the UI for the status bar.
-    this.kernel.on('ha_state_changed', (data) => {
+    this.kernel.on('ha_state_changed', (data: unknown) => {
       this.io.emit('ha_state_changed', data);
     });
 
     // Relays all HA events to subscribed Event Inspector clients only
-    this.kernel.on('ha_event', (event) => {
+    this.kernel.on('ha_event', (event: { event_type: string; data?: unknown }) => {
       if (eventInspectorClients.size === 0) return;
       const payload = {
         t: Date.now(),
@@ -156,7 +201,7 @@ class Bridge {
     });
 
     // Relays integration status changes
-    this.kernel.on('integration_status_changed', (status) => {
+    this.kernel.on('integration_status_changed', (status: unknown) => {
       // Relay full status object to the frontend
       this.io.emit('integration_status', status);
     });
@@ -181,4 +226,4 @@ class Bridge {
   }
 }
 
-module.exports = Bridge;
+export = Bridge;

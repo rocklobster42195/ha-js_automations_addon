@@ -27,6 +27,7 @@ module.exports = [
       'js_automations/core/type-definition-generator.js',
       'js_automations/core/capability-analyzer.js',
       'js_automations/core/log-manager.js',
+      'js_automations/core/bridge.js',
     ],
   },
   js.configs.recommended,
