@@ -1,17 +1,24 @@
-const express = require('express');
-const https = require('https');
-const { ZipArchive } = require('archiver');
-const packageJson = require('../../package.json');
+import * as express from 'express';
+import * as https from 'https';
+import { ZipArchive } from 'archiver';
+import * as packageJson from '../../package.json';
+import type HAConnector from '../core/ha-connection';
+import type LogManager from '../core/log-manager';
+import type SystemService from '../services/system-service';
+import MqttManager from '../core/mqtt-manager';
+// worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
+// itself, so the type has to be derived from the module's export value.
+type WorkerManagerInstance = typeof import('../core/worker-manager');
 
-module.exports = (
-  connector,
-  logManager,
-  getSystemOptions,
-  SCRIPTS_DIR,
-  systemService,
-  getCombinedStatus,
-  mqttManager,
-  workerManager
+export = (
+  connector: HAConnector,
+  logManager: LogManager,
+  getSystemOptions: () => { expert_mode: boolean },
+  SCRIPTS_DIR: string,
+  systemService: SystemService,
+  getCombinedStatus: () => Promise<unknown>,
+  mqttManager: MqttManager,
+  workerManager: WorkerManagerInstance
 ) => {
   const router = express.Router();
 
@@ -53,11 +60,11 @@ module.exports = (
   router.post('/mqtt/test', async (req, res) => {
     try {
       const config = req.body; // Expects { host, port, username, password }
-      const result = await mqttManager.constructor.testConnection(config); // Use static method
+      const result = await MqttManager.testConnection(config); // Use static method
       res.json(result);
     } catch (error) {
-      logManager.add('error', 'System', `MQTT Test Connection API Error: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      logManager.add('error', 'System', `MQTT Test Connection API Error: ${(error as Error).message}`);
+      res.status(500).json({ success: false, error: (error as Error).message });
     }
   });
 
@@ -71,8 +78,8 @@ module.exports = (
         res.json({ success: false });
       }
     } catch (error) {
-      logManager.add('error', 'System', `MQTT Discover Settings API Error: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      logManager.add('error', 'System', `MQTT Discover Settings API Error: ${(error as Error).message}`);
+      res.status(500).json({ success: false, error: (error as Error).message });
     }
   });
 
@@ -85,7 +92,7 @@ module.exports = (
       const status = await getCombinedStatus();
       res.json(status);
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: (e as Error).message });
     }
   });
 
@@ -125,7 +132,7 @@ module.exports = (
       const result = await workerManager.runRepl(code);
       res.json(result);
     } catch (e) {
-      res.status(500).json({ logs: [], error: e.message });
+      res.status(500).json({ logs: [], error: (e as Error).message });
     }
   });
 

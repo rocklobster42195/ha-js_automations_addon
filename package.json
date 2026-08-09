@@ -50,8 +50,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@open-wc/testing": "^5.0.0",
+    "@types/archiver": "^8.0.0",
     "@types/express": "^5.0.6",
     "@types/mocha": "^10.0.10",
+    "@types/multer": "^2.2.0",
     "@types/node": "^26.0.0",
     "@types/sinon": "^22.0.0",
     "@types/ws": "^8.18.1",
