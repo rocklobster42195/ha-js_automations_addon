@@ -2,24 +2,58 @@
  * JS AUTOMATIONS - Worker Wrapper (v2.16.x)
  * Features: Local Cache, Sync Store, Graceful Shutdown, Global Libraries.
  */
-const { parentPort, workerData } = require('worker_threads');
-const path = require('path');
-const fs = require('fs');
-const vm = require('vm');
-const crypto = require('crypto');
-const historyHelpers = require('./ha-history-helpers');
+import { parentPort, workerData } from 'worker_threads';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as vm from 'vm';
+import * as crypto from 'crypto';
+import historyHelpers from './ha-history-helpers';
+// Plain require(), not `import * as Module` - the capability-enforcement block below
+// mutates Module._load, and TS's __importStar interop wrapper makes imported
+// properties getter-only, which breaks that assignment at runtime.
 const Module = require('module');
 
+if (!parentPort) throw new Error('worker-wrapper.js must run inside a worker_threads Worker');
+const pp = parentPort;
+
+interface WorkerData {
+  storageDir?: string;
+  capabilityEnforcement?: boolean;
+  permissions?: string[];
+  name?: string;
+  loglevel?: string;
+  language?: string;
+  initialStates?: Record<string, any>;
+  initialStore?: Record<string, any>;
+  initialAreas?: any[];
+  initialEntityRegistry?: any[];
+  initialDeviceRegistry?: any[];
+  initialLabels?: any[];
+  initialFloors?: any[];
+  initialConnected?: boolean;
+  defaultThrottle?: number;
+  filesystemEnabled?: boolean;
+  fsDataDir?: string;
+  fsQuotas?: Record<string, number>;
+  path: string;
+  filename?: string;
+  // Script header fields (name, icon, etc.) are spread into workerData at start,
+  // and ha.getHeader() reads any of them by lowercase key.
+  [key: string]: any;
+}
+
+const wd = workerData as WorkerData;
+
 // --- 1. MODULE PATH INJECTION ---
-if (workerData.storageDir) {
-  const nodeModulesPath = path.resolve(workerData.storageDir, 'node_modules');
+if (wd.storageDir) {
+  const nodeModulesPath = path.resolve(wd.storageDir, 'node_modules');
   // Inject into global search paths
-  Module.globalPaths.push(nodeModulesPath);
-  module.paths.unshift(nodeModulesPath);
+  (Module as any).globalPaths.push(nodeModulesPath);
+  (module as any).paths.unshift(nodeModulesPath);
   process.env.NODE_PATH = nodeModulesPath;
   // Force Node.js to re-evaluate paths
-  if (typeof Module._initPaths === 'function') {
-    Module._initPaths();
+  if (typeof (Module as any)._initPaths === 'function') {
+    (Module as any)._initPaths();
   }
 }
 
@@ -34,9 +68,9 @@ if (workerData.storageDir) {
 // ensuring that @permission network/exec is enforced even for indirect requires.
 let _scriptExecuting = false;
 
-if (workerData.capabilityEnforcement) {
-  const _permissions = new Set(workerData.permissions || []);
-  const _origLoad = Module._load;
+if (wd.capabilityEnforcement) {
+  const _permissions = new Set(wd.permissions || []);
+  const _origLoad = (Module as any)._load;
 
   const NETWORK_MODULES = new Set(['http', 'https', 'net', 'tls', 'dns']);
   const EXEC_MODULES = new Set(['child_process']);
@@ -46,7 +80,7 @@ if (workerData.capabilityEnforcement) {
   // even when only foreground tasks are used.
   const SYSTEM_INTERNAL_PACKAGES = ['node-cron'];
 
-  Module._load = function (request, parent) {
+  (Module as any)._load = function (request: string, parent: any) {
     if (_scriptExecuting) {
       const parentFile = parent?.filename || '';
       const isSystemInternal = SYSTEM_INTERNAL_PACKAGES.some(
@@ -77,40 +111,40 @@ if (workerData.capabilityEnforcement) {
 
   // Block native fetch (Node 18+) when network is not declared
   if (!_permissions.has('network') && typeof globalThis.fetch === 'function') {
-    globalThis.fetch = () => {
+    (globalThis as any).fetch = () => {
       throw new Error(`PermissionDeniedError: fetch() requires @permission network in your script header.`);
     };
   }
 }
 
 // Default: Allow thread to exit if nothing is happening
-parentPort.unref();
+pp.unref();
 
 // Reference counting for parentPort keep-alive.
 // parentPort.ref()/unref() is a toggle, not a counter — one unref() cancels all
 // previous ref() calls. We track intent ourselves so that a completing service call
 // does not accidentally cancel the keep-alive from registered ha.on() listeners.
 let _refCount = 0;
-function _addRef() {
+function _addRef(): void {
   _refCount++;
-  if (_refCount === 1) parentPort.ref();
+  if (_refCount === 1) pp.ref();
 }
-function _releaseRef() {
+function _releaseRef(): void {
   if (_refCount > 0) _refCount--;
-  if (_refCount === 0) parentPort.unref();
+  if (_refCount === 0) pp.unref();
 }
 
 // 🛡️ GLOBAL CRASH HANDLER
 // Catches errors that would otherwise terminate the script silently.
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', (err: any) => {
   // Known Issue: node-unifi sometimes throws errors from internal timeouts
   // while the connection is still being established. We ignore these so the script continues running.
   if (err.message && err.message.includes('WebSocket is not open')) {
-    if (parentPort) {
-      parentPort.postMessage({
+    if (pp) {
+      pp.postMessage({
         type: 'log',
         level: 'warn',
-        source: workerData.name || 'System',
+        source: wd.name || 'System',
         message: `⚠️ Background Error Suppressed: ${err.message}`,
       });
 
@@ -124,12 +158,12 @@ process.on('uncaughtException', (err) => {
         errorCallbacks.forEach((cb) => {
           try {
             cb(errorData);
-          } catch (e) {
+          } catch (e: any) {
             // Log an error if the user's error handler itself crashes
-            parentPort.postMessage({
+            pp.postMessage({
               type: 'log',
               level: 'error',
-              source: workerData.name || 'System',
+              source: wd.name || 'System',
               message: `🔥 CRASH inside ha.onError handler: ${e.message}\n${e.stack}`,
             });
           }
@@ -139,15 +173,15 @@ process.on('uncaughtException', (err) => {
     return; // Do NOT terminate the process!
   }
 
-  if (parentPort) {
-    const payload = {
+  if (pp) {
+    const payload: any = {
       type: 'log',
       level: 'error',
-      source: workerData.name || 'System',
+      source: wd.name || 'System',
       message: `🔥 CRASH: ${err.message}\n${err.stack}`,
     };
     if (err.blockId) payload.blockId = err.blockId;
-    parentPort.postMessage(payload);
+    pp.postMessage(payload);
   } else {
     console.error('🔥 CRASH:', err);
   }
@@ -159,17 +193,17 @@ process.on('uncaughtException', (err) => {
 // (see wrapGeneratedCode() in blockly-blocks-shared.js) — an error thrown in there becomes
 // an unhandled rejection, not a caught exception, so this is the actual arrival point for
 // that case's blockId, not the top-level require() try/catch below.
-process.on('unhandledRejection', (reason) => {
-  if (!parentPort) return;
+process.on('unhandledRejection', (reason: any) => {
+  if (!pp) return;
   const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
-  const payload = {
+  const payload: any = {
     type: 'log',
     level: 'error',
-    source: workerData.name || 'System',
+    source: wd.name || 'System',
     message: `⚠️ Unhandled Rejection: ${message}`,
   };
   if (reason && reason.blockId) payload.blockId = reason.blockId;
-  parentPort.postMessage(payload);
+  pp.postMessage(payload);
 });
 
 // 🛡️ GLOBAL SIGNAL HANDLER
@@ -179,21 +213,26 @@ process.on('SIGTERM', () => {
 });
 
 // --- 2. LOGGING LOGIC ---
-const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
-const scriptLevel = LOG_LEVELS[workerData.loglevel?.toLowerCase()] ?? 1;
+const LOG_LEVELS: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+const scriptLevel = LOG_LEVELS[wd.loglevel?.toLowerCase() ?? ''] ?? 1;
+
+interface LogMeta {
+  blockId?: string;
+  scriptId?: string;
+}
 
 // `meta.blockId` — set by BlocklyCompiler's scrub_() instrumentation (blockly-compiler.js) on
 // any error thrown from a .blocks script, tagging it with the exact block that threw. Threaded
 // through here rather than baked into the message string so the frontend can act on it
 // structurally (highlight the block on the Blockly canvas) without parsing log text. Always
 // undefined/absent for .js/.ts scripts — harmless no-op there.
-const sendLog = (level, msg, meta) => {
+const sendLog = (level: string, msg: unknown, meta?: LogMeta): void => {
   if (LOG_LEVELS[level] >= scriptLevel) {
-    let finalMessage = msg;
+    let finalMessage: unknown = msg;
     let blockId = meta && meta.blockId;
     if (msg instanceof Error) {
       finalMessage = msg.stack || msg.toString();
-      if (blockId === undefined) blockId = msg.blockId;
+      if (blockId === undefined) blockId = (msg as any).blockId;
     } else if (typeof msg === 'object' && msg !== null) {
       try {
         // Pretty-print for better readability in logs
@@ -202,58 +241,63 @@ const sendLog = (level, msg, meta) => {
         finalMessage = '[Unserializable Object]';
       }
     }
-    const payload = { type: 'log', level, message: String(finalMessage) };
+    const payload: any = { type: 'log', level, message: String(finalMessage) };
     if (blockId) payload.blockId = blockId;
-    parentPort.postMessage(payload);
+    pp.postMessage(payload);
   }
 };
 
 // --- 3. CACHE & SYNC ---
 // Deep copy initialStates to prevent any potential shared references or mutation issues
 // This ensures the worker's state cache is truly isolated.
-const states = JSON.parse(JSON.stringify(workerData.initialStates || {}));
+const states: Record<string, any> = JSON.parse(JSON.stringify(wd.initialStates || {}));
 
 // Initialize Store: Ensure only the 'value' fields are kept in the local cache
 // in case the data structure contains metadata (Refactoring Support).
-const rawStore = workerData.initialStore || {};
-const storeValues = {};
+const rawStore = wd.initialStore || {};
+const storeValues: Record<string, any> = {};
 for (const k in rawStore) {
   const item = rawStore[k];
   storeValues[k] = item && typeof item === 'object' && 'value' in item ? item.value : item;
 }
 
-const storeListeners = {};
-const subscriptionCallbacks = [];
-const eventTypeCallbacks = []; // for ha.onEvent()
-const stopCallbacks = [];
-const errorCallbacks = [];
-const connectionCallbacks = []; // for ha.onConnectionChange()
+const storeListeners: Record<string, Array<(newVal: unknown, oldVal: unknown) => void>> = {};
+const subscriptionCallbacks: Array<{
+  pattern: unknown;
+  callback: (event: any) => void;
+  filter?: unknown;
+  threshold?: unknown;
+}> = [];
+const eventTypeCallbacks: Array<{ eventType: string; callback: (event: any) => void }> = []; // for ha.onEvent()
+const stopCallbacks: Array<() => Promise<void> | void> = [];
+const errorCallbacks: Array<(errorData: any) => void> = [];
+const connectionCallbacks: Array<(connected: boolean) => void> = []; // for ha.onConnectionChange()
 let isListening = false;
 
 // Tracks the HA WebSocket connection as last reported by the main process, kept in
 // sync via 'ha_connection_changed' messages so ha.isConnected() is a cheap sync read.
-let _haConnected = workerData.initialConnected !== false;
+let _haConnected = wd.initialConnected !== false;
 
 // Native entity tracking: entity IDs registered via ha.register().
 // ha_events for these are always HA echoes of the script's own MQTT publishes
 // and are suppressed entirely in the ha_event handler. Commands from HA arrive
 // via mqtt_command instead.
-const nativeEntityIds = new Set();
+const nativeEntityIds = new Set<string>();
 
 // Watch expressions: label → { fn, lastSerialized }
-const _watchers = new Map();
+const _watchers = new Map<string, { fn: () => unknown; lastSerialized: string }>();
 // Keep-alive timer for scripts that only use ha.watch() — parentPort.ref() alone is
 // unreliable in some Node.js versions (especially after Atomics.wait() returns).
-let _watchKeepaliveTimer = null;
+let _watchKeepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
 // HA non-command states filtered out of mqtt_command dispatches.
 // Scripts should never need to guard against these themselves.
 const HA_TECH_STATES = new Set(['unknown', 'unavailable', 'None', '']);
 
-const pendingServiceCalls = new Map();
-const pendingAsks = new Map(); // correlationId -> { resolve, timer }
-const actionHandlers = new Map(); // actionName -> async handler
-const entityActionMap = new Map(); // entityId -> actionName (for ha.register action: routing)
+const pendingServiceCalls = new Map<number | string, { resolve: (v?: any) => void; reject: (e: Error) => void }>();
+const pendingAsks = new Map<string, { resolve: (action: string | null) => void; timer: ReturnType<typeof setTimeout> }>();
+const actionHandlers = new Map<string, (payload: any) => any>();
+const entityActionMap = new Map<string, string>(); // entityId -> actionName (for ha.register action: routing)
 const ASK_SEP = '__jsa_ask__';
 let serviceCallCounter = 0;
 
@@ -261,20 +305,25 @@ let serviceCallCounter = 0;
  * EntitySelector Class for bulk actions
  */
 class EntitySelector {
-  constructor(entities, parentHa) {
+  list: any[];
+  ha: any;
+  private _throttleMs: number;
+  private _proxy: EntitySelector | null;
+
+  constructor(entities: any[], parentHa: any) {
     this.list = entities; // Array of HA State objects
     this.ha = parentHa;
-    this._throttleMs = workerData.defaultThrottle || 0;
+    this._throttleMs = wd.defaultThrottle || 0;
     this._proxy = null;
 
     // Return a Proxy to allow calling any service name as a method
-    const proxy = new Proxy(this, {
-      get: (target, prop) => {
+    const proxy: any = new Proxy(this, {
+      get: (target: any, prop) => {
         // Do not treat internal JS properties or 'then' (for Promises) as services
         if (prop in target || typeof prop !== 'string' || prop === 'then') return target[prop];
 
         // Call via proxy so 'this' inside call() stays the proxy, preserving chaining
-        return (data = {}) => target._proxy.call(prop, data);
+        return (data: any = {}) => target._proxy.call(prop, data);
       },
     });
     this._proxy = proxy;
@@ -282,23 +331,23 @@ class EntitySelector {
   }
 
   /** Returns the number of entities in the current selection */
-  get count() {
+  get count(): number {
     return this.list.length;
   }
 
   /** Filters the current selection using a callback function */
-  where(callback) {
+  where(callback: (entity: any) => boolean): EntitySelector {
     return new EntitySelector(this.list.filter(callback), this.ha);
   }
 
   /** Executes a function for each entity in the selection */
-  each(callback) {
+  each(callback: (entity: any) => void): this {
     this.list.forEach(callback);
     return this;
   }
 
   /** Calls a service for all entities in the selection */
-  async call(service, data = {}) {
+  async call(service: string, data: Record<string, unknown> = {}): Promise<this> {
     for (let i = 0; i < this.list.length; i++) {
       const entity = this.list[i];
       // Uses the awaitable logic from ha.entity()
@@ -313,24 +362,24 @@ class EntitySelector {
   }
 
   /** Sets a delay between individual entity calls in a batch */
-  throttle(ms) {
+  throttle(ms: number): this {
     this._throttleMs = ms;
     return this;
   }
 
   /** Wait for X ms and return this for chaining */
-  async wait(ms) {
+  async wait(ms: number): Promise<this> {
     await new Promise((res) => setTimeout(res, ms));
     return this;
   }
 
   /** Expands groups to their members */
-  expand() {
-    const expanded = new Map();
+  expand(): EntitySelector {
+    const expanded = new Map<string, any>();
     this.list.forEach((entity) => {
       const members = entity.attributes?.entity_id;
       if (Array.isArray(members) && members.length > 0) {
-        members.forEach((mid) => {
+        members.forEach((mid: string) => {
           const mState = this.ha.states[mid];
           if (mState) expanded.set(mid, mState);
         });
@@ -342,13 +391,13 @@ class EntitySelector {
   }
 
   /** Returns the raw array of state objects */
-  toArray() {
+  toArray(): any[] {
     return this.list;
   }
 }
 
 /** Helper: Checks if an entity ID matches a pattern (String, Wildcard, Array, RegExp) */
-function matches(entityId, pattern) {
+function matches(entityId: string, pattern: unknown): boolean {
   if (typeof pattern === 'string') {
     if (pattern === entityId) return true;
     if (pattern.includes('*')) {
@@ -362,75 +411,41 @@ function matches(entityId, pattern) {
   return false;
 }
 
+// Response message types that all follow the exact same shape: resolve/reject the
+// pending promise registered under msg.callId, and release the keep-alive ref.
+// Consolidated from 8 near-identical copy-pasted blocks (found while converting
+// this file to TypeScript) into one - same behavior, easier to extend.
+const SIMPLE_RESPONSE_TYPES = new Set([
+  'service_response',
+  'install_card_response',
+  'cache_asset_response',
+  'get_history_response',
+  'get_statistics_response',
+  'render_template_response',
+  'get_calendar_events_response',
+  'get_todo_items_response',
+]);
+
 /**
  * Ensures the worker is listening for updates from the master.
  */
-function ensureMessageListener() {
+function ensureMessageListener(): void {
   if (isListening) return;
   isListening = true;
 
   // Ensure the listener doesn't prevent the worker from exiting
   // as long as no active triggers (ha.on, schedule) are registered.
-  parentPort.unref();
+  pp.unref();
 
-  parentPort.on('message', async (msg) => {
-    // Handle response from service calls (for ha.entity() / awaitable calls)
-    if (msg.type === 'service_response') {
+  pp.on('message', async (msg: any) => {
+    // Handle response messages for pending call-and-wait requests (ha.entity() calls,
+    // ha.frontend.installCard()/cacheAsset(), ha.getHistory()/getStatistics()/
+    // renderTemplate()/getCalendarEvents()/getTodoItems()).
+    if (SIMPLE_RESPONSE_TYPES.has(msg.type)) {
       const promise = pendingServiceCalls.get(msg.callId);
       if (promise) {
         if (msg.error) promise.reject(new Error(msg.error));
-        else promise.resolve(msg.result);
-        pendingServiceCalls.delete(msg.callId);
-      }
-      return;
-    }
-
-    // Handle ha.frontend.installCard() response
-    if (msg.type === 'install_card_response') {
-      const promise = pendingServiceCalls.get(msg.callId);
-      if (promise) {
-        if (msg.error) promise.reject(new Error(msg.error));
-        else promise.resolve(msg.url);
-        pendingServiceCalls.delete(msg.callId);
-        _releaseRef();
-      }
-      return;
-    }
-
-    // Handle ha.frontend.cacheAsset() response
-    if (msg.type === 'cache_asset_response') {
-      const promise = pendingServiceCalls.get(msg.callId);
-      if (promise) {
-        if (msg.error) promise.reject(new Error(msg.error));
-        else promise.resolve(msg.url);
-        pendingServiceCalls.delete(msg.callId);
-        _releaseRef();
-      }
-      return;
-    }
-
-    // Handle ha.getHistory() response
-    if (msg.type === 'get_history_response') {
-      const promise = pendingServiceCalls.get(msg.callId);
-      if (promise) {
-        if (msg.error) promise.reject(new Error(msg.error));
-        else promise.resolve(msg.result);
-        pendingServiceCalls.delete(msg.callId);
-        _releaseRef();
-      }
-      return;
-    }
-
-    if (
-      msg.type === 'get_statistics_response' ||
-      msg.type === 'render_template_response' ||
-      msg.type === 'get_calendar_events_response' ||
-      msg.type === 'get_todo_items_response'
-    ) {
-      const promise = pendingServiceCalls.get(msg.callId);
-      if (promise) {
-        if (msg.error) promise.reject(new Error(msg.error));
-        else promise.resolve(msg.result);
+        else promise.resolve(msg.result ?? msg.url);
         pendingServiceCalls.delete(msg.callId);
         _releaseRef();
       }
@@ -443,7 +458,7 @@ function ensureMessageListener() {
         if (sub.eventType === msg.event.event_type) {
           try {
             sub.callback(msg.event);
-          } catch (e) {
+          } catch (e: any) {
             ha.error(`Error in ha.onEvent callback for ${msg.event.event_type}: ${e.message}\n${e.stack}`, {
               blockId: e.blockId,
             });
@@ -486,7 +501,7 @@ function ensureMessageListener() {
         storeListeners[msg.key].forEach((cb) => {
           try {
             cb(msg.value, oldValue);
-          } catch (e) {
+          } catch (e: any) {
             ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
           }
         });
@@ -499,7 +514,7 @@ function ensureMessageListener() {
       connectionCallbacks.forEach((cb) => {
         try {
           cb(_haConnected);
-        } catch (e) {
+        } catch (e: any) {
           ha.error(`Error in ha.onConnectionChange callback: ${e.message}\n${e.stack}`);
         }
       });
@@ -522,7 +537,7 @@ function ensureMessageListener() {
             const serialized = JSON.stringify(value);
             if (serialized !== watcher.lastSerialized) {
               watcher.lastSerialized = serialized;
-              parentPort.postMessage({ type: 'watch_update', label, value, script: workerData.filename });
+              pp.postMessage({ type: 'watch_update', label, value, script: wd.filename });
             }
           } catch (e) {
             /* entity might not exist yet or value not serializable */
@@ -553,7 +568,7 @@ function ensureMessageListener() {
           const isNum = !isNaN(nNew) && (sub.threshold === undefined ? !isNaN(nOld) : true);
 
           // Determine comparison value (Threshold or Old Value)
-          const compVal = sub.threshold !== undefined ? parseFloat(sub.threshold) : nOld;
+          const compVal = sub.threshold !== undefined ? parseFloat(sub.threshold as string) : nOld;
           const compValStr = sub.threshold !== undefined ? String(sub.threshold) : valOld;
 
           let match = false;
@@ -587,7 +602,7 @@ function ensureMessageListener() {
             old_state: msg.old_state?.state,
             attributes: msg.state.attributes,
           });
-        } catch (e) {
+        } catch (e: any) {
           ha.error(`Error in ha.on callback for ${msg.entity_id}: ${e.message}\n${e.stack}`, { blockId: e.blockId });
         }
       });
@@ -604,7 +619,7 @@ function ensureMessageListener() {
         if (!matches(msg.entityId, sub.pattern)) return;
         try {
           sub.callback({ entity_id: msg.entityId, state: msg.payload, old_state: null, attributes: {} });
-        } catch (e) {
+        } catch (e: any) {
           ha.error(`Error in ha.on command callback for ${msg.entityId}: ${e.message}\n${e.stack}`, {
             blockId: e.blockId,
           });
@@ -615,8 +630,8 @@ function ensureMessageListener() {
       const linkedAction = entityActionMap.get(msg.entityId);
       if (linkedAction && actionHandlers.has(linkedAction)) {
         Promise.resolve()
-          .then(() => actionHandlers.get(linkedAction)({}))
-          .catch((e) => {
+          .then(() => actionHandlers.get(linkedAction)!({}))
+          .catch((e: any) => {
             ha.error(`ha.action('${linkedAction}') error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
           });
       }
@@ -630,7 +645,7 @@ function ensureMessageListener() {
     if (msg.type === 'card_action') {
       const handler = actionHandlers.get(msg.action);
       if (!handler) {
-        parentPort.postMessage({
+        pp.postMessage({
           type: 'action_response',
           callId: msg.callId,
           error: `Unknown action "${msg.action}"`,
@@ -639,10 +654,10 @@ function ensureMessageListener() {
       }
       try {
         const result = await handler(msg.payload ?? {});
-        parentPort.postMessage({ type: 'action_response', callId: msg.callId, result: result ?? null });
-      } catch (e) {
+        pp.postMessage({ type: 'action_response', callId: msg.callId, result: result ?? null });
+      } catch (e: any) {
         ha.error(`ha.action('${msg.action}') error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
-        parentPort.postMessage({ type: 'action_response', callId: msg.callId, error: e.message });
+        pp.postMessage({ type: 'action_response', callId: msg.callId, error: e.message });
       }
       return;
     }
@@ -660,7 +675,7 @@ function ensureMessageListener() {
     if (msg.type === 'mqtt_raw_message') {
       const cb = _mqttSubscriptions.get(msg.subscriptionId);
       if (cb) {
-        let payload = msg.payload;
+        let payload: any = msg.payload;
         try {
           payload = JSON.parse(payload);
         } catch (e) {
@@ -668,7 +683,7 @@ function ensureMessageListener() {
         }
         try {
           cb(msg.topic, payload);
-        } catch (e) {
+        } catch (e: any) {
           ha.error(`Error in ha.mqtt.subscribe callback (${msg.topic}): ${e.message}\n${e.stack}`, {
             blockId: e.blockId,
           });
@@ -692,24 +707,24 @@ function ensureMessageListener() {
 
       let responded = false;
       let statusCode = 200;
-      const respond = (body, isJson) => {
+      const respond = (body: unknown, isJson: boolean): void => {
         if (responded) return;
         responded = true;
-        parentPort.postMessage({
+        pp.postMessage({
           type: 'webhook_response',
           correlationId: msg.correlationId,
           response: { status: statusCode, body, isJson },
         });
       };
       const res = {
-        status(code) {
+        status(code: number) {
           statusCode = code;
           return this;
         },
-        json(data) {
+        json(data: unknown) {
           respond(data, true);
         },
-        send(text) {
+        send(text: unknown) {
           respond(text, false);
         },
       };
@@ -717,11 +732,11 @@ function ensureMessageListener() {
       try {
         await handler(msg.req, res);
         if (!responded) respond(undefined, false);
-      } catch (e) {
+      } catch (e: any) {
         ha.error(`ha.onWebhook('${msg.id}') handler error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
         if (!responded) {
           responded = true;
-          parentPort.postMessage({
+          pp.postMessage({
             type: 'webhook_response',
             correlationId: msg.correlationId,
             response: { error: e.message },
@@ -736,7 +751,7 @@ function ensureMessageListener() {
       for (const cb of stopCallbacks) {
         try {
           await cb();
-        } catch (e) {
+        } catch (e: any) {
           ha.error(`onStop Error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
         }
       }
@@ -745,7 +760,6 @@ function ensureMessageListener() {
       process.exit(0);
     }
 
-    // Emergency flush before force-kill — sent when the worker didn't respond to stop_request.
     if (msg.type === 'flush_persistent') {
       for (const flush of persistentFlushRegistry) flush();
     }
@@ -753,7 +767,7 @@ function ensureMessageListener() {
     // Handle stats request
     if (msg.type === 'get_stats') {
       const mem = process.memoryUsage();
-      parentPort.postMessage({
+      pp.postMessage({
         type: 'stats',
         heapUsed: mem.heapUsed,
         rss: mem.rss,
@@ -763,17 +777,17 @@ function ensureMessageListener() {
 }
 
 // --- 4. THE GLOBAL API ---
-const ha = {
+const ha: any = {
   // Internationalization
-  language: workerData.language || 'en',
+  language: wd.language || 'en',
 
   /**
    * Returns a localized string based on the current language.
-   * @param {object} mapping - Object mapping language codes to strings (e.g. { en: "Hi", de: "Hallo" })
-   * @param {string} [fallback] - Optional fallback string if language is not found
+   * @param mapping - Object mapping language codes to strings (e.g. { en: "Hi", de: "Hallo" })
+   * @param fallback - Optional fallback string if language is not found
    */
-  localize: (mapping, fallback) => {
-    const lang = workerData.language || 'en';
+  localize: (mapping: Record<string, string>, fallback?: string): string => {
+    const lang = wd.language || 'en';
     if (mapping[lang]) return mapping[lang];
     // Try short code if lang is like "en-US"
     const short = lang.split('-')[0];
@@ -782,21 +796,21 @@ const ha = {
   },
 
   // Logging
-  debug: (m) => sendLog('debug', m),
-  log: (m) => sendLog('info', m),
-  warn: (m) => sendLog('warn', m),
-  error: (m, meta) => sendLog('error', m, meta),
-  stop: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'stop', reason }),
-  restart: (reason) => parentPort.postMessage({ type: 'script_lifecycle', action: 'restart', reason }),
+  debug: (m: unknown) => sendLog('debug', m),
+  log: (m: unknown) => sendLog('info', m),
+  warn: (m: unknown) => sendLog('warn', m),
+  error: (m: unknown, meta?: LogMeta) => sendLog('error', m, meta),
+  stop: (reason?: string) => pp.postMessage({ type: 'script_lifecycle', action: 'stop', reason }),
+  restart: (reason?: string) => pp.postMessage({ type: 'script_lifecycle', action: 'restart', reason }),
 
   /**
    * Pauses script execution until the developer clicks "Continue" in the UI.
    * The vars object is displayed in the Breakpoints tab as a variable inspector.
    * Auto-resumes after 60 seconds to prevent scripts from hanging indefinitely.
-   * @param {string} label - Descriptive label shown in the UI
-   * @param {object} [vars] - Variables to inspect (key/value pairs)
+   * @param label - Descriptive label shown in the UI
+   * @param vars - Variables to inspect (key/value pairs)
    */
-  breakpoint: (label, vars = {}) => {
+  breakpoint: (label: string, vars: Record<string, unknown> = {}): void => {
     if (scriptLevel > 0) {
       sendLog('info', `⏸ ha.breakpoint("${label}") skipped — set log level to 'debug' to enable breakpoints`);
       return;
@@ -804,7 +818,7 @@ const ha = {
     const sab = new SharedArrayBuffer(4);
     const flag = new Int32Array(sab);
     sendLog('info', `⏸ Breakpoint: "${label}"`);
-    parentPort.postMessage({ type: 'breakpoint', label, vars, sab });
+    pp.postMessage({ type: 'breakpoint', label, vars, sab });
     Atomics.wait(flag, 0, 0, 60000);
     sendLog('debug', `▶ Continued from breakpoint: "${label}"`);
   },
@@ -812,30 +826,30 @@ const ha = {
   /**
    * Sends a one-shot variable snapshot to the WATCH tab (non-blocking).
    * Appears as a timestamped list entry below the live watch tiles.
-   * @param {string} label - Descriptive label shown in the UI
-   * @param {object} [vars] - Variables to display (key/value pairs)
+   * @param label - Descriptive label shown in the UI
+   * @param vars - Variables to display (key/value pairs)
    */
-  inspect: (label, vars = {}) => {
+  inspect: (label: string, vars: Record<string, unknown> = {}): void => {
     if (scriptLevel > 0) {
       sendLog('info', `🔍 ha.inspect("${label}") skipped — set log level to 'debug' to enable inspect snapshots`);
       return;
     }
-    parentPort.postMessage({ type: 'inspect', label, vars, script: workerData.filename });
+    pp.postMessage({ type: 'inspect', label, vars, script: wd.filename });
   },
 
   /**
    * Registers a live watch expression that re-evaluates on every HA state change.
    * Results appear as updating tiles at the top of the WATCH tab.
-   * @param {string} label - Unique label for the tile (used to identify it in the UI)
-   * @param {function(): unknown} fn - Expression to evaluate; has access to all ha.* APIs
+   * @param label - Unique label for the tile (used to identify it in the UI)
+   * @param fn - Expression to evaluate; has access to all ha.* APIs
    */
-  watch: (label, fn) => {
+  watch: (label: string, fn: () => unknown): void => {
     ensureMessageListener();
     _addRef();
     if (!_watchKeepaliveTimer) {
       _watchKeepaliveTimer = setInterval(() => {}, 60000);
     }
-    parentPort.postMessage({ type: 'subscribe', pattern: '*' });
+    pp.postMessage({ type: 'subscribe', pattern: '*' });
     const initial = (() => {
       try {
         return fn();
@@ -844,13 +858,14 @@ const ha = {
       }
     })();
     _watchers.set(label, { fn, lastSerialized: JSON.stringify(initial) });
-    parentPort.postMessage({ type: 'watch_update', label, value: initial, script: workerData.filename });
+    pp.postMessage({ type: 'watch_update', label, value: initial, script: wd.filename });
   },
 
   // Commands
-  callService: (domain, service, data) => parentPort.postMessage({ type: 'call_service', domain, service, data }),
-  updateState: (entityId, state, attributes = {}) =>
-    parentPort.postMessage({ type: 'update_state', entityId, state, attributes }),
+  callService: (domain: string, service: string, data: unknown) =>
+    pp.postMessage({ type: 'call_service', domain, service, data }),
+  updateState: (entityId: string, state: unknown, attributes: Record<string, unknown> = {}) =>
+    pp.postMessage({ type: 'update_state', entityId, state, attributes }),
 
   /**
    * Global helper function for Home Assistant service calls.
@@ -858,7 +873,7 @@ const ha = {
    * Pass { returnResponse: true } to await the service's response payload
    * (e.g. weather.get_forecasts) instead of firing-and-forgetting.
    */
-  call: (serviceId, data = {}, options = {}) => {
+  call: (serviceId: string, data: Record<string, any> = {}, options: { returnResponse?: boolean } = {}) => {
     const [domain, service] = (serviceId || '').split('.');
     if (!domain || !service) {
       ha.error(`Invalid service ID format: "${serviceId}". Expected "domain.service"`);
@@ -888,7 +903,7 @@ const ha = {
     _addRef();
     return new Promise((resolve, reject) => {
       pendingServiceCalls.set(callId, {
-        resolve: (result) => {
+        resolve: (result: any) => {
           _releaseRef();
           resolve(result?.response ?? result);
         },
@@ -897,7 +912,7 @@ const ha = {
           reject(err);
         },
       });
-      parentPort.postMessage({ type: 'call_service', domain, service, data, callId, returnResponse: true });
+      pp.postMessage({ type: 'call_service', domain, service, data, callId, returnResponse: true });
 
       setTimeout(() => {
         const pending = pendingServiceCalls.get(callId);
@@ -911,16 +926,15 @@ const ha = {
 
   /**
    * Sends a notification via Home Assistant's notify service.
-   * @param {string} message - The notification message.
-   * @param {object} [options] - Optional options.
-   * @param {string} [options.title] - Notification title.
-   * @param {string} [options.target] - Target service (e.g. 'notify.mobile_app_phone'). Defaults to 'notify.notify'.
-   * @param {object} [options.data] - Additional service data (e.g. action buttons, image).
+   * @param message - The notification message.
+   * @param options.title - Notification title.
+   * @param options.target - Target service (e.g. 'notify.mobile_app_phone'). Defaults to 'notify.notify'.
+   * @param options.data - Additional service data (e.g. action buttons, image).
    */
-  notify: (message, options = {}) => {
+  notify: (message: string, options: { title?: string; target?: string; data?: any; persistent?: boolean } = {}) => {
     const { title, target, data, persistent } = options;
 
-    let service;
+    let service: string;
     if (persistent) {
       // Route to Home Assistant's persistent notification system (visible in browser)
       service = 'persistent_notification';
@@ -930,7 +944,7 @@ const ha = {
 
     // HA notify service expects platform-specific fields (actions, tag, image, …)
     // nested under a 'data' key, not spread at the top level.
-    const serviceData = { message, title };
+    const serviceData: any = { message, title };
     if (data) serviceData.data = data;
     ha.callService('notify', service, serviceData);
   },
@@ -940,15 +954,23 @@ const ha = {
    * Returns a Promise that resolves with the chosen action string,
    * or with `defaultAction` (default: null) if the timeout expires.
    *
-   * @param {string} message - The notification message body.
-   * @param {object} options
-   * @param {string} [options.title] - Notification title.
-   * @param {string} [options.target] - Notify service target. Defaults to 'notify.notify'.
-   * @param {number} [options.timeout=60000] - ms to wait before resolving with defaultAction.
-   * @param {string|null} [options.defaultAction=null] - Value to resolve with on timeout.
-   * @param {Array<{action: string, title: string}>} [options.actions=[]] - Action buttons.
+   * @param message - The notification message body.
+   * @param options.title - Notification title.
+   * @param options.target - Notify service target. Defaults to 'notify.notify'.
+   * @param options.timeout - ms to wait before resolving with defaultAction. Default 60000.
+   * @param options.defaultAction - Value to resolve with on timeout. Default null.
+   * @param options.actions - Action buttons.
    */
-  ask: (message, options = {}) => {
+  ask: (
+    message: string,
+    options: {
+      title?: string;
+      target?: string;
+      timeout?: number;
+      defaultAction?: string | null;
+      actions?: Array<{ action: string; title: string }>;
+    } = {}
+  ) => {
     const { title, target, timeout = 60000, defaultAction = null, actions = [] } = options;
 
     const correlationId = `jsa_ask_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -967,7 +989,7 @@ const ha = {
 
     ensureMessageListener();
     _addRef(); // Prevent the worker from exiting while waiting for the response
-    parentPort.postMessage({ type: 'register_ask', correlationId });
+    pp.postMessage({ type: 'register_ask', correlationId });
 
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -992,15 +1014,15 @@ const ha = {
   /**
    * Fluent API for interacting with a single entity.
    */
-  entity: (entityId) => {
+  entity: (entityId: string) => {
     const domain = entityId.split('.')[0];
 
     // Ensure the worker waits for the response (service_response)
     ensureMessageListener();
 
-    const api = {
-      wait: (ms) => new Promise((res) => setTimeout(() => res(apiProxy), ms)),
-      getAttribute: (name) => states[entityId]?.attributes?.[name],
+    const api: any = {
+      wait: (ms: number) => new Promise((res) => setTimeout(() => res(apiProxy), ms)),
+      getAttribute: (name: string) => states[entityId]?.attributes?.[name],
       get state() {
         return states[entityId]?.state;
       },
@@ -1009,12 +1031,12 @@ const ha = {
       },
     };
 
-    const apiProxy = new Proxy(api, {
+    const apiProxy: any = new Proxy(api, {
       get: (target, service) => {
         // Do not treat internal JS properties or 'then' (for Promises) as services
         if (service in target || typeof service !== 'string' || service === 'then') return target[service];
 
-        return (data = {}) => {
+        return (data: Record<string, unknown> = {}) => {
           const callId = ++serviceCallCounter;
           _addRef(); // Prevent exit while the call is in progress
           return new Promise((resolve, reject) => {
@@ -1028,7 +1050,7 @@ const ha = {
                 reject(err);
               },
             });
-            parentPort.postMessage({
+            pp.postMessage({
               type: 'call_service',
               domain,
               service,
@@ -1052,9 +1074,9 @@ const ha = {
     return apiProxy;
   },
 
-  update: (entityId, arg2, arg3) => {
+  update: (entityId: string, arg2?: unknown, arg3?: unknown) => {
     let state = arg2;
-    let attributes = arg3;
+    let attributes: any = arg3;
 
     // Overload: ha.update(id, { attributes }) -> Keep current state and merge attributes
     if (attributes === undefined && typeof arg2 === 'object' && arg2 !== null && !Array.isArray(arg2)) {
@@ -1092,7 +1114,7 @@ const ha = {
     }
 
     // Send the full merged attribute set to ensure MQTT attributes are not partially cleared.
-    parentPort.postMessage({
+    pp.postMessage({
       type: 'update_state',
       entityId,
       state: states[entityId].state,
@@ -1103,10 +1125,10 @@ const ha = {
   /**
    * Registers a native Home Assistant entity (via MQTT).
    * Creates it or updates the configuration if it already exists.
-   * @param {string} entityId - The desired Entity ID (e.g. 'sensor.my_value')
-   * @param {object} config - Configuration (name, icon, type, unit_of_measurement, etc.)
+   * @param entityId - The desired Entity ID (e.g. 'sensor.my_value')
+   * @param config - Configuration (name, icon, type, unit_of_measurement, etc.)
    */
-  register: (entityId, config = {}) => {
+  register: (entityId: string, config: Record<string, any> = {}) => {
     // Optimistic Update for registered entities
     if (!states[entityId]) {
       states[entityId] = {
@@ -1131,20 +1153,20 @@ const ha = {
     // Track as a native entity so ha_events for it are suppressed (commands arrive via mqtt_command).
     nativeEntityIds.add(entityId);
     // Send the intent to the main process, which handles the registration via MQTT.
-    parentPort.postMessage({ type: 'create_entity', entityId, config });
+    pp.postMessage({ type: 'create_entity', entityId, config });
   },
 
   /**
    * Permanently removes a dynamically-created entity from Home Assistant, without
    * restarting the script. Entities declared via the `@expose` header are managed
    * automatically and cannot be unregistered this way.
-   * @param {string} entityId - The entity ID to remove.
+   * @param entityId - The entity ID to remove.
    */
-  unregister: (entityId) => {
+  unregister: (entityId: string) => {
     delete states[entityId];
     nativeEntityIds.delete(entityId);
     entityActionMap.delete(entityId);
-    parentPort.postMessage({ type: 'remove_entity', entityId });
+    pp.postMessage({ type: 'remove_entity', entityId });
   },
 
   // Frontend / Lovelace
@@ -1157,18 +1179,17 @@ const ha = {
      * In @card dev mode the file write and Lovelace registration are skipped;
      * the preview panel is updated live instead.
      *
-     * @param {object} [options]
-     * @param {object} [options.config]  - Config object passed to setConfig() on first connect
-     * @param {boolean} [options.force]  - Force reinstall even if hash matches
-     * @returns {Promise<string>} Installed resource URL
+     * @param options.config - Config object passed to setConfig() on first connect
+     * @param options.force - Force reinstall even if hash matches
+     * @returns Installed resource URL
      */
-    installCard: (options = {}) =>
+    installCard: (options: Record<string, unknown> = {}) =>
       new Promise((resolve, reject) => {
         const callId = `card_${serviceCallCounter++}`;
         ensureMessageListener();
         _addRef();
         pendingServiceCalls.set(callId, { resolve, reject });
-        parentPort.postMessage({ type: 'install_card', options, callId });
+        pp.postMessage({ type: 'install_card', options, callId });
       }),
 
     /**
@@ -1182,29 +1203,28 @@ const ha = {
      * Repeated calls with the same URL are served from the on-disk cache — free unless
      * `force` is set or `ttl` has elapsed. Requires @permission network.
      *
-     * @param {string} url - The external URL to download.
-     * @param {object} [options]
-     * @param {string} [options.filename] - Override the cached filename (incl. extension).
-     * @param {number} [options.ttl] - Re-download if the cached copy is older than this many ms.
-     * @param {boolean} [options.force] - Skip the cache and re-download unconditionally.
-     * @param {number} [options.maxSize] - Max accepted response size in bytes (default 5MB).
-     * @returns {Promise<string>} The cached asset's /local/... URL.
+     * @param url - The external URL to download.
+     * @param options.filename - Override the cached filename (incl. extension).
+     * @param options.ttl - Re-download if the cached copy is older than this many ms.
+     * @param options.force - Skip the cache and re-download unconditionally.
+     * @param options.maxSize - Max accepted response size in bytes (default 5MB).
+     * @returns The cached asset's /local/... URL.
      */
-    cacheAsset: (url, options = {}) =>
+    cacheAsset: (url: string, options: Record<string, unknown> = {}) =>
       new Promise((resolve, reject) => {
         const callId = `asset_${serviceCallCounter++}`;
         ensureMessageListener();
         _addRef();
         pendingServiceCalls.set(callId, { resolve, reject });
-        parentPort.postMessage({ type: 'cache_asset', url, options, callId });
+        pp.postMessage({ type: 'cache_asset', url, options, callId });
       }),
   },
 
   // Real-time Data
   states: states,
-  getState: (entityId) => states[entityId],
-  getAttr: (entityId, attr) => states[entityId]?.attributes?.[attr],
-  getStateValue: (entityId) => {
+  getState: (entityId: string) => states[entityId],
+  getAttr: (entityId: string, attr: string) => states[entityId]?.attributes?.[attr],
+  getStateValue: (entityId: string) => {
     const val = states[entityId]?.state;
     if (val === undefined) return undefined;
     if (val === 'on') return true;
@@ -1213,34 +1233,34 @@ const ha = {
     if (!isNaN(num) && val.trim() !== '') return num;
     return val;
   },
-  getGroupMembers: (entityId) => {
+  getGroupMembers: (entityId: string) => {
     const s = states[entityId];
     return s && Array.isArray(s.attributes?.entity_id) ? s.attributes.entity_id : [];
   },
-  entityExists: (entityId) => entityId in states,
-  getAreas: () => workerData.initialAreas || [],
-  getEntitiesInArea: (areaId) => {
-    const entityRegistry = workerData.initialEntityRegistry || [];
-    const deviceRegistry = workerData.initialDeviceRegistry || [];
+  entityExists: (entityId: string) => entityId in states,
+  getAreas: () => wd.initialAreas || [],
+  getEntitiesInArea: (areaId: string) => {
+    const entityRegistry = wd.initialEntityRegistry || [];
+    const deviceRegistry = wd.initialDeviceRegistry || [];
     // Build device_id → area_id map for the fallback lookup
-    const deviceAreaMap = new Map(deviceRegistry.map((d) => [d.id, d.area_id]));
+    const deviceAreaMap = new Map(deviceRegistry.map((d: any) => [d.id, d.area_id]));
     return entityRegistry
-      .filter((e) => {
+      .filter((e: any) => {
         if (e.disabled_by) return false;
         // Direct assignment takes priority; fall back to the device's area
         const effectiveArea = e.area_id ?? deviceAreaMap.get(e.device_id) ?? null;
         return effectiveArea === areaId;
       })
-      .map((e) => e.entity_id);
+      .map((e: any) => e.entity_id);
   },
   history: {
-    get: (entityId, options = {}) => {
+    get: (entityId: string, options: Record<string, any> = {}) => {
       _addRef();
       ensureMessageListener();
       const callId = ++serviceCallCounter;
       return new Promise((resolve, reject) => {
         pendingServiceCalls.set(callId, { resolve, reject });
-        parentPort.postMessage({
+        pp.postMessage({
           type: 'get_history',
           callId,
           entityId,
@@ -1252,13 +1272,13 @@ const ha = {
       });
     },
 
-    statistics: (statId, options = {}) => {
+    statistics: (statId: string, options: Record<string, any> = {}) => {
       _addRef();
       ensureMessageListener();
       const callId = ++serviceCallCounter;
       return new Promise((resolve, reject) => {
         pendingServiceCalls.set(callId, { resolve, reject });
-        parentPort.postMessage({
+        pp.postMessage({
           type: 'get_statistics',
           callId,
           statId,
@@ -1270,31 +1290,31 @@ const ha = {
       });
     },
 
-    trend: (entityId, options) => historyHelpers.trend(ha, entityId, options),
-    derivative: (entityId, options) => historyHelpers.derivative(ha, entityId, options),
-    integral: (entityId, options) => historyHelpers.integral(ha, entityId, options),
-    stats: (entityId, options) => historyHelpers.stats(ha, entityId, options),
-    timeSince: (entityId, state) => historyHelpers.timeSince(ha, entityId, state),
-    timeInState: (entityId, state, options) => historyHelpers.timeInState(ha, entityId, state, options),
+    trend: (entityId: string, options: any) => historyHelpers.trend(ha, entityId, options),
+    derivative: (entityId: string, options: any) => historyHelpers.derivative(ha, entityId, options),
+    integral: (entityId: string, options: any) => historyHelpers.integral(ha, entityId, options),
+    stats: (entityId: string, options: any) => historyHelpers.stats(ha, entityId, options),
+    timeSince: (entityId: string, state: any) => historyHelpers.timeSince(ha, entityId, state),
+    timeInState: (entityId: string, state: any, options: any) => historyHelpers.timeInState(ha, entityId, state, options),
   },
 
-  renderTemplate: (template) => {
+  renderTemplate: (template: string) => {
     _addRef();
     ensureMessageListener();
     const callId = ++serviceCallCounter;
     return new Promise((resolve, reject) => {
       pendingServiceCalls.set(callId, { resolve, reject });
-      parentPort.postMessage({ type: 'render_template', callId, template });
+      pp.postMessage({ type: 'render_template', callId, template });
     });
   },
 
-  getCalendarEvents: (entityId, options = {}) => {
+  getCalendarEvents: (entityId: string, options: Record<string, any> = {}) => {
     _addRef();
     ensureMessageListener();
     const callId = ++serviceCallCounter;
     return new Promise((resolve, reject) => {
       pendingServiceCalls.set(callId, { resolve, reject });
-      parentPort.postMessage({
+      pp.postMessage({
         type: 'get_calendar_events',
         callId,
         entityId,
@@ -1304,61 +1324,61 @@ const ha = {
     });
   },
 
-  getTodoItems: (entityId) => {
+  getTodoItems: (entityId: string) => {
     _addRef();
     ensureMessageListener();
     const callId = ++serviceCallCounter;
     return new Promise((resolve, reject) => {
       pendingServiceCalls.set(callId, { resolve, reject });
-      parentPort.postMessage({ type: 'get_todo_items', callId, entityId });
+      pp.postMessage({ type: 'get_todo_items', callId, entityId });
     });
   },
 
-  getLabels: () => workerData.initialLabels || [],
+  getLabels: () => wd.initialLabels || [],
 
-  getEntitiesWithLabel: (labelIdOrName) => {
-    const labels = workerData.initialLabels || [];
-    const entityRegistry = workerData.initialEntityRegistry || [];
-    const label = labels.find((l) => l.label_id === labelIdOrName || l.name === labelIdOrName);
+  getEntitiesWithLabel: (labelIdOrName: string) => {
+    const labels = wd.initialLabels || [];
+    const entityRegistry = wd.initialEntityRegistry || [];
+    const label = labels.find((l: any) => l.label_id === labelIdOrName || l.name === labelIdOrName);
     if (!label) return [];
     return entityRegistry
-      .filter((e) => !e.disabled_by && Array.isArray(e.labels) && e.labels.includes(label.label_id))
-      .map((e) => e.entity_id);
+      .filter((e: any) => !e.disabled_by && Array.isArray(e.labels) && e.labels.includes(label.label_id))
+      .map((e: any) => e.entity_id);
   },
 
-  getFloors: () => workerData.initialFloors || [],
+  getFloors: () => wd.initialFloors || [],
 
-  getAreasInFloor: (floorIdOrName) => {
-    const floors = workerData.initialFloors || [];
-    const floor = floors.find((f) => f.floor_id === floorIdOrName || f.name === floorIdOrName);
+  getAreasInFloor: (floorIdOrName: string) => {
+    const floors = wd.initialFloors || [];
+    const floor = floors.find((f: any) => f.floor_id === floorIdOrName || f.name === floorIdOrName);
     if (!floor) return [];
-    return (workerData.initialAreas || []).filter((a) => a.floor_id === floor.floor_id);
+    return (wd.initialAreas || []).filter((a: any) => a.floor_id === floor.floor_id);
   },
 
-  onEvent: (eventType, callback) => {
+  onEvent: (eventType: string, callback: (event: any) => void) => {
     ensureMessageListener();
     _addRef();
     eventTypeCallbacks.push({ eventType, callback });
-    parentPort.postMessage({ type: 'subscribe_event_type', eventType });
+    pp.postMessage({ type: 'subscribe_event_type', eventType });
   },
 
-  fireEvent: (eventType, eventData = {}) => {
-    parentPort.postMessage({ type: 'fire_event', eventType, eventData });
+  fireEvent: (eventType: string, eventData: Record<string, unknown> = {}) => {
+    pp.postMessage({ type: 'fire_event', eventType, eventData });
   },
 
   /**
    * Reads a value from the script header.
    */
-  getHeader: (key, defaultValue) => {
+  getHeader: (key: string, defaultValue?: unknown) => {
     if (!key) return defaultValue;
     const k = key.toLowerCase();
-    const val = workerData[k];
+    const val = wd[k];
     return val !== undefined ? val : defaultValue;
   },
 
-  select: (pattern) => {
+  select: (pattern: unknown) => {
     const allIds = Object.keys(states);
-    let matchedIds = [];
+    let matchedIds: string[] = [];
 
     if (typeof pattern === 'string') {
       if (pattern.includes('*')) {
@@ -1377,12 +1397,12 @@ const ha = {
     return new EntitySelector(matchedStates, ha);
   },
 
-  on: (pattern, arg2, arg3, arg4) => {
+  on: (pattern: unknown, arg2?: unknown, arg3?: unknown, arg4?: unknown) => {
     ensureMessageListener();
     _addRef(); // Keep alive — must come after ensureMessageListener() which may call unref()
-    parentPort.postMessage({ type: 'subscribe', pattern });
+    pp.postMessage({ type: 'subscribe', pattern });
 
-    let callback, filter, threshold;
+    let callback: any, filter: any, threshold: any;
     if (typeof arg2 === 'function') {
       callback = arg2;
     } else if (typeof arg3 === 'function') {
@@ -1400,14 +1420,14 @@ const ha = {
    * Waits for a specific event or state change.
    * Returns a Promise that resolves when the condition is met.
    */
-  waitFor: (pattern, arg2, arg3, arg4) => {
+  waitFor: (pattern: unknown, arg2?: unknown, arg3?: unknown, arg4?: unknown) => {
     return new Promise((resolve, reject) => {
-      let filter,
-        threshold,
-        options = {};
+      let filter: any,
+        threshold: any,
+        options: any = {};
 
       // Helper to identify the options object
-      const isOptions = (o) => typeof o === 'object' && o !== null && !Array.isArray(o);
+      const isOptions = (o: unknown): boolean => typeof o === 'object' && o !== null && !Array.isArray(o);
 
       if (isOptions(arg2)) {
         options = arg2;
@@ -1424,9 +1444,9 @@ const ha = {
       }
 
       const timeoutMs = options.timeout || 5000;
-      let timer;
+      let timer: ReturnType<typeof setTimeout>;
 
-      const callback = (event) => {
+      const callback = (event: unknown): void => {
         clearTimeout(timer);
         const idx = subscriptionCallbacks.indexOf(subscription);
         if (idx !== -1) subscriptionCallbacks.splice(idx, 1);
@@ -1436,11 +1456,11 @@ const ha = {
       const subscription = { pattern, callback, filter, threshold };
 
       ensureMessageListener();
-      parentPort.postMessage({ type: 'subscribe', pattern });
-      subscriptionCallbacks.push(subscription);
+      pp.postMessage({ type: 'subscribe', pattern });
+      subscriptionCallbacks.push(subscription as any);
 
       timer = setTimeout(() => {
-        const idx = subscriptionCallbacks.indexOf(subscription);
+        const idx = subscriptionCallbacks.indexOf(subscription as any);
         if (idx !== -1) subscriptionCallbacks.splice(idx, 1);
         reject(new Error(`Timeout waiting for ${pattern}`));
       }, timeoutMs);
@@ -1451,11 +1471,11 @@ const ha = {
    * Waits until a specific condition function returns true.
    * This is useful for complex state checks involving multiple entities.
    */
-  waitUntil: (condition, options = {}) => {
+  waitUntil: (condition: () => boolean, options: { timeout?: number; pollInterval?: number } = {}) => {
     const overallTimeout = options.timeout || 30000; // Default 30s overall timeout
     const pollInterval = options.pollInterval || 5000; // Default 5s wait between checks
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       (async () => {
         const startTime = Date.now();
 
@@ -1486,7 +1506,7 @@ const ha = {
     });
   },
 
-  onStop: (cb) => {
+  onStop: (cb: () => Promise<void> | void) => {
     ensureMessageListener();
     stopCallbacks.push(cb);
   },
@@ -1496,8 +1516,8 @@ const ha = {
    * (via __jsa__.callAction()), from a ha.register() button entity (via the action: field),
    * or from the addon UI.
    *
-   * @param {string} name - Action name, e.g. 'refresh' or 'set-team'
-   * @param {function} handler - Async function receiving an optional payload object.
+   * @param name - Action name, e.g. 'refresh' or 'set-team'
+   * @param handler - Async function receiving an optional payload object.
    *   May return a value that is forwarded back to the caller.
    *
    * @example
@@ -1509,13 +1529,13 @@ const ha = {
    *   await update();
    * });
    */
-  action: (name, handler) => {
+  action: (name: string, handler: (payload: any) => any) => {
     ensureMessageListener();
     _addRef(); // Keep alive — must come after ensureMessageListener() which may call unref()
     actionHandlers.set(name, handler);
   },
 
-  onError: (cb) => {
+  onError: (cb: (errorData: any) => void) => {
     if (typeof cb === 'function') {
       errorCallbacks.push(cb);
       _addRef(); // Keep process alive if an error handler is used
@@ -1526,7 +1546,7 @@ const ha = {
   isConnected: () => _haConnected,
 
   /** Registers a callback invoked whenever the HA WebSocket connection is lost or restored. */
-  onConnectionChange: (cb) => {
+  onConnectionChange: (cb: (connected: boolean) => void) => {
     if (typeof cb === 'function') {
       ensureMessageListener(); // must be listening to receive 'ha_connection_changed'
       connectionCallbacks.push(cb);
@@ -1537,16 +1557,16 @@ const ha = {
   // Persistent Store
   store: {
     val: storeValues,
-    set: (key, value, isSecret = false) => {
+    set: (key: string, value: unknown, isSecret = false) => {
       storeValues[key] = value;
-      parentPort.postMessage({ type: 'store_set', key, value, isSecret });
+      pp.postMessage({ type: 'store_set', key, value, isSecret });
     },
-    get: (key) => storeValues[key], // Safe now as it's filtered above
-    delete: (key) => {
+    get: (key: string) => storeValues[key], // Safe now as it's filtered above
+    delete: (key: string) => {
       delete storeValues[key];
-      parentPort.postMessage({ type: 'store_delete', key });
+      pp.postMessage({ type: 'store_delete', key });
     },
-    on: (key, cb) => {
+    on: (key: string, cb: (newVal: unknown, oldVal: unknown) => void) => {
       if (typeof cb !== 'function') return;
       if (!storeListeners[key]) storeListeners[key] = [];
       storeListeners[key].push(cb);
@@ -1557,33 +1577,33 @@ const ha = {
 };
 
 // Injection
-global.ha = ha;
+(global as any).ha = ha;
 
 // --- 4b. FS INJECTION ---
-if (workerData.filesystemEnabled && workerData.fsDataDir) {
+if (wd.filesystemEnabled && wd.fsDataDir) {
   const { buildHaFs } = require('./fs-service');
   ha.fs = buildHaFs({
-    dataDir: workerData.fsDataDir,
-    capabilityEnforcement: workerData.capabilityEnforcement,
-    permissions: workerData.permissions || [],
-    quotas: workerData.fsQuotas || {},
+    dataDir: wd.fsDataDir,
+    capabilityEnforcement: wd.capabilityEnforcement,
+    permissions: wd.permissions || [],
+    quotas: wd.fsQuotas || {},
   });
 }
 
 // --- 4b2. MQTT SUBSCRIPTIONS ---
-const _mqttSubscriptions = new Map(); // subscriptionId → callback
+const _mqttSubscriptions = new Map<string, (topic: string, payload: unknown) => void>(); // subscriptionId → callback
 let _mqttSubCounter = 0;
 
 // --- 4c. HTTP CONVENIENCE WRAPPER ---
 {
-  const _httpPermissions = new Set(workerData.permissions || []);
-  const _checkNetworkPermission = () => {
-    if (workerData.capabilityEnforcement && !_httpPermissions.has('network')) {
+  const _httpPermissions = new Set(wd.permissions || []);
+  const _checkNetworkPermission = (): void => {
+    if (wd.capabilityEnforcement && !_httpPermissions.has('network')) {
       throw new Error('PermissionDeniedError: ha.http requires @permission network in your script header.');
     }
   };
 
-  const _parseResponse = async (res) => {
+  const _parseResponse = async (res: Response): Promise<any> => {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`HTTP ${res.status} ${res.statusText}${body ? ': ' + body : ''}`);
@@ -1593,18 +1613,18 @@ let _mqttSubCounter = 0;
   };
 
   ha.http = {
-    async get(url, options = {}) {
+    async get(url: string, options: Record<string, unknown> = {}) {
       _checkNetworkPermission();
       const res = await fetch(url, { method: 'GET', ...options });
       return _parseResponse(res);
     },
-    async post(url, body, options = {}) {
+    async post(url: string, body: unknown, options: Record<string, any> = {}) {
       _checkNetworkPermission();
       const isJson = body !== null && typeof body === 'object';
       const res = await fetch(url, {
         method: 'POST',
         headers: { ...(isJson ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
-        body: isJson ? JSON.stringify(body) : body,
+        body: isJson ? JSON.stringify(body) : (body as any),
         ...options,
       });
       return _parseResponse(res);
@@ -1619,36 +1639,36 @@ let _mqttSubCounter = 0;
      * Subscribes to an MQTT topic. Wildcards supported (+ single-level, # multi-level).
      * Returns an unsubscribe function.
      */
-    subscribe(topic, callback) {
+    subscribe(topic: string, callback: (topic: string, payload: unknown) => void) {
       ensureMessageListener();
       _addRef();
       const subscriptionId = `mqttsub_${++_mqttSubCounter}`;
       _mqttSubscriptions.set(subscriptionId, callback);
-      parentPort.postMessage({ type: 'mqtt_subscribe', subscriptionId, topic });
+      pp.postMessage({ type: 'mqtt_subscribe', subscriptionId, topic });
 
       return () => {
         if (!_mqttSubscriptions.has(subscriptionId)) return;
         _mqttSubscriptions.delete(subscriptionId);
         _releaseRef();
-        parentPort.postMessage({ type: 'mqtt_unsubscribe', subscriptionId });
+        pp.postMessage({ type: 'mqtt_unsubscribe', subscriptionId });
       };
     },
 
     /**
      * Publishes a message to an MQTT topic. Objects are JSON-serialized automatically.
      */
-    publish(topic, payload, options = {}) {
-      parentPort.postMessage({ type: 'mqtt_publish', topic, payload, options });
+    publish(topic: string, payload: unknown, options: Record<string, unknown> = {}) {
+      pp.postMessage({ type: 'mqtt_publish', topic, payload, options });
     },
   };
 }
 
 // --- 4e. WEBHOOK API ---
-const _webhookHandlers = new Map(); // id -> handler function
+const _webhookHandlers = new Map<string, (req: any, res: any) => any>(); // id -> handler function
 {
-  const _webhookPermissions = new Set(workerData.permissions || []);
-  const _checkWebhookPermission = () => {
-    if (workerData.capabilityEnforcement && !_webhookPermissions.has('webhook')) {
+  const _webhookPermissions = new Set(wd.permissions || []);
+  const _checkWebhookPermission = (): void => {
+    if (wd.capabilityEnforcement && !_webhookPermissions.has('webhook')) {
       throw new Error('PermissionDeniedError: ha.onWebhook requires @permission webhook in your script header.');
     }
   };
@@ -1656,7 +1676,7 @@ const _webhookHandlers = new Map(); // id -> handler function
   /**
    * Registers a webhook endpoint at :3001/webhook/<id> (fixed port). See ha-api.d.ts for details.
    */
-  ha.onWebhook = (id, optionsOrHandler, maybeHandler) => {
+  ha.onWebhook = (id: string, optionsOrHandler: any, maybeHandler?: any) => {
     _checkWebhookPermission();
     const handler = typeof optionsOrHandler === 'function' ? optionsOrHandler : maybeHandler;
     const options = typeof optionsOrHandler === 'function' ? {} : optionsOrHandler || {};
@@ -1670,7 +1690,7 @@ const _webhookHandlers = new Map(); // id -> handler function
     ensureMessageListener();
     _addRef(); // Keep the worker alive to handle future requests, like ha.onEvent()
     _webhookHandlers.set(id, handler);
-    parentPort.postMessage({
+    pp.postMessage({
       type: 'webhook_register',
       id,
       method: (options.method || 'POST').toUpperCase(),
@@ -1685,7 +1705,12 @@ const _webhookHandlers = new Map(); // id -> handler function
    * `req.rawBody`, not `req.body` — the parsed/re-serialized JSON is not guaranteed
    * to be byte-identical to what the sender actually signed.
    */
-  ha.verifyWebhookSignature = (payload, signature, secret, options = {}) => {
+  ha.verifyWebhookSignature = (
+    payload: unknown,
+    signature: string | undefined,
+    secret: string,
+    options: { algorithm?: string; encoding?: crypto.BinaryToTextEncoding; prefix?: string } = {}
+  ): boolean => {
     const algorithm = options.algorithm || 'sha256';
     const encoding = options.encoding || 'hex';
     const prefix = options.prefix !== undefined ? options.prefix : `${algorithm}=`;
@@ -1705,14 +1730,13 @@ const _webhookHandlers = new Map(); // id -> handler function
 
 /**
  * Helper to create a deep, recursive proxy that triggers a callback on any modification.
- * @param {object} target The object to wrap.
- * @param {function} onSave The callback to execute on change.
- * @returns {Proxy}
+ * @param target The object to wrap.
+ * @param onSave The callback to execute on change.
  */
-function createDeepProxy(target, onSave) {
-  const proxyCache = new WeakMap();
+function createDeepProxy<T extends object>(target: T, onSave: () => void): T {
+  const proxyCache = new WeakMap<object, unknown>();
 
-  const handler = {
+  const handler: ProxyHandler<any> = {
     get(obj, prop) {
       const value = Reflect.get(obj, prop);
       if (typeof value === 'object' && value !== null) {
@@ -1738,9 +1762,9 @@ function createDeepProxy(target, onSave) {
 }
 
 // Registry of pending persistent saves — flushed synchronously on worker exit.
-const persistentFlushRegistry = [];
+const persistentFlushRegistry: Array<() => void> = [];
 
-ha.persistent = (key, defaultValue = {}) => {
+ha.persistent = (key: string, defaultValue: any = {}) => {
   // Primitives cannot be proxied — return a ref-like { value } wrapper instead.
   if (typeof defaultValue !== 'object' || defaultValue === null) {
     if (ha.store.get(key) === undefined || ha.store.get(key) === null) {
@@ -1767,26 +1791,26 @@ ha.persistent = (key, defaultValue = {}) => {
     ha.store.set(key, target);
   }
 
-  let saveTimeout;
+  let saveTimeout: ReturnType<typeof setTimeout>;
   let dirty = false;
 
-  const markClean = () => {
+  const markClean = (): void => {
     dirty = false;
-    parentPort.postMessage({ type: 'store_clean', key });
+    pp.postMessage({ type: 'store_clean', key });
   };
 
-  const flush = () => {
+  const flush = (): void => {
     if (!dirty) return;
     clearTimeout(saveTimeout);
     ha.store.set(key, target);
     markClean();
   };
 
-  const onChange = () => {
+  const onChange = (): void => {
     if (!dirty) {
       // First change since last save: write immediately and mark dirty in parent.
       dirty = true;
-      parentPort.postMessage({ type: 'store_dirty', key, dirtyAt: Date.now() });
+      pp.postMessage({ type: 'store_dirty', key, dirtyAt: Date.now() });
       ha.store.set(key, target);
       // Schedule clean-up for any rapid subsequent changes within the debounce window.
       clearTimeout(saveTimeout);
@@ -1809,7 +1833,7 @@ ha.persistent = (key, defaultValue = {}) => {
  * Converts human-readable schedule expressions to cron strings.
  * Standard cron expressions pass through unchanged.
  */
-function _parseCronExpression(exp) {
+function _parseCronExpression(exp: string): string {
   if (typeof exp !== 'string') return exp;
   const s = exp.trim().toLowerCase();
 
@@ -1840,14 +1864,22 @@ function _parseCronExpression(exp) {
   if (everyWeekend) return `${parseInt(everyWeekend[2])} ${parseInt(everyWeekend[1])} * * 6,0`;
 
   // "every monday at H:MM", "every tuesday at H:MM", etc.
-  const dayNames = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0 };
+  const dayNames: Record<string, number> = {
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+    sunday: 0,
+  };
   const everyNamed = s.match(/^every (monday|tuesday|wednesday|thursday|friday|saturday|sunday) at (\d{1,2}):(\d{2})$/);
   if (everyNamed) return `${parseInt(everyNamed[3])} ${parseInt(everyNamed[2])} * * ${dayNames[everyNamed[1]]}`;
 
   return exp;
 }
 
-global.schedule = (exp, cb) => {
+(global as any).schedule = (exp: string, cb: () => Promise<void> | void) => {
   _addRef(); // Keep alive for cron
   ensureMessageListener();
   const cronExp = _parseCronExpression(exp);
@@ -1855,16 +1887,16 @@ global.schedule = (exp, cb) => {
   return require('node-cron').schedule(cronExp, async () => {
     try {
       await cb();
-    } catch (e) {
+    } catch (e: any) {
       ha.error(`Scheduled Task Error (${exp}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
     }
   });
 };
-global.sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+(global as any).sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 // --- 5. LIBRARY INJECTION ---
-function loadLibraries() {
-  const scriptPath = workerData.path;
+function loadLibraries(): void {
+  const scriptPath = wd.path;
   try {
     // 1. Read script content to parse headers
     const content = fs.readFileSync(scriptPath, 'utf8');
@@ -1872,7 +1904,7 @@ function loadLibraries() {
     // 2. Find all @include tags (supports multiple lines and comma-separation)
     // Matches: @include lib1.js, lib2.js
     const includeMatches = content.matchAll(/@include\s+(.+)/g);
-    const librariesToLoad = new Set();
+    const librariesToLoad = new Set<string>();
 
     for (const match of includeMatches) {
       match[1].split(',').forEach((lib) => {
@@ -1907,19 +1939,19 @@ function loadLibraries() {
       });
     }
   } catch (e) {
-    ha.error(e);
+    ha.error(e as Error);
   }
 }
 
 // --- 6. EXECUTION ---
 try {
   loadLibraries(); // Load libraries first
-  const scriptPath = require.resolve(workerData.path);
+  const scriptPath = require.resolve(wd.path);
   delete require.cache[scriptPath]; // Avoid stale code
   _scriptExecuting = true;
   require(scriptPath);
 } catch (err) {
-  ha.error(err);
+  ha.error(err as Error);
   // Exit after a short delay to allow log delivery
   setTimeout(() => process.exit(1), 100);
 }
