@@ -1,17 +1,22 @@
-// core/blockly-compiler.js
+// core/blockly-compiler.ts
 // Server-side ".blocks" -> JS compilation. `blockly` is required via its root entry point,
 // which is already the Node/CJS build with all built-in blocks pre-registered (there is no
 // './node' subpath export in blockly@11).
-const fs = require('fs');
-const path = require('path');
-const EventEmitter = require('events');
-const Blockly = require('blockly');
-const { javascriptGenerator } = require('blockly/javascript');
+import * as fs from 'fs';
+import * as path from 'path';
+import { EventEmitter } from 'events';
+import * as Blockly from 'blockly';
+import { javascriptGenerator } from 'blockly/javascript';
+
+interface RegisterHaBlocksFn {
+  (generator: typeof javascriptGenerator): void;
+  wrapGeneratedCode(code: string): string;
+}
 
 // Both physically under public/js/ so the browser can also load them via plain <script> tags
 // (no bundler in this project) — see blockly-blocks-shared.js's header comment for why.
 Blockly.common.defineBlocksWithJsonArray(require('../public/js/blockly-blocks'));
-const registerHaBlocks = require('../public/js/blockly-blocks-shared');
+const registerHaBlocks: RegisterHaBlocksFn = require('../public/js/blockly-blocks-shared');
 registerHaBlocks(javascriptGenerator);
 
 // Block-level error visualization (docs/blockly_concept.md M5, should-have): wraps every
@@ -44,8 +49,14 @@ registerHaBlocks(javascriptGenerator);
 // still terminates the loop after the expected number of iterations, not looping forever, so
 // bare `break`/`continue` remains valid *and* semantically correct when it ends up inside a
 // try block like this.
-const _origScrub = javascriptGenerator.scrub_.bind(javascriptGenerator);
-javascriptGenerator.scrub_ = function (block, code, opt_thisOnly) {
+//
+// scrub_() is a real, documented Blockly generator-plugin customization point, but it isn't part
+// of the public .d.ts surface (underscore-suffixed internal hook) — cast through unknown to
+// override it.
+type ScrubFn = (block: Blockly.Block, code: string, opt_thisOnly?: boolean) => string;
+const generatorInternals = javascriptGenerator as unknown as { scrub_: ScrubFn };
+const _origScrub = generatorInternals.scrub_.bind(javascriptGenerator);
+generatorInternals.scrub_ = function (block, code, opt_thisOnly) {
   let wrapped = code;
   if (code && code.trim() && block.previousConnection) {
     wrapped = `try {\n${code}} catch (__e) { if (!__e.blockId) __e.blockId = ${JSON.stringify(block.id)}; throw __e; }\n`;
@@ -55,10 +66,10 @@ javascriptGenerator.scrub_ = function (block, code, opt_thisOnly) {
 // Registers ha_call_service's mutator (see blockly-mutators.js). Only its saveExtraState/
 // loadExtraState/updateShape_ matter here — Node never opens the interactive popup, but it
 // still needs those to reconstruct a saved workspace's dynamic ADD0/ADD1/... inputs.
-require('../public/js/blockly-mutators')(Blockly);
+(require('../public/js/blockly-mutators') as (b: typeof Blockly) => void)(Blockly);
 // Registers the entity/service dropdown fields (see blockly-fields.js). Node has no live HA
 // data to populate the menu with — it only needs to read back whatever value was serialized.
-require('../public/js/blockly-fields')(Blockly);
+(require('../public/js/blockly-fields') as (b: typeof Blockly) => void)(Blockly);
 
 // Block-type -> permission derivation (docs/blockly_concept.md "Permissions" section). Every
 // capability-using construct in a .blocks script is one of our own known block types, so
@@ -66,33 +77,41 @@ require('../public/js/blockly-fields')(Blockly);
 // to reach a capability through an untracked code path. HTTP blocks are cut from scope entirely
 // (see the concept doc's "Out of Scope"), so 'network' has no entry here — only add one if an
 // HTTP block is ever actually built.
-const BLOCK_PERMISSION_MAP = {
+const BLOCK_PERMISSION_MAP: Record<string, string> = {
   ha_on_webhook: 'webhook',
 };
 
+interface BlocksFileContent {
+  jsa?: { permission?: string[]; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
 class BlocklyCompiler extends EventEmitter {
-  constructor(scriptsDir, distDir) {
+  scriptsDir: string;
+  distDir: string;
+
+  constructor(scriptsDir: string, distDir: string) {
     super();
     this.scriptsDir = scriptsDir;
     this.distDir = distDir;
   }
 
-  _getDistPath(blocksPath) {
+  private _getDistPath(blocksPath: string): string {
     const relativePath = path.relative(this.scriptsDir, blocksPath);
     return path.join(this.distDir, relativePath.replace(/\.blocks$/, '.js'));
   }
 
   /**
    * Compiles a .blocks file to its dist/*.js counterpart.
-   * @param {string} blocksPath Absolute path to the .blocks file.
-   * @returns {Promise<boolean>} true on success.
+   * @param blocksPath Absolute path to the .blocks file.
+   * @returns true on success.
    */
-  async compile(blocksPath) {
+  async compile(blocksPath: string): Promise<boolean> {
     if (!blocksPath.endsWith('.blocks')) return false;
 
     this.emit('log', { level: 'debug', message: `Compiling ${path.basename(blocksPath)}...` });
 
-    let parsed;
+    let parsed: BlocksFileContent;
     try {
       const rawFile = fs.readFileSync(blocksPath, 'utf8');
       const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
@@ -101,34 +120,38 @@ class BlocklyCompiler extends EventEmitter {
       this.emit('compiler_signal', {
         type: 'BLOCKLY_ERR',
         filename: path.basename(blocksPath),
-        text: `Invalid JSON: ${e.message}`,
+        text: `Invalid JSON: ${(e as Error).message}`,
       });
       this.emit('log', {
         level: 'error',
-        message: `[${path.basename(blocksPath)}] Invalid .blocks JSON: ${e.message}`,
+        message: `[${path.basename(blocksPath)}] Invalid .blocks JSON: ${(e as Error).message}`,
       });
       return false;
     }
 
     const workspace = new Blockly.Workspace();
-    let code;
-    let derivedPermissions;
+    let code: string;
+    let derivedPermissions: string[];
     try {
       // Pass the whole parsed file, not parsed.blocks — workspaces.load() reads its own
       // top-level `blocks` key internally; unrelated keys like `jsa` are ignored.
       Blockly.serialization.workspaces.load(parsed, workspace);
       code = javascriptGenerator.workspaceToCode(workspace);
       const usedTypes = new Set(workspace.getAllBlocks(false).map((b) => b.type));
-      const permSet = new Set();
+      const permSet = new Set<string>();
       for (const type of usedTypes) {
         if (BLOCK_PERMISSION_MAP[type]) permSet.add(BLOCK_PERMISSION_MAP[type]);
       }
       derivedPermissions = [...permSet].sort();
     } catch (e) {
-      this.emit('compiler_signal', { type: 'BLOCKLY_ERR', filename: path.basename(blocksPath), text: e.message });
+      this.emit('compiler_signal', {
+        type: 'BLOCKLY_ERR',
+        filename: path.basename(blocksPath),
+        text: (e as Error).message,
+      });
       this.emit('log', {
         level: 'error',
-        message: `[${path.basename(blocksPath)}] Blockly compile failed: ${e.message}`,
+        message: `[${path.basename(blocksPath)}] Blockly compile failed: ${(e as Error).message}`,
       });
       return false;
     } finally {
@@ -163,10 +186,10 @@ class BlocklyCompiler extends EventEmitter {
   /**
    * Removes the compiled JS file when a .blocks file is deleted.
    */
-  cleanup(blocksPath) {
+  cleanup(blocksPath: string): void {
     const distPath = this._getDistPath(blocksPath);
     if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
   }
 }
 
-module.exports = BlocklyCompiler;
+export = BlocklyCompiler;

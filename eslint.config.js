@@ -31,6 +31,7 @@ module.exports = [
       'js_automations/core/ha-history-helpers.js',
       'js_automations/core/store-manager.js',
       'js_automations/core/script-header-parser.js',
+      'js_automations/core/blockly-compiler.js',
     ],
   },
   js.configs.recommended,
