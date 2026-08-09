@@ -662,7 +662,7 @@ export class AppSidebar extends LitElement {
       ${mdiStylesheetLink}
       <div class="sidebar-header">
         <div class="brand">
-          <i class="mdi mdi-robot-happy-outline nav-logo"></i>
+          <i class="mdi ${this._isBeta ? 'mdi-robot-angry-outline' : 'mdi-robot-happy-outline'} nav-logo"></i>
           <span>${this._isBeta ? 'JSA BETA' : this._t('header_title', 'JS AUTOMATIONS')}</span>
           <span class="version-tag">${this._version}</span>
         </div>
