@@ -1,6 +1,7 @@
-const express = require('express');
+import * as express from 'express';
+import type WebhookManager from '../core/webhook-manager';
 
-module.exports = (webhookManager) => {
+export = (webhookManager: WebhookManager) => {
   const router = express.Router();
 
   router.get('/', (req, res) => {
@@ -16,7 +17,7 @@ module.exports = (webhookManager) => {
       const token = webhookManager.revealToken(req.params.id);
       res.json({ token });
     } catch (e) {
-      res.status(404).json({ error: e.message });
+      res.status(404).json({ error: (e as Error).message });
     }
   });
 
@@ -25,7 +26,7 @@ module.exports = (webhookManager) => {
       const token = webhookManager.rotateToken(req.params.id);
       res.json({ token });
     } catch (e) {
-      res.status(400).json({ error: e.message });
+      res.status(400).json({ error: (e as Error).message });
     }
   });
 
@@ -34,7 +35,7 @@ module.exports = (webhookManager) => {
       webhookManager.deleteWebhook(req.params.id);
       res.json({ ok: true });
     } catch (e) {
-      res.status(400).json({ error: e.message });
+      res.status(400).json({ error: (e as Error).message });
     }
   });
 
