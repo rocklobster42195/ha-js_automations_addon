@@ -22,6 +22,7 @@ module.exports = [
       'js_automations/core/config.js',
       'js_automations/core/dev-setup.js',
       'js_automations/core/state-manager.js',
+      'js_automations/core/script-command-router.js',
     ],
   },
   js.configs.recommended,

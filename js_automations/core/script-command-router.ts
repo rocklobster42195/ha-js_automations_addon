@@ -1,5 +1,38 @@
-// core/script-command-router.js
-const path = require('path');
+// core/script-command-router.ts
+import * as path from 'path';
+import type StateManager from './state-manager';
+
+interface HaEvent {
+  event_type: string;
+  data: {
+    domain: string;
+    service: string;
+    service_data?: { entity_id?: string | string[] };
+  };
+}
+
+interface HaConnectionLike {
+  subscribeToEvents(handler: (event: HaEvent) => void): void;
+}
+
+interface MqttCommand {
+  domain: string;
+  scriptId: string;
+  payload: string;
+}
+
+interface MqttManagerLike {
+  on(event: 'command', handler: (cmd: MqttCommand) => void): void;
+}
+
+interface WorkerManagerLike {
+  startScript(scriptName: string): void;
+  stopScript(scriptName: string): void;
+  workers: Map<string, unknown>;
+  nativeEntities: Map<string, unknown>;
+  emit(event: string, payload: unknown): void;
+  broadcastToWorkers(payload: unknown): void;
+}
 
 /**
  * Routes incoming commands from two sources to the WorkerManager:
@@ -10,13 +43,15 @@ const path = require('path');
  * external signals into script lifecycle actions (start / stop / broadcast).
  */
 class ScriptCommandRouter {
-  /**
-   * @param {object} workerManager
-   * @param {object} stateManager
-   * @param {object} haConnection  - provides subscribeToEvents()
-   * @param {object} mqttManager   - emits 'command' events
-   */
-  constructor(workerManager, stateManager, haConnection, mqttManager) {
+  workerManager: WorkerManagerLike;
+  stateManager: StateManager;
+
+  constructor(
+    workerManager: WorkerManagerLike,
+    stateManager: StateManager,
+    haConnection: HaConnectionLike,
+    mqttManager: MqttManagerLike
+  ) {
     this.workerManager = workerManager;
     this.stateManager = stateManager;
 
@@ -26,9 +61,8 @@ class ScriptCommandRouter {
 
   /**
    * Handles HA service call events (switch/button/homeassistant domain).
-   * @private
    */
-  _onHaEvent(event) {
+  private _onHaEvent(event: HaEvent): void {
     if (event.event_type !== 'call_service') return;
 
     const { domain, service, service_data } = event.data;
@@ -67,10 +101,8 @@ class ScriptCommandRouter {
 
   /**
    * Handles incoming MQTT commands on jsa/<domain>/<scriptId>/set topics.
-   * @param {{ domain: string, scriptId: string, payload: string }} cmd
-   * @private
    */
-  _onMqttCommand({ domain, scriptId, payload }) {
+  private _onMqttCommand({ domain, scriptId, payload }: MqttCommand): void {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[ScriptCommandRouter] MQTT command for ${domain}.${scriptId}: ${payload}`,
@@ -101,4 +133,4 @@ class ScriptCommandRouter {
   }
 }
 
-module.exports = ScriptCommandRouter;
+export = ScriptCommandRouter;
