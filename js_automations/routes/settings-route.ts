@@ -1,10 +1,10 @@
-const express = require('express');
+import * as express from 'express';
 const router = express.Router();
-const settingsManager = require('../core/settings-manager');
+import settingsManager from '../core/settings-manager';
 
 /**
  * GET /api/settings
- * Gibt die aktuellen Einstellungen zurück.
+ * Returns the current settings.
  */
 router.get('/', (req, res) => {
   try {
@@ -12,13 +12,13 @@ router.get('/', (req, res) => {
     res.json(settings);
   } catch (error) {
     console.error('API Error (GET /settings):', error);
-    res.status(500).json({ error: 'Konnte Einstellungen nicht laden.' });
+    res.status(500).json({ error: 'Could not load settings.' });
   }
 });
 
 /**
  * GET /api/settings/schema
- * Gibt das Schema für die UI-Generierung (Schema-Driven UI) zurück.
+ * Returns the schema for UI generation (schema-driven UI).
  */
 router.get('/schema', (req, res) => {
   try {
@@ -26,13 +26,13 @@ router.get('/schema', (req, res) => {
     res.json(schema);
   } catch (error) {
     console.error('API Error (GET /settings/schema):', error);
-    res.status(500).json({ error: 'Konnte Schema nicht laden.' });
+    res.status(500).json({ error: 'Could not load schema.' });
   }
 });
 
 /**
  * POST /api/settings
- * Speichert Änderungen an den Einstellungen (partielles Update).
+ * Saves changes to the settings (partial update).
  */
 router.post('/', (req, res) => {
   try {
@@ -40,8 +40,8 @@ router.post('/', (req, res) => {
     res.json(updatedSettings);
   } catch (error) {
     console.error('API Error (POST /settings):', error);
-    res.status(500).json({ error: 'Konnte Einstellungen nicht speichern.' });
+    res.status(500).json({ error: 'Could not save settings.' });
   }
 });
 
-module.exports = router;
+export = router;
