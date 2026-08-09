@@ -28,6 +28,7 @@ module.exports = [
       'js_automations/core/capability-analyzer.js',
       'js_automations/core/log-manager.js',
       'js_automations/core/bridge.js',
+      'js_automations/core/ha-history-helpers.js',
     ],
   },
   js.configs.recommended,

@@ -4,24 +4,94 @@
  *
  * All six public functions accept either a string (entity ID, fetches from HA)
  * or an array of { state, last_changed } objects (Option A — external data).
+ *
+ * Internal types here are deliberately independent of ha-api.d.ts (the
+ * public, user-script-facing contract) - this file is the host-side
+ * implementation, not the sandboxed API surface.
  */
 
-const UNIT_MS = { second: 1000, minute: 60000, hour: 3600000 };
+type TimeUnit = 'second' | 'minute' | 'hour';
 
-function parsePeriod(value) {
+const UNIT_MS: Record<TimeUnit, number> = { second: 1000, minute: 60000, hour: 3600000 };
+
+interface HistoryEntry {
+  state: string;
+  last_changed: string;
+}
+
+interface HaHistoryGetOptions {
+  start?: Date;
+  end?: Date;
+  minimalResponse?: boolean;
+  noAttributes?: boolean;
+}
+
+interface HaLike {
+  history: {
+    get(source: string, options?: HaHistoryGetOptions): Promise<HistoryEntry[]>;
+  };
+  getState(entityId: string): { last_changed: string } | undefined;
+}
+
+type Source = string | HistoryEntry[];
+
+interface TrendOptions {
+  period?: string | number;
+  sensitivity?: number;
+}
+
+interface DerivativeOptions {
+  period?: string | number;
+  unit?: TimeUnit;
+  method?: 'linear' | 'polynomial';
+  degree?: number;
+}
+
+interface IntegralOptions {
+  period?: string | number;
+  unit?: TimeUnit;
+  method?: 'left' | 'right' | 'trapezoidal';
+}
+
+interface StatsOptions {
+  period?: string | number;
+}
+
+interface StatsResult {
+  mean: number;
+  min: number;
+  max: number;
+  median: number;
+  stddev: number;
+  count: number;
+}
+
+interface TimeInStateOptions {
+  period?: string | number;
+  start?: Date;
+  end?: Date;
+}
+
+interface NumericPoint {
+  t: number;
+  v: number;
+}
+
+function parsePeriod(value: string | number): number {
   if (typeof value === 'number') return value;
   const m = String(value).match(/^(\d+(?:\.\d+)?)(s|m|h|d)$/i);
   if (!m) throw new Error(`Invalid period: '${value}'. Use e.g. '30m', '2h', '7d'.`);
-  return parseFloat(m[1]) * { s: 1000, m: 60000, h: 3600000, d: 86400000 }[m[2].toLowerCase()];
+  const unitMs: Record<string, number> = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  return parseFloat(m[1]) * unitMs[m[2].toLowerCase()];
 }
 
-function toNumeric(entries) {
+function toNumeric(entries: HistoryEntry[]): NumericPoint[] {
   return entries
     .map((e) => ({ t: new Date(e.last_changed).getTime(), v: parseFloat(e.state) }))
     .filter((e) => isFinite(e.v));
 }
 
-function olsSlope(pts) {
+function olsSlope(pts: NumericPoint[]): number {
   const n = pts.length;
   if (n < 2) return 0;
   const x0 = pts[0].t;
@@ -40,7 +110,7 @@ function olsSlope(pts) {
   return denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
 }
 
-function polyFit(xs, ys, d) {
+function polyFit(xs: number[], ys: number[], d: number): number[] {
   const deg = d + 1;
   const n = xs.length;
   const VtV = Array.from({ length: deg }, () => new Array(deg).fill(0));
@@ -70,14 +140,14 @@ function polyFit(xs, ys, d) {
 }
 
 // Resolves the first argument: array → use as-is, string → fetch from HA.
-async function fetchOrUse(ha, source, periodMs) {
+async function fetchOrUse(ha: HaLike, source: Source, periodMs: number): Promise<HistoryEntry[]> {
   if (Array.isArray(source)) return source;
   return ha.history.get(source, { start: new Date(Date.now() - periodMs), minimalResponse: true });
 }
 
 // --- Public API ---
 
-async function trend(ha, source, options = {}) {
+async function trend(ha: HaLike, source: Source, options: TrendOptions = {}): Promise<'rising' | 'falling' | 'stable'> {
   const period = parsePeriod(options.period ?? '1h');
   const sensitivity = options.sensitivity ?? 0.1;
   const raw = await fetchOrUse(ha, source, period);
@@ -89,7 +159,7 @@ async function trend(ha, source, options = {}) {
   return 'stable';
 }
 
-async function derivative(ha, source, options = {}) {
+async function derivative(ha: HaLike, source: Source, options: DerivativeOptions = {}): Promise<number> {
   const period = parsePeriod(options.period ?? '1h');
   const method = options.method ?? 'linear';
   const scale = UNIT_MS[options.unit ?? 'minute'];
@@ -112,7 +182,7 @@ async function derivative(ha, source, options = {}) {
   return (dAt1 / tRange) * scale;
 }
 
-async function integral(ha, source, options = {}) {
+async function integral(ha: HaLike, source: Source, options: IntegralOptions = {}): Promise<number> {
   const period = parsePeriod(options.period ?? '1h');
   const method = options.method ?? 'trapezoidal';
   const scale = UNIT_MS[options.unit ?? 'hour'];
@@ -129,7 +199,7 @@ async function integral(ha, source, options = {}) {
   return sum / scale;
 }
 
-async function stats(ha, source, options = {}) {
+async function stats(ha: HaLike, source: Source, options: StatsOptions = {}): Promise<StatsResult> {
   const period = parsePeriod(options.period ?? '24h');
   const raw = await fetchOrUse(ha, source, period);
   const values = toNumeric(raw).map((p) => p.v);
@@ -142,7 +212,7 @@ async function stats(ha, source, options = {}) {
   return { mean, min: sorted[0], max: sorted[n - 1], median, stddev, count: n };
 }
 
-async function timeSince(ha, source, state) {
+async function timeSince(ha: HaLike, source: Source, state?: string): Promise<number> {
   if (Array.isArray(source)) {
     const raw = source;
     if (raw.length === 0) return NaN;
@@ -174,7 +244,7 @@ async function timeSince(ha, source, state) {
   return NaN;
 }
 
-async function timeInState(ha, source, state, options = {}) {
+async function timeInState(ha: HaLike, source: Source, state: string, options: TimeInStateOptions = {}): Promise<number> {
   const endTime = options.end ?? new Date();
   const startTime = options.start ?? new Date(endTime.getTime() - parsePeriod(options.period ?? '24h'));
   const raw = Array.isArray(source)
@@ -192,4 +262,4 @@ async function timeInState(ha, source, state, options = {}) {
   return total;
 }
 
-module.exports = { trend, derivative, integral, stats, timeSince, timeInState };
+export = { trend, derivative, integral, stats, timeSince, timeInState };
