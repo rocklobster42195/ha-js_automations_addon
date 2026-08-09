@@ -1,6 +1,13 @@
 {
   "verbose": true,
-  "ignore": ["scripts/*", "node_modules", "state.json", "store.json", ".git"],
+  "ignore": [
+    "scripts/*",
+    "node_modules",
+    "state.json",
+    "store.json",
+    ".git",
+    "js_automations/core/*.js"
+  ],
   "watch": ["js_automations/"],
   "ext": "js,ts,json,html,css",
   "exec": "npm run build:backend && node js_automations/server.js"
