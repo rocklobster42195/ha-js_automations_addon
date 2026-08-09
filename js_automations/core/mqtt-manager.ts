@@ -26,7 +26,7 @@ interface HaConfigEntry {
 }
 
 interface HaConnectionLike {
-  getConfigEntries(): Promise<HaConfigEntry[]>;
+  getConfigEntries(): Promise<unknown[]>;
 }
 
 interface TestConnectionConfig {
@@ -201,7 +201,7 @@ class MqttManager extends EventEmitter {
   async discoverSettings(): Promise<DiscoveredSettings | null> {
     this.logManager.add('debug', 'System', '[MQTT] Attempting to discover settings from Home Assistant...');
 
-    const entries = await this.haConnection.getConfigEntries();
+    const entries = (await this.haConnection.getConfigEntries()) as HaConfigEntry[];
     const mqttEntry = entries.find((e) => e.domain === 'mqtt');
 
     if (mqttEntry) {
@@ -500,7 +500,12 @@ class MqttManager extends EventEmitter {
    * @param scriptId - Owning script filename for cleanup on stop
    * @param callback - Called with (topic, payload) on match
    */
-  subscribeRaw(subscriptionId: string, topic: string, scriptId: string, callback: (topic: string, payload: string) => void): void {
+  subscribeRaw(
+    subscriptionId: string,
+    topic: string,
+    scriptId: string,
+    callback: (topic: string, payload: string) => void
+  ): void {
     this._rawSubscriptions.set(subscriptionId, { topic, scriptId, callback });
     if (this.client && this.isConnected) {
       this.client.subscribe(topic, (err) => {

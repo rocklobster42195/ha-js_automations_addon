@@ -1,9 +1,10 @@
-// core/kernel.js
-const EventEmitter = require('events');
-const fs = require('fs');
-const path = require('path');
-const config = require('./config');
-const ScriptHeaderParser = require('./script-header-parser');
+// core/kernel.ts
+import { EventEmitter } from 'events';
+import * as fs from 'fs';
+import * as path from 'path';
+import type { Server as SocketIOServer } from 'socket.io';
+import config from './config';
+import ScriptHeaderParser from './script-header-parser';
 
 // Ensure base directories exist before any manager is initialized
 config.ensureDirectories();
@@ -14,60 +15,117 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Manager Imports
-const HAConnector = require('./ha-connection');
-const DependencyManager = require('./dependency-manager');
-const StateManager = require('./state-manager');
-const StoreManager = require('./store-manager');
-const LogManager = require('./log-manager');
-const SettingsManager = require('./settings-manager'); // Static-like module
-const workerManager = require('./worker-manager'); // Singleton module
-const MqttManager = require('./mqtt-manager');
-const WebhookManager = require('./webhook-manager');
-const EntityManager = require('./entity-manager');
-const CompilerManager = require('./compiler-manager');
-const BlocklyCompiler = require('./blockly-compiler');
-const CardManager = require('./card-manager');
-const Bridge = require('./bridge');
-const SystemService = require('../services/system-service');
+import HAConnector from './ha-connection';
+import DependencyManager from './dependency-manager';
+import StateManager from './state-manager';
+import StoreManager from './store-manager';
+import LogManager from './log-manager';
+import SettingsManager from './settings-manager'; // Static-like module
+import workerManager from './worker-manager'; // Singleton module
+import MqttManager from './mqtt-manager';
+import WebhookManager from './webhook-manager';
+import EntityManager from './entity-manager';
+import CompilerManager from './compiler-manager';
+import BlocklyCompiler from './blockly-compiler';
+import CardManager from './card-manager';
+import Bridge from './bridge';
+
+// settings-manager.ts and worker-manager.ts export a singleton instance (export = new X()),
+// not the class itself, so the type has to be derived from the module's export value.
+type SettingsManagerInstance = typeof SettingsManager;
+type WorkerManagerInstance = typeof workerManager;
+
+// services/system-service.js lives outside core/ and is out of scope for this migration,
+// so it's typed structurally (like EntityManager's SystemServiceLike) instead of imported.
+interface SystemServiceLike {
+  isSafeMode: boolean;
+  start(): void;
+  markCleanShutdown(): void;
+  on(event: 'system_stats_updated', listener: (stats: Record<string, unknown>) => void): void;
+  on(event: 'safe_mode_changed', listener: (isSafeMode: boolean) => void): void;
+}
+interface SystemServiceConstructor {
+  new (appConfig: typeof config, workerManager: WorkerManagerInstance): SystemServiceLike;
+}
+const SystemService = require('../services/system-service') as SystemServiceConstructor;
+
+interface KernelSettings {
+  mqtt?: { enabled?: boolean };
+  system?: { log_level?: string; default_throttle?: number };
+  general?: { ui_language?: string };
+  danger?: {
+    restart_count?: number;
+    restart_time?: number;
+    node_memory?: number;
+    filesystem_enabled?: boolean;
+    capability_enforcement?: boolean;
+    quota_internal?: number;
+    quota_shared?: number;
+    quota_media?: number;
+  };
+}
+
+interface WorkerManagerSettingsPatch {
+  restart_protection_count?: number;
+  restart_protection_time?: number;
+  node_memory?: number;
+  ui_language?: string;
+  default_throttle?: number;
+  filesystem_enabled?: boolean;
+  capability_enforcement?: boolean;
+  quota_internal?: number;
+  quota_shared?: number;
+  quota_media?: number;
+}
 
 /**
  * The Kernel is the central orchestrator of the application.
  * It's responsible for booting, starting, and shutting down all services and managers.
  */
 class Kernel extends EventEmitter {
+  systemOptions: { expert_mode: boolean };
+  lastStats: Record<string, unknown> | null;
+  _mqttEverConnected: boolean;
+  _startupCompleted: boolean;
+  _reconnectState: { attempts: number; startedAt: number } | null;
+
+  // Manager instances are only ever used after boot() has run, which unconditionally
+  // assigns every one of them (or exits the process on failure) - so they're declared
+  // with definite assignment assertions instead of a nullable type, matching that
+  // construct-then-boot lifecycle instead of forcing null checks everywhere they're used.
+  io!: SocketIOServer;
+  logManager!: LogManager;
+  settingsManager!: SettingsManagerInstance;
+  haConnector!: HAConnector;
+  depManager!: DependencyManager;
+  stateManager!: StateManager;
+  storeManager!: StoreManager;
+  workerManager!: WorkerManagerInstance;
+  entityManager!: EntityManager;
+  mqttManager!: MqttManager;
+  webhookManager!: WebhookManager;
+  compilerManager!: CompilerManager;
+  blocklyCompiler!: BlocklyCompiler;
+  cardManager!: CardManager;
+  systemService!: SystemServiceLike;
+  bridge!: Bridge;
+
   constructor() {
     super();
-    // Core properties
-    this.io = null;
     this.systemOptions = { expert_mode: true }; // Default options
-
-    // Manager instances
-    this.logManager = null;
-    this.settingsManager = null;
-    this.haConnector = null;
-    this.depManager = null;
-    this.stateManager = null;
-    this.storeManager = null;
-    this.workerManager = null;
-    this.entityManager = null;
-    this.mqttManager = null;
-    this.webhookManager = null;
-    this.compilerManager = null;
-    this.bridge = null;
-    this.systemService = null;
-    this.cardManager = null;
     this.lastStats = null; // Cache for the latest system metrics
     this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
     this._startupCompleted = false; // Post-connect startup (autostart etc.) has run
+    this._reconnectState = null;
   }
 
   /**
    * Gathers the current system status regarding HA and MQTT connectivity.
-   * @returns {Promise<object>} A system status object.
+   * @returns A system status object.
    */
   async getSystemStatus() {
     const isConnected = this.haConnector.isReady;
-    const mqttSettings = this.settingsManager.getSettings()?.mqtt || {};
+    const mqttSettings = (this.settingsManager.getSettings() as KernelSettings)?.mqtt || {};
     const mqttStatus = {
       connected: this.mqttManager ? this.mqttManager.isConnected : false,
       enabled: mqttSettings.enabled || false,
@@ -91,7 +149,7 @@ class Kernel extends EventEmitter {
    * Boots the core systems.
    * Instantiates all managers and registers persistent event listeners.
    */
-  boot(io) {
+  boot(io: SocketIOServer): void {
     this.io = io;
     const { SCRIPTS_DIR, STORAGE_DIR, DIST_DIR } = config;
 
@@ -99,7 +157,7 @@ class Kernel extends EventEmitter {
     try {
       this.logManager = new LogManager(STORAGE_DIR);
       this.settingsManager = SettingsManager;
-      this.haConnector = new HAConnector(process.env.HA_URL, process.env.HA_TOKEN, STORAGE_DIR);
+      this.haConnector = new HAConnector(process.env.HA_URL || '', process.env.HA_TOKEN, STORAGE_DIR);
       this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
       this.stateManager = new StateManager(STORAGE_DIR);
       this.storeManager = new StoreManager(STORAGE_DIR);
@@ -144,7 +202,7 @@ class Kernel extends EventEmitter {
     this.logManager.add('debug', 'System', 'Kernel boot completed. All managers initialized.');
 
     // Initial log level
-    const currentSettings = this.settingsManager.getSettings();
+    const currentSettings = this.settingsManager.getSettings() as KernelSettings;
     if (currentSettings.system && currentSettings.system.log_level) {
       this.logManager.setLevel(currentSettings.system.log_level);
     }
@@ -155,11 +213,10 @@ class Kernel extends EventEmitter {
 
   /**
    * Updates worker settings based on the main settings file.
-   * @param {object} settings The main settings object.
    * @private
    */
-  _updateWorkerManagerSettings(settings) {
-    const workerSettings = {};
+  _updateWorkerManagerSettings(settings: KernelSettings): void {
+    const workerSettings: WorkerManagerSettingsPatch = {};
     if (settings.danger?.restart_count) {
       workerSettings.restart_protection_count = settings.danger.restart_count;
     }
@@ -199,9 +256,9 @@ class Kernel extends EventEmitter {
    * Registers event listeners that persist through the application's lifecycle.
    * @private
    */
-  _registerStaticEventListeners() {
+  _registerStaticEventListeners(): void {
     // Settings changes
-    this.settingsManager.on('settings_updated', (newSettings) => {
+    this.settingsManager.on('settings_updated', (newSettings: KernelSettings) => {
       if (newSettings.system && newSettings.system.log_level) {
         this.logManager.setLevel(newSettings.system.log_level);
       }
@@ -209,30 +266,30 @@ class Kernel extends EventEmitter {
     });
 
     // Forward NPM logs to the LogManager
-    this.depManager.on('log', ({ level, message }) => {
+    this.depManager.on('log', ({ level, message }: { level: string; message: string }) => {
       this.logManager.add(level, 'System', message);
     });
 
     // Forward human-readable Compiler logs
-    this.compilerManager.on('log', ({ level, message }) => {
+    this.compilerManager.on('log', ({ level, message }: { level: string; message: string }) => {
       this.logManager.add(level, 'System', message);
     });
 
     // Forward technical Compiler signals (for Editor markers) via Socket only
-    this.compilerManager.on('compiler_signal', (data) => {
+    this.compilerManager.on('compiler_signal', (data: unknown) => {
       if (this.io) this.io.emit('compiler_signal', data);
     });
 
     // Same forwarding for the Blockly compiler
-    this.blocklyCompiler.on('log', ({ level, message }) => {
+    this.blocklyCompiler.on('log', ({ level, message }: { level: string; message: string }) => {
       this.logManager.add(level, 'System', message);
     });
-    this.blocklyCompiler.on('compiler_signal', (data) => {
+    this.blocklyCompiler.on('compiler_signal', (data: unknown) => {
       if (this.io) this.io.emit('compiler_signal', data);
     });
 
     // Forward MQTT status to UI
-    this.mqttManager.on('status_change', async (status) => {
+    this.mqttManager.on('status_change', async (status: { connected: boolean }) => {
       if (this.io) {
         this.io.emit('mqtt_status_changed', status);
         // UX: Push full system status update so banners and indicators can react immediately
@@ -246,7 +303,11 @@ class Kernel extends EventEmitter {
           await this.entityManager.createExposedEntities();
           await this.workerManager.republishNativeEntities(false);
         } catch (e) {
-          this.logManager?.add('warn', 'System', `[Kernel] Entity republish after MQTT reconnect failed: ${e.message}`);
+          this.logManager?.add(
+            'warn',
+            'System',
+            `[Kernel] Entity republish after MQTT reconnect failed: ${(e as Error).message}`
+          );
         }
       }
       if (status.connected) this._mqttEverConnected = true;
@@ -256,18 +317,18 @@ class Kernel extends EventEmitter {
     this.webhookManager.on('registry_changed', () => {
       if (this.io) this.io.emit('webhook_registry_changed', this.webhookManager.listWebhooks());
     });
-    this.webhookManager.on('call_logged', (data) => {
+    this.webhookManager.on('call_logged', (data: unknown) => {
       if (this.io) this.io.emit('webhook_call_logged', data);
     });
-    this.webhookManager.on('config_changed', (config) => {
-      if (this.io) this.io.emit('webhook_config_changed', config);
+    this.webhookManager.on('config_changed', (webhookConfig: unknown) => {
+      if (this.io) this.io.emit('webhook_config_changed', webhookConfig);
     });
   }
 
   /**
    * Starts the main application logic.
    */
-  async start() {
+  async start(): Promise<void> {
     this.bridge.connect();
     this.systemService.start();
 
@@ -275,7 +336,7 @@ class Kernel extends EventEmitter {
 
     const { VERSION, SCRIPTS_DIR } = config;
 
-    let startMsg = `Addon started (v${VERSION})...`;
+    const startMsg = `Addon started (v${VERSION})...`;
     this.logManager.add('info', 'System', startMsg);
 
     try {
@@ -286,8 +347,8 @@ class Kernel extends EventEmitter {
 
       // Perform initial full compilation pass for all TypeScript files
       this.logManager.add('debug', 'System', 'Starting initial TypeScript compilation pass...');
-      const tsFiles = [];
-      const scanForTs = (dir) => {
+      const tsFiles: string[] = [];
+      const scanForTs = (dir: string): void => {
         if (!fs.existsSync(dir)) return;
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
@@ -308,8 +369,8 @@ class Kernel extends EventEmitter {
 
       // Same initial pass for .blocks files, so dist/*.js exists for enabled Blockly
       // scripts after a restart, not just after the next save.
-      const blocksFiles = [];
-      const scanForBlocks = (dir) => {
+      const blocksFiles: string[] = [];
+      const scanForBlocks = (dir: string): void => {
         if (!fs.existsSync(dir)) return;
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
@@ -347,11 +408,11 @@ class Kernel extends EventEmitter {
       try {
         await this.haConnector.connect();
       } catch (err) {
-        console.error('⚠️ Initial HA connection failed:', err.message);
+        console.error('⚠️ Initial HA connection failed:', (err as Error).message);
         this.logManager.add(
           'warn',
           'System',
-          `Initial HA connection failed: ${err.message} — startup will complete once HA is reachable.`
+          `Initial HA connection failed: ${(err as Error).message} — startup will complete once HA is reachable.`
         );
         return;
       }
@@ -359,7 +420,7 @@ class Kernel extends EventEmitter {
       await this._finishStartup();
     } catch (err) {
       console.error(err);
-      this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
+      this.logManager.add('error', 'System', `Kernel start failed: ${(err as Error).message}`);
     }
   }
 
@@ -369,7 +430,7 @@ class Kernel extends EventEmitter {
    * start(), or from handleReconnection() if the initial connect failed.
    * @private
    */
-  async _finishStartup() {
+  async _finishStartup(): Promise<void> {
     if (this._startupCompleted) return;
     this._startupCompleted = true;
 
@@ -381,7 +442,7 @@ class Kernel extends EventEmitter {
       // Update System Language from HA Config
       const haConfig = await this.haConnector.getHAConfig();
       if (haConfig && haConfig.language) {
-        this.workerManager.setSystemLanguage(haConfig.language);
+        this.workerManager.setSystemLanguage(haConfig.language as string);
       }
 
       const status = await this.getSystemStatus();
@@ -389,7 +450,7 @@ class Kernel extends EventEmitter {
 
       this.workerManager.setConnector(this.haConnector);
 
-      const currentSettings = this.settingsManager.getSettings();
+      const currentSettings = this.settingsManager.getSettings() as KernelSettings;
       this._updateWorkerManagerSettings(currentSettings);
 
       await this.entityManager.createExposedEntities();
@@ -405,11 +466,12 @@ class Kernel extends EventEmitter {
         // board. A small gap spreads the burst out instead of front-loading it all.
         const AUTOSTART_STAGGER_MS = 300;
         for (const file of enabled) {
-          let fullPath = path.join(SCRIPTS_DIR, file);
+          const fullPath = path.join(SCRIPTS_DIR, file);
 
           if (fs.existsSync(fullPath)) {
             const meta = ScriptHeaderParser.parse(fullPath);
-            if (meta.dependencies.length > 0) await this.depManager.install(meta.dependencies, false);
+            const dependencies = 'dependencies' in meta ? meta.dependencies : [];
+            if (dependencies.length > 0) await this.depManager.install(dependencies, false);
             this.workerManager.startScript(file);
             await new Promise((r) => setTimeout(r, AUTOSTART_STAGGER_MS));
           }
@@ -436,18 +498,18 @@ class Kernel extends EventEmitter {
         const knownCardNames = this.workerManager
           .getScripts()
           .map((p) => {
-            const meta = ScriptHeaderParser.parse(p);
+            const meta: any = ScriptHeaderParser.parse(p);
             if (!meta.card) return null;
             return path.basename(p, path.extname(p)) + '-card';
           })
-          .filter(Boolean);
+          .filter((name): name is string => Boolean(name));
         this.cardManager
           .performStartupCleanup(knownCardNames)
           .catch((e) => console.warn('[Kernel] Card startup cleanup failed:', e.message));
       }, 10000);
     } catch (err) {
       console.error(err);
-      this.logManager.add('error', 'System', `Kernel start failed: ${err.message}`);
+      this.logManager.add('error', 'System', `Kernel start failed: ${(err as Error).message}`);
     }
   }
 
@@ -455,7 +517,7 @@ class Kernel extends EventEmitter {
    * Compares entities in Home Assistant with existing script files
    * and removes orphaned entries. Triggered hourly.
    */
-  async performGlobalCleanup() {
+  async performGlobalCleanup(): Promise<void> {
     if (!this.haConnector.isReady || !this.mqttManager.isConnected) {
       this.logManager.add('debug', 'System', '[Kernel] Skipping cleanup: HA or MQTT not connected.');
       return;
@@ -489,10 +551,10 @@ class Kernel extends EventEmitter {
    * Sets up event listeners for core system events (HA, workers).
    * @private
    */
-  _setupSystemEventListeners() {
+  _setupSystemEventListeners(): void {
     // Deduplicate jsa_action events — on WS reconnect a second global subscription can
     // briefly overlap the first, causing the same event to be delivered twice.
-    const _seenCorrIds = new Set();
+    const _seenCorrIds = new Set<string>();
 
     // HA state changes + jsa_action routing
     this.haConnector.subscribeToEvents((event) => {
@@ -544,15 +606,15 @@ class Kernel extends EventEmitter {
     this.workerManager.on('log', this._onWorkerLog.bind(this));
 
     // Developer tools: breakpoint / watch / inspect events
-    this.workerManager.on('breakpoint_hit', (data) => this.emit('breakpoint_hit', data));
-    this.workerManager.on('breakpoint_continued', (data) => this.emit('breakpoint_continued', data));
-    this.workerManager.on('watch_update', (data) => this.emit('watch_update', data));
-    this.workerManager.on('inspect_snapshot', (data) => this.emit('inspect_snapshot', data));
-    this.workerManager.on('watch_clear', (data) => this.emit('watch_clear', data));
+    this.workerManager.on('breakpoint_hit', (data: unknown) => this.emit('breakpoint_hit', data));
+    this.workerManager.on('breakpoint_continued', (data: unknown) => this.emit('breakpoint_continued', data));
+    this.workerManager.on('watch_update', (data: unknown) => this.emit('watch_update', data));
+    this.workerManager.on('inspect_snapshot', (data: unknown) => this.emit('inspect_snapshot', data));
+    this.workerManager.on('watch_clear', (data: unknown) => this.emit('watch_clear', data));
 
     // Developer tools: MQTT traffic monitor
     if (this.mqttManager) {
-      this.mqttManager.on('raw_message', (data) => this.emit('mqtt_traffic', data));
+      this.mqttManager.on('raw_message', (data: unknown) => this.emit('mqtt_traffic', data));
     }
 
     // Notify frontend when type definitions are updated
@@ -561,7 +623,7 @@ class Kernel extends EventEmitter {
     });
   }
 
-  _onScriptStart({ filename, meta }) {
+  _onScriptStart({ filename, meta }: { filename: string; meta: any }): void {
     if (!meta || meta.expose !== 'button') {
       // StateManager still tracks by filename for persistence,
       // but EntityManager now handles the HA state via events.
@@ -570,7 +632,7 @@ class Kernel extends EventEmitter {
     this.emit('status_update');
   }
 
-  _onScriptExit(d) {
+  _onScriptExit(d: { filename: string; reason: string; type: string; meta: any }): void {
     if (!d.meta || d.meta.expose !== 'button') {
       // Any exit is a permanent stop (removes the script from autostart on next boot),
       // except reasons that are inherently transient: the script keeps running under a
@@ -610,15 +672,14 @@ class Kernel extends EventEmitter {
   /**
    * Tells running scripts that the HA connection was lost or restored, so scripts
    * that care can react (e.g. pause their own logic) via ha.onConnectionChange().
-   * @param {boolean} connected
    */
-  _notifyConnectionChange(connected) {
+  _notifyConnectionChange(connected: boolean): void {
     if (this.workerManager) {
       this.workerManager.broadcastToWorkers({ type: 'ha_connection_changed', connected });
     }
   }
 
-  _onWorkerLog(data) {
+  _onWorkerLog(data: { level?: string; source: string; message: string; blockId?: string; scriptId?: string }): void {
     this.logManager.add(data.level || 'info', data.source, data.message, {
       blockId: data.blockId,
       scriptId: data.scriptId,
@@ -634,7 +695,7 @@ class Kernel extends EventEmitter {
    * RECONNECT_LOG_EVERY attempts, instead of once per tick, to avoid
    * flooding the System log with identical lines.
    */
-  async handleReconnection() {
+  async handleReconnection(): Promise<void> {
     const RECONNECT_LOG_EVERY = 6; // ~30s at the current 5s poll interval
 
     if (!this.haConnector.isReady) {
@@ -672,7 +733,7 @@ class Kernel extends EventEmitter {
         // Update System Language
         const haConfig = await this.haConnector.getHAConfig();
         if (haConfig && haConfig.language) {
-          this.workerManager.setSystemLanguage(haConfig.language);
+          this.workerManager.setSystemLanguage(haConfig.language as string);
         }
 
         // Notify UI
@@ -687,9 +748,13 @@ class Kernel extends EventEmitter {
         // from kernel.start() stuck. Force a fresh MQTT attempt if still not connected.
         if (this.mqttManager) this.mqttManager.ensureConnected();
       } catch (e) {
-        console.error(`❌ Reconnection failed (attempt ${state.attempts}):`, e.message);
+        console.error(`❌ Reconnection failed (attempt ${state.attempts}):`, (e as Error).message);
         if (state.attempts === 1 || state.attempts % RECONNECT_LOG_EVERY === 0) {
-          this.logManager.add('error', 'System', `Reconnection failed (attempt ${state.attempts}): ${e.message}`);
+          this.logManager.add(
+            'error',
+            'System',
+            `Reconnection failed (attempt ${state.attempts}): ${(e as Error).message}`
+          );
         }
       }
     }
@@ -698,7 +763,7 @@ class Kernel extends EventEmitter {
   /**
    * Shuts down the application gracefully.
    */
-  shutdown() {
+  shutdown(): void {
     console.log('🛑 Kernel shutting down...');
     // A graceful shutdown (SIGTERM/SIGINT) shouldn't count toward the bootloop
     // window — only unexpected crashes/kills should be able to trip Safe Mode.
@@ -716,4 +781,4 @@ class Kernel extends EventEmitter {
   }
 }
 
-module.exports = new Kernel();
+export = new Kernel();

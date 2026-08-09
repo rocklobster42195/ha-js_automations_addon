@@ -45,6 +45,7 @@ module.exports = [
       'js_automations/core/worker-manager.js',
       'js_automations/core/worker-wrapper.js',
       'js_automations/core/entity-manager.js',
+      'js_automations/core/kernel.js',
     ],
   },
   js.configs.recommended,
