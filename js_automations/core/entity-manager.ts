@@ -3,33 +3,58 @@
  * Orchestrates Home Assistant entities via MQTT Discovery and provides IntelliSense definitions.
  */
 
-const path = require('path');
-const fs = require('fs');
-const ScriptHeaderParser = require('./script-header-parser');
-const ScriptWatcher = require('./script-watcher');
-const ScriptCommandRouter = require('./script-command-router');
-const TypeDefinitionGenerator = require('./type-definition-generator');
+import * as path from 'path';
+import * as fs from 'fs';
+import ScriptHeaderParser from './script-header-parser';
+import ScriptWatcher from './script-watcher';
+import ScriptCommandRouter from './script-command-router';
+import TypeDefinitionGenerator from './type-definition-generator';
+import type HAConnector from './ha-connection';
+// worker-manager.ts exports a singleton instance (export = new WorkerManager()), not
+// the class itself, so the type has to be derived from the module's export value.
+type WorkerManagerInstance = typeof import('./worker-manager');
+import type StateManager from './state-manager';
+import type DependencyManager from './dependency-manager';
+import type MqttManager from './mqtt-manager';
+import type CompilerManager from './compiler-manager';
+import type BlocklyCompiler from './blockly-compiler';
+
+interface SystemServiceLike {
+  on(event: 'system_stats_updated', listener: (stats: any) => void): void;
+}
 
 class EntityManager {
+  haConnection: HAConnector;
+  workerManager: WorkerManagerInstance;
+  stateManager: StateManager;
+  depManager: DependencyManager;
+  systemService: SystemServiceLike;
+  mqttManager: MqttManager;
+  compilerManager: CompilerManager;
+  blocklyCompiler: BlocklyCompiler;
+  warnedEntities: Set<string>;
+  typings: TypeDefinitionGenerator;
+  watcher: ScriptWatcher;
+
   /**
-   * @param {object} haConnection - The Home Assistant connection manager.
-   * @param {object} workerManager - The worker thread manager.
-   * @param {object} stateManager - The script state persistence manager.
-   * @param {object} depManager - The dependency manager for NPM packages.
-   * @param {object} systemService - The system monitoring service.
-   * @param {object} mqttManager - The MQTT communication manager.
-   * @param {object} compilerManager - The TypeScript compiler manager.
-   * @param {object} blocklyCompiler - The Blockly (.blocks) compiler.
+   * @param haConnection - The Home Assistant connection manager.
+   * @param workerManager - The worker thread manager.
+   * @param stateManager - The script state persistence manager.
+   * @param depManager - The dependency manager for NPM packages.
+   * @param systemService - The system monitoring service.
+   * @param mqttManager - The MQTT communication manager.
+   * @param compilerManager - The TypeScript compiler manager.
+   * @param blocklyCompiler - The Blockly (.blocks) compiler.
    */
   constructor(
-    haConnection,
-    workerManager,
-    stateManager,
-    depManager,
-    systemService,
-    mqttManager,
-    compilerManager,
-    blocklyCompiler
+    haConnection: HAConnector,
+    workerManager: WorkerManagerInstance,
+    stateManager: StateManager,
+    depManager: DependencyManager,
+    systemService: SystemServiceLike,
+    mqttManager: MqttManager,
+    compilerManager: CompilerManager,
+    blocklyCompiler: BlocklyCompiler
   ) {
     this.haConnection = haConnection;
     this.workerManager = workerManager;
@@ -40,11 +65,11 @@ class EntityManager {
     this.compilerManager = compilerManager;
     this.blocklyCompiler = blocklyCompiler;
     this.warnedEntities = new Set(); // Tracks entities that already triggered a device_class warning
-    this.typings = new TypeDefinitionGenerator(haConnection, workerManager);
+    this.typings = new TypeDefinitionGenerator(haConnection as any, workerManager as any);
 
-    new ScriptCommandRouter(workerManager, stateManager, haConnection, mqttManager);
+    new ScriptCommandRouter(workerManager as any, stateManager, haConnection as any, mqttManager as any);
 
-    this.mqttManager.on('status_change', async (status) => {
+    this.mqttManager.on('status_change', async (status: any) => {
       if (status.connected) {
         await this.startupAudit();
         this.createSystemEntities();
@@ -54,15 +79,15 @@ class EntityManager {
       }
     });
 
-    this.workerManager.on('script_start', (data) => this.handleScriptLifecycle(data, 'start'));
-    this.workerManager.on('script_exit', (data) => this.handleScriptLifecycle(data, 'stop'));
-    this.workerManager.on('create_entity', (data) => this.handleDynamicEntity(data));
-    this.workerManager.on('update_entity_state', (data) => this.handleEntityStateUpdate(data));
-    this.workerManager.on('request_device_cleanup', (name) => this.checkDeviceCleanup(name));
-    this.workerManager.on('sweep_entity_removed', (entityId) => {
+    this.workerManager.on('script_start', (data: any) => this.handleScriptLifecycle(data, 'start'));
+    this.workerManager.on('script_exit', (data: any) => this.handleScriptLifecycle(data, 'stop'));
+    this.workerManager.on('create_entity', (data: any) => this.handleDynamicEntity(data));
+    this.workerManager.on('update_entity_state', (data: any) => this.handleEntityStateUpdate(data));
+    this.workerManager.on('request_device_cleanup', (name: string) => this.checkDeviceCleanup(name));
+    this.workerManager.on('sweep_entity_removed', (entityId: string) => {
       this.stateManager.unregisterEntity(entityId);
       if (this.haConnection.isReady) {
-        this.haConnection.removeEntity(entityId).catch((err) => {
+        this.haConnection.removeEntity(entityId).catch((err: Error) => {
           this.workerManager.emit('log', {
             source: 'System',
             message: `[EntityManager] Could not remove swept entity ${entityId} from HA registry: ${err.message}`,
@@ -71,14 +96,14 @@ class EntityManager {
         });
       }
     });
-    this.systemService.on('system_stats_updated', (stats) => this.updateSystemStates(stats));
+    this.systemService.on('system_stats_updated', (stats: any) => this.updateSystemStates(stats));
 
     if (this.workerManager.storeManager) {
       this.workerManager.storeManager.on('changed', () => this.typings.schedule());
     }
 
     this.watcher = new ScriptWatcher(
-      workerManager,
+      workerManager as any,
       stateManager,
       mqttManager,
       haConnection,
@@ -97,7 +122,7 @@ class EntityManager {
   /**
    * Attempts to resolve a name to an ID using Home Assistant metadata.
    */
-  resolveId(input, list, idField) {
+  resolveId(input: string | undefined, list: any[], idField: string): string | undefined {
     if (!input || typeof input !== 'string') return undefined;
     const cleanInput = input.trim();
     if (!cleanInput || !list || list.length === 0) return undefined;
@@ -118,7 +143,7 @@ class EntityManager {
    * based on its running status, and publishes per-script availability so
    * ha.register() entities go unavailable when their script stops.
    */
-  async handleScriptLifecycle({ filename, meta }, action) {
+  async handleScriptLifecycle({ filename, meta }: { filename: string; meta: any }, action: 'start' | 'stop'): Promise<void> {
     const ext = path.extname(filename);
     const scriptNameRaw = path.basename(filename, ext);
     const slug = scriptNameRaw
@@ -160,9 +185,9 @@ class EntityManager {
   /**
    * Handles dynamic entity registration from ha.register() in scripts.
    * Generates MQTT discovery payloads for these entities.
-   * @param {object} data - The registration data containing filename, entityId, and config.
+   * @param data - The registration data containing filename, entityId, and config.
    */
-  async handleDynamicEntity({ filename, entityId, config }) {
+  async handleDynamicEntity({ filename, entityId, config }: { filename: string; entityId: string; config: any }): Promise<void> {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] Registering dynamic entity: ${entityId}`,
@@ -174,13 +199,13 @@ class EntityManager {
     const ext = path.extname(filename);
     const scriptNameRaw = path.basename(filename, ext);
     const scriptPath = path.join(this.workerManager.scriptsDir, filename);
-    const meta = fs.existsSync(scriptPath) ? ScriptHeaderParser.parse(scriptPath) : { name: scriptNameRaw };
+    const meta: any = fs.existsSync(scriptPath) ? ScriptHeaderParser.parse(scriptPath) : { name: scriptNameRaw };
 
     // Prettify the script/device name for the HA UI.
     const displayName =
       meta.name && meta.name !== filename
         ? meta.name
-        : scriptNameRaw.replace(/[_-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+        : scriptNameRaw.replace(/[_-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
     const scriptSlug = scriptNameRaw
       .toLowerCase()
@@ -192,7 +217,7 @@ class EntityManager {
     const objectId = entityId.includes('.') ? entityId.split('.').slice(1).join('.') : entityId;
 
     // Generate a readable default name from the ID
-    const defaultFriendlyName = objectId.replace(/[._-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    const defaultFriendlyName = objectId.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
     // Unique ID: jsa_<scriptSlug>_<objectId> — globally unique in HA's entity registry.
     const uniqueId = `jsa_${scriptSlug}_${objectId}`;
@@ -204,7 +229,7 @@ class EntityManager {
 
     // Don't force a fallback icon when device_class is set — HA provides its own class icon.
     const fallbackIcon = config.icon || (config.device_class ? undefined : 'mdi:eye');
-    const payload = {
+    const payload: any = {
       name: config.name || config.friendly_name || defaultFriendlyName,
       // default_entity_id: HA 2025.10+ replacement for the deprecated object_id field.
       // Takes the full entity_id (domain.object_id). object_id is kept for HA < 2025.10.
@@ -306,7 +331,7 @@ class EntityManager {
     if (payload.device && (config.area || config.suggested_area)) {
       const { areas } = await this.haConnection.getHAMetadata();
       const areaName = config.area || config.suggested_area;
-      const areaId = this.resolveId(areaName, areas, 'area_id');
+      const areaId = this.resolveId(areaName, areas as any[], 'area_id');
       if (areaId) payload.device.suggested_area = areaName;
     }
 
@@ -331,9 +356,9 @@ class EntityManager {
     let alreadyCorrect = false; // entity already in HA registry at the correct entity_id
     if (this.haConnection.isReady) {
       try {
-        const entityReg = await this.haConnection.getEntityRegistry();
+        const entityReg: any[] = (await this.haConnection.getEntityRegistry()) as any[];
 
-        const removeStale = async (stale) => {
+        const removeStale = async (stale: any): Promise<void> => {
           this.workerManager.emit('log', {
             source: 'System',
             message: `[EntityManager] Removing stale entity ${stale.entity_id} (should be ${entityId})`,
@@ -412,7 +437,7 @@ class EntityManager {
           await this.haConnection.deleteState(entityId);
           needsTopicClear = true;
         }
-      } catch (err) {
+      } catch (err: any) {
         this.workerManager.emit('log', {
           source: 'System',
           message: `[EntityManager] Could not check HA registry for stale entity (${entityId}): ${err.message}`,
@@ -472,21 +497,21 @@ class EntityManager {
     const MAX_ATTEMPTS = 40;
     const POLL_INTERVAL = 500;
 
-    const applyPostRegistration = async (haEntry) => {
-      const registryUpdates = {};
+    const applyPostRegistration = async (haEntry: any): Promise<void> => {
+      const registryUpdates: Record<string, unknown> = {};
       if (config.area_id) {
         registryUpdates.area_id = config.area_id;
       } else if (config.area || config.suggested_area) {
         const { areas } = await this.haConnection.getHAMetadata();
         const areaName = config.area || config.suggested_area;
-        const resolved = this.resolveId(areaName, areas, 'area_id');
+        const resolved = this.resolveId(areaName, areas as any[], 'area_id');
         if (resolved) registryUpdates.area_id = resolved;
       }
       if (Array.isArray(config.labels) && config.labels.length > 0) {
         const { labels: allLabels } = await this.haConnection.getHAMetadata();
         const resolvedLabels = config.labels
-          .map((l) => {
-            const found = allLabels.find((al) => al.label_id === l || al.name?.toLowerCase() === l.toLowerCase());
+          .map((l: string) => {
+            const found = (allLabels as any[]).find((al) => al.label_id === l || al.name?.toLowerCase() === l.toLowerCase());
             return found ? found.label_id : null;
           })
           .filter(Boolean);
@@ -497,7 +522,7 @@ class EntityManager {
       }
     };
 
-    const poll = async (attempt) => {
+    const poll = async (attempt: number): Promise<void> => {
       if (attempt > MAX_ATTEMPTS) {
         this.workerManager.emit('log', {
           source: 'System',
@@ -507,7 +532,7 @@ class EntityManager {
         return;
       }
       try {
-        const entityReg = await this.haConnection.getEntityRegistry();
+        const entityReg: any[] = (await this.haConnection.getEntityRegistry()) as any[];
 
         // Find ALL entries for our unique_id — there can be more than one if a stale _2
         // and a correct entity coexist with the same unique_id (e.g. after a partial
@@ -581,7 +606,7 @@ class EntityManager {
               await this.haConnection.deleteState(entityId);
               await new Promise((r) => setTimeout(r, 100));
             }
-            const renameResult = await this.haConnection.updateEntityRegistry(haEntry.entity_id, {
+            const renameResult: any = await this.haConnection.updateEntityRegistry(haEntry.entity_id, {
               new_entity_id: entityId,
             });
             if (renameResult.success) {
@@ -608,7 +633,7 @@ class EntityManager {
             });
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         this.workerManager.emit('log', {
           source: 'System',
           message: `[EntityManager] ACK poll error for "${entityId}": ${err.message}`,
@@ -623,7 +648,7 @@ class EntityManager {
   /**
    * Publishes state updates for dynamic entities via MQTT.
    */
-  handleEntityStateUpdate({ entityId, state, attributes }) {
+  handleEntityStateUpdate({ entityId, state, attributes }: { entityId: string; state: unknown; attributes: any }): void {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] State update for ${entityId}: ${state}. Attributes: ${JSON.stringify(attributes)}`,
@@ -632,7 +657,7 @@ class EntityManager {
 
     if (!this.mqttManager.isConnected) return;
 
-    const config = this.workerManager.nativeEntities.get(entityId);
+    const config: any = this.workerManager.nativeEntities.get(entityId);
     if (config) {
       if (config.device_class && attributes && (attributes.icon || attributes.entity_icon)) {
         this._warnIconConflict(entityId, config.device_class);
@@ -671,11 +696,10 @@ class EntityManager {
 
   /**
    * Logs a warning if an entity might have its icon ignored by Home Assistant due to device_class.
-   * @param {string} entityId - The entity ID.
-   * @param {string} deviceClass - The device class of the entity.
-   * @private
+   * @param entityId - The entity ID.
+   * @param deviceClass - The device class of the entity.
    */
-  _warnIconConflict(entityId, deviceClass) {
+  private _warnIconConflict(entityId: string, deviceClass: string): void {
     if (!this.warnedEntities.has(entityId)) {
       this.warnedEntities.add(entityId);
       this.workerManager.emit('log', {
@@ -688,24 +712,24 @@ class EntityManager {
 
   /**
    * Robust extraction helper for numeric values from various data structures.
-   * @private
    */
-  _getNumericValue(raw, keys) {
+  private _getNumericValue(raw: unknown, keys: string[]): number | undefined {
     if (raw === undefined || raw === null) return undefined;
     if (typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
       for (const key of keys) {
-        if (raw[key] !== undefined && raw[key] !== null) return parseFloat(raw[key]);
+        if (obj[key] !== undefined && obj[key] !== null) return parseFloat(obj[key] as string);
       }
       return undefined;
     }
-    return parseFloat(raw);
+    return parseFloat(raw as string);
   }
 
   /**
    * Updates the actual state of the system entities in Home Assistant.
    * Called whenever the SystemService provides new statistics.
    */
-  async updateSystemStates(stats) {
+  async updateSystemStates(stats: any): Promise<void> {
     if (!this.mqttManager.isConnected) return;
 
     // Defensive extraction for CPU
@@ -747,7 +771,7 @@ class EntityManager {
    * Ensures that system-wide entities (CPU, RAM) are registered
    * within the central "JS Automations" device.
    */
-  async createSystemEntities() {
+  async createSystemEntities(): Promise<void> {
     const device = {
       identifiers: ['jsa_system_device'],
       name: 'JS Automations',
@@ -780,6 +804,10 @@ class EntityManager {
         state_topic: `jsa/sensor/${entity.slug}/state`,
         unit_of_measurement: entity.unit,
         icon: entity.icon,
+        // Found while converting to TypeScript: this field was defined per-entity but
+        // never actually included in the discovery payload sent to HA. Fixed to match
+        // the original apparent intent (confirmed with the user before fixing).
+        device_class: entity.device_class,
         device: device,
         availability_topic: 'jsa/status',
       };
@@ -788,8 +816,8 @@ class EntityManager {
     }
   }
 
-  async createExposedEntities() {
-    const scripts = await this.workerManager.getScripts();
+  async createExposedEntities(): Promise<void> {
+    const scripts = this.workerManager.getScripts();
 
     // Load metadata for ID resolution (Areas)
     const { areas } = await this.haConnection.getHAMetadata();
@@ -808,7 +836,7 @@ class EntityManager {
       // Skip passive libraries located in the /libraries subfolder
       if (path.basename(path.dirname(scriptPath)) === 'libraries') continue;
 
-      const meta = ScriptHeaderParser.parse(scriptPath);
+      const meta: any = ScriptHeaderParser.parse(scriptPath);
       const ext = path.extname(scriptPath);
       const scriptNameRaw = path.basename(scriptPath, ext);
       const slug = scriptNameRaw
@@ -820,9 +848,9 @@ class EntityManager {
       const displayName =
         meta.name && meta.name !== path.basename(scriptPath)
           ? meta.name
-          : scriptNameRaw.replace(/[_-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+          : scriptNameRaw.replace(/[_-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
-      const protectedIds = [];
+      const protectedIds: string[] = [];
 
       const domain = meta.expose === 'button' ? 'button' : 'switch';
       const uniqueId = `jsa_${domain}_${slug}`;
@@ -844,7 +872,7 @@ class EntityManager {
 
       const initialState = domain === 'switch' && isRunning ? 'ON' : 'OFF';
 
-      const areaId = this.resolveId(meta.area, areas, 'area_id');
+      const areaId = this.resolveId(meta.area, areas as any[], 'area_id');
       if (meta.area && !areaId)
         this.workerManager.emit('log', {
           source: 'System',
@@ -855,7 +883,7 @@ class EntityManager {
       // Use uniqueId in discovery topic for stability and rename protection
       const discoveryTopic = `homeassistant/${domain}/${uniqueId}/config`;
 
-      const payload = {
+      const payload: any = {
         name: null, // Entity inherits the device name directly (no doubling)
         unique_id: uniqueId,
         // Unified topic approach for script control entities
@@ -905,10 +933,10 @@ class EntityManager {
    * Removes those stale HA entries before scripts call ha.register(), so the ACK poll
    * can land entities on the correct ID without blocker conflicts.
    */
-  async startupAudit() {
+  async startupAudit(): Promise<void> {
     if (!this.haConnection.isReady) return;
     try {
-      const entityReg = await this.haConnection.getEntityRegistry();
+      const entityReg: any[] = (await this.haConnection.getEntityRegistry()) as any[];
 
       this.workerManager.emit('log', {
         source: 'System',
@@ -918,7 +946,7 @@ class EntityManager {
 
       let removedCount = 0;
 
-      const removeEntry = async (haEntry, reason) => {
+      const removeEntry = async (haEntry: any, reason: string): Promise<void> => {
         removedCount++;
         this.workerManager.emit('log', {
           source: 'System',
@@ -964,7 +992,7 @@ class EntityManager {
             : `[EntityManager] Startup audit complete: no conflicts found.`,
         level: 'debug',
       });
-    } catch (err) {
+    } catch (err: any) {
       this.workerManager.emit('log', {
         source: 'System',
         message: `[EntityManager] Startup audit failed: ${err.message}`,
@@ -978,7 +1006,7 @@ class EntityManager {
    * 1. Removes entities in HA that no longer have a corresponding script file.
    * 2. Ensures all @expose entities exist (Self-Healing).
    */
-  async cleanupOrphanedEntities(activeScriptNames) {
+  async cleanupOrphanedEntities(activeScriptNames: string[]): Promise<void> {
     // Ensure connection to both HA (for registry access) and MQTT (for purging retained messages).
     if (!this.haConnection.isReady || !this.mqttManager.isConnected) return;
 
@@ -988,16 +1016,13 @@ class EntityManager {
       level: 'debug',
     });
 
-    const entityReg = await this.haConnection.getEntityRegistry();
-    const deviceReg = await this.haConnection.getDeviceRegistry();
+    const entityReg: any[] = (await this.haConnection.getEntityRegistry()) as any[];
+    const deviceReg: any[] = (await this.haConnection.getDeviceRegistry()) as any[];
 
     // CLEANUP RELIC: Specifically target stubborn legacy entities or prefixed ghost variations.
     // This part targets entities from the old custom integration (platform === 'js_automations').
     const stubbornEntities = entityReg.filter(
-      (e) =>
-        e.entity_id.includes('waschmaschinen_skript') ||
-        e.entity_id.includes('js_automations_') ||
-        (e.platform === null && e.entity_id.startsWith('sensor.jsa_'))
+      (e) => e.entity_id.includes('js_automations_') || (e.platform === null && e.entity_id.startsWith('sensor.jsa_'))
     );
 
     for (const ghost of stubbornEntities) {
@@ -1024,22 +1049,6 @@ class EntityManager {
       const domain = ghost.entity_id.split('.')[0];
       if (ghost.unique_id) {
         this.mqttManager.publish(`homeassistant/${domain}/${ghost.unique_id}/config`, null, { retain: true });
-      }
-    }
-
-    // 5. Explicitly scan the local registry for the ghost ID, even if not found in HA's current registry.
-    for (const [entityId, payload] of this.workerManager.nativeEntities) {
-      if (entityId.includes('waschmaschinen_skript')) {
-        this.workerManager.emit('log', {
-          source: 'System',
-          message: `[EntityManager] Cleaning local registry for ghost: ${entityId}`,
-          level: 'debug',
-        });
-        this.workerManager.nativeEntities.delete(entityId);
-        const domain = entityId.split('.')[0];
-        if (payload.unique_id) {
-          this.mqttManager.publish(`homeassistant/${domain}/${payload.unique_id}/config`, null, { retain: true });
-        }
       }
     }
 
@@ -1079,7 +1088,7 @@ class EntityManager {
         continue; // Move to next entity
       }
 
-      let scriptName = null;
+      let scriptName: string | null = null;
       const device = entity.device_id ? deviceMap.get(entity.device_id) : null;
 
       // PROTECT SYSTEM ENTITIES: Explicitly skip any system related unique_ids
@@ -1089,7 +1098,7 @@ class EntityManager {
 
       if (device && device.identifiers) {
         // Only look for script identifiers to determine ownership
-        const mainIdentifier = device.identifiers.find((idPair) => {
+        const mainIdentifier = device.identifiers.find((idPair: any) => {
           // Identifiers can be [domain, id] pairs or just strings depending on registry version/source
           const id = Array.isArray(idPair) ? idPair[1] : idPair;
           return id && (id.startsWith('jsa_script_') || id.startsWith('js_automations_script_'));
@@ -1148,7 +1157,7 @@ class EntityManager {
       // differs from what HA has, remove the stale HA entry so it gets recreated correctly.
       if (!isRelic && lowerActiveScripts.includes(scriptName.toLowerCase())) {
         const localEntry = Array.from(this.workerManager.nativeEntities.entries()).find(
-          ([, payload]) => payload?.unique_id === entity.unique_id
+          ([, payload]: [string, any]) => payload?.unique_id === entity.unique_id
         );
         if (localEntry && localEntry[0] !== entity.entity_id) {
           this.workerManager.emit('log', {
@@ -1184,7 +1193,7 @@ class EntityManager {
         // The local payload is the authoritative source; fall back to derivedObjectId.
         const domain = entity.entity_id.split('.')[0];
         const derivedObjectId = entity.entity_id.split('.').slice(1).join('.');
-        const localPayload = this.workerManager.nativeEntities.get(entity.entity_id);
+        const localPayload: any = this.workerManager.nativeEntities.get(entity.entity_id);
         const topicId = localPayload?.object_id || localPayload?.unique_id || entity.unique_id || derivedObjectId;
         this.mqttManager.publish(`homeassistant/${domain}/${topicId}/config`, '', { retain: true });
         // Clear retained state/attributes topic
@@ -1194,7 +1203,7 @@ class EntityManager {
         // Find the actual filename (js or ts) from the manager's map
         const fileName = Array.from(this.workerManager.scriptEntityMap.keys()).find((k) => {
           const base = path.basename(k, path.extname(k));
-          return base.toLowerCase() === scriptName.toLowerCase();
+          return base.toLowerCase() === scriptName!.toLowerCase();
         });
         if (fileName) {
           await this.workerManager.removeScriptEntities(fileName);
@@ -1226,16 +1235,18 @@ class EntityManager {
 
   /**
    * Removes devices from the 'js_automations' integration that no longer have any entities.
+   * MQTT Discovery auto-removes a device once all its entities are purged, so this is
+   * currently a diagnostic scan rather than an active removal - see the log messages below.
    */
-  async cleanupOrphanedDevices() {
+  async cleanupOrphanedDevices(): Promise<void> {
     this.workerManager.emit('log', {
       source: 'System',
       message: '[EntityManager] Starting cleanup of orphaned devices',
       level: 'debug',
     });
 
-    const devices = await this.haConnection.getDeviceRegistry();
-    const entities = await this.haConnection.getEntityRegistry();
+    const devices: any[] = (await this.haConnection.getDeviceRegistry()) as any[];
+    const entities: any[] = (await this.haConnection.getEntityRegistry()) as any[];
 
     // Get all devices managed by this integration
     const ourDevices = devices.filter((d) => d.manufacturer === 'JS Automations');
@@ -1246,17 +1257,21 @@ class EntityManager {
 
     for (const device of ourDevices) {
       if (!usedDeviceIds.has(device.id)) {
+        // Found while converting to TypeScript: this used to say "Removing from HA..." even
+        // though nothing here actually removes anything - fixed to describe what actually
+        // happens (confirmed with the user before fixing).
         this.workerManager.emit('log', {
           source: 'System',
-          message: `[EntityManager] Found orphaned device "${device.name_by_user || device.name}". Removing from HA...`,
+          message: `[EntityManager] Found orphaned device "${device.name_by_user || device.name}".`,
           level: 'debug',
         });
 
-        // SAFETY: Only prune if it's explicitly a script device identifier.
-        // This protects the main "JS Automations" system device from accidental pruning.
+        // SAFETY: Only log as a script-owned candidate if it's explicitly a script device
+        // identifier. This protects the main "JS Automations" system device from ever being
+        // treated as a pruning candidate.
         const identifiers = device.identifiers
-          .filter((idPair) => idPair[1].includes('_script_'))
-          .map((idPair) => idPair[1]);
+          .filter((idPair: any) => idPair[1].includes('_script_'))
+          .map((idPair: any) => idPair[1]);
 
         if (identifiers.length > 0) {
           // In MQTT Discovery, devices are automatically removed when all associated
@@ -1275,7 +1290,7 @@ class EntityManager {
    * Checks if a script still has any associated entities.
    * If no entities remain, the device is eventually removed by Home Assistant.
    */
-  async checkDeviceCleanup(scriptName) {
+  async checkDeviceCleanup(scriptName: string): Promise<void> {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] Checking if device for ${scriptName} should be removed`,
@@ -1290,7 +1305,7 @@ class EntityManager {
 
     // Check if @expose entities still exist by parsing the file
     const fullPath = fileName ? path.join(this.workerManager.scriptsDir, fileName) : '';
-    const meta = fullPath && fs.existsSync(fullPath) ? ScriptHeaderParser.parse(fullPath) : { expose: null };
+    const meta: any = fullPath && fs.existsSync(fullPath) ? ScriptHeaderParser.parse(fullPath) : { expose: null };
 
     if (!meta.expose && (!dynamicEntities || dynamicEntities.size === 0)) {
       this.workerManager.emit('log', {
@@ -1303,4 +1318,4 @@ class EntityManager {
   }
 }
 
-module.exports = EntityManager;
+export = EntityManager;

@@ -44,6 +44,7 @@ module.exports = [
       'js_automations/core/card-manager.js',
       'js_automations/core/worker-manager.js',
       'js_automations/core/worker-wrapper.js',
+      'js_automations/core/entity-manager.js',
     ],
   },
   js.configs.recommended,
