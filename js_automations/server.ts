@@ -43,6 +43,23 @@ const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, { path: '/socket.io', cors: { origin: '*' } });
 
+// A `nodemon` dev-server restart on Windows can hit a stale EADDRINUSE even
+// with a plain (non-shell-chained) exec command: the previous process's real
+// node.exe can outlive nodemon's own kill/PID tracking by a few hundred ms.
+// Retry briefly instead of crashing - same defensive pattern already used
+// for the webhook port in webhook-manager.ts.
+let listenRetries = 0;
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code === 'EADDRINUSE' && listenRetries < 10) {
+    listenRetries++;
+    console.warn(`⚠️  Port ${config.PORT} still in use — retrying in 500ms (${listenRetries}/10)...`);
+    setTimeout(() => server.listen(Number(config.PORT), '0.0.0.0'), 500);
+    return;
+  }
+  console.error(`❌ Server error: ${e.message}`);
+  process.exit(1);
+});
+
 // --- Sibling guard gate ---
 // While the sibling addon (stable ↔ beta) is running, every request is answered
 // with the blocked page instead of the app. The gate sits in front of all other

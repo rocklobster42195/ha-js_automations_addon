@@ -5,7 +5,8 @@
   "main": "js_automations/server.js",
   "scripts": {
     "start": "npm run build:backend && node js_automations/server.js",
-    "dev": "nodemon js_automations/server.js",
+    "predev": "node tools/kill-stale-dev.js",
+    "dev": "npm run build:backend && concurrently -k -n tsc,server -c blue,green \"tsc -p tsconfig.backend-build.json --watch --preserveWatchOutput\" \"nodemon js_automations/server.js\"",
     "version": "node tools/update-version.js",
     "release": "node tools/release.js",
     "ship:patch": "npm version patch && npm run release",
@@ -60,6 +61,7 @@
     "@web/dev-server-esbuild": "^2.0.0",
     "@web/test-runner": "^1.0.0",
     "@web/test-runner-playwright": "^1.0.0",
+    "concurrently": "^10.0.4",
     "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
