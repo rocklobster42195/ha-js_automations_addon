@@ -4,6 +4,8 @@ This document describes the technical architecture of the addon — how the subs
 
 It is intended as a contributor-level deep-dive, not a quick-start guide. For API usage examples see [API_REFERENCE.md](./API_REFERENCE.md).
 
+**A note on scope:** this document covers backend runtime architecture — how the pieces above actually behave, not how the codebase is built or how the UI is put together. Two things worth knowing as a contributor that don't otherwise show up here: the backend (`core/`, `routes/`, `services/`, `server.js`) is written in TypeScript and compiled via `tsc` to plain `.js` in place before running (mirrors the frontend's esbuild bundle step — see `nodemon.json`/`package.json`'s `build:backend`); the UI is built with [LIT](https://lit.dev/) web components (`public/js/components/*.ts`), one custom element per major panel, communicating with not-yet-migrated legacy files via a small set of `window.<component>` bridge objects. Full migration history and conventions: `docs/RFC_FRONTEND_MODERNIZATION.md`.
+
 ---
 
 ## Table of Contents
@@ -22,10 +24,11 @@ It is intended as a contributor-level deep-dive, not a quick-start guide. For AP
 12. [HA Connection: WebSocket & State Cache](#12-ha-connection-websocket--state-cache)
 13. [MQTT Manager: Broker Connection and Command Routing](#13-mqtt-manager-broker-connection-and-command-routing)
 14. [TypeScript Pipeline and IntelliSense](#14-typescript-pipeline-and-intellisense)
-15. [Settings: Schema-Driven UI](#15-settings-schema-driven-ui)
-16. [Capability & Permission System](#16-capability--permission-system)
-17. [Card Manager: Script Pack System](#17-card-manager-script-pack-system)
-18. [Resource Consumption and Known Limits](#18-resource-consumption-and-known-limits)
+15. [Blockly: Visual Scripting Compilation](#15-blockly-visual-scripting-compilation)
+16. [Settings: Schema-Driven UI](#16-settings-schema-driven-ui)
+17. [Capability & Permission System](#17-capability--permission-system)
+18. [Card Manager: Script Pack System](#18-card-manager-script-pack-system)
+19. [Resource Consumption and Known Limits](#19-resource-consumption-and-known-limits)
 
 ---
 
@@ -253,7 +256,7 @@ The wrapper constructs a global `ha` object. The following table covers the comp
 | `ha.onStop(cb)`                                    | —                      | Registers shutdown callback                                                      |
 | `ha.onError(cb)`                                   | —                      | Registers background error handler                                               |
 | `ha.localize(mapping, fallback)`                   | —                      | Returns string for `ha.language`                                                 |
-| `ha.frontend.installCard(opts)`                    | `install_card`         | Triggers CardManager; see §17                                                    |
+| `ha.frontend.installCard(opts)`                    | `install_card`         | Triggers CardManager; see §18                                                    |
 | `ha.entity(entityId)`                              | (fluent proxy)         | Returns `EntityServices` proxy for chained service calls                         |
 
 ---
@@ -753,7 +756,44 @@ Any change to store data or HA states triggers regeneration with debouncing. The
 
 ---
 
-## 15. Settings: Schema-Driven UI
+## 15. Blockly: Visual Scripting Compilation
+
+A `.blocks` file is a JSON-serialized Blockly workspace (block tree, not code) — a second script pipeline running alongside TypeScript, with its own compiler but the same execution path: the compiled output is a plain `.js` file that runs in a Worker Thread exactly like any other script (`worker-manager.js` resolves `.blocks` to its `dist/*.js` counterpart the same way it resolves `.ts`, §4).
+
+### Compilation
+
+`core/blockly-compiler.js`, driven by the same `ScriptWatcher` (chokidar) that watches for `.ts` changes:
+
+1. Parse the `.blocks` file's JSON, load it into a real (headless, server-side) `Blockly.Workspace` via `Blockly.serialization.workspaces.load()`.
+2. Generate JavaScript via `javascriptGenerator.workspaceToCode(workspace)` — the same code-generation engine the browser's own "Show Code" panel uses, but a separate instance (see below).
+3. Write the result to `dist/<name>.js`, wrapped in an async IIFE only when the generated code actually needs top-level `await` (see `wrapGeneratedCode()` in `blockly-blocks-shared.js`).
+
+Both the Node-side compiler and the browser's editor load their block _definitions_ (`public/js/blockly-blocks.js`, `blockly-blocks-shared.js`, `blockly-mutators.js`, `blockly-fields.js`) from the same files under `public/js/` via plain `<script>` tags / `require()` — there is no bundler in this project, so these files have to work unmodified in both environments.
+
+### Permission Derivation
+
+Unlike free-form JS/TS (where `@permission` is a manual, self-declared header tag), every capability-using construct in a `.blocks` file is one of JSA's own known block types — so "declared" permissions can be computed exactly from "used" block types, with no risk of an untracked code path. `BLOCK_PERMISSION_MAP` (currently just `{ ha_on_webhook: 'webhook' }`) maps block types to permissions; after each compile, the derived list is written back into the `.blocks` file's own `jsa.permission` field, same as a hand-written tag would appear for `.js`/`.ts`. The write is guarded to only happen when the value actually _changed_ — an unconditional write would loop forever, since writing to the `.blocks` source re-triggers `ScriptWatcher`'s own change handler, which calls `compile()` again.
+
+### Block-Level Error Visualization
+
+To trace a runtime error back to the specific block that threw (not just "somewhere in this script"), the Node-side `javascriptGenerator` instance overrides `scrub_()` — Blockly's own per-block code-generation hook, called once for every block in a statement chain with just that block's own code fragment. Each statement block's generated code is wrapped in:
+
+```js
+try {
+  /* block's own generated code */
+} catch (__e) {
+  if (!__e.blockId) __e.blockId = /* this block's id */;
+  throw __e;
+}
+```
+
+`if (!__e.blockId)` only sets it once, so as the error propagates up through several nested wrappers (e.g. a block inside a loop inside a trigger's body), the innermost — most specific — block's id wins. The tagged error flows through `worker-wrapper.js` → `worker-manager.js` → `bridge.js` → the frontend, which highlights the exact block in `blockly-editor.js` if that `.blocks` tab is open.
+
+This override is applied **only** to the Node-side generator instance used by `BlocklyCompiler` for real runtime output — the browser's own separate `Blockly.JavaScript` instance (loaded via CDN, used solely for the "Show Code" panel) is never touched, so Show Code stays clean and readable without try/catch noise the user never asked to see.
+
+---
+
+## 16. Settings: Schema-Driven UI
 
 `core/settings-schema.js` defines the settings structure as an array of sections with items. The same schema is used for two purposes:
 
@@ -782,7 +822,7 @@ Items with `active: false` are defined in the schema but hidden in the UI (e.g.,
 
 ---
 
-## 16. Capability & Permission System
+## 17. Capability & Permission System
 
 ### Overview
 
@@ -816,7 +856,7 @@ New settings in the `danger` section must always be added here.
 
 ---
 
-## 17. Card Manager: Script Pack System
+## 18. Card Manager: Script Pack System
 
 `core/card-manager.js` implements the Script Pack feature — the ability to embed a Lovelace Web Component directly in a JSA script file.
 
@@ -921,7 +961,7 @@ The resource URL has the format `/local/jsa-cards/<scriptName>-card.js?v=<shortH
 
 ---
 
-## 18. Resource Consumption and Known Limits
+## 19. Resource Consumption and Known Limits
 
 ### RAM Overhead per Worker Thread
 

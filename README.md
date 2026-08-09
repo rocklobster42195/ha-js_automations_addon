@@ -15,6 +15,9 @@
 > **Actively evolving:** JS Automations is stable enough for daily/production use, but it's still a young project under active development. New features and improvements land regularly, so expect more frequent updates than a fully mature add-on — check the [releases](https://github.com/rocklobster42195/ha-js_automations_addon/releases) for what's new. Feedback and bug reports are always welcome!
 
 > [!TIP]
+> **Try the 3.x beta!** We're working on a major frontend/backend modernization (TypeScript, LIT web components, a unified design system) for the next major version — including a brand-new **visual scripting editor (Blockly)**: build automations by dragging blocks instead of writing code, with a "Show Code" panel and a one-click "Duplicate as JavaScript" escape hatch once you outgrow the blocks. The beta channel lives in the same repository you already added — look for **"JS Automations (Beta)"** in the Add-on Store. See [js_automations_beta/README.md](js_automations_beta/README.md) for how stable/beta coexist. Feedback and bug reports on the beta are especially welcome right now!
+
+> [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/API_REFERENCE.md)
 
 > **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
