@@ -1,0 +1,17 @@
+# Force LF line endings for all text files in this repo, regardless of a
+# contributor's global core.autocrlf setting. Without this, Windows checkouts
+# convert working-tree line endings to CRLF, which Prettier (configured for
+# LF) then flags as a formatting violation on files that are otherwise
+# byte-identical to what's committed - breaking the release pipeline's
+# format:check gate on every Windows machine, every time.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
