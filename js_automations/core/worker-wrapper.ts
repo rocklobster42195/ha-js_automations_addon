@@ -295,7 +295,10 @@ let _watchKeepaliveTimer: ReturnType<typeof setInterval> | null = null;
 const HA_TECH_STATES = new Set(['unknown', 'unavailable', 'None', '']);
 
 const pendingServiceCalls = new Map<number | string, { resolve: (v?: any) => void; reject: (e: Error) => void }>();
-const pendingAsks = new Map<string, { resolve: (action: string | null) => void; timer: ReturnType<typeof setTimeout> }>();
+const pendingAsks = new Map<
+  string,
+  { resolve: (action: string | null) => void; timer: ReturnType<typeof setTimeout> }
+>();
 const actionHandlers = new Map<string, (payload: any) => any>();
 const entityActionMap = new Map<string, string>(); // entityId -> actionName (for ha.register action: routing)
 const ASK_SEP = '__jsa_ask__';
@@ -1295,7 +1298,8 @@ const ha: any = {
     integral: (entityId: string, options: any) => historyHelpers.integral(ha, entityId, options),
     stats: (entityId: string, options: any) => historyHelpers.stats(ha, entityId, options),
     timeSince: (entityId: string, state: any) => historyHelpers.timeSince(ha, entityId, state),
-    timeInState: (entityId: string, state: any, options: any) => historyHelpers.timeInState(ha, entityId, state, options),
+    timeInState: (entityId: string, state: any, options: any) =>
+      historyHelpers.timeInState(ha, entityId, state, options),
   },
 
   renderTemplate: (template: string) => {

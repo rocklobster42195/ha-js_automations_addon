@@ -1,4 +1,5 @@
 # Backend TS Migration Order: Grill / Discovery Notes
+
 Date: 2026-08-09 · Goal: Concretize RFC_FRONTEND_MODERNIZATION.md Abschnitt 8 ("Modul für Modul auf .ts, Reihenfolge nach Kritikalität") into an actual file-by-file order for `js_automations/core` (+ `routes`/`services`), decide how much backend test coverage must exist before each rename, and find edge-case handling from the original JS authoring that may have overcomplicated things and could be simplified once real types land.
 
 ## Summary / key decisions
@@ -6,6 +7,7 @@ Date: 2026-08-09 · Goal: Concretize RFC_FRONTEND_MODERNIZATION.md Abschnitt 8 (
 **Scope:** Nicht die exakte Datei-Reihenfolge, sondern die **Methodik** für den in RFC Abschnitt 8 offen gelassenen Schritt "Modul für Modul auf .ts, Reihenfolge nach Kritikalität" (Q1).
 
 **Die Methodik, Schritt für Schritt:**
+
 1. **Rename-Prinzip:** Leaf-first nach Abhängigkeitsgraph — Module ohne interne `require('./...')`-Abhängigkeiten zuerst, dann ihre Konsumenten, `kernel.js` (Fan-in auf fast alles) zuletzt (Q4).
 2. **Test-Tiefe:** Nicht jedes Modul bekommt vorab Tests — nur die als riskant eingestuften (Q2).
 3. **Risiko-Kriterien (alle drei zusammen, kein Einzelkriterium reicht):** hoher Fan-in/Blast-Radius, hohe Verzweigungs-/Edge-Case-Dichte, vergangene Bugs/Incidents (Q3). Daraus ergeben sich `kernel.js`, `worker-wrapper.js`, `entity-manager.js` als klare Kandidaten.
@@ -19,11 +21,12 @@ Date: 2026-08-09 · Goal: Concretize RFC_FRONTEND_MODERNIZATION.md Abschnitt 8 (
 **Bereits vorhandener Unterbau (aus Repo-Analyse, nicht neu entschieden):** `checkJs`/`allowJs` bereits aktiv (M1 erledigt), Lint/Format/Test-Gate bereits scharf in `tools/release.js` + `ci.yml` (M0/M3 erledigt). Es fehlt nur die per-Modul-Testabdeckung in `core/` (M2 unvollständig) — genau die Lücke, die Q2/Q3 jetzt gezielt schließen, statt pauschal überall Tests nachzuziehen.
 
 ## Context established by reading the repo (not asked, already known)
+
 - `tsconfig.json` already has `checkJs`+`allowJs` on for `js_automations/{server.js,core,routes,services}` + `tools` — M1 from the old RFC is live. Backend is CommonJS, staying CommonJS.
 - Gate is already wired (M3 done): `tools/release.js` runs `lint && test` before tag/push; `.github/workflows/ci.yml` runs lint+format:check+test on push/PR to main.
 - Backend test coverage today is exactly one file: `test/boot.test.js` (spawns the real server, hits `/api/status`). No unit tests exist yet for any individual `core/` module. `npm run test:backend` = `node --test test/**/*.test.js`.
 - `core/` has 28 files. Internal `require('./...')` dependency graph:
-  - Zero internal deps (leaves): `script-header-parser`, `config`, `settings-schema`, `ha-history-helpers`, `fs-service`, `capability-analyzer`, `sibling-guard`, `log-manager`, `store-manager`, `state-manager`, `ha-connection`, `compiler-manager`, `blockly-compiler`, `bridge`, `dev-setup`, `type-definition-generator`, `script-command-router`, `mqtt-manager`, `webhook-manager`, `card-manager`* , `dependency-manager`*, `store-type-generator`* (*these three depend only on the leaves above)
+  - Zero internal deps (leaves): `script-header-parser`, `config`, `settings-schema`, `ha-history-helpers`, `fs-service`, `capability-analyzer`, `sibling-guard`, `log-manager`, `store-manager`, `state-manager`, `ha-connection`, `compiler-manager`, `blockly-compiler`, `bridge`, `dev-setup`, `type-definition-generator`, `script-command-router`, `mqtt-manager`, `webhook-manager`, `card-manager`* , `dependency-manager`_, `store-type-generator`_ (*these three depend only on the leaves above)
   - `script-watcher` -> `script-header-parser`
   - `settings-manager` -> `settings-schema`, `config`
   - `worker-manager` -> `script-header-parser`
@@ -90,6 +93,7 @@ Date: 2026-08-09 · Goal: Concretize RFC_FRONTEND_MODERNIZATION.md Abschnitt 8 (
 - Flags: Kandidat für eine dauerhafte Feedback-Memory (allgemeines Arbeitsverhalten, nicht nur für diese Migration) -> bei Graduation berücksichtigen
 
 ## Open flags (pending input)
+
 - Ob ein Modul "UI-sichtbar genug" für den manuellen Addon-Check (Q6) ist, wird pro Fall entschieden, kein festes Kriterium -> Praxisentscheidung bei Umsetzung
 
 ## Addendum — Umsetzungsbeginn 2026-08-09 (gleicher Tag, direkt im Anschluss)

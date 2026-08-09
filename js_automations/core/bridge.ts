@@ -124,11 +124,14 @@ class Bridge {
         this.kernel.workerManager.continueBreakpoint(filename);
       });
 
-      socket.on('mqtt_ui_publish', ({ topic, payload, retain }: { topic: unknown; payload: unknown; retain: unknown }) => {
-        if (typeof topic === 'string' && topic.trim() && this.kernel.mqttManager?.isConnected) {
-          this.kernel.mqttManager.publish(topic.trim(), payload ?? '', { retain: !!retain });
+      socket.on(
+        'mqtt_ui_publish',
+        ({ topic, payload, retain }: { topic: unknown; payload: unknown; retain: unknown }) => {
+          if (typeof topic === 'string' && topic.trim() && this.kernel.mqttManager?.isConnected) {
+            this.kernel.mqttManager.publish(topic.trim(), payload ?? '', { retain: !!retain });
+          }
         }
-      });
+      );
 
       socket.on('fire_ha_event', ({ event_type, data }: { event_type: unknown; data: unknown }) => {
         if (typeof event_type === 'string' && event_type.trim()) {

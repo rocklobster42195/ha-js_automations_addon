@@ -244,7 +244,12 @@ async function timeSince(ha: HaLike, source: Source, state?: string): Promise<nu
   return NaN;
 }
 
-async function timeInState(ha: HaLike, source: Source, state: string, options: TimeInStateOptions = {}): Promise<number> {
+async function timeInState(
+  ha: HaLike,
+  source: Source,
+  state: string,
+  options: TimeInStateOptions = {}
+): Promise<number> {
   const endTime = options.end ?? new Date();
   const startTime = options.start ?? new Date(endTime.getTime() - parsePeriod(options.period ?? '24h'));
   const raw = Array.isArray(source)

@@ -464,7 +464,9 @@ class CardManager {
               return this.haConnector!.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
             }
           })
-          .catch((e: Error) => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
+          .catch((e: Error) =>
+            console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message)
+          );
       }
     }
 
@@ -734,11 +736,7 @@ class CardManager {
   // Private: Lovelace Resource Management
   // ---------------------------------------------------------------------------
 
-  private async _upsertLovelaceResource(
-    url: string,
-    existingResourceId: unknown,
-    cardName: string
-  ): Promise<unknown> {
+  private async _upsertLovelaceResource(url: string, existingResourceId: unknown, cardName: string): Promise<unknown> {
     if (!this.haConnector?.isReady) {
       console.warn('[CardManager] HA not connected — skipping Lovelace resource registration.');
       return null;

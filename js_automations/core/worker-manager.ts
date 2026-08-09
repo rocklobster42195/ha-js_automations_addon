@@ -350,7 +350,11 @@ class WorkerManager extends EventEmitter {
         level: 'debug',
       });
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to sync services: ${(e as Error).message}`, level: 'error' });
+      this.emit('log', {
+        source: 'System',
+        message: `Failed to sync services: ${(e as Error).message}`,
+        level: 'error',
+      });
     }
   }
 
@@ -413,7 +417,11 @@ class WorkerManager extends EventEmitter {
         fs.copyFileSync(masterPath, targetPath);
       }
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to sync ha-api.d.ts: ${(e as Error).message}`, level: 'error' });
+      this.emit('log', {
+        source: 'System',
+        message: `Failed to sync ha-api.d.ts: ${(e as Error).message}`,
+        level: 'error',
+      });
     }
   }
 
@@ -467,7 +475,11 @@ class WorkerManager extends EventEmitter {
     try {
       fs.writeFileSync(targetPath, JSON.stringify(defaultConfig, null, 2));
     } catch (e) {
-      this.emit('log', { source: 'System', message: `Failed to create tsconfig.json: ${(e as Error).message}`, level: 'error' });
+      this.emit('log', {
+        source: 'System',
+        message: `Failed to create tsconfig.json: ${(e as Error).message}`,
+        level: 'error',
+      });
     }
   }
 
@@ -941,7 +953,8 @@ class WorkerManager extends EventEmitter {
             const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
             if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
           } catch (err) {
-            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
+            if (msg.callId)
+              worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
             else
               this.emit('log', {
                 source: name,
@@ -1272,7 +1285,11 @@ class WorkerManager extends EventEmitter {
           }
         }
       } catch (err) {
-        this.emit('log', { source: name, message: `Service call execution failed: ${(err as Error).message}`, level: 'error' });
+        this.emit('log', {
+          source: name,
+          message: `Service call execution failed: ${(err as Error).message}`,
+          level: 'error',
+        });
       }
     });
 
@@ -1310,7 +1327,8 @@ class WorkerManager extends EventEmitter {
           this.mqttManager.unsubscribeAllRawByScript(scriptMeta.filename);
         }
 
-        const reason = this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
+        const reason =
+          this.stopReasons.get(scriptMeta.filename) || (code === 0 ? 'finished' : `crashed (Code ${code})`);
         const type = code !== 0 && !this.stopReasons.has(scriptMeta.filename) ? 'error' : 'success';
 
         // Deactivate (not delete) this script's ha.onWebhook() registrations —
@@ -1482,7 +1500,8 @@ class WorkerManager extends EventEmitter {
             const result = await this.haConnector.callService(msg.domain, msg.service, msg.data, !!msg.returnResponse);
             if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, result });
           } catch (err) {
-            if (msg.callId) worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
+            if (msg.callId)
+              worker.postMessage({ type: 'service_response', callId: msg.callId, error: (err as Error).message });
           }
         }
         if (msg.type === 'update_state') {

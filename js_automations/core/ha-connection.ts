@@ -624,7 +624,12 @@ class HAConnector {
     });
   }
 
-  callService(domain: string, service: string, data: Record<string, unknown>, expectResponse = false): Promise<unknown> {
+  callService(
+    domain: string,
+    service: string,
+    data: Record<string, unknown>,
+    expectResponse = false
+  ): Promise<unknown> {
     if (!this.isReady) return Promise.reject(new Error('WebSocket not connected'));
     const id = this.msgId++;
     const msg: Record<string, unknown> = { id, type: 'call_service', domain, service, service_data: data };

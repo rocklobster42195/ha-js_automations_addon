@@ -85,7 +85,10 @@ interface WebhookListing {
 }
 
 interface SettingsManagerLike {
-  on(event: 'settings_updated', listener: (settings: { webhook?: { trust_proxy?: boolean; external_url?: string } }) => void): void;
+  on(
+    event: 'settings_updated',
+    listener: (settings: { webhook?: { trust_proxy?: boolean; external_url?: string } }) => void
+  ): void;
   getSettings(): { webhook?: { trust_proxy?: boolean; external_url?: string } } | undefined;
 }
 
