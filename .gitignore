@@ -59,3 +59,4 @@ js_automations/public/js/dist/
 # see tsconfig.backend-build.json). One line per converted module, added in the
 # same commit as its .js -> .ts rename.
 js_automations/core/config.js
+js_automations/core/dev-setup.js

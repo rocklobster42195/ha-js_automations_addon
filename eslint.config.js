@@ -20,6 +20,7 @@ module.exports = [
       // Backend TS build output (tsc emits .js in-place next to its .ts source,
       // see tsconfig.backend-build.json) — one line per converted module.
       'js_automations/core/config.js',
+      'js_automations/core/dev-setup.js',
     ],
   },
   js.configs.recommended,

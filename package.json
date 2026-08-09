@@ -4,7 +4,7 @@
   "description": "",
   "main": "js_automations/server.js",
   "scripts": {
-    "start": "node js_automations/server.js",
+    "start": "npm run build:backend && node js_automations/server.js",
     "dev": "nodemon js_automations/server.js",
     "version": "node tools/update-version.js",
     "release": "node tools/release.js",
