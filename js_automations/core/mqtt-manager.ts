@@ -1,13 +1,83 @@
-// core/mqtt-manager.js
-const mqtt = require('mqtt');
-const EventEmitter = require('events');
+// core/mqtt-manager.ts
+import * as mqtt from 'mqtt';
+import { EventEmitter } from 'events';
+
+interface MqttSettings {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+}
+
+interface SettingsManagerLike {
+  on(event: 'settings_updated', listener: (settings: { mqtt?: MqttSettings }) => void): void;
+  getSettings(): { mqtt?: MqttSettings };
+}
+
+interface LogManagerLike {
+  add(level: string, source: string, message: string): void;
+}
+
+interface HaConfigEntry {
+  domain: string;
+  data?: { broker?: string; host?: string; port?: number; username?: string };
+  options?: { broker?: string; host?: string; port?: number; username?: string };
+}
+
+interface HaConnectionLike {
+  getConfigEntries(): Promise<HaConfigEntry[]>;
+}
+
+interface TestConnectionConfig {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
+
+interface TestConnectionResult {
+  success: boolean;
+  error?: string;
+}
+
+interface DiscoveredSettings {
+  host: string;
+  port: number;
+  username: string;
+  _isFallback?: boolean;
+}
+
+interface RawSubscription {
+  topic: string;
+  scriptId: string;
+  callback: (topic: string, payload: string) => void;
+}
+
+interface EntityConfig {
+  state_topic?: string;
+  json_attributes_topic?: string;
+}
 
 /**
  * MqttManager handles the connection to the MQTT broker and manages
  * communication for Home Assistant MQTT Discovery.
  */
 class MqttManager extends EventEmitter {
-  constructor(settingsManager, logManager, haConnection) {
+  settingsManager: SettingsManagerLike;
+  logManager: LogManagerLike;
+  haConnection: HaConnectionLike;
+  client: mqtt.MqttClient | null;
+  isConnected: boolean;
+  private healthCheckTimer: ReturnType<typeof setInterval> | null;
+  private _lastConfig: MqttSettings | null;
+  private _reconnectFallbackTimer: ReturnType<typeof setTimeout> | null;
+  private _monitoring: boolean;
+  statusTopic: string;
+  discoveryPrefix: string;
+  private _rawSubscriptions: Map<string, RawSubscription>;
+
+  constructor(settingsManager: SettingsManagerLike, logManager: LogManagerLike, haConnection: HaConnectionLike) {
     super();
     this.settingsManager = settingsManager;
     this.logManager = logManager;
@@ -38,7 +108,7 @@ class MqttManager extends EventEmitter {
    * Initializes the MQTT connection based on current settings.
    * Returns a promise that resolves when the connection is established.
    */
-  async connect() {
+  async connect(): Promise<void> {
     const settings = this.settingsManager.getSettings().mqtt;
     if (!settings || !settings.enabled) {
       this.logManager.add('debug', 'System', '[MQTT] MQTT is disabled in settings.');
@@ -51,7 +121,7 @@ class MqttManager extends EventEmitter {
       // Resolve as soon as MQTT connects, or after 10 s so kernel boot is never blocked.
       // Do NOT reject on error: the mqtt library retries automatically (reconnectPeriod: 5 s).
       // Rejecting would abort kernel.start() and prevent scripts from loading.
-      this.client.once('connect', () => resolve());
+      this.client!.once('connect', () => resolve());
       setTimeout(() => resolve(), 10000);
     });
   }
@@ -60,7 +130,7 @@ class MqttManager extends EventEmitter {
    * Handles updates to MQTT settings at runtime.
    * Disconnects or reconnects as needed.
    */
-  handleSettingsUpdate(mqttSettings) {
+  handleSettingsUpdate(mqttSettings: MqttSettings): void {
     const isEnabled = mqttSettings.enabled;
 
     // If disabled but client exists, shut it down
@@ -81,10 +151,8 @@ class MqttManager extends EventEmitter {
   /**
    * Static helper to test a connection without using the main client.
    * Useful for the "Test Connection" button in settings.
-   * @param {object} config - { host, port, username, password }
-   * @returns {Promise<{success: boolean, error?: string}>}
    */
-  static testConnection(config) {
+  static testConnection(config: TestConnectionConfig): Promise<TestConnectionResult> {
     return new Promise((resolve) => {
       const { host, port, username, password } = config;
       const brokerUrl = `mqtt://${host}:${port}`;
@@ -129,9 +197,8 @@ class MqttManager extends EventEmitter {
 
   /**
    * Attempts to discover MQTT broker settings from Home Assistant.
-   * @returns {Promise<object|null>}
    */
-  async discoverSettings() {
+  async discoverSettings(): Promise<DiscoveredSettings | null> {
     this.logManager.add('debug', 'System', '[MQTT] Attempting to discover settings from Home Assistant...');
 
     const entries = await this.haConnection.getConfigEntries();
@@ -151,7 +218,7 @@ class MqttManager extends EventEmitter {
       const isAddon = !!process.env.SUPERVISOR_TOKEN;
       // Use core-mosquitto when running as addon and broker points to the Mosquitto addon
       const isMosquittoAddon = isAddon && (!brokerFromEntry || brokerFromEntry === 'core-mosquitto');
-      const discovery = {
+      const discovery: DiscoveredSettings = {
         host: isMosquittoAddon ? 'core-mosquitto' : brokerFromEntry || 'localhost',
         port: portFromEntry || 1883,
         username: usernameFromEntry,
@@ -177,14 +244,13 @@ class MqttManager extends EventEmitter {
 
   /**
    * Establishes the MQTT connection to the broker.
-   * @private
    */
-  _connectToBroker(config) {
+  private _connectToBroker(config: MqttSettings): void {
     const { host, port, username, password } = config;
     this._lastConfig = config;
     const brokerUrl = `mqtt://${host}:${port}`;
 
-    const options = {
+    const options: mqtt.IClientOptions = {
       clientId: `jsa_addon_${Math.random().toString(16).substring(2, 8)}`,
       clean: true,
       reconnectPeriod: 5000,
@@ -214,7 +280,7 @@ class MqttManager extends EventEmitter {
         this.publish(this.statusTopic, 'online', { retain: true });
 
         // Subscribe to all inbound JSA topics (command topics for switch/button/select/number/text entities)
-        this.client.subscribe('jsa/#', (err) => {
+        this.client!.subscribe('jsa/#', (err) => {
           if (err) this.logManager.add('error', 'System', `[MQTT] Failed to subscribe to jsa/#: ${err.message}`);
           else this.logManager.add('debug', 'System', '[MQTT] Subscribed to jsa/#');
         });
@@ -222,7 +288,7 @@ class MqttManager extends EventEmitter {
         // Re-subscribe to any active raw subscriptions (e.g. after reconnect)
         const rawTopics = new Set([...this._rawSubscriptions.values()].map((s) => s.topic));
         for (const topic of rawTopics) {
-          this.client.subscribe(topic, (err) => {
+          this.client!.subscribe(topic, (err) => {
             if (err)
               this.logManager.add(
                 'error',
@@ -233,7 +299,7 @@ class MqttManager extends EventEmitter {
         }
 
         // Re-subscribe to wildcard monitor if active
-        if (this._monitoring) this.client.subscribe('#');
+        if (this._monitoring) this.client!.subscribe('#');
 
         // Start the health monitoring watchdog
         this._startHealthCheck();
@@ -277,15 +343,14 @@ class MqttManager extends EventEmitter {
         if (this.client) this._scheduleReconnectFallback();
       });
     } catch (e) {
-      this.logManager.add('error', 'System', `[MQTT] Initialization failed: ${e.message}`);
+      this.logManager.add('error', 'System', `[MQTT] Initialization failed: ${(e as Error).message}`);
     }
   }
 
   /**
    * Starts the periodic connection health monitor.
-   * @private
    */
-  _startHealthCheck() {
+  private _startHealthCheck(): void {
     this._stopHealthCheck();
     // Run health check every 30 seconds
     this.healthCheckTimer = setInterval(() => this._performHealthCheck(), 30000);
@@ -293,9 +358,8 @@ class MqttManager extends EventEmitter {
 
   /**
    * Stops the periodic connection health monitor.
-   * @private
    */
-  _stopHealthCheck() {
+  private _stopHealthCheck(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
       this.healthCheckTimer = null;
@@ -307,9 +371,8 @@ class MqttManager extends EventEmitter {
    * covers the edge case where the socket dies without emitting 'close'/'offline'
    * (e.g. a silent network partition), which would otherwise leave the client
    * stuck forever since nothing else would arm the reconnect fallback.
-   * @private
    */
-  _performHealthCheck() {
+  private _performHealthCheck(): void {
     if (!this.client) return;
 
     if (!this.client.connected && this.isConnected) {
@@ -331,7 +394,7 @@ class MqttManager extends EventEmitter {
    * timer never recovers from. Forces a fresh connection attempt if MQTT is
    * enabled but not currently connected; a no-op otherwise.
    */
-  ensureConnected() {
+  ensureConnected(): void {
     const settings = this.settingsManager.getSettings().mqtt;
     if (!settings || !settings.enabled || this.isConnected) return;
 
@@ -352,7 +415,7 @@ class MqttManager extends EventEmitter {
    * Helper to publish data. Objects are automatically stringified.
    * Providing null or undefined results in an empty payload (clears retained messages).
    */
-  publish(topic, payload, options = {}) {
+  publish(topic: string, payload: unknown, options: mqtt.IClientPublishOptions = {}): void {
     if (!this.client || !this.isConnected) return;
 
     let message = '';
@@ -368,11 +431,11 @@ class MqttManager extends EventEmitter {
    * Publishes the state and attributes of an entity based on its configuration.
    * This automatically handles stringification and topic routing for sub-topics.
    *
-   * @param {object} entityConfig The discovery configuration payload.
-   * @param {any} state The new state value (null or undefined to clear).
-   * @param {object} [attributes] Optional attributes object (null or empty to clear).
+   * @param entityConfig The discovery configuration payload.
+   * @param state The new state value (null or undefined to clear).
+   * @param attributes Optional attributes object (null or empty to clear).
    */
-  publishEntityState(entityConfig, state, attributes = {}) {
+  publishEntityState(entityConfig: EntityConfig, state: unknown, attributes: Record<string, unknown> = {}): void {
     if (!this.isConnected || !entityConfig) return;
 
     // 1. Normalize state to MQTT-friendly string (ON/OFF for binary states)
@@ -386,14 +449,14 @@ class MqttManager extends EventEmitter {
     // 2. Unified Payload Handling:
     // If state and attributes topics are the same, we send one combined JSON.
     if (entityConfig.state_topic && entityConfig.state_topic === entityConfig.json_attributes_topic) {
-      const finalAttributes = { ...attributes };
+      const finalAttributes: Record<string, unknown> = { ...attributes };
 
       // Extract icon and remove from attributes to avoid shadowing in HA
       const iconToUse = finalAttributes.icon || finalAttributes.entity_icon || null;
       delete finalAttributes.icon;
       delete finalAttributes.entity_icon;
 
-      const unifiedPayload = {
+      const unifiedPayload: { state: string | null; attributes: Record<string, unknown>; icon?: unknown } = {
         state: normalizedState,
         attributes: finalAttributes,
       };
@@ -425,19 +488,19 @@ class MqttManager extends EventEmitter {
   /**
    * Subscribes to a topic.
    */
-  subscribe(topic) {
+  subscribe(topic: string): void {
     if (this.client) this.client.subscribe(topic);
   }
 
   /**
    * Registers a raw MQTT subscription for a script (ha.mqtt.subscribe()).
    * Subscribes to the broker topic and stores the callback.
-   * @param {string} subscriptionId - Unique ID for this subscription
-   * @param {string} topic - MQTT topic filter (wildcards + and # supported)
-   * @param {string} scriptId - Owning script filename for cleanup on stop
-   * @param {function} callback - Called with (topic, payload) on match
+   * @param subscriptionId - Unique ID for this subscription
+   * @param topic - MQTT topic filter (wildcards + and # supported)
+   * @param scriptId - Owning script filename for cleanup on stop
+   * @param callback - Called with (topic, payload) on match
    */
-  subscribeRaw(subscriptionId, topic, scriptId, callback) {
+  subscribeRaw(subscriptionId: string, topic: string, scriptId: string, callback: (topic: string, payload: string) => void): void {
     this._rawSubscriptions.set(subscriptionId, { topic, scriptId, callback });
     if (this.client && this.isConnected) {
       this.client.subscribe(topic, (err) => {
@@ -450,9 +513,8 @@ class MqttManager extends EventEmitter {
   /**
    * Removes a single raw subscription by ID. Unsubscribes from the broker if
    * no other subscription needs the same topic.
-   * @param {string} subscriptionId
    */
-  unsubscribeRaw(subscriptionId) {
+  unsubscribeRaw(subscriptionId: string): void {
     const sub = this._rawSubscriptions.get(subscriptionId);
     if (!sub) return;
     this._rawSubscriptions.delete(subscriptionId);
@@ -465,11 +527,11 @@ class MqttManager extends EventEmitter {
   /**
    * Removes all raw subscriptions belonging to a specific script.
    * Called automatically when a script stops.
-   * @param {string} scriptId - Script filename
+   * @param scriptId - Script filename
    */
-  unsubscribeAllRawByScript(scriptId) {
+  unsubscribeAllRawByScript(scriptId: string): void {
     for (const subscriptionId of [...this._rawSubscriptions.keys()]) {
-      if (this._rawSubscriptions.get(subscriptionId).scriptId === scriptId) {
+      if (this._rawSubscriptions.get(subscriptionId)!.scriptId === scriptId) {
         this.unsubscribeRaw(subscriptionId);
       }
     }
@@ -478,12 +540,10 @@ class MqttManager extends EventEmitter {
   /**
    * Checks whether an MQTT topic matches a filter pattern.
    * Supports + (single-level) and # (multi-level) wildcards.
-   * @param {string} filter - Topic filter (e.g. 'shellies/+/light/0/status')
-   * @param {string} topic  - Actual incoming topic
-   * @returns {boolean}
-   * @private
+   * @param filter - Topic filter (e.g. 'shellies/+/light/0/status')
+   * @param topic  - Actual incoming topic
    */
-  _mqttTopicMatches(filter, topic) {
+  private _mqttTopicMatches(filter: string, topic: string): boolean {
     const fp = filter.split('/');
     const tp = topic.split('/');
     for (let i = 0; i < fp.length; i++) {
@@ -494,7 +554,7 @@ class MqttManager extends EventEmitter {
     return fp.length === tp.length;
   }
 
-  startMonitoring() {
+  startMonitoring(): void {
     if (this._monitoring) return;
     this._monitoring = true;
     if (this.client && this.isConnected) {
@@ -504,13 +564,13 @@ class MqttManager extends EventEmitter {
     }
   }
 
-  stopMonitoring() {
+  stopMonitoring(): void {
     if (!this._monitoring) return;
     this._monitoring = false;
     if (this.client && this.isConnected) this.client.unsubscribe('#');
   }
 
-  _handleIncomingMessage(topic, message) {
+  private _handleIncomingMessage(topic: string, message: string): void {
     this.emit('raw_message', { topic, payload: message, direction: 'in', ts: Date.now() });
 
     const parts = topic.split('/');
@@ -531,9 +591,8 @@ class MqttManager extends EventEmitter {
    * Schedules a forced client restart if the client is still disconnected after 15 seconds.
    * Guards against the edge case where mqtt.js fails to auto-reconnect after the initial
    * ECONNREFUSED (e.g. when the broker is not yet ready on addon startup).
-   * @private
    */
-  _scheduleReconnectFallback() {
+  private _scheduleReconnectFallback(): void {
     if (this._reconnectFallbackTimer || this.isConnected) return;
     this._reconnectFallbackTimer = setTimeout(() => {
       this._reconnectFallbackTimer = null;
@@ -548,16 +607,15 @@ class MqttManager extends EventEmitter {
 
   /**
    * Cancels any pending forced-reconnect fallback timer.
-   * @private
    */
-  _clearReconnectFallback() {
+  private _clearReconnectFallback(): void {
     if (this._reconnectFallbackTimer) {
       clearTimeout(this._reconnectFallbackTimer);
       this._reconnectFallbackTimer = null;
     }
   }
 
-  disconnect() {
+  disconnect(): void {
     this._clearReconnectFallback();
     if (this.client) {
       this.client.end(true);
@@ -569,4 +627,4 @@ class MqttManager extends EventEmitter {
   }
 }
 
-module.exports = MqttManager;
+export = MqttManager;
