@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowJs": false,
+    "checkJs": false
+  },
+  "include": [
+    "js_automations/server.ts",
+    "js_automations/core/**/*.ts",
+    "js_automations/routes/**/*.ts",
+    "js_automations/services/**/*.ts",
+    "tools/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

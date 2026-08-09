@@ -18,9 +18,11 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "typecheck:frontend": "tsc --noEmit -p js_automations/public/tsconfig.json",
-    "build": "esbuild js_automations/public/js/components/index.ts --bundle --format=esm --outfile=js_automations/public/js/dist/components.js",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "esbuild js_automations/public/js/components/index.ts --bundle --format=esm --outfile=js_automations/public/js/dist/components.js",
+    "build:backend": "tsc -p tsconfig.backend-build.json",
     "test": "npm run test:backend && npm run test:frontend",
-    "test:backend": "node --test \"test/**/*.test.js\"",
+    "test:backend": "npm run build:backend && node --test \"test/**/*.test.js\"",
     "test:frontend": "web-test-runner --config web-test-runner.config.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

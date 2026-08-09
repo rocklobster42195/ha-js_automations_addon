@@ -13,10 +13,24 @@
   },
   "include": [
     "js_automations/server.js",
+    "js_automations/server.ts",
     "js_automations/core/**/*.js",
+    "js_automations/core/**/*.ts",
     "js_automations/routes/**/*.js",
+    "js_automations/routes/**/*.ts",
     "js_automations/services/**/*.js",
+    "js_automations/services/**/*.ts",
     "tools/**/*.js"
   ],
-  "exclude": ["node_modules", "scripts", "js_automations_beta", "js_automations/public", "examples"]
+  "exclude": [
+    "node_modules",
+    "scripts",
+    "js_automations_beta",
+    "js_automations/public",
+    "examples",
+    // Backend TS build output (tsc emits .js in-place next to its .ts source,
+    // see tsconfig.backend-build.json) — one line per converted module, kept
+    // out of checkJs since it's generated code, not hand-written source.
+    "js_automations/core/config.js"
+  ]
 }
