@@ -2,20 +2,24 @@
  * JS AUTOMATIONS - Dependency Manager (v1.1.0)
  * Handles automatic installation of NPM packages and their TypeScript definitions.
  */
-const { exec } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const EventEmitter = require('events');
-const ScriptHeaderParser = require('./script-header-parser');
+import { exec } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+import { EventEmitter } from 'events';
+import ScriptHeaderParser from './script-header-parser';
 
 // Extracts the bare package name, handling scoped packages (@scope/name) and version suffixes (@x.y.z).
-function getPkgBaseName(dep) {
+function getPkgBaseName(dep: string): string {
   if (dep.startsWith('@')) return '@' + dep.slice(1).split('@')[0];
   return dep.split('@')[0];
 }
 
 class DependencyManager extends EventEmitter {
-  constructor(scriptsDir, storageDir) {
+  scriptsDir: string;
+  storageDir: string;
+  nodeModulesPath: string;
+
+  constructor(scriptsDir: string, storageDir: string) {
     super();
     this.scriptsDir = scriptsDir;
     this.storageDir = storageDir;
@@ -28,10 +32,10 @@ class DependencyManager extends EventEmitter {
 
   /**
    * Installs a list of dependencies and their corresponding @types if available.
-   * @param {string[]} dependencies - List of package names.
-   * @param {boolean} force - Force re-installation.
+   * @param dependencies - List of package names.
+   * @param force - Force re-installation.
    */
-  async install(dependencies, force = false) {
+  async install(dependencies: string[], force = false): Promise<void> {
     if (!dependencies || !Array.isArray(dependencies) || dependencies.length === 0) return;
 
     const packagesToInstall = dependencies.filter((dep) => {
@@ -50,16 +54,15 @@ class DependencyManager extends EventEmitter {
       // 2. Install TypeScript definitions for better IntelliSense
       await this._installTypeDefinitions(packagesToInstall);
     } catch (error) {
-      this.emit('log', { level: 'error', message: `Dependency installation failed: ${error.message}` });
+      this.emit('log', { level: 'error', message: `Dependency installation failed: ${(error as Error).message}` });
     }
   }
 
   /**
    * Attempts to install @types packages for the given list.
    * Missing @types packages are ignored.
-   * @private
    */
-  async _installTypeDefinitions(packages) {
+  private async _installTypeDefinitions(packages: string[]): Promise<void> {
     const typesToInstall = packages
       .map((pkg) => getPkgBaseName(pkg))
       .filter((name) => !name.startsWith('@types/'))
@@ -82,9 +85,8 @@ class DependencyManager extends EventEmitter {
 
   /**
    * Maps a package name to its corresponding @types package name.
-   * @private
    */
-  _getTypePackageName(name) {
+  private _getTypePackageName(name: string): string {
     if (name.startsWith('@types/')) return name;
     // Handle scoped packages: @org/pkg -> org__pkg
     const normalizedName = name.startsWith('@') ? name.substring(1).replace('/', '__') : name;
@@ -93,9 +95,8 @@ class DependencyManager extends EventEmitter {
 
   /**
    * Helper to execute npm install.
-   * @private
    */
-  _runNpmInstall(packages, silent = false) {
+  private _runNpmInstall(packages: string[], silent = false): Promise<string> {
     return new Promise((resolve, reject) => {
       const pkgList = packages.join(' ');
       const cmd = `npm install ${pkgList} --prefix "${this.storageDir}" --no-audit --no-fund --legacy-peer-deps`;
@@ -112,9 +113,8 @@ class DependencyManager extends EventEmitter {
 
   /**
    * Helper to execute npm uninstall.
-   * @private
    */
-  _runNpmUninstall(packages) {
+  private _runNpmUninstall(packages: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
       const pkgList = packages.join(' ');
       const cmd = `npm uninstall ${pkgList} --prefix "${this.storageDir}"`;
@@ -128,11 +128,10 @@ class DependencyManager extends EventEmitter {
 
   /**
    * Recursively finds all script files in the scripts directory.
-   * @private
    */
-  _getAllScriptFiles() {
-    const files = [];
-    const find = (dir) => {
+  private _getAllScriptFiles(): string[] {
+    const files: string[] = [];
+    const find = (dir: string): void => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
@@ -153,7 +152,7 @@ class DependencyManager extends EventEmitter {
   /**
    * Removes installed packages that are no longer referenced in any script.
    */
-  async prune() {
+  async prune(): Promise<void> {
     const pkgJsonPath = path.join(this.storageDir, 'package.json');
     if (!fs.existsSync(pkgJsonPath)) return;
 
@@ -163,12 +162,13 @@ class DependencyManager extends EventEmitter {
       if (installedPackages.length === 0) return;
 
       const scripts = this._getAllScriptFiles();
-      const requiredPackages = new Set();
+      const requiredPackages = new Set<string>();
 
       // Collect all required packages from all scripts
       scripts.forEach((file) => {
         const meta = ScriptHeaderParser.parse(file);
-        (meta.dependencies || []).forEach((dep) => {
+        const deps = 'dependencies' in meta ? meta.dependencies : [];
+        (deps || []).forEach((dep) => {
           const name = getPkgBaseName(dep);
           requiredPackages.add(name);
           requiredPackages.add(this._getTypePackageName(name));
@@ -182,9 +182,9 @@ class DependencyManager extends EventEmitter {
         await this._runNpmUninstall(toRemove);
       }
     } catch (e) {
-      this.emit('log', { level: 'error', message: `Failed to prune dependencies: ${e.message}` });
+      this.emit('log', { level: 'error', message: `Failed to prune dependencies: ${(e as Error).message}` });
     }
   }
 }
 
-module.exports = DependencyManager;
+export = DependencyManager;
