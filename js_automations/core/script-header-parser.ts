@@ -1,9 +1,72 @@
-const fs = require('fs');
-const path = require('path');
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface MutableMetadata {
+  name?: string | null;
+  icon?: string;
+  description?: string;
+  area?: string;
+  label?: string;
+  loglevel?: string;
+  dependencies?: string[];
+  includes?: string[];
+  expose?: string | null;
+  permissions?: string[];
+  card?: boolean | string | null;
+}
+
+interface ScriptMetadata {
+  filename: string;
+  path: string;
+  name: string | null;
+  icon: string;
+  description: string;
+  area: string;
+  label: string;
+  loglevel: string;
+  dependencies: string[];
+  includes: string[];
+  expose: string | null;
+  permissions: string[];
+  card: boolean | string | null; // null | true | 'dev'
+}
+
+interface SourceMetadata {
+  name: string | null;
+  description: string;
+  permissions: string[];
+  dependencies: string[];
+  includes: string[];
+  expose: string | null;
+  icon: string;
+  area: string;
+  label: string;
+  loglevel: string;
+}
+
+interface BlocksFileContent {
+  jsa?: Record<string, unknown>;
+  blocks: { languageVersion: number; blocks: unknown[] };
+}
+
+interface MetadataUpdate {
+  name?: string;
+  icon?: string;
+  description?: string;
+  area?: string;
+  label?: string;
+  loglevel?: string;
+  expose?: string;
+  permissions?: string[];
+  card?: boolean | string;
+  npmModules?: string[];
+  dependencies?: string[];
+  includes?: string[];
+}
 
 class ScriptHeaderParser {
-  static parse(filePath) {
-    const metadata = {
+  static parse(filePath: string): ScriptMetadata | Record<string, never> {
+    const metadata: ScriptMetadata = {
       filename: path.basename(filePath),
       path: filePath,
       name: null,
@@ -21,23 +84,23 @@ class ScriptHeaderParser {
 
     if (filePath.endsWith('.blocks')) {
       const jsa = this._readBlocksFile(filePath)?.jsa || {};
-      for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel', 'expose']) {
-        if (jsa[key] !== undefined) metadata[key] = jsa[key];
+      for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel', 'expose'] as const) {
+        if (jsa[key] !== undefined) (metadata as unknown as Record<string, unknown>)[key] = jsa[key];
       }
       // `permission`/`card` mirror the JSDoc `@permission`/`@card` tag names in the jsa
       // key, but the returned metadata object uses `permissions` (plural) like the
-      // JSDoc-based path \u2014 keep both in sync so callers don't need a .blocks special case.
-      if (jsa.permission !== undefined) metadata.permissions = jsa.permission;
-      if (jsa.card !== undefined) metadata.card = jsa.card;
+      // JSDoc-based path — keep both in sync so callers don't need a .blocks special case.
+      if (jsa.permission !== undefined) metadata.permissions = jsa.permission as string[];
+      if (jsa.card !== undefined) metadata.card = jsa.card as boolean | string;
       if (!metadata.name) metadata.name = metadata.filename;
       return metadata;
     }
 
-    let content;
+    let content: string;
     try {
       content = fs.readFileSync(filePath, 'utf8');
       // Standard BOM removal
-      content = content.replace(/^\uFEFF/, '');
+      if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
     } catch (e) {
       return {};
     }
@@ -73,9 +136,10 @@ class ScriptHeaderParser {
     return metadata;
   }
 
-  // Parse metadata from a raw source string (no file I/O).
-  static _parseSource(source) {
-    const metadata = {
+  // Parse metadata from a raw source string (no file I/O). Called externally
+  // from routes/scripts-routes.js, despite the underscore prefix.
+  static _parseSource(source: string): SourceMetadata {
+    const metadata: SourceMetadata = {
       name: null,
       description: '',
       permissions: [],
@@ -87,7 +151,8 @@ class ScriptHeaderParser {
       label: '',
       loglevel: 'info',
     };
-    const content = source.replace(/^\uFEFF/, '').replace(/^(\/\/\/[^\n]*\n)+/, '');
+    let content = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+    content = content.replace(/^(\/\/\/[^\n]*\n)+/, '');
     const jsDocMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
     if (jsDocMatch) {
       jsDocMatch[1].split('\n').forEach((line) => {
@@ -98,15 +163,15 @@ class ScriptHeaderParser {
     return metadata;
   }
 
-  static _applyMeta(metadata, key, val) {
+  private static _applyMeta(metadata: MutableMetadata, key: string, val: string | undefined): void {
     val = val ? val.trim() : '';
     if (key === 'npm' || key === 'include') {
       const list = val
         .split(/[\s,]+/)
         .map((s) => s.trim().replace(/['"()]/g, ''))
         .filter((s) => s);
-      if (key === 'npm') metadata.dependencies.push(...list);
-      else metadata.includes.push(...list);
+      if (key === 'npm') metadata.dependencies!.push(...list);
+      else metadata.includes!.push(...list);
     } else if (key === 'card') {
       // @card        → card: true
       // @card dev    → card: 'dev'
@@ -118,20 +183,20 @@ class ScriptHeaderParser {
         .split(/[\s,]+/)
         .map((s) => s.toLowerCase().trim())
         .filter(Boolean);
-      const expanded = [];
+      const expanded: string[] = [];
       for (const t of tokens) {
         if (t === 'fs') {
           expanded.push('fs:read', 'fs:write');
         } else expanded.push(t);
       }
-      metadata.permissions = [...new Set([...metadata.permissions, ...expanded])];
+      metadata.permissions = [...new Set([...(metadata.permissions ?? []), ...expanded])];
     } else if (Object.prototype.hasOwnProperty.call(metadata, key)) {
-      metadata[key] = val;
+      (metadata as Record<string, unknown>)[key] = val;
     }
   }
 
   // Reads and JSON.parses a .blocks file. Returns null on missing/invalid file.
-  static _readBlocksFile(filePath) {
+  private static _readBlocksFile(filePath: string): BlocksFileContent | null {
     try {
       const rawFile = fs.readFileSync(filePath, 'utf8');
       const raw = rawFile.charCodeAt(0) === 0xfeff ? rawFile.slice(1) : rawFile;
@@ -141,7 +206,7 @@ class ScriptHeaderParser {
     }
   }
 
-  static updateMetadata(filePath, meta) {
+  static updateMetadata(filePath: string, meta: MetadataUpdate): void {
     if (!fs.existsSync(filePath)) {
       return;
     }
@@ -149,9 +214,12 @@ class ScriptHeaderParser {
     if (filePath.endsWith('.blocks')) {
       // Metadata lives in the `jsa` JSON key, not a JSDoc header — prepending a comment
       // would corrupt the file's JSON.
-      const parsed = this._readBlocksFile(filePath) || { jsa: {}, blocks: { languageVersion: 0, blocks: [] } };
+      const parsed: BlocksFileContent = this._readBlocksFile(filePath) || {
+        jsa: {},
+        blocks: { languageVersion: 0, blocks: [] },
+      };
       parsed.jsa = parsed.jsa || {};
-      for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel']) {
+      for (const key of ['name', 'icon', 'description', 'area', 'label', 'loglevel'] as const) {
         if (meta[key] !== undefined) parsed.jsa[key] = meta[key];
       }
       if (meta.expose !== undefined) {
@@ -170,13 +238,13 @@ class ScriptHeaderParser {
       return;
     }
 
-    let content;
+    let content: string;
     try {
       content = fs.readFileSync(filePath, 'utf8');
     } catch (e) {
       return;
     }
-    content = content.replace(/^\uFEFF/, ''); // Remove BOM
+    if (content.charCodeAt(0) === 0xfeff) content = content.slice(1); // Remove BOM
 
     // 1. Remove old headers
     // First remove JSDoc block...
@@ -219,4 +287,4 @@ class ScriptHeaderParser {
     }
   }
 }
-module.exports = ScriptHeaderParser;
+export = ScriptHeaderParser;
