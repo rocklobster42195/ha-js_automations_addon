@@ -1617,7 +1617,9 @@ export class MonacoEditorElement extends LitElement {
         },
       });
 
-      // @include library names
+      // Header tags (@name, @icon, ...) + their enum/dynamic values. See README's "The
+      // Metadata Header" table - keep this list in sync with it and with
+      // script-header-parser.ts's actual recognized keys.
       m.languages.registerCompletionItemProvider(lang, {
         triggerCharacters: [' ', '@', ','],
         provideCompletionItems: (model, position) => {
@@ -1628,18 +1630,59 @@ export class MonacoEditorElement extends LitElement {
             endColumn: position.column,
           });
 
+          const keyword = (label: string, insertText: string, documentation: string) => ({
+            label,
+            kind: m.languages.CompletionItemKind.Keyword,
+            insertText,
+            documentation,
+            range: undefined as unknown as import('monaco-editor').IRange,
+          });
+          const value = (label: string) => ({
+            label,
+            kind: m.languages.CompletionItemKind.Value,
+            insertText: label,
+            range: undefined as unknown as import('monaco-editor').IRange,
+          });
+
           if (textUntilPosition.endsWith('@')) {
             return {
               suggestions: [
-                {
-                  label: 'include',
-                  kind: m.languages.CompletionItemKind.Keyword,
-                  insertText: 'include ',
-                  documentation: 'Include a global library from the libraries folder.',
-                  range: undefined as unknown as import('monaco-editor').IRange,
-                },
+                keyword('name', 'name ', 'Human-readable script name shown in the sidebar.'),
+                keyword('icon', 'icon ', 'MDI icon for the script and its exposed entity.'),
+                keyword('description', 'description ', 'Short description shown in the UI.'),
+                keyword('loglevel', 'loglevel ', 'Minimum log level: debug, info, warn, error.'),
+                keyword('npm', 'npm ', 'Auto-installed npm packages (space or comma separated).'),
+                keyword('include', 'include ', 'Include a global library from the libraries folder.'),
+                keyword('area', 'area ', 'Home Assistant area to assign the exposed entity to.'),
+                keyword('label', 'label ', 'HA Label for sidebar grouping.'),
+                keyword('expose', 'expose ', 'Expose as a switch or button entity in HA.'),
+                keyword(
+                  'permission',
+                  'permission ',
+                  'Declare required capabilities: network, fs:read, fs:write, exec.'
+                ),
+                keyword('card', 'card', 'Mark script as a Script Pack. Add "dev" for development mode.'),
               ],
             };
+          }
+
+          if (textUntilPosition.match(/@loglevel\s+\w*$/)) {
+            return { suggestions: ['debug', 'info', 'warn', 'error'].map(value) };
+          }
+
+          if (textUntilPosition.match(/@expose\s+\w*$/)) {
+            return { suggestions: ['switch', 'button'].map(value) };
+          }
+
+          if (textUntilPosition.match(/@card\s+\w*$/)) {
+            return { suggestions: [value('dev')] };
+          }
+
+          if (
+            textUntilPosition.match(/@permission\s+[^,]*$/) ||
+            textUntilPosition.match(/@permission\s+.*,\s*[^,]*$/)
+          ) {
+            return { suggestions: ['network', 'fs:read', 'fs:write', 'exec'].map(value) };
           }
 
           if (textUntilPosition.match(/@include\s+[^,]*$/) || textUntilPosition.match(/@include\s+.*,\s*[^,]*$/)) {
