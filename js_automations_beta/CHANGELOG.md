@@ -1,3 +1,121 @@
+## [3.0.0-beta.0] - 2026-08-09
+
+- chore: force LF line endings via .gitattributes
+- Merge pull request #23 from rocklobster42195/feature/backend-ts-migration
+- docs: add 3.x beta callout to README, document LIT/backend-TS/Blockly in TECH-README
+- feat: swap sidebar header logo to robot_angry on beta builds
+- feat: give the beta channel a distinct robot_angry identity
+- docs: mark dev-port flag resolved in grill notes
+- fix: npm run dev port-already-in-use after a previous session
+- docs: draft 3.0.0 changelog entry (Harder, Better, Faster, Stronger)
+- style: apply prettier formatting to backend TS files and notes
+- docs: capture 3.0.0 beta ship-plan grill session
+- chore: silence Edge Tools' typescript-config/strict advisory hint
+- refactor: convert server.js to TypeScript (final file, RFC §8 complete)
+- refactor: convert routes/scripts-routes.js to TypeScript
+- refactor: convert routes/system-route.js to TypeScript
+- refactor: convert routes/store-route.js and ha-routes.js to TypeScript
+- refactor: convert routes/webhook-route.js to TypeScript
+- refactor: convert routes/settings-route.js to TypeScript
+- refactor: convert services/system-service.js to TypeScript
+- fix: Expert Mode toggle needed a hard reload to apply the sidebar logo color
+- fix: nodemon restart-storm from watching its own tsc build output
+- feat: full header-tag IntelliSense in the editor
+- fix: IntelliSense/snippet consistency gaps in the Monaco editor
+- fix: use state_class instead of device_class for system CPU/RAM sensors
+- refactor: convert kernel.js to TypeScript
+- refactor: convert core/entity-manager.js to TypeScript
+- refactor: convert core/worker-wrapper.js to TypeScript
+- refactor: convert core/worker-manager.js to TypeScript
+- refactor: convert core/card-manager.js to TypeScript
+- refactor: convert core/script-watcher.js to TypeScript
+- refactor: convert core/dependency-manager.js to TypeScript
+- refactor: convert core/settings-manager.js to TypeScript
+- refactor: convert core/ha-connection.js to TypeScript
+- refactor: convert core/mqtt-manager.js to TypeScript
+- refactor: convert core/webhook-manager.js to TypeScript
+- refactor: convert core/settings-schema.js to TypeScript
+- refactor: convert core/fs-service.js to TypeScript
+- refactor: convert core/compiler-manager.js to TypeScript
+- refactor: convert core/blockly-compiler.js to TypeScript
+- refactor: convert core/script-header-parser.js to TypeScript
+- refactor: convert core/store-manager.js to TypeScript
+- refactor: convert core/ha-history-helpers.js to TypeScript
+- refactor: convert core/bridge.js to TypeScript
+- refactor: convert core/log-manager.js to TypeScript
+- refactor: convert core/capability-analyzer.js to TypeScript
+- refactor: convert core/type-definition-generator.js to TypeScript
+- refactor: convert core/sibling-guard.js to TypeScript
+- refactor: convert core/script-command-router.js to TypeScript
+- refactor: convert core/state-manager.js to TypeScript
+- refactor: convert core/dev-setup.js to TypeScript
+- chore: remove dead store-type-generator.js
+- refactor: convert core/config.js to TypeScript
+- build: add tsc compile step for backend TypeScript modules
+- docs: capture backend TS migration methodology
+- fix: sidebar BLK badge had no color styling
+- feat: state-preview toggle in the entity picker (Ctrl+E)
+- fix: entity-picker-modal now closes on Escape
+- style: run prettier on pre-existing Blockly files (whitespace only)
+- style: run prettier on today's new/edited files
+- ci: allow manually triggering the CI workflow (workflow_dispatch)
+- feat: add automated frontend component tests (RFC §9.3)
+- refactor: remove dead CSS left behind by the LIT component migration
+- fix: card-preview toggle button active-state never synced reactively
+- fix: card-preview drag handle listener never actually attached
+- fix: keep card-preview panel on-screen when widening or resizing
+- fix: hide card-preview toggle unless a JS/TS script has @card active
+- feat: migrate script editor to <editor-view>/<monaco-editor> LIT components (RFC Phase B item 8)
+- feat: migrate creation wizard to <script-modal> LIT component (RFC Phase B item 7)
+- fix: resolve pre-existing lint errors in Blockly's .blocks BOM handling
+- Merge main (Blockly visual editor) into feature/lint-prettier-ci-foundation
+- Merge pull request #21 from rocklobster42195/feature/blockly-integration
+- Merge remote-tracking branch 'origin/main' into feature/blockly-integration
+- feat: add block-level error visualization for Blockly scripts
+- feat: add Calendar/Todo blocks and history timeSince/trend blocks
+- feat: add Area/Label blocks, Webhook block, and permission-map derivation
+- feat: add ha_ask Blockly block, localize toolbox shadow text, fix inline layout
+- docs: sync M5 checklist with the shipped Show Code / duplicate-as-JS design
+- feat: add Blockly Show Code panel and non-destructive Convert-to-JS
+- feat: add ha_wait_for_state Blockly block with timeout success/timeout branches
+- docs: record final Blockly scope decision (beginner-focused, cut list)
+- feat: mobile header as fixed 4-button nav, settings mobile polish
+- feat: add Mobile View (RFC §7)
+- feat: add confirm-dialog, alert-toast, entity-picker-modal, store-item-modal (RFC Phase A item 6)
+- docs: remove duplicate/auto-generated 2.57.9 CHANGELOG entry
+- feat: migrate card preview panel to LIT (TS)
+- style: run prettier on card-manager.js
+- fix: card preview default config now respects @expose entity domain
+- feat: add ha.frontend.cacheAsset() for locally caching external assets
+- fix: repair the Command Reference docs tab and extend the mqtt warning dot
+- feat: migrate sidebar and script list to LIT (TS)
+- fix: MQTT test connection could hang forever on a dead port
+- feat: migrate settings view to LIT (TS)
+- feat: migrate event inspector to LIT (TS)
+- feat: migrate store explorer to LIT (TS)
+- feat: migrate webhook-panel, mqtt-monitor, and watch-panel to LIT (TS)
+- feat: migrate status bar to LIT (TS), fix shadow-DOM icon loading
+- feat: migrate log-viewer to LIT (TS)
+- feat: migrate integration-banner and safe-mode-banner to LIT (TS)
+- feat: extract CSS design tokens into a defined 3-level surface model
+- feat: wire lint/format/test as a pre-release gate
+- feat: add node:test infra with a Home-Assistant-unreachable boot smoke test
+- chore: enable checkJs/allowJs for backend TypeScript groundwork
+- chore: add ESLint + Prettier + CI, fix all lint errors
+- docs: replace LIT migration RFC with frontend modernization plan
+- feat: add Store/MQTT blocks, localize Blockly UI, expand standard block library
+- feat: add ha_register options mutator and extend ha_update
+- feat: dynamic entity/service dropdowns for Blockly blocks
+- Merge branch 'main' into feature/blockly-integration
+- Merge branch 'main' into feature/blockly-integration
+- feat: add ha_entity value block and unify entity sockets
+- feat: add schedule triggers and a data mutator for call service
+- feat: add script-utility and register/update blocks to Blockly library
+- feat: add Blockly editor shell with first working block chain
+- feat: add Blockly M1 foundation (.blocks compile pipeline)
+
+---
+
 <!-- NEXT -->
 
 ---
