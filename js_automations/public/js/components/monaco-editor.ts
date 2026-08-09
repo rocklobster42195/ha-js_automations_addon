@@ -676,6 +676,7 @@ export class MonacoEditorElement extends LitElement {
       setMode: this.setMode,
       loadLibraryDefinitions: this.loadLibraryDefinitions,
       isReady: () => this._ready,
+      insertSnippet: this.insertSnippet,
     };
     window.monacoEditor = bridge;
     // Documented external call site (global.d.ts): some not-yet-migrated code may still call
@@ -862,6 +863,13 @@ export class MonacoEditorElement extends LitElement {
     if (!selection) return;
     this._editor.executeEdits('insert-entity', [{ range: selection, text, forceMoveMarkers: true }]);
     this._editor.focus();
+  };
+
+  /** Public wrapper around the internal snippet system (see _insertSnippet below) - used by
+   * editor-view.ts to pre-fill a newly created, still-empty card tab with the card boilerplate
+   * as a live tab-stop snippet instead of leaving it blank. */
+  insertSnippet = (id: string, mode: 'full' | 'minimal' = 'full', variant: string | null = null): void => {
+    this._insertSnippet(id, mode, variant);
   };
 
   // -------------------------------------------------------------------------
@@ -1136,11 +1144,12 @@ export class MonacoEditorElement extends LitElement {
           const cRes = await window.apiFetch!(`api/scripts/${lib.filename}/content`);
           if (cRes.ok) {
             const data = await cRes.json();
-            const disposable = m.languages.typescript.javascriptDefaults.addExtraLib(
-              data.content,
-              `file:///libraries/${lib.filename}`
-            );
-            this._libDisposables.push(disposable);
+            const uri = `file:///libraries/${lib.filename}`;
+            // Registered for both JS and TS defaults - .ts scripts that @include a library
+            // need this too (README explicitly promises IntelliSense for .ts libraries "in
+            // any script that includes it"), same reasoning as _loadTypings() above.
+            this._libDisposables.push(m.languages.typescript.javascriptDefaults.addExtraLib(data.content, uri));
+            this._libDisposables.push(m.languages.typescript.typescriptDefaults.addExtraLib(data.content, uri));
           }
         } catch (e) {
           // skip library that failed to load

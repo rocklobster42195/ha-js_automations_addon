@@ -545,6 +545,11 @@ export class EditorViewElement extends LitElement {
       }
 
       this.switchToTab(cardTabName);
+
+      // A brand-new card starts as a blank file with no scaffold at all - pre-fill it with the
+      // card boilerplate as a live, tab-stop-navigable snippet (class name propagates to both
+      // its occurrences) instead of leaving the user to find and trigger it manually.
+      if (data.isNew) window.monacoEditor?.insertSnippet('card_litelement', 'full');
     } catch (e) {
       console.error(`[CardTab] Failed to open card tab for ${scriptFilename}`, e);
     }

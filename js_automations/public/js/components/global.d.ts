@@ -228,6 +228,10 @@ export interface JsaMonacoEditorBridge {
   setMode(mode: 'script' | 'card'): void;
   loadLibraryDefinitions(): Promise<void>;
   isReady(): boolean;
+  /** Inserts a registered snippet (by id, see SNIPPET_REGISTRY) into the currently active
+   * model as a live, tab-stop-navigable Monaco snippet - used to pre-fill a newly created,
+   * still-empty card tab with the card boilerplate instead of leaving it blank. */
+  insertSnippet(id: string, mode?: 'full' | 'minimal', variant?: string | null): void;
 }
 
 export interface JsaLogEntry {
