@@ -3,17 +3,40 @@
  * Handles persistent logging with memory buffering and periodic flushing.
  * Implements memory protection and persistence logic.
  */
-const fs = require('fs');
-const path = require('path');
-const EventEmitter = require('events');
+import * as fs from 'fs';
+import * as path from 'path';
+import { EventEmitter } from 'events';
 
-const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+const LOG_LEVELS: Record<string, number> = { error: 0, warn: 1, info: 2, debug: 3 };
+
+interface LogEntry {
+  ts: number;
+  level: string;
+  source: string;
+  message: string;
+  blockId?: string;
+  scriptId?: string;
+}
+
+interface LogMeta {
+  blockId?: string;
+  scriptId?: string;
+}
 
 class LogManager extends EventEmitter {
+  logFile: string;
+  buffer: LogEntry[];
+  maxEntries: number;
+  flushIntervalMs: number;
+  isDirty: boolean;
+  systemLogLevel: string;
+  private urgentFlushTimer: ReturnType<typeof setTimeout> | null;
+  private flushInterval: ReturnType<typeof setInterval>;
+
   /**
-   * @param {string} storageDir - Path to the .storage directory
+   * @param storageDir - Path to the .storage directory
    */
-  constructor(storageDir) {
+  constructor(storageDir: string) {
     super();
     this.logFile = path.join(storageDir, 'logs.json');
     this.buffer = [];
@@ -34,7 +57,7 @@ class LogManager extends EventEmitter {
     process.on('SIGINT', () => this.flushSync());
   }
 
-  load() {
+  load(): void {
     if (fs.existsSync(this.logFile)) {
       try {
         const data = fs.readFileSync(this.logFile, 'utf8');
@@ -46,7 +69,7 @@ class LogManager extends EventEmitter {
     }
   }
 
-  setLevel(level) {
+  setLevel(level: string): void {
     if (LOG_LEVELS[level.toLowerCase()] !== undefined) {
       this.systemLogLevel = level.toLowerCase();
     }
@@ -54,15 +77,15 @@ class LogManager extends EventEmitter {
 
   /**
    * Adds a new log entry to the buffer.
-   * @param {string} level - 'info', 'warn', 'error', 'debug'
-   * @param {string} source - 'System' or script name
-   * @param {string} message - The log message
-   * @param {object} [meta] - Optional extra fields, currently just { blockId, scriptId } —
+   * @param level - 'info', 'warn', 'error', 'debug'
+   * @param source - 'System' or script name
+   * @param message - The log message
+   * @param meta - Optional extra fields, currently just { blockId, scriptId } —
    *   traces a .blocks script's runtime error back to the exact block that threw it (see
    *   blockly-compiler.js's scrub_() instrumentation and worker-manager.js's log handler).
-   * @returns {object} The created log entry
+   * @returns The created log entry, or null if filtered out by the system log level
    */
-  add(level, source, message, meta) {
+  add(level: string, source: string, message: string, meta?: LogMeta): LogEntry | null {
     const lvl = (level || 'info').toLowerCase();
 
     // Apply global system log level filter only to 'System' messages
@@ -72,7 +95,7 @@ class LogManager extends EventEmitter {
     }
     // For script logs, we assume the worker has already applied the script's @loglevel filter.
 
-    const entry = {
+    const entry: LogEntry = {
       ts: Date.now(),
       level: level,
       source: source,
@@ -105,9 +128,8 @@ class LogManager extends EventEmitter {
   /**
    * Schedules a near-immediate flush for critical log entries, debounced to avoid
    * hammering disk during a burst of errors/warnings.
-   * @private
    */
-  _scheduleUrgentFlush() {
+  private _scheduleUrgentFlush(): void {
     if (this.urgentFlushTimer) return;
     this.urgentFlushTimer = setTimeout(() => {
       this.urgentFlushTimer = null;
@@ -118,7 +140,7 @@ class LogManager extends EventEmitter {
   /**
    * Asynchronously writes the buffer to disk if changes exist.
    */
-  flush() {
+  flush(): void {
     if (!this.isDirty) return;
 
     // Create a snapshot of the current buffer to write
@@ -136,7 +158,7 @@ class LogManager extends EventEmitter {
   /**
    * Synchronously writes to disk (for shutdown).
    */
-  flushSync() {
+  flushSync(): void {
     if (!this.isDirty) return;
     try {
       fs.writeFileSync(this.logFile, JSON.stringify(this.buffer, null, 2));
@@ -150,18 +172,18 @@ class LogManager extends EventEmitter {
   /**
    * Returns the current log history.
    */
-  getHistory() {
+  getHistory(): LogEntry[] {
     return this.buffer;
   }
 
   /**
    * Clears the log history.
    */
-  clear() {
+  clear(): void {
     this.buffer = [];
     this.isDirty = true;
     this.flush();
   }
 }
 
-module.exports = LogManager;
+export = LogManager;
