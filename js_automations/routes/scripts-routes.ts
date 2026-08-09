@@ -1,26 +1,34 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const ScriptHeaderParser = require('../core/script-header-parser');
-const CapabilityAnalyzer = require('../core/capability-analyzer');
-const multer = require('multer');
+import * as express from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
+import type { Server as SocketIOServer } from 'socket.io';
+import ScriptHeaderParser from '../core/script-header-parser';
+import CapabilityAnalyzer from '../core/capability-analyzer';
+import type DependencyManager from '../core/dependency-manager';
+import type StateManager from '../core/state-manager';
+import type MqttManager from '../core/mqtt-manager';
+import type CardManager from '../core/card-manager';
+import multer from 'multer';
 const upload = multer({ storage: multer.memoryStorage() });
+// worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
+// itself, so the type has to be derived from the module's export value.
+type WorkerManagerInstance = typeof import('../core/worker-manager');
 
-module.exports = (
-  workerManager,
-  depManager,
-  stateManager,
-  io,
-  SCRIPTS_DIR,
-  STORAGE_DIR,
-  LIBRARIES_DIR,
-  mqttManager,
-  cardManager
+export = (
+  workerManager: WorkerManagerInstance,
+  depManager: DependencyManager,
+  stateManager: StateManager,
+  io: SocketIOServer,
+  SCRIPTS_DIR: string,
+  STORAGE_DIR: string,
+  LIBRARIES_DIR: string,
+  mqttManager: MqttManager,
+  cardManager: CardManager
 ) => {
   const router = express.Router();
 
-  // Helper: Findet Datei in Scripts ODER Libraries Ordner
-  const getFilePath = (filename) => {
+  // Helper: finds a file in the scripts OR libraries folder
+  const getFilePath = (filename: string): string | null => {
     const p1 = path.join(SCRIPTS_DIR, filename);
     if (fs.existsSync(p1)) return p1;
     const p2 = path.join(LIBRARIES_DIR, filename);
@@ -30,7 +38,7 @@ module.exports = (
 
   // GET List
   router.get('/', (req, res) => {
-    const results = [];
+    const results: any[] = [];
     const conflicts = workerManager.getEntityConflicts();
 
     // Use centralized getScripts for consistency (handles TS/JS filtering)
@@ -39,7 +47,7 @@ module.exports = (
       const filename = path.basename(fullPath);
       const isLibrary = path.basename(path.dirname(fullPath)) === 'libraries';
 
-      const m = ScriptHeaderParser.parse(fullPath);
+      const m: any = ScriptHeaderParser.parse(fullPath);
       if (!m.name) m.name = filename;
 
       try {
@@ -95,10 +103,10 @@ module.exports = (
         workerManager.stopScript(filename, 'stopped by user');
       } else {
         if (fs.existsSync(fullPath)) {
-          const meta = ScriptHeaderParser.parse(fullPath);
+          const meta: any = ScriptHeaderParser.parse(fullPath);
           if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
         }
-        // Wir übergeben den vollen Pfad, damit WorkerManager ihn sicher findet
+        // Pass the full path so WorkerManager can find it reliably
         workerManager.startScript(fullPath);
         stateManager.saveScriptStarted(filename);
       }
@@ -106,7 +114,7 @@ module.exports = (
       workerManager.stopScript(filename, 'restarting');
       setTimeout(async () => {
         if (fs.existsSync(fullPath)) {
-          const meta = ScriptHeaderParser.parse(fullPath);
+          const meta: any = ScriptHeaderParser.parse(fullPath);
           if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
         }
         workerManager.startScript(fullPath);
@@ -136,7 +144,7 @@ module.exports = (
 
   // GET All Typings (Bundle for Monaco)
   router.get('/typings', (req, res) => {
-    const typings = [];
+    const typings: { filename: string; content: string }[] = [];
 
     // 1. Static HA API Definition
     const haApiPath = path.join(__dirname, '../core/types/ha-api.d.ts');
@@ -168,7 +176,7 @@ module.exports = (
     // 4. NPM @types (axios, lodash, etc.)
     const typesDir = path.join(STORAGE_DIR, 'node_modules/@types');
     if (fs.existsSync(typesDir)) {
-      const scanTypes = (dir, base = '') => {
+      const scanTypes = (dir: string, base = ''): void => {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
@@ -186,7 +194,7 @@ module.exports = (
       try {
         scanTypes(typesDir);
       } catch (e) {
-        console.warn('[API] Failed to scan @types directory:', e.message);
+        console.warn('[API] Failed to scan @types directory:', (e as Error).message);
       }
     }
 
@@ -199,7 +207,7 @@ module.exports = (
     const term = (req.query.q || '').toString().trim().toLowerCase();
     if (!term) return res.json({ filenames: [] });
 
-    const filenames = [];
+    const filenames: string[] = [];
     workerManager.getScripts().forEach((fullPath) => {
       try {
         const source = fs.readFileSync(fullPath, 'utf8');
@@ -215,17 +223,17 @@ module.exports = (
   // GET Content
   router.get('/:filename/content', (req, res) => {
     const filename = req.params.filename;
-    let fullPath;
+    let fullPath: string | null | undefined;
 
-    // Typdefinitionen (.d.ts) können im .storage Ordner (für dynamische Typen)
-    // oder im core/types Ordner (für statische ha-api.d.ts) liegen.
+    // Type definitions (.d.ts) can live in the .storage folder (for dynamic types)
+    // or in the core/types folder (for the static ha-api.d.ts).
     if (filename.endsWith('.d.ts')) {
-      let storagePath = path.join(STORAGE_DIR, filename);
+      const storagePath = path.join(STORAGE_DIR, filename);
       if (fs.existsSync(storagePath)) {
         fullPath = storagePath;
       } else {
         // Check core/types for static ha-api.d.ts
-        let coreTypesPath = path.join(__dirname, '../core/types', filename);
+        const coreTypesPath = path.join(__dirname, '../core/types', filename);
         if (fs.existsSync(coreTypesPath)) {
           fullPath = coreTypesPath;
         }
@@ -274,7 +282,7 @@ module.exports = (
     // Guess the entity domain from @expose so the first-paint default config
     // (before any real discovery completes) isn't always "sensor." — wrong for
     // @expose switch/button scripts.
-    const exposeMeta = ScriptHeaderParser.parse(fullPath);
+    const exposeMeta: any = ScriptHeaderParser.parse(fullPath);
     const defaultDomain =
       exposeMeta.expose === 'button' ? 'button' : exposeMeta.expose === 'switch' ? 'switch' : 'sensor';
     const safeDefaultDomain = JSON.stringify(defaultDomain);
@@ -504,18 +512,18 @@ module.exports = (
         const show = (html) => { sr.innerHTML = CSS + html; };
         const loadStep = async () => {
           const step = steps[stepIdx];
-          show('<div class="wiz"><div class="wiz-spin">Laden\u2026</div></div>');
+          show('<div class="wiz"><div class="wiz-spin">Laden…</div></div>');
           const depPayload = {};
           if (step.depends) { for (const [k, v] of Object.entries(step.depends)) depPayload[k] = values[v]; }
           const cacheKey = step.action + JSON.stringify(depPayload);
           let data;
           if (cache[cacheKey]) { data = cache[cacheKey]; } else {
             try { data = await __jsa__.callAction(step.action, depPayload); cache[cacheKey] = data; }
-            catch (e) { show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '<br><small>Skript gestartet?</small></div>'); return; }
+            catch (e) { show('<div class="wiz-err">⚠ ' + esc(e.message) + '<br><small>Skript gestartet?</small></div>'); return; }
           }
           if (!data || data.length === 0) {
-            show('<div class="wiz"><div class="wiz-err">\u26a0 Keine Eintr\u00e4ge gefunden. Saison oder Liga pr\u00fcfen.</div>' +
-              (stepIdx > 0 ? '<div class="wiz-btns"><button class="btn-s" id="wiz-back">Zur\u00fcck</button></div>' : '') + '</div>');
+            show('<div class="wiz"><div class="wiz-err">⚠ Keine Einträge gefunden. Saison oder Liga prüfen.</div>' +
+              (stepIdx > 0 ? '<div class="wiz-btns"><button class="btn-s" id="wiz-back">Zurück</button></div>' : '') + '</div>');
             var backEl2 = sr.querySelector('#wiz-back');
             if (backEl2) backEl2.onclick = function() { stepIdx--; loadStep(); };
             return;
@@ -526,10 +534,10 @@ module.exports = (
           const seasonHtml = step.seasonField ? '<div class="wiz-note">Saison <input class="wiz-inp wiz-inp-sm" id="wiz-season" type="number" value="' + season + '" min="2000" max="2100"></div>' : '';
           const freeInputHtml = step.freeInput ? '<div class="wiz-note">Eigene Liga-ID <input class="wiz-inp" id="wiz-free" type="text" placeholder="z.B. WM2026" autocomplete="off"></div>' : '';
           show('<div class="wiz"><div class="wiz-title">Schritt ' + (stepIdx + 1) + ' / ' + steps.length + ': ' + esc(step.label) + '</div>' +
-            '<select id="wiz-sel"><option value="">Bitte w\u00e4hlen\u2026</option>' + optsHtml + '</select>' +
+            '<select id="wiz-sel"><option value="">Bitte wählen…</option>' + optsHtml + '</select>' +
             seasonHtml + freeInputHtml +
             '<div class="wiz-btns"><button class="btn-p" id="wiz-next">' + (isLast ? 'Speichern' : 'Weiter') + '</button>' +
-            (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zur\u00fcck</button>' : '') + '</div></div>');
+            (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zurück</button>' : '') + '</div></div>');
           var freeEl = sr.querySelector('#wiz-free');
           var selEl  = sr.querySelector('#wiz-sel');
           if (freeEl) { freeEl.oninput = function() { if (freeEl.value) selEl.value = ''; }; }
@@ -560,14 +568,14 @@ module.exports = (
           if (backEl) backEl.onclick = function() { stepIdx--; loadStep(); };
         };
         const finish = async () => {
-          show('<div class="wiz"><div class="wiz-spin">Speichern\u2026</div></div>');
+          show('<div class="wiz"><div class="wiz-spin">Speichern…</div></div>');
           try {
             const instanceId = genUUID();
             const config = await Promise.resolve(opts.onComplete(values, instanceId));
             const baseType = (hostEl._cfg && hostEl._cfg.type) || ('custom:' + __jsa__.scriptId + '-card');
             hostEl.dispatchEvent(new CustomEvent('config-changed', { detail: { config: Object.assign({ type: baseType }, config) }, bubbles: true, composed: true }));
             hostEl.dispatchEvent(new CustomEvent('jsa-editor-close', { bubbles: true, composed: true }));
-          } catch (e) { show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '</div>'); }
+          } catch (e) { show('<div class="wiz-err">⚠ ' + esc(e.message) + '</div>'); }
         };
         loadStep();
       },
@@ -673,7 +681,7 @@ module.exports = (
       const result = await workerManager.callAction(normalizedFilename, action, payload);
       res.json({ ok: true, result: result ?? null });
     } catch (err) {
-      res.status(500).json({ ok: false, error: err.message });
+      res.status(500).json({ ok: false, error: (err as Error).message });
     }
   });
 
@@ -681,7 +689,7 @@ module.exports = (
   router.get('/:filename/download', (req, res) => {
     const { filename } = req.params;
 
-    // Sicherheitsprüfung: Verhindere Path Traversal
+    // Security check: prevent path traversal
     if (!filename || filename.includes('..') || filename.includes('/')) {
       return res.status(400).send('Invalid filename.');
     }
@@ -703,7 +711,7 @@ module.exports = (
 
     fs.writeFileSync(fullPath, req.body.content, 'utf8');
 
-    const meta = ScriptHeaderParser.parse(fullPath);
+    const meta: any = ScriptHeaderParser.parse(fullPath);
     if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
 
     if (workerManager.workers.has(filename)) {
@@ -723,11 +731,11 @@ module.exports = (
   router.post('/upload', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const { type, name } = req.body; // 'automation' oder 'library', optional 'name'
+    const { type, name } = req.body; // 'automation' or 'library', optional 'name'
     const originalExt = path.extname(req.file.originalname) || '.js';
 
-    // Dateinamen bereinigen (gleiche Logik wie bei Create)
-    let filename;
+    // Sanitize the filename (same logic as Create)
+    let filename: string;
     if (name && name.trim()) {
       filename =
         name
@@ -771,7 +779,7 @@ module.exports = (
         capabilities: { detected, declared, undeclared, unused },
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: (e as Error).message });
     }
   });
 
@@ -784,8 +792,8 @@ module.exports = (
       const code = await response.text();
       const urlExt = path.extname(url.split('?')[0]) || '.js';
 
-      // Dateinamen aus URL ableiten und bereinigen
-      let filename;
+      // Derive and sanitize the filename from the URL
+      let filename: string;
       if (name && name.trim()) {
         filename =
           name
@@ -827,7 +835,7 @@ module.exports = (
       fs.writeFileSync(fullPath, code, 'utf8');
       res.json({ filename });
     } catch (e) {
-      res.status(400).json({ error: 'Import failed: ' + e.message });
+      res.status(400).json({ error: 'Import failed: ' + (e as Error).message });
     }
   });
 
@@ -894,7 +902,7 @@ module.exports = (
 
     // Use Parser to update metadata (handles @expose and formatting centrally)
     // Preserve @permission and @card tags — they are edited in source, not via the metadata form
-    const existingMeta = ScriptHeaderParser.parse(fullPath);
+    const existingMeta: any = ScriptHeaderParser.parse(fullPath);
     ScriptHeaderParser.updateMetadata(fullPath, {
       ...req.body,
       permissions: existingMeta.permissions,
@@ -904,7 +912,7 @@ module.exports = (
     // 5. REFACTORING: Update consumers
     let updatedConsumers = 0;
     if (wasLibrary && isRenaming) {
-      const allFiles = [];
+      const allFiles: string[] = [];
       if (fs.existsSync(SCRIPTS_DIR))
         fs.readdirSync(SCRIPTS_DIR)
           .filter((f) => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'))
@@ -922,8 +930,8 @@ module.exports = (
 
         // Regex to find @include line(s)
         cContent = cContent.replace(/^(\s*\*\s*@include\s+)(.*)$/gm, (match, prefix, args) => {
-          const parts = args.split(/[\s,]+/).filter((p) => p.trim().length > 0);
-          const newParts = parts.map((p) => {
+          const parts = args.split(/[\s,]+/).filter((p: string) => p.trim().length > 0);
+          const newParts = parts.map((p: string) => {
             // Check exact match or without .js
             if (p === oldFilename || p === oldFilename.replace(/\.js$/, '')) {
               changed = true;
@@ -950,7 +958,7 @@ module.exports = (
       }
     }
 
-    const meta = ScriptHeaderParser.parse(fullPath);
+    const meta: any = ScriptHeaderParser.parse(fullPath);
     if (meta.dependencies.length > 0) await depManager.install(meta.dependencies);
     depManager.prune();
     io.emit('status_update');

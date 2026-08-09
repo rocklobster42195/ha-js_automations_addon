@@ -52,6 +52,7 @@ module.exports = [
       'js_automations/routes/store-route.js',
       'js_automations/routes/ha-routes.js',
       'js_automations/routes/system-route.js',
+      'js_automations/routes/scripts-routes.js',
     ],
   },
   js.configs.recommended,
