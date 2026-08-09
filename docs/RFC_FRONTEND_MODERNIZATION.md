@@ -50,9 +50,9 @@ Schutz läuft stattdessen zweistufig:
 
 ## 4. Docker-Build-Sicherheit
 
-Aktuell hat das `Dockerfile` **keinen Build-Step** (`npm install --production`, dann Code-Copy, dann direkter `node`-Start). Sobald TS-Kompilierung und/oder esbuild-Bundling für LIT dazukommen, muss ein Build-Step ins `Dockerfile` (`RUN npm run build`, produziert nach `public/`).
+Build-Step im `Dockerfile` (`RUN npm run build`) existiert bereits für das esbuild-Bundling des LIT-Frontends (produziert nach `public/js/dist/`). **Entschieden 2026-08-09 beim Start der Backend-TS-Migration:** Backend-`.ts`-Dateien werden über denselben Build-Step per `tsc` **zu Plain-JS kompiliert** (nicht nativ über Node's Type-Stripping ausgeführt) — `tsc` emittiert `.js` unter demselben Dateinamen/derselben Ordnerstruktur wie die `.ts`-Quelle, sodass bestehende `require('./modul')`-Aufrufe **unverändert** bleiben. Erwogene Alternative (Node-Version im Dockerfile pinnen + native `.ts`-Ausführung + explizite `.ts`-Endung an jeder `require()`-Stelle) wurde verworfen: sie hätte eine Node-Versionsgarantie über das ungepinnte `ghcr.io/home-assistant/*-base:latest`-Image hinweg gebraucht (Multi-Arch-Risiko, nicht lokal verifizierbar) und jede `require()`-Stelle dauerhaft angefasst — der Compile-Weg braucht keins von beidem und ist unabhängig von der im Base-Image installierten Node-Version. Volle Abwägung in `notes/2026-08-09-backend-ts-migration-order-grill.md` (Addendum).
 
-**Warum das sicher ist:** Schlägt der Build fehl, schlägt der gesamte Docker-Image-Build fehl — es entsteht schlicht kein neues Image, und Nutzer, die bereits ein älteres Image laufen haben, sind davon nicht betroffen. Kein Szenario eines halb-kaputten Deploys zur Laufzeit.
+**Warum das sicher ist:** Schlägt der Build (esbuild ODER `tsc`) fehl, schlägt der gesamte Docker-Image-Build fehl — es entsteht schlicht kein neues Image, und Nutzer, die bereits ein älteres Image laufen haben, sind davon nicht betroffen. Kein Szenario eines halb-kaputten Deploys zur Laufzeit.
 
 ## 5. Meilenstein-Plan
 
@@ -112,10 +112,17 @@ Solange eine Komponente noch nicht migriert ist, bleibt ihr Vanilla-JS-Pendant u
 
 ## 8. Backend auf TypeScript
 
-1. `checkJs` + `allowJs` in `tsconfig.json` aktivieren (M1), bestehendes JS ohne Umbenennung typprüfen lassen, Fehler schrittweise beheben.
-2. Modul für Modul auf `.ts` umstellen (kein Stichtag) — Reihenfolge nach Kritikalität/Änderungshäufigkeit.
-3. `ha-api.d.ts` als Referenz für Nutzerskript-Typen bleibt unverändert bestehen; interner Backend-Code bekommt eigene Typen.
-4. CommonJS-Modulsystem bleibt — kein Umstieg auf ESM als Teil dieses Workstreams.
+1. `checkJs` + `allowJs` in `tsconfig.json` aktivieren (M1, erledigt), bestehendes JS ohne Umbenennung typprüfen lassen, Fehler schrittweise beheben.
+2. `ha-api.d.ts` als Referenz für Nutzerskript-Typen bleibt unverändert bestehen; interner Backend-Code bekommt eigene Typen.
+3. CommonJS-Modulsystem bleibt — kein Umstieg auf ESM als Teil dieses Workstreams.
+4. **Methodik für den eigentlichen Datei-für-Datei-Umbau (`core/`, später `routes/`/`services/` nach demselben Prinzip), entschieden 2026-08-09 (`notes/2026-08-09-backend-ts-migration-order-grill.md`):**
+   - **Rename-Reihenfolge:** leaf-first nach dem internen `require()`-Abhängigkeitsgraph — Module ohne interne `core/`-Abhängigkeiten zuerst, dann ihre Konsumenten, `kernel.js` (höchster Fan-in, zur Boot-Zeit fast überall verdrahtet) zuletzt.
+   - **Tests vor dem Rename sind selektiv, nicht flächendeckend:** die meisten Module werden ohne vorherigen Test direkt umbenannt. Nur Module, die den Risiko-Maßstab unten erfüllen, bekommen vorab Charakterisierungs-/Unit-Tests — entkoppelt vom tatsächlichen Zeitpunkt ihres Renames in der leaf-first-Reihenfolge.
+   - **Risiko-Maßstab (alle drei Signale zusammen, kein einzelnes reicht):** hoher Fan-in/Blast-Radius, hohe Verzweigungs-/Edge-Case-Dichte, vergangene Bugs/Incidents. Aktuell erfüllen `kernel.js` (siehe `[[project_startup_502_fix]]`), `worker-wrapper.js` (führt Nutzerskripte in einer Sandbox aus, historisch am meisten Edge-Case-Handling) und `entity-manager.js` (höchster Fan-in unter den Nicht-Kernel-Modulen) diesen Maßstab.
+   - **Überkomplizierungs-Suche:** für diese Risiko-Module erst ein dedizierter Lesedurchgang, der verdächtige Edge-Case-Handler markiert (redundante Checks, nie erreichbare Zweige, doppelte Absicherung die Node/die HA-Lib schon übernimmt) — Ergebnisse werden vorgelegt und bestätigt, bevor dafür Tests geschrieben werden. Kein organisches "nebenbei beim Testen finden".
+   - **Validierungsgate pro Rename-Schritt:** `npm run typecheck` sauber + `npm run test:backend` grün (inkl. evtl. neuer Modul-Tests) + `test/boot.test.js` grün, zusätzlich ein manueller Check im laufenden Addon für Module mit UI-sichtbarem/funktionalem Effekt.
+   - **Ein Commit/PR pro umbenanntem Modul** — kleinstmöglicher Blast-Radius, trivialer Revert.
+   - **Start:** erst nach Abschluss/Merge des laufenden Mobile-View-Meilensteins (Abschnitt 7) auf `feature/lint-prettier-ci-foundation`, dann auf einem eigenen neuen Branch — keine Vermischung mit dem Frontend-Branch.
 
 ## 9. Lint & Test
 
