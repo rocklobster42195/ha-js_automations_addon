@@ -21,13 +21,15 @@ https://<your-ha>/api/webhook/<webhook-id>
 The webhook ID itself acts as the secret (it is a long random string embedded in the URL).
 
 **What works well:**
+
 - No extra port needed — goes through HA's own HTTPS server
 - Works through Nabu Casa / HA Cloud tunnel out of the box
 - HTTPS automatically if HA has SSL configured
 - Simple to set up via the UI
 
 **What does not work:**
-- **No custom response** — HA always returns `200 OK` with an empty body immediately. The automation runs asynchronously *after* the response is sent. The caller cannot receive any data back.
+
+- **No custom response** — HA always returns `200 OK` with an empty body immediately. The automation runs asynchronously _after_ the response is sent. The caller cannot receive any data back.
 - **No bidi** — fire-and-forget only
 - **No JavaScript** — actions are limited to HA automation YAML
 - **No access to the full request** — headers and query parameters are not easily accessible in automations
@@ -36,13 +38,14 @@ The webhook ID itself acts as the secret (it is a long random string embedded in
 
 ```js
 ha.onWebhook('github-push', async (req, res) => {
-    const { ref } = req.body;
-    await ha.notify('mobile_app_phone', `Push: ${ref}`);
-    res.json({ received: true, branch: ref }); // ← caller gets this back
+  const { ref } = req.body;
+  await ha.notify('mobile_app_phone', `Push: ${ref}`);
+  res.json({ received: true, branch: ref }); // ← caller gets this back
 });
 ```
 
 **What works well:**
+
 - **Full bidi** — custom HTTP response with any body, status code, and headers
 - **Full JavaScript** — complete access to the `ha.*` API inside the handler
 - **Full request access** — body, headers, query params all available
@@ -50,18 +53,19 @@ ha.onWebhook('github-push', async (req, res) => {
 - Suitable for services that require a specific response (GitHub, Stripe, etc.)
 
 **What requires extra setup:**
+
 - Dedicated port must be opened in router/firewall
 - Extra configuration needed behind a reverse proxy (see below)
 - Does **not** work through Nabu Casa tunnel without additional port forwarding
 
 ### Decision guide
 
-| Need | Use |
-|---|---|
-| Simple trigger → HA action, no response needed | HA Native Webhook |
-| Custom response body / status code | JSA `ha.onWebhook()` |
-| Complex logic, access to `ha.*` API | JSA `ha.onWebhook()` |
-| Nabu Casa / HA Cloud, no port forwarding | HA Native Webhook |
+| Need                                                | Use                  |
+| --------------------------------------------------- | -------------------- |
+| Simple trigger → HA action, no response needed      | HA Native Webhook    |
+| Custom response body / status code                  | JSA `ha.onWebhook()` |
+| Complex logic, access to `ha.*` API                 | JSA `ha.onWebhook()` |
+| Nabu Casa / HA Cloud, no port forwarding            | HA Native Webhook    |
 | Services expecting a real response (GitHub, Stripe) | JSA `ha.onWebhook()` |
 
 ---
@@ -122,19 +126,19 @@ The webhook server is reachable from the public internet (that's the point), so 
 
 ### Required (v1)
 
-| Measure | Why |
-|---|---|
-| Constant-time token comparison (`crypto.timingSafeEqual`, not `===`) | Prevents timing attacks that could leak the token byte-by-byte |
-| Rate limiting per webhook ID / IP | Blocks token brute-forcing and basic request-flood DoS |
-| Body size limit on `express.json()` (e.g. `100kb`) | Prevents memory-exhaustion DoS via oversized payloads |
-| `webhook_trust_proxy` is an explicit opt-in setting, **not** automatic | If the addon is directly port-forwarded (no reverse proxy in front), trusting `X-Forwarded-For` by default lets any caller spoof their IP and defeat IP-based checks. Must default to `false`. |
-| Reject registering a webhook ID already owned by another script | Prevents one script from silently hijacking another script's endpoint/token |
-| Generic `500` body to the caller on internal errors | Stack traces / internals must never leak externally — details go to the script log only |
-| `noAuth: true` webhooks show a clear "public / unprotected" badge in the panel | Anyone with the URL can call them with zero verification — must be obvious, not just documented |
-| 10-second handler timeout (already specified above) | Also protects against slow-loris-style resource exhaustion, not just correctness |
-| IP allowlist per webhook (`WebhookOptions.allowlist`) | Second layer beyond the token for providers that publish static IP ranges (GitHub, Stripe). Exact IPs or IPv4 CIDR ranges; IPv6 supports exact addresses only. Checked before token verification — a request from outside the allowlist gets `403` regardless of whether it has a valid token. |
-| HMAC signature helper (`ha.verifyWebhookSignature()`) | For providers that sign the payload with a secret *you* choose (GitHub `X-Hub-Signature-256`, Stripe) instead of sending a static token. Verifies against `req.rawBody` — the exact bytes received — since `JSON.stringify(JSON.parse(raw))` is not guaranteed byte-identical to what the sender signed. Uses `crypto.timingSafeEqual` internally, same as the built-in token check. |
-| Auth-failure backoff | After 5 failed token attempts from the same IP against the same webhook ID within 10 minutes, that IP is locked out from *any* further attempt against that ID (even a correct token) for 10 minutes. Independent of the general rate limiter, which caps total request volume regardless of validity. |
+| Measure                                                                        | Why                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Constant-time token comparison (`crypto.timingSafeEqual`, not `===`)           | Prevents timing attacks that could leak the token byte-by-byte                                                                                                                                                                                                                                                                                                                       |
+| Rate limiting per webhook ID / IP                                              | Blocks token brute-forcing and basic request-flood DoS                                                                                                                                                                                                                                                                                                                               |
+| Body size limit on `express.json()` (e.g. `100kb`)                             | Prevents memory-exhaustion DoS via oversized payloads                                                                                                                                                                                                                                                                                                                                |
+| `webhook_trust_proxy` is an explicit opt-in setting, **not** automatic         | If the addon is directly port-forwarded (no reverse proxy in front), trusting `X-Forwarded-For` by default lets any caller spoof their IP and defeat IP-based checks. Must default to `false`.                                                                                                                                                                                       |
+| Reject registering a webhook ID already owned by another script                | Prevents one script from silently hijacking another script's endpoint/token                                                                                                                                                                                                                                                                                                          |
+| Generic `500` body to the caller on internal errors                            | Stack traces / internals must never leak externally — details go to the script log only                                                                                                                                                                                                                                                                                              |
+| `noAuth: true` webhooks show a clear "public / unprotected" badge in the panel | Anyone with the URL can call them with zero verification — must be obvious, not just documented                                                                                                                                                                                                                                                                                      |
+| 10-second handler timeout (already specified above)                            | Also protects against slow-loris-style resource exhaustion, not just correctness                                                                                                                                                                                                                                                                                                     |
+| IP allowlist per webhook (`WebhookOptions.allowlist`)                          | Second layer beyond the token for providers that publish static IP ranges (GitHub, Stripe). Exact IPs or IPv4 CIDR ranges; IPv6 supports exact addresses only. Checked before token verification — a request from outside the allowlist gets `403` regardless of whether it has a valid token.                                                                                       |
+| HMAC signature helper (`ha.verifyWebhookSignature()`)                          | For providers that sign the payload with a secret _you_ choose (GitHub `X-Hub-Signature-256`, Stripe) instead of sending a static token. Verifies against `req.rawBody` — the exact bytes received — since `JSON.stringify(JSON.parse(raw))` is not guaranteed byte-identical to what the sender signed. Uses `crypto.timingSafeEqual` internally, same as the built-in token check. |
+| Auth-failure backoff                                                           | After 5 failed token attempts from the same IP against the same webhook ID within 10 minutes, that IP is locked out from _any_ further attempt against that ID (even a correct token) for 10 minutes. Independent of the general rate limiter, which caps total request volume regardless of validity.                                                                               |
 
 > **No TLS termination.** The webhook server speaks plain HTTP only — it does not terminate TLS itself. Exposing it directly to the internet (direct port-forwarding, no reverse proxy) means all traffic, including the `X-Webhook-Secret` token, travels **unencrypted**. Put a reverse proxy with TLS in front for anything beyond local testing (see Reverse Proxy Setup below).
 
@@ -148,10 +152,10 @@ The webhook server is reachable from the public internet (that's the point), so 
 // @permission webhook
 
 ha.onWebhook('github-push', async (req, res) => {
-    // Token already verified — handler only called if valid
-    const { ref, repository } = req.body;
-    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
-    res.json({ received: true });
+  // Token already verified — handler only called if valid
+  const { ref, repository } = req.body;
+  await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+  res.json({ received: true });
 });
 ```
 
@@ -165,19 +169,18 @@ For services that embed their own token in the request body (e.g. Ko-fi) and whe
 const config = ha.persistent('kofi_config', {}); // { verification_token: '...' } — set via Store Explorer, flagged as Secret
 
 ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
-    const data = JSON.parse(req.body.data);
+  const data = JSON.parse(req.body.data);
 
-    // Verify Ko-fi's own token manually — read from the store, never hardcoded in the script
-    if (data.verification_token !== config.verification_token) {
-        return res.status(401).json({ error: 'unauthorized' });
-    }
+  // Verify Ko-fi's own token manually — read from the store, never hardcoded in the script
+  if (data.verification_token !== config.verification_token) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
 
-    if (data.type === 'Donation') {
-        await ha.notify('mobile_app_phone',
-            `☕ ${data.from_name} donated €${data.amount}!`);
-    }
+  if (data.type === 'Donation') {
+    await ha.notify('mobile_app_phone', `☕ ${data.from_name} donated €${data.amount}!`);
+  }
 
-    res.json({ status: 'ok' });
+  res.json({ status: 'ok' });
 });
 ```
 
@@ -189,22 +192,22 @@ Some services (or simple status/polling checks) use `GET` instead of `POST`. The
 // @permission webhook
 
 ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
-    const { token } = req.query;
-    if (token !== 'expected-token') return res.status(401).json({ error: 'unauthorized' });
-    res.json({ ok: true, uptime: process.uptime() });
+  const { token } = req.query;
+  if (token !== 'expected-token') return res.status(401).json({ error: 'unauthorized' });
+  res.json({ ok: true, uptime: process.uptime() });
 });
 ```
 
 ### IP Allowlist (`allowlist`)
 
-A second layer of defense on top of the token, for providers that publish static IP ranges. Checked *before* token verification — a request from outside the allowlist gets `403` even with a valid token:
+A second layer of defense on top of the token, for providers that publish static IP ranges. Checked _before_ token verification — a request from outside the allowlist gets `403` even with a valid token:
 
 ```js
 // @permission webhook
 
 // GitHub's published webhook IP ranges (see https://api.github.com/meta)
 ha.onWebhook('github-push', { allowlist: ['192.30.252.0/22', '185.199.108.0/22'] }, async (req, res) => {
-    res.json({ received: true });
+  res.json({ received: true });
 });
 ```
 
@@ -220,13 +223,13 @@ For providers that sign the payload with a secret **you** choose when configurin
 const secret = ha.persistent('github_webhook_secret', { value: '' }); // set via Store Explorer, flagged as Secret
 
 ha.onWebhook('github-push', async (req, res) => {
-    const sig = req.headers['x-hub-signature-256'];
-    if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
-        return res.status(401).json({ error: 'invalid signature' });
-    }
-    const { ref, repository } = req.body;
-    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
-    res.json({ received: true });
+  const sig = req.headers['x-hub-signature-256'];
+  if (!ha.verifyWebhookSignature(req.rawBody, sig, secret.value)) {
+    return res.status(401).json({ error: 'invalid signature' });
+  }
+  const { ref, repository } = req.body;
+  await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+  res.json({ received: true });
 });
 ```
 
@@ -255,21 +258,21 @@ Deliberately **not** supported: multiple methods per ID, custom/arbitrary paths,
 
 ### `req` object
 
-| Field | Type | Description |
-|---|---|---|
-| `method` | `string` | HTTP method (`POST`, `GET`, …) |
-| `headers` | `Record<string, string>` | Request headers |
-| `body` | `any` | Parsed JSON body, or raw string |
-| `rawBody` | `string` | Exact unparsed request body — use this, not `body`, for `ha.verifyWebhookSignature()` |
-| `query` | `Record<string, string>` | URL query parameters |
-| `ip` | `string` | Caller IP (real IP if behind a trusted proxy) |
+| Field     | Type                     | Description                                                                           |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| `method`  | `string`                 | HTTP method (`POST`, `GET`, …)                                                        |
+| `headers` | `Record<string, string>` | Request headers                                                                       |
+| `body`    | `any`                    | Parsed JSON body, or raw string                                                       |
+| `rawBody` | `string`                 | Exact unparsed request body — use this, not `body`, for `ha.verifyWebhookSignature()` |
+| `query`   | `Record<string, string>` | URL query parameters                                                                  |
+| `ip`      | `string`                 | Caller IP (real IP if behind a trusted proxy)                                         |
 
 ### `res` object
 
-| Method | Description |
-|---|---|
-| `res.json(data)` | Send JSON response (200) |
-| `res.send(text)` | Send plain text response (200) |
+| Method             | Description                                               |
+| ------------------ | --------------------------------------------------------- |
+| `res.json(data)`   | Send JSON response (200)                                  |
+| `res.send(text)`   | Send plain text response (200)                            |
 | `res.status(code)` | Set status code, chainable: `res.status(404).json({...})` |
 
 ---
@@ -312,10 +315,10 @@ When `ha.onWebhook()` is called, a line is written to the script log:
 
 The webhook server always listens on port **3001** — fixed, not a setting, since it must match the port published in `config.yaml`.
 
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `webhook_external_url` | string | _(empty)_ | Base URL shown in the panel for copy (e.g. `https://myha.example.com`). Optional — only needed when behind a reverse proxy. |
-| `webhook_trust_proxy` | boolean | `false` | Trust `X-Forwarded-For` for `req.ip`. Only enable when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP. |
+| Key                    | Type    | Default   | Description                                                                                                                                                       |
+| ---------------------- | ------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webhook_external_url` | string  | _(empty)_ | Base URL shown in the panel for copy (e.g. `https://myha.example.com`). Optional — only needed when behind a reverse proxy.                                       |
+| `webhook_trust_proxy`  | boolean | `false`   | Trust `X-Forwarded-For` for `req.ip`. Only enable when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP. |
 
 ---
 
@@ -387,18 +390,19 @@ A new `@permission webhook` entry in the script header system:
 ## Webhook Server Lifecycle
 
 Each registry entry has two separate identity fields, which must not be conflated:
+
 - **`owner`** — the filename that registered the webhook. **Persisted**, survives addon restarts, never cleared. This is the only handle used to attribute an entry to a script for deletion/purge.
 - **`active`** — **runtime-only, never persisted.** True only while that script's worker is currently running and has (re-)registered the webhook this session. Always resets to `false` on every addon boot, before any script has had a chance to re-register.
 
 This split exists because an earlier version conflated the two into a single `scriptFilename` field that was reset to `null` on every load — which meant deleting a script could never find its own (by-then-inactive) webhooks to purge, since the match against the (already-null) owner always failed.
 
-| Event | Action |
-|---|---|
-| First `ha.onWebhook()` registered | Webhook server starts on configured port; `owner` set, `active` set to `true` |
-| Worker exits (reload / stopped / crashed) | Its webhooks are marked **inactive** (`active: false`, requests get `503`) — `owner` and the token stay persisted so a later reload/restart (or a full addon restart) reclaims the same token |
-| Script **file deleted** via `DELETE /api/scripts/:filename` | Its webhooks are **permanently purged** (token included) — triggered directly by the delete route itself (`workerManager.purgeWebhooksForScript()`), matched by `owner`, not by `active` state. This works regardless of whether the script had a running worker at the time (stopScript() is a no-op without one, so purging can never depend on the worker's exit event) |
-| No `active` webhooks remain (inactive/persisted entries don't keep it running) | Webhook server shuts down |
-| User deletes an inactive webhook from the panel | Permanently purged. Refused for an active webhook — stop the script first |
+| Event                                                                          | Action                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First `ha.onWebhook()` registered                                              | Webhook server starts on configured port; `owner` set, `active` set to `true`                                                                                                                                                                                                                                                                                              |
+| Worker exits (reload / stopped / crashed)                                      | Its webhooks are marked **inactive** (`active: false`, requests get `503`) — `owner` and the token stay persisted so a later reload/restart (or a full addon restart) reclaims the same token                                                                                                                                                                              |
+| Script **file deleted** via `DELETE /api/scripts/:filename`                    | Its webhooks are **permanently purged** (token included) — triggered directly by the delete route itself (`workerManager.purgeWebhooksForScript()`), matched by `owner`, not by `active` state. This works regardless of whether the script had a running worker at the time (stopScript() is a no-op without one, so purging can never depend on the worker's exit event) |
+| No `active` webhooks remain (inactive/persisted entries don't keep it running) | Webhook server shuts down                                                                                                                                                                                                                                                                                                                                                  |
+| User deletes an inactive webhook from the panel                                | Permanently purged. Refused for an active webhook — stop the script first                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -430,17 +434,17 @@ Token is regenerated only on explicit user action (↺ in panel), not on script 
 
 ## Components to Build
 
-| Component | Change |
-|---|---|
-| `core/webhook-manager.js` | New — Express server, webhook registry, token persistence, IPC bridge, rate limiting (`express-rate-limit`), constant-time token check |
-| `core/worker-wrapper.js` | Add `ha.onWebhook()` API + IPC protocol for bidi |
-| `core/worker-manager.js` | Route IPC webhook messages, manage correlation IDs |
-| `core/kernel.js` | Instantiate and wire up `WebhookManager` |
-| `core/settings-schema.js` | Add `webhook_port`, `webhook_external_url`, `webhook_trust_proxy` fields |
-| `core/capability-analyzer.js` | Add `webhook` permission detection |
-| `ha-api.d.ts` | Add types for `ha.onWebhook`, `WebhookOptions`, `WebhookRequest`, `WebhookResponse` |
-| `locales/*/translation.json` | Settings labels + panel UI strings |
-| `public/js/webhook-panel.js` | New — UI panel with token management |
+| Component                     | Change                                                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `core/webhook-manager.js`     | New — Express server, webhook registry, token persistence, IPC bridge, rate limiting (`express-rate-limit`), constant-time token check |
+| `core/worker-wrapper.js`      | Add `ha.onWebhook()` API + IPC protocol for bidi                                                                                       |
+| `core/worker-manager.js`      | Route IPC webhook messages, manage correlation IDs                                                                                     |
+| `core/kernel.js`              | Instantiate and wire up `WebhookManager`                                                                                               |
+| `core/settings-schema.js`     | Add `webhook_port`, `webhook_external_url`, `webhook_trust_proxy` fields                                                               |
+| `core/capability-analyzer.js` | Add `webhook` permission detection                                                                                                     |
+| `ha-api.d.ts`                 | Add types for `ha.onWebhook`, `WebhookOptions`, `WebhookRequest`, `WebhookResponse`                                                    |
+| `locales/*/translation.json`  | Settings labels + panel UI strings                                                                                                     |
+| `public/js/webhook-panel.js`  | New — UI panel with token management                                                                                                   |
 
 ---
 
@@ -463,13 +467,13 @@ Add after the `ha.mqtt` bullet:
 ```markdown
 ### When to use `ha.onWebhook()` vs. HA native webhooks
 
-| Need | Use |
-|---|---|
-| Simple trigger → HA action, no response needed | HA Automation Webhook |
-| Custom response body / status code | `ha.onWebhook()` |
-| Complex logic, access to the full `ha.*` API | `ha.onWebhook()` |
-| Nabu Casa / HA Cloud, no port forwarding | HA Automation Webhook |
-| Services that require a real response (GitHub, Stripe, Ko-fi) | `ha.onWebhook()` |
+| Need                                                          | Use                   |
+| ------------------------------------------------------------- | --------------------- |
+| Simple trigger → HA action, no response needed                | HA Automation Webhook |
+| Custom response body / status code                            | `ha.onWebhook()`      |
+| Complex logic, access to the full `ha.*` API                  | `ha.onWebhook()`      |
+| Nabu Casa / HA Cloud, no port forwarding                      | HA Automation Webhook |
+| Services that require a real response (GitHub, Stripe, Ko-fi) | `ha.onWebhook()`      |
 ```
 
 ### API_REFERENCE.md — New section (add after `## MQTT API`)
@@ -494,10 +498,10 @@ Registers a webhook endpoint at `:<webhook_port>/webhook/<id>`. Default method i
 // @permission webhook
 
 ha.onWebhook('github-push', async (req, res) => {
-    // Token is verified automatically via X-Webhook-Secret header
-    const { ref, repository } = req.body;
-    await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
-    res.json({ received: true });
+  // Token is verified automatically via X-Webhook-Secret header
+  const { ref, repository } = req.body;
+  await ha.notify('mobile_app_phone', `Push to ${ref} in ${repository.name}`);
+  res.json({ received: true });
 });
 ```
 
@@ -511,14 +515,14 @@ For services that embed their own token in the body (e.g. Ko-fi sends `data.veri
 const config = ha.persistent('kofi_config', {}); // { verification_token: '...' } — set via Store Explorer, flagged as Secret
 
 ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
-    const data = JSON.parse(req.body.data);
-    if (data.verification_token !== config.verification_token) {
-        return res.status(401).json({ error: 'unauthorized' });
-    }
-    if (data.type === 'Donation') {
-        await ha.notify('mobile_app_phone', `☕ ${data.from_name} donated €${data.amount}!`);
-    }
-    res.json({ status: 'ok' });
+  const data = JSON.parse(req.body.data);
+  if (data.verification_token !== config.verification_token) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  if (data.type === 'Donation') {
+    await ha.notify('mobile_app_phone', `☕ ${data.from_name} donated €${data.amount}!`);
+  }
+  res.json({ status: 'ok' });
 });
 ```
 
@@ -528,28 +532,28 @@ ha.onWebhook('ko-fi', { noAuth: true }, async (req, res) => {
 // @permission webhook
 
 ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
-    const { token } = req.query;
-    if (token !== 'expected-token') return res.status(401).json({ error: 'unauthorized' });
-    res.json({ ok: true, uptime: process.uptime() });
+  const { token } = req.query;
+  if (token !== 'expected-token') return res.status(401).json({ error: 'unauthorized' });
+  res.json({ ok: true, uptime: process.uptime() });
 });
 ```
 
 **`req` object**
 
-| Field | Type | Description |
-|---|---|---|
-| `method` | `string` | HTTP method (`POST`, `GET`, …) |
-| `headers` | `Record<string, string>` | Request headers |
-| `body` | `any` | Parsed JSON body, or raw string (empty for `GET`) |
-| `query` | `Record<string, string>` | URL query parameters |
-| `ip` | `string` | Caller IP (real IP only if `webhook_trust_proxy` is enabled behind a trusted reverse proxy) |
+| Field     | Type                     | Description                                                                                 |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| `method`  | `string`                 | HTTP method (`POST`, `GET`, …)                                                              |
+| `headers` | `Record<string, string>` | Request headers                                                                             |
+| `body`    | `any`                    | Parsed JSON body, or raw string (empty for `GET`)                                           |
+| `query`   | `Record<string, string>` | URL query parameters                                                                        |
+| `ip`      | `string`                 | Caller IP (real IP only if `webhook_trust_proxy` is enabled behind a trusted reverse proxy) |
 
 **`res` object**
 
-| Method | Description |
-|---|---|
-| `res.json(data)` | Send JSON response (200) |
-| `res.send(text)` | Send plain text response (200) |
+| Method             | Description                                               |
+| ------------------ | --------------------------------------------------------- |
+| `res.json(data)`   | Send JSON response (200)                                  |
+| `res.send(text)`   | Send plain text response (200)                            |
 | `res.status(code)` | Set status code, chainable: `res.status(404).json({...})` |
 
 Handler timeout: **10 seconds** — if the handler does not respond in time, the caller receives `504 Gateway Timeout`.
@@ -559,11 +563,12 @@ Handler timeout: **10 seconds** — if the handler does not respond in time, the
 - Requests are rate-limited per webhook ID/IP; excessive requests receive `429`.
 - Token verification uses a constant-time comparison — timing cannot be used to guess the token.
 - `noAuth: true` webhooks are **fully public** — anyone with the URL can call them with no verification at all. Only use this when the service itself embeds a verifiable token in the payload (as shown above for Ko-fi), and check it yourself in the handler.
-- `req.ip` only reflects the real caller IP if `webhook_trust_proxy` is enabled *and* a trusted reverse proxy actually sits in front of the webhook port. Never enable it for a directly port-forwarded setup — callers could spoof their IP via `X-Forwarded-For`.
+- `req.ip` only reflects the real caller IP if `webhook_trust_proxy` is enabled _and_ a trusted reverse proxy actually sits in front of the webhook port. Never enable it for a directly port-forwarded setup — callers could spoof their IP via `X-Forwarded-For`.
 
 ### Token management
 
 JSA auto-generates a secret token per webhook ID on first use. Tokens are:
+
 - Persisted in `.storage/webhooks.json` — stable across reloads and restarts
 - Never written into script code
 - Shown in the **Webhook Panel** (masked, with reveal / copy / rotate buttons)
@@ -572,6 +577,7 @@ JSA auto-generates a secret token per webhook ID on first use. Tokens are:
 ### Reverse proxy setup
 
 If HA runs behind nginx, Traefik, Caddy, or Cloudflare:
+
 - Forward your proxy to the addon's `webhook_port` (default `3001`)
 - Ensure `X-Webhook-Secret` is not stripped by the proxy/WAF
 - Set `webhook_external_url` in Settings so the panel shows the correct copy URL

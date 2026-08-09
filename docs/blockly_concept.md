@@ -5,6 +5,7 @@
 JS Automations already supports JavaScript and TypeScript as editing modalities. Blockly adds a **third modality**: a visual block-based editor that allows non-programmers to build real automations and lets power users prototype ideas quickly — without touching any of the existing architecture.
 
 Target users:
+
 - Home Assistant users who want automation without writing code
 - Developers prototyping trigger/action logic before committing to a full script
 
@@ -12,15 +13,15 @@ Target users:
 
 ## Editing Modalities
 
-| | `.js` | `.ts` | `.blocks` |
-|---|---|---|---|
-| Language | JavaScript | TypeScript | Blockly visual |
-| Source of truth | `.js` file | `.ts` file | `.blocks` JSON file |
+|                 | `.js`             | `.ts`                     | `.blocks`                 |
+| --------------- | ----------------- | ------------------------- | ------------------------- |
+| Language        | JavaScript        | TypeScript                | Blockly visual            |
+| Source of truth | `.js` file        | `.ts` file                | `.blocks` JSON file       |
 | Compiled output | – (runs directly) | `.storage/dist/script.js` | `.storage/dist/script.js` |
-| Editor | Monaco | Monaco | Blockly workspace |
-| Type safety | None | Full TypeScript | Block connection rules |
-| Code visible | Always | Always | Via "Show Code" panel |
-| Convert to JS | – | Not planned | M5: one-way, destructive |
+| Editor          | Monaco            | Monaco                    | Blockly workspace         |
+| Type safety     | None              | Full TypeScript           | Block connection rules    |
+| Code visible    | Always            | Always                    | Via "Show Code" panel     |
+| Convert to JS   | –                 | Not planned               | M5: one-way, destructive  |
 
 ---
 
@@ -48,14 +49,18 @@ Blockly 11 uses JSON as its primary serialization format (XML is legacy). JSA me
         "y": 20,
         "fields": { "TO_STATE": "off" },
         "inputs": {
-          "ENTITY": { "block": { "type": "ha_entity", "id": "e1", "fields": { "ENTITY_ID": "binary_sensor.presence" } } },
+          "ENTITY": {
+            "block": { "type": "ha_entity", "id": "e1", "fields": { "ENTITY_ID": "binary_sensor.presence" } }
+          },
           "DO": {
             "block": {
               "type": "ha_call_service",
               "id": "c1",
               "fields": { "SERVICE": "light.turn_off" },
               "inputs": {
-                "ENTITY": { "block": { "type": "ha_entity", "id": "e2", "fields": { "ENTITY_ID": "light.living_room" } } }
+                "ENTITY": {
+                  "block": { "type": "ha_entity", "id": "e2", "fields": { "ENTITY_ID": "light.living_room" } }
+                }
               }
             }
           }
@@ -69,6 +74,7 @@ Blockly 11 uses JSON as its primary serialization format (XML is legacy). JSA me
 Note: statement-connected blocks (like `DO` above) live under the same `inputs` key as value inputs — verified against `Blockly.serialization.workspaces.save()`'s actual output, not a separate `statements` key as an earlier draft of this doc showed.
 
 `ScriptHeaderParser` gets a `.blocks` branch on both sides:
+
 - `parse()` reads metadata from the `jsa` key instead of parsing a JSDoc comment
 - `updateMetadata()` writes fields back into the `jsa` key (JSON.stringify) instead of prepending a `/** ... */` header — prepending a comment onto a `.blocks` file would corrupt its JSON
 
@@ -137,7 +143,7 @@ note for the full reasoning). Kept here only so the "why" isn't lost. The actual
 
 Both the block shape definitions and the generator registration function live under
 `public/js/` (not `core/`), each wrapped in a tiny UMD shim (`module.exports` if present, else
-a `window` global) so the *same file* is `require()`-able from Node and loadable via a plain
+a `window` global) so the _same file_ is `require()`-able from Node and loadable via a plain
 `<script>` tag in the browser — no bundler, no duplication:
 
 ```js
@@ -169,6 +175,7 @@ window.registerHaBlocks(Blockly.JavaScript);
 ```
 
 ~~Original (incorrect) plan:~~
+
 ```js
 // Browser
 import { javascriptGenerator } from 'blockly/javascript';
@@ -184,101 +191,101 @@ Categorized by milestone. All generated code targets the current `ha.*` API surf
 
 ### Triggers
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| On state change | `ha.on('entity_id', async e => { ... })` | M2 |
-| On state change (filtered) | `ha.on('entity_id', e => e.state === 'on', async e => { ... })` | M2 |
-| On state change (debounced) | `ha.on('entity_id', filter, { for: 5000 }, async e => { ... })` | M2 |
-| On cron schedule | `schedule('0 * * * *', async () => { ... })` | M2 |
-| On HA event | `ha.onEvent('event_type', async e => { ... })` | M3 |
-| On MQTT message | `ha.mqtt.subscribe('topic/path', async msg => { ... })` | M3 |
-| On webhook (basic) | `ha.onWebhook('id', async (req, res) => { ... })` | M4 |
+| Block                       | Generated code                                                  | Milestone |
+| --------------------------- | --------------------------------------------------------------- | --------- |
+| On state change             | `ha.on('entity_id', async e => { ... })`                        | M2        |
+| On state change (filtered)  | `ha.on('entity_id', e => e.state === 'on', async e => { ... })` | M2        |
+| On state change (debounced) | `ha.on('entity_id', filter, { for: 5000 }, async e => { ... })` | M2        |
+| On cron schedule            | `schedule('0 * * * *', async () => { ... })`                    | M2        |
+| On HA event                 | `ha.onEvent('event_type', async e => { ... })`                  | M3        |
+| On MQTT message             | `ha.mqtt.subscribe('topic/path', async msg => { ... })`         | M3        |
+| On webhook (basic)          | `ha.onWebhook('id', async (req, res) => { ... })`               | M4        |
 
 ### Actions
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Call service | `await ha.call('light.turn_on', { entity_id: 'light.x' })` | M2 |
-| Entity fluent call | `await ha.entity('light.living_room').turn_on({ brightness: 255 })` | M2 |
-| Send notification | `await ha.notify('Message text')` | M2 |
-| Send notification with options | `await ha.notify('Message', { title: 'Title', target: '...' })` | M2 |
-| Ask (actionable notification) | `const reply = await ha.ask('Pick one', { actions: ['Yes','No'] })` | M3 |
-| Publish MQTT | `await ha.mqtt.publish('topic', payload, { retain: true })` | M3 |
-| HTTP GET | `const res = await ha.http.get('https://...')` | M4 |
-| HTTP POST | `const res = await ha.http.post('https://...', { body })` | M4 |
-| Fire HA event | `await ha.fireEvent('my_event', { data: 'value' })` | M3 |
+| Block                          | Generated code                                                      | Milestone |
+| ------------------------------ | ------------------------------------------------------------------- | --------- |
+| Call service                   | `await ha.call('light.turn_on', { entity_id: 'light.x' })`          | M2        |
+| Entity fluent call             | `await ha.entity('light.living_room').turn_on({ brightness: 255 })` | M2        |
+| Send notification              | `await ha.notify('Message text')`                                   | M2        |
+| Send notification with options | `await ha.notify('Message', { title: 'Title', target: '...' })`     | M2        |
+| Ask (actionable notification)  | `const reply = await ha.ask('Pick one', { actions: ['Yes','No'] })` | M3        |
+| Publish MQTT                   | `await ha.mqtt.publish('topic', payload, { retain: true })`         | M3        |
+| HTTP GET                       | `const res = await ha.http.get('https://...')`                      | M4        |
+| HTTP POST                      | `const res = await ha.http.post('https://...', { body })`           | M4        |
+| Fire HA event                  | `await ha.fireEvent('my_event', { data: 'value' })`                 | M3        |
 
 ### State
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Get state | `ha.getState('sensor.temp')` | M2 |
-| Get state value (numeric/bool) | `ha.getStateValue('sensor.temp')` | M2 |
-| Get attribute | `ha.getAttr('climate.hall', 'temperature')` | M2 |
-| Entity exists | `ha.entityExists('sensor.temp')` | M2 |
-| Bulk select entities | `ha.select('light.*')` | M3 |
-| Render template | `await ha.renderTemplate('{{ states("sensor.x") }}')` | M4 |
-| Get history | `await ha.getHistory('sensor.temp', { hours: 24 })` | M4 |
-| Get statistics | `await ha.getStatistics('sensor.temp', { period: 'hour' })` | M4 |
+| Block                          | Generated code                                              | Milestone |
+| ------------------------------ | ----------------------------------------------------------- | --------- |
+| Get state                      | `ha.getState('sensor.temp')`                                | M2        |
+| Get state value (numeric/bool) | `ha.getStateValue('sensor.temp')`                           | M2        |
+| Get attribute                  | `ha.getAttr('climate.hall', 'temperature')`                 | M2        |
+| Entity exists                  | `ha.entityExists('sensor.temp')`                            | M2        |
+| Bulk select entities           | `ha.select('light.*')`                                      | M3        |
+| Render template                | `await ha.renderTemplate('{{ states("sensor.x") }}')`       | M4        |
+| Get history                    | `await ha.getHistory('sensor.temp', { hours: 24 })`         | M4        |
+| Get statistics                 | `await ha.getStatistics('sensor.temp', { period: 'hour' })` | M4        |
 
 ### Wait / Async
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Wait for state | `await ha.waitFor('lock.door', e => e.state === 'locked')` | M3 |
-| Wait for state with timeout | `await ha.waitFor('lock.door', filter, 0, { timeout: 10000 })` | M3 |
-| Sleep | `await sleep(2000)` | M2 |
+| Block                       | Generated code                                                 | Milestone |
+| --------------------------- | -------------------------------------------------------------- | --------- |
+| Wait for state              | `await ha.waitFor('lock.door', e => e.state === 'locked')`     | M3        |
+| Wait for state with timeout | `await ha.waitFor('lock.door', filter, 0, { timeout: 10000 })` | M3        |
+| Sleep                       | `await sleep(2000)`                                            | M2        |
 
 ### Store / Persistence
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Store get | `ha.store.get('my_key')` | M3 |
-| Store set | `ha.store.set('my_key', value)` | M3 |
-| Store delete | `ha.store.delete('my_key')` | M3 |
-| Store on change | `ha.store.on('my_key', async val => { ... })` | M3 |
-| Persistent variable | `const counter = ha.persistent('counter', 0)` | M3 |
+| Block               | Generated code                                | Milestone |
+| ------------------- | --------------------------------------------- | --------- |
+| Store get           | `ha.store.get('my_key')`                      | M3        |
+| Store set           | `ha.store.set('my_key', value)`               | M3        |
+| Store delete        | `ha.store.delete('my_key')`                   | M3        |
+| Store on change     | `ha.store.on('my_key', async val => { ... })` | M3        |
+| Persistent variable | `const counter = ha.persistent('counter', 0)` | M3        |
 
 ### Areas & Labels
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Get all areas | `await ha.getAreas()` | M4 |
-| Get entities in area | `await ha.getEntitiesInArea('living_room')` | M4 |
-| Get all labels | `await ha.getLabels()` | M4 |
-| Get entities with label | `await ha.getEntitiesWithLabel('outdoor')` | M4 |
-| Get floors | `await ha.getFloors()` | M4 |
-| Get areas in floor | `await ha.getAreasInFloor('ground_floor')` | M4 |
+| Block                   | Generated code                              | Milestone |
+| ----------------------- | ------------------------------------------- | --------- |
+| Get all areas           | `await ha.getAreas()`                       | M4        |
+| Get entities in area    | `await ha.getEntitiesInArea('living_room')` | M4        |
+| Get all labels          | `await ha.getLabels()`                      | M4        |
+| Get entities with label | `await ha.getEntitiesWithLabel('outdoor')`  | M4        |
+| Get floors              | `await ha.getFloors()`                      | M4        |
+| Get areas in floor      | `await ha.getAreasInFloor('ground_floor')`  | M4        |
 
 ### Register / Update (MQTT Discovery)
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Register entity | `await ha.register('sensor.my_sensor', { device_class: 'temperature', unit: '°C' })` | M4 |
-| Update entity state | `await ha.update('sensor.my_sensor', '21.5', { unit_of_measurement: '°C' })` | M4 |
+| Block               | Generated code                                                                       | Milestone |
+| ------------------- | ------------------------------------------------------------------------------------ | --------- |
+| Register entity     | `await ha.register('sensor.my_sensor', { device_class: 'temperature', unit: '°C' })` | M4        |
+| Update entity state | `await ha.update('sensor.my_sensor', '21.5', { unit_of_measurement: '°C' })`         | M4        |
 
 ### Calendar & Todo
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Get calendar events | `await ha.getCalendarEvents('calendar.work', { days: 7 })` | M4 |
-| Get todo items | `await ha.getTodoItems('todo.shopping')` | M4 |
+| Block               | Generated code                                             | Milestone |
+| ------------------- | ---------------------------------------------------------- | --------- |
+| Get calendar events | `await ha.getCalendarEvents('calendar.work', { days: 7 })` | M4        |
+| Get todo items      | `await ha.getTodoItems('todo.shopping')`                   | M4        |
 
 ### Script Utilities
 
-| Block | Generated code | Milestone |
-|---|---|---|
-| Log (debug) | `ha.debug('message')` | M2 |
-| Log (info) | `ha.log('message')` | M2 |
-| Log (warn) | `ha.warn('message')` | M2 |
-| Log (error) | `ha.error('message')` | M2 |
-| Stop script | `ha.stop('reason')` | M2 |
-| Restart script | `ha.restart('reason')` | M4 |
-| On stop | `ha.onStop(async () => { ... })` | M4 |
-| On error | `ha.onError(async err => { ... })` | M4 |
-| Named action | `ha.action('my_action', async () => { ... })` | M4 |
-| Get script header | `ha.getHeader('area', 'default')` | M4 |
-| Localize string | `ha.localize({ en: 'Hello', de: 'Hallo' })` | M4 |
+| Block             | Generated code                                | Milestone |
+| ----------------- | --------------------------------------------- | --------- |
+| Log (debug)       | `ha.debug('message')`                         | M2        |
+| Log (info)        | `ha.log('message')`                           | M2        |
+| Log (warn)        | `ha.warn('message')`                          | M2        |
+| Log (error)       | `ha.error('message')`                         | M2        |
+| Stop script       | `ha.stop('reason')`                           | M2        |
+| Restart script    | `ha.restart('reason')`                        | M4        |
+| On stop           | `ha.onStop(async () => { ... })`              | M4        |
+| On error          | `ha.onError(async err => { ... })`            | M4        |
+| Named action      | `ha.action('my_action', async () => { ... })` | M4        |
+| Get script header | `ha.getHeader('area', 'default')`             | M4        |
+| Localize string   | `ha.localize({ en: 'Hello', de: 'Hallo' })`   | M4        |
 
 ### Standard (Blockly built-in)
 
@@ -301,16 +308,16 @@ Dropdowns use Blockly's `FieldDropdown` with dynamic option callbacks.
 
 ## Permissions
 
-`@permission` (network, webhook, exec, fs:read, fs:write) is enforced at runtime — `worker-wrapper.js` blocks `ha.http.*`/`fetch` without `network`, `ha.onWebhook()` without `webhook`, etc. It's not just a UI warning. For `.js`/`.ts` the user declares it by hand-editing the JSDoc `@permission` tag; `.blocks` has no editable raw-source surface for that (Show Code is read-only, generated *from* the blocks, not editable back into them).
+`@permission` (network, webhook, exec, fs:read, fs:write) is enforced at runtime — `worker-wrapper.js` blocks `ha.http.*`/`fetch` without `network`, `ha.onWebhook()` without `webhook`, etc. It's not just a UI warning. For `.js`/`.ts` the user declares it by hand-editing the JSDoc `@permission` tag; `.blocks` has no editable raw-source surface for that (Show Code is read-only, generated _from_ the blocks, not editable back into them).
 
 Instead of a manual declaration step, `BlocklyCompiler` derives permissions automatically from a static block-type → permission map and writes the result into `jsa.permission` on every compile:
 
-| Block type | Permission |
-|---|---|
-| `ha_http_get` / `ha_http_post` | `network` |
-| `ha_on_webhook` | `webhook` |
+| Block type                     | Permission |
+| ------------------------------ | ---------- |
+| `ha_http_get` / `ha_http_post` | `network`  |
+| `ha_on_webhook`                | `webhook`  |
 
-This is safe specifically *because* it's Blockly: every capability-using construct is one of our own known block types, so "declared" can always be computed exactly from "used" — unlike free-form JS/TS, there's no way to reach a capability through an untracked code path. As a result `CapabilityAnalyzer`'s declared/undeclared/unused diff is trivially satisfied for `.blocks` scripts and needs no special-casing.
+This is safe specifically _because_ it's Blockly: every capability-using construct is one of our own known block types, so "declared" can always be computed exactly from "used" — unlike free-form JS/TS, there's no way to reach a capability through an untracked code path. As a result `CapabilityAnalyzer`'s declared/undeclared/unused diff is trivially satisfied for `.blocks` scripts and needs no special-casing.
 
 `@card` is not supported for `.blocks` — it requires hand-written companion card JS unrelated to automation logic, same reasoning as the `npm`/`include` exclusions below. Scripts needing a card use "Convert to JavaScript".
 
@@ -349,6 +356,7 @@ Verified against the installed package: Blockly 11's root entry point (`require(
 Guiding principle: Blockly is for **beginners composing straightforward automations**. Anyone who needs something more complex should write JavaScript/TypeScript directly — the "Convert to JavaScript" escape hatch (below) exists specifically so that's never a dead end, just a natural next step. This is why the remaining M3–M5 work below was deliberately narrowed rather than building out the full API surface as blocks.
 
 **In scope, must have:**
+
 - Wait blocks (`ha.waitFor()`, with/without timeout) — core control flow, needed even in simple automations
 - Area/Label blocks — "everything in the living room" is one of the single most common beginner requests; dropdown-driven, no regex
 - "Show Code" panel — read-only view of the compiled JS; builds trust and is the on-ramp to "Convert to JavaScript"
@@ -356,12 +364,14 @@ Guiding principle: Blockly is for **beginners composing straightforward automati
 - `BlocklyCompiler` permission-map (`network`/`webhook` → `jsa.permission`) — not a user-facing block, but required infrastructure the moment any network/webhook block ships, or the capability/permission system silently drifts out of sync
 
 **In scope, should have:**
+
 - Webhook block (`ha.onWebhook()`, default auth only — the extended options were already out of scope, see below)
 - Calendar/Todo blocks
 - A couple of History blocks (`timeSince`, `trend` — not the full six `ha.history` helpers)
 - Block-level error visualization (highlights the block that threw) — valuable, but flagged as the one item here with real technical risk (needs the compiler to emit position metadata); slips first if time runs short
 
 **In scope, nice to have (only this one kept):**
+
 - Ask block (`ha.ask()` with action buttons)
 
 **Explicitly cut — see "Out of Scope" below for the reasoning on each:** Floor blocks, Bulk ops (`ha.select(pattern)`), Event bus blocks, `ha.onError()`, `ha.localize()`, `ha.restart()` block, `ha.getHeader()` block, HTTP blocks, `ha.action()`.
@@ -371,6 +381,7 @@ Guiding principle: Blockly is for **beginners composing straightforward automati
 This branch is a **separate git worktree** (`C:\dev\ha-js_automations_addon-blockly`) from the main working directory (`C:\dev\ha-js_automations_addon`, currently on `feature/lint-prettier-ci-foundation` — the LIT/TS frontend migration). As of 2026-08-07, `feature/blockly-integration` is **62 commits behind `main`** (only 10 of its own ahead of the merge-base `631d75d`) and the drift is real, not cosmetic: `main` has since gone through the entire LIT migration, and `script-list.js` — a file this branch still modifies — **no longer exists on `main`** (replaced by `<app-sidebar>`/`<script-row>`/`<script-group>`). The longer this branch sits before merging, the worse that gets.
 
 Agreed order:
+
 1. Finish the scoped Blockly work above, here, on `feature/blockly-integration`.
 2. Merge `main` into `feature/blockly-integration` — don't defer this further once the scoped work above is done.
 3. Merge `feature/blockly-integration` into `main`.
@@ -381,6 +392,7 @@ Agreed order:
 ## Milestones
 
 ### M1 — Foundation
+
 **Goal**: Full pipeline from `.blocks` file to running script. No custom blocks — uses Blockly's built-in blocks only to prove the round-trip works.
 
 Deliverable: Creating, saving, enabling, and deleting a `.blocks` file works end-to-end.
@@ -400,11 +412,12 @@ Deliverable: Creating, saving, enabling, and deleting a `.blocks` file works end
 - [x] i18n: `wizard_option_blockly`
 
 ### M2 — Core Block Library
+
 **Goal**: Enough blocks to build 80% of typical automations visually.
 
 Deliverable: A real automation (state change → service call → notification) can be built entirely in the Blockly editor.
 
-**Architecture correction made while implementing step 1** (trigger → log → call, the priority order from "Implementation Approach" below): the original plan had `core/blockly-blocks-shared.js` reused in the browser via ES `import`, plus a *separate* `public/js/blockly-generator.js` for the browser side. This project has no frontend bundler (Monaco/socket.io/i18next are all loaded as plain CDN `<script>` tags, no ESM) — `import` doesn't work here, and Node's `core/` directory isn't web-served anyway. Fix: both `blockly-blocks-shared.js` (generators) and `blockly-blocks.js` (block shape definitions) physically live under `public/js/`, wrapped in a small UMD shim (`module.exports` if present, else a `window` global). Node's `blockly-compiler.js` reaches across the directory boundary with a relative `require('../public/js/...')`, the browser loads the identical file via `<script src="js/...">`. One file, two runtimes, no duplication, no `blockly-generator.js`.
+**Architecture correction made while implementing step 1** (trigger → log → call, the priority order from "Implementation Approach" below): the original plan had `core/blockly-blocks-shared.js` reused in the browser via ES `import`, plus a _separate_ `public/js/blockly-generator.js` for the browser side. This project has no frontend bundler (Monaco/socket.io/i18next are all loaded as plain CDN `<script>` tags, no ESM) — `import` doesn't work here, and Node's `core/` directory isn't web-served anyway. Fix: both `blockly-blocks-shared.js` (generators) and `blockly-blocks.js` (block shape definitions) physically live under `public/js/`, wrapped in a small UMD shim (`module.exports` if present, else a `window` global). Node's `blockly-compiler.js` reaches across the directory boundary with a relative `require('../public/js/...')`, the browser loads the identical file via `<script src="js/...">`. One file, two runtimes, no duplication, no `blockly-generator.js`.
 
 - [x] `public/js/blockly-editor.js` — lazy `Blockly.inject()`, load/save workspace state, dirty-change hook (`onBlocklyWorkspaceChanged`), `ResizeObserver` for `Blockly.svgResize()`
 - [x] `public/js/blockly-blocks.js` — UMD, JSON shape definitions for `ha_trigger_on` / `ha_call_service` / `ha_log` only so far (the M2 blocks table's full list is still open — see below)
@@ -417,7 +430,7 @@ Deliverable: A real automation (state change → service call → notification) 
   - **Combobox, not a plain dropdown (2026-07-07)** — a click-to-scroll menu doesn't hold up with a large entity count (installations with 1000+ entities were the concern raised). Rebuilt on `Blockly.FieldTextInput` instead of `Blockly.FieldDropdown`: `widgetCreate_` calls `super.widgetCreate_()` to get Blockly's normal editor `<input>` unchanged, then attaches a filter-as-you-type suggestion list.
   - **First attempt (native `<datalist>`) broke visually — verified live in the browser, not assumed**: the suggestion popup rendered offset from the field, with leftover overlapping text after picking a value. Root cause: Blockly pans/zooms its workspace via a CSS `transform` on an SVG ancestor, and a `transform` anywhere in an element's ancestor chain changes the containing block for natively-positioned popups (`<select>`/`<datalist>`, `position: fixed`) to that ancestor instead of the viewport — a well-known browser quirk that no CSS on the popup itself can fix.
   - **Fix**: a plain `<div>` suggestion list appended directly to `document.body` (not inside the transformed workspace), positioned every render via `input.getBoundingClientRect()` math instead of relying on native popup positioning — the same technique floating-UI libraries (Popper, Floating UI) use to render over transformed/canvas containers. Filters by substring on the input's `input` event, capped at 50 matches (cheap to filter, keeps the list scrollable rather than dumping 1000+ rows into the DOM). Selecting an item sets `input.value` and dispatches a synthetic `input` event so Blockly's own value-commit logic runs unchanged — `mousedown` (not `click`) with `preventDefault()` so selecting an item doesn't blur the field first. `widgetDispose_` removes the list element when the editor closes.
-  - This turned out to also be the *safer* choice than `FieldDropdown`, not just better UX: an earlier `FieldDropdown`-based version needed a custom `doClassValidation_`/`getText_` workaround because `FieldDropdown` silently discards a saved value that isn't in its current menu (verified against `blockly@11.2.2`, not assumed) and its constructor throws on an empty menu array. `FieldTextInput` has neither problem — its default validation already accepts any string, and an empty suggestion list (no live data yet, e.g. in Node) is simply an unfiltered free-text input, no placeholder-value workaround needed.
+  - This turned out to also be the _safer_ choice than `FieldDropdown`, not just better UX: an earlier `FieldDropdown`-based version needed a custom `doClassValidation_`/`getText_` workaround because `FieldDropdown` silently discards a saved value that isn't in its current menu (verified against `blockly@11.2.2`, not assumed) and its constructor throws on an empty menu array. `FieldTextInput` has neither problem — its default validation already accepts any string, and an empty suggestion list (no live data yet, e.g. in Node) is simply an unfiltered free-text input, no placeholder-value workaround needed.
   - Non-breaking for already-saved `.blocks` files — same-shape field swap (`field_input`/former `field_entity_dropdown` → combobox, all plain strings), no re-plugging needed unlike the earlier `input_value` conversion.
 - [x] i18n: category names and block labels (2026-07-10) — translated as a plain string substitution in `blockly-editor.js` (`localizeBlockDefinitions()` for `message0`/`message1`/`message2`/`message3`/`tooltip`, plus `ha_schedule_interval`'s UNIT dropdown labels; a small map in `ensureBlocklyReady()` for the 6 toolbox category names), not via Blockly's own `%{BKY_...}` message-reference resolution — that path is undocumented for `tooltip` and toolbox category `name`, verified only for `message0`-style block text, so a controlled substitution sidesteps relying on unverified Blockly-internal behavior. Applied once at editor-init time since a UI language change already triggers a full page reload (`i18n.js`), not a hot-swap. Logic (if/else), Text, and Math categories keep Blockly's own built-in English names — Blockly core has no German message pack loaded (`Blockly.setLocale` not called), out of scope here since the concept doc's i18n key list never included `blockly_category_logic`/`_text`/`_math`.
 - [x] `ha_trigger_on_state` (filtered trigger), `ha_get_state` (value block — plugs into other blocks' sockets, e.g. Logic/Text), `ha_wait` (`sleep()`, exposed as **seconds** not milliseconds — beginner-friendlier unit, generator multiplies by 1000), `ha_notify`. Target audience is non-programmers (see Overview) — went with two separate, self-explanatory trigger blocks ("when X changes" / "when X changes to Y") instead of one block with an optional "leave blank for any state" field, since an implicit blank-means-something convention is a worse fit for that audience than two clearly-labeled blocks
@@ -427,15 +440,15 @@ Deliverable: A real automation (state change → service call → notification) 
 - [x] `ha_register`/`ha_update` (M4-scoped in the original table, pulled forward). `ha.register()`'s config object has many optional fields (unit, device_class, area, labels, ...) — the block only exposes `name`/`icon` for now, same "start minimal, extend via mutator later" approach as `ha_get_state`. Both `ha.register()`/`ha.update()` are synchronous (`void`, verified in `ha-api.d.ts`) — the original Block Library table's `await ha.register(...)`/no-`await` inconsistency was wrong, generators emit neither with `await`
 - [x] Mutators for `ha_register`/`ha_update` (2026-07-07) — the "extend via mutator later" from above, now built. Two different mutator shapes, since the extra data is shaped differently:
   - **`ha_update`**: reuses `ha_call_service`'s existing data mutator as-is — no new mutator code. `ha.update()`'s `attributes` parameter is exactly the same shape as `ha.call()`'s service data (an open-ended, user-named key/value bag), so the same mixin/container/item blocks now serve both. Renamed for clarity since it's no longer call_service-specific: `ha_call_service_data_mutator` → `ha_extra_data_mutator` (+ its container/item block types). Pure rename, verified safe — a `.blocks` file's serialized `extraState` only stores `itemCount`/`names`, never the mutator's own name, confirmed by recompiling the real `scripts/blockly.blocks` (already had 2 mutator-added fields on its `ha_call_service` block) and getting byte-identical output before/after the rename.
-  - **`ha_register`**: a *different*, simpler mutator (`ha_register_options_mutator`) — a fixed checklist of known optional config keys (unit, device class, state class, area, labels, min/max/step, enabled by default, expire after), not a free-form user-named list. Ticking a box in the popup adds/removes exactly one named input; no drag/reorder/reconnect logic needed, so no `saveConnections` hook (verified it's only invoked if the block defines it — an optional hook, per the compiled Blockly bundle). This is a curated subset of `ha.register()`'s ~20 optional keys, not all of them — `entity_category`, `mode`, `suggested_display_precision`, `options` (select entities), and `device` stay deferred, same "start minimal" precedent as the rest of M2; can be added the same way later if needed.
+  - **`ha_register`**: a _different_, simpler mutator (`ha_register_options_mutator`) — a fixed checklist of known optional config keys (unit, device class, state class, area, labels, min/max/step, enabled by default, expire after), not a free-form user-named list. Ticking a box in the popup adds/removes exactly one named input; no drag/reorder/reconnect logic needed, so no `saveConnections` hook (verified it's only invoked if the block defines it — an optional hook, per the compiled Blockly bundle). This is a curated subset of `ha.register()`'s ~20 optional keys, not all of them — `entity_category`, `mode`, `suggested_display_precision`, `options` (select entities), and `device` stay deferred, same "start minimal" precedent as the rest of M2; can be added the same way later if needed.
   - Verified in Node against the real compile pipeline (not just unit-level): built both blocks programmatically with several options/attributes set, generated code, then round-tripped through a full `Blockly.serialization.workspaces.save()`/`load()` cycle and regenerated — identical output both times, confirming `saveExtraState`/`loadExtraState`/`decompose`/`compose` all survive a save/reload, not just first-time creation.
 - [ ] Skipped by request: `ha.entity().service()` (redundant with `ha_call_service` — same underlying call, just a different JS syntax; not worth a second block), `ha.getAttr()`/`ha.entityExists()` (deprioritized for now), debounced trigger
-- [x] `schedule()` — 3 trigger blocks instead of hand-built cron math: `ha_schedule_interval` ("every N minutes/hours"), `ha_schedule_daily` ("every day at HH:MM"), `ha_schedule_cron` (raw text — cron *or* `schedule()`'s human-readable shorthand, both pass through unchanged; power users can paste output from an online cron generator). Discovered `schedule()` already accepts shorthand strings natively (`_parseCronExpression()` in `worker-wrapper.js`) — generators produce shorthand text (`"every 15 minutes"`, `"every day at 7:05"`) rather than raw cron math, verified against the actual regexes there (e.g. daily requires a zero-padded 2-digit minute, hour can be 1–2 digits unpadded)
+- [x] `schedule()` — 3 trigger blocks instead of hand-built cron math: `ha_schedule_interval` ("every N minutes/hours"), `ha_schedule_daily` ("every day at HH:MM"), `ha_schedule_cron` (raw text — cron _or_ `schedule()`'s human-readable shorthand, both pass through unchanged; power users can paste output from an online cron generator). Discovered `schedule()` already accepts shorthand strings natively (`_parseCronExpression()` in `worker-wrapper.js`) — generators produce shorthand text (`"every 15 minutes"`, `"every day at 7:05"`) rather than raw cron math, verified against the actual regexes there (e.g. daily requires a zero-padded 2-digit minute, hour can be 1–2 digits unpadded)
 - [x] `ha_notify` gained `title`/`target` (both optional `input_value` sockets, no shadow — an empty socket visually signals "optional", unlike a blank text field) and the `PERSISTENT` checkbox (`{ persistent: true }` → routes through HA's own notification bell instead of a companion-app push, since the dev environment here has no companion app configured to test against). `ha.register()`/`ha.update()` confirmed synchronous (`void` in `ha-api.d.ts`) — no `await` in the generator, unlike the original Block Library table's `await ha.register(...)` example
 - [x] Pre-compile "no trigger block" warning (2026-07-10) — `tab-manager.js`'s `saveActiveTab()`; skipped when the script is `@expose`d (switch/button), since toggling it in HA calls the script directly rather than needing a trigger block. User-verified live in the browser.
-- [x] `ha_entity` value block (2026-07-05) — reusable, pluggable carrier for an entity ID, superseding the earlier "mutator on `ha_get_state`" idea from the user's fluent-API observation (`ha.entity(id).getAttribute()`/`.turn_on()` already exist). Deliberately generates a bare `JSON.stringify(entityId)` string, **not** `ha.entity(id)` — the fluent handle's `.state` getter returns the raw unconverted string, which would reopen the on/off-is-truthy footgun `ha.getStateValue()` was chosen to avoid. Also deliberately *not* building fluent action blocks (`ha.entity(id).turn_on()`) — same "redundant with `ha_call_service`" reasoning as before, this is only for the getter side. New `ha_get_attribute` block (`ha.getAttr(entity, name)`) plugs into the same kind of socket as `ha_get_state`.
-- [x] Rolled the same `field_input` → `input_value` (`ha_entity` shadow) conversion out to `ha_trigger_on`/`ha_trigger_on_state`/`ha_call_service`'s `ENTITY_ID` — so the whole library is uniformly ready for a future live-dropdown entity picker, not just the getter blocks. Deliberately **not** rolled out to `ha_register` (its `ENTITY_ID` names a *new* entity that doesn't exist yet — a "pick from existing entities" dropdown would make no sense there) or `ha_update` (kept out of scope for now, real difference is marginal). **Breaking for already-saved `.blocks` files** using any of these four blocks — verified (Node) the failure mode is the same benign one each time: Blockly logs "Ignoring non-existant field ENTITY_ID", the entity socket comes up empty rather than crashing, but a real saved script needs the entity re-plugged in by hand once. Also re-verified the `ha_call_service` mutator (extra data fields) still works correctly now that `ENTITY` is a socket instead of the field it used to append after.
-- [x] `ha_call_service` layout: `inputsInline: true` so "call service X for [entity]" reads as one row instead of looking optional — but that setting applies block-wide, so it also started pulling the mutator's dynamically-added `brightness`/`color_temp` fields onto that same row. Fix: each mutator field is preceded by `this.appendEndRowInput(...)` in `updateShape_`, which forces a fresh row for *that* input specifically regardless of the block's `inputsInline` setting. Verified in the compiled Blockly bundle's renderer (`shouldStartNewRow_()`) that `EndRowInput` always breaks while a plain value input only breaks when `inputsInline` is false, rather than assuming from memory — this is a real, if under-documented, Blockly 11 API (`Block.prototype.appendEndRowInput`).
+- [x] `ha_entity` value block (2026-07-05) — reusable, pluggable carrier for an entity ID, superseding the earlier "mutator on `ha_get_state`" idea from the user's fluent-API observation (`ha.entity(id).getAttribute()`/`.turn_on()` already exist). Deliberately generates a bare `JSON.stringify(entityId)` string, **not** `ha.entity(id)` — the fluent handle's `.state` getter returns the raw unconverted string, which would reopen the on/off-is-truthy footgun `ha.getStateValue()` was chosen to avoid. Also deliberately _not_ building fluent action blocks (`ha.entity(id).turn_on()`) — same "redundant with `ha_call_service`" reasoning as before, this is only for the getter side. New `ha_get_attribute` block (`ha.getAttr(entity, name)`) plugs into the same kind of socket as `ha_get_state`.
+- [x] Rolled the same `field_input` → `input_value` (`ha_entity` shadow) conversion out to `ha_trigger_on`/`ha_trigger_on_state`/`ha_call_service`'s `ENTITY_ID` — so the whole library is uniformly ready for a future live-dropdown entity picker, not just the getter blocks. Deliberately **not** rolled out to `ha_register` (its `ENTITY_ID` names a _new_ entity that doesn't exist yet — a "pick from existing entities" dropdown would make no sense there) or `ha_update` (kept out of scope for now, real difference is marginal). **Breaking for already-saved `.blocks` files** using any of these four blocks — verified (Node) the failure mode is the same benign one each time: Blockly logs "Ignoring non-existant field ENTITY_ID", the entity socket comes up empty rather than crashing, but a real saved script needs the entity re-plugged in by hand once. Also re-verified the `ha_call_service` mutator (extra data fields) still works correctly now that `ENTITY` is a socket instead of the field it used to append after.
+- [x] `ha_call_service` layout: `inputsInline: true` so "call service X for [entity]" reads as one row instead of looking optional — but that setting applies block-wide, so it also started pulling the mutator's dynamically-added `brightness`/`color_temp` fields onto that same row. Fix: each mutator field is preceded by `this.appendEndRowInput(...)` in `updateShape_`, which forces a fresh row for _that_ input specifically regardless of the block's `inputsInline` setting. Verified in the compiled Blockly bundle's renderer (`shouldStartNewRow_()`) that `EndRowInput` always breaks while a plain value input only breaks when `inputsInline` is false, rather than assuming from memory — this is a real, if under-documented, Blockly 11 API (`Block.prototype.appendEndRowInput`).
 - [x] Verified live in the running app: trigger → call service → log built by hand in the browser, saved, and actually fired on a real state change (`switch.shelly_plug_s`), logging twice as expected. Found and fixed along the way: Monaco's AMD loader hijacking Blockly's UMD registration (`window.Blockly` never set), no dark theme (default Blockly theme unusable next to the rest of the dark-only UI), Ctrl+S only bound to Monaco's focus context (Blockly tabs have no Monaco focus target), `Blockly.Events.isUiEvent` called as a function instead of read as the per-event boolean it actually is (silently broke all dirty-tracking), and a double-nested `blocks` key when serializing the workspace for save (`workspaces.save()` returns `{blocks: {languageVersion, blocks: [...]}}`, not the inner object directly — mirrors the M1-era `workspaces.load()` nesting bug, same mistake on the write side this time)
 
 **M2 blocks covered**: `ha.on()` (3 variants), `schedule()`, `ha.call()`, `ha.entity().service()`, `ha.notify()`, `ha.getState()`, `ha.getStateValue()`, `ha.getAttr()`, `ha.entityExists()`, `sleep()`, `ha.log/debug/warn/error()`, `ha.stop()`
@@ -459,33 +472,33 @@ New file `public/js/blockly-mutators.js` (UMD, same cross-environment reasoning 
 
 - Renaming a data field happens directly on the main block (each `ADD<i>` input has a real editable `FieldTextInput` for its name) — the popup is only for adding/removing/reordering how many slots exist, not renaming them. `saveConnections()` snapshots each current name onto the popup's item block as a plain `.name_` property (not a serialized field) so it survives reordering without needing an editable field inside the popup too.
 - **Verified (Node, this environment)**: `saveExtraState`/`loadExtraState`/`updateShape_` correctly reconstruct a saved block's dynamic `ADD0`/`ADD1`/... inputs from `{itemCount, names}`, deserialization correctly plugs in whatever's connected to each (tested a literal number and a nested `ha_get_state` block), the generator emits correct `ha.call(service, {entity_id, "brightness": 128, "color_temp": ha.getStateValue(...)})`, and old saved workspaces with no `extraState` at all still compile unchanged (backward compatible).
-- **Verified live in the browser**: gear icon opens the popup; dragging "field" blocks in from the popup's flyout adds `ADD<i>` inputs on the main block; deleting one only disconnects its own slot; inserting a new item *between* two existing ones (not just at the end) keeps `brightness`/`color_temp` and their connected values (`128`, `state of ...`) correctly attached after reordering.
+- **Verified live in the browser**: gear icon opens the popup; dragging "field" blocks in from the popup's flyout adds `ADD<i>` inputs on the main block; deleting one only disconnects its own slot; inserting a new item _between_ two existing ones (not just at the end) keeps `brightness`/`color_temp` and their connected values (`128`, `state of ...`) correctly attached after reordering.
 - Two real bugs found and fixed during that testing, both in `compose()`'s rename loop:
-  1. First cut skipped `setValue()` when a new item had no name yet (to avoid stomping the "field_name" placeholder with `''`) — but skipping-when-empty meant a stale name from *before* the edit could survive into a slot it no longer belonged to whenever an item was inserted/reordered anywhere but the tail, since `updateShape_()` only appends/removes inputs at the end and never resets one in the middle. Fix: always call `setValue()` for every index on every `compose()`, falling back to `'field_name'` for an empty name rather than skipping — makes each index unconditionally reflect the *current* popup order instead of trusting leftovers.
+  1. First cut skipped `setValue()` when a new item had no name yet (to avoid stomping the "field_name" placeholder with `''`) — but skipping-when-empty meant a stale name from _before_ the edit could survive into a slot it no longer belonged to whenever an item was inserted/reordered anywhere but the tail, since `updateShape_()` only appends/removes inputs at the end and never resets one in the middle. Fix: always call `setValue()` for every index on every `compose()`, falling back to `'field_name'` for an empty name rather than skipping — makes each index unconditionally reflect the _current_ popup order instead of trusting leftovers.
 
 #### Categories & colors — decided 2026-07-05
 
-- **Category list**: reuse the Block Library table sections above as toolbox categories directly — Triggers, Actions, State, Wait/Async, Store, Areas & Labels, Register/Update, Calendar & Todo, Script Utilities — plus Blockly's standard categories (Logic, Loops, Variables, Math, Text, Lists, Color). Deliberately *not* a 1:1 copy of ioBroker's category list (System, Sendto, Datum und Zeit, Konvertierung, Timeouts, Objekt, ...) — those are organized around generic JS/adapter concepts because ioBroker has no equivalent to our structured `ha.*` API; our table sections are already the natural cut for this API.
+- **Category list**: reuse the Block Library table sections above as toolbox categories directly — Triggers, Actions, State, Wait/Async, Store, Areas & Labels, Register/Update, Calendar & Todo, Script Utilities — plus Blockly's standard categories (Logic, Loops, Variables, Math, Text, Lists, Color). Deliberately _not_ a 1:1 copy of ioBroker's category list (System, Sendto, Datum und Zeit, Konvertierung, Timeouts, Objekt, ...) — those are organized around generic JS/adapter concepts because ioBroker has no equivalent to our structured `ha.*` API; our table sections are already the natural cut for this API.
 - **Naming**: English category names, matching the existing English block text (`when ... changes`, `call service`, `log`) — translated via i18n like the rest of the UI, not hardcoded German.
 - **Colors**: hue-based palette (Blockly hue 0–360), grouping conceptually related categories into adjacent hues rather than copying ioBroker's exact values:
 
-  | Category | Hue | Rationale |
-  |---|---|---|
-  | Triggers | 210 (blue) | "when something happens" |
-  | Actions | 20 (red-orange) | "do something" — deliberate contrast to Triggers |
-  | State | 45 (yellow/amber) | "read something" |
-  | Register/Update | 65 (yellow-green) | adjacent to State, also data-flavored |
-  | Areas & Labels | 180 (teal) | "organize/group" |
-  | Calendar & Todo | 165 (teal-green) | adjacent to Areas, both structured HA data |
-  | Store | 260 (indigo) | "remember something" |
-  | Wait/Async | 300 (purple) | adjacent to Store, both control-flow |
-  | Script Utilities | 0 (red) | logs/lifecycle, deliberately standalone |
+  | Category         | Hue               | Rationale                                        |
+  | ---------------- | ----------------- | ------------------------------------------------ |
+  | Triggers         | 210 (blue)        | "when something happens"                         |
+  | Actions          | 20 (red-orange)   | "do something" — deliberate contrast to Triggers |
+  | State            | 45 (yellow/amber) | "read something"                                 |
+  | Register/Update  | 65 (yellow-green) | adjacent to State, also data-flavored            |
+  | Areas & Labels   | 180 (teal)        | "organize/group"                                 |
+  | Calendar & Todo  | 165 (teal-green)  | adjacent to Areas, both structured HA data       |
+  | Store            | 260 (indigo)      | "remember something"                             |
+  | Wait/Async       | 300 (purple)      | adjacent to Store, both control-flow             |
+  | Script Utilities | 0 (red)           | logs/lifecycle, deliberately standalone          |
 
   `blockly-toolbox.json` updated: Triggers/Actions unchanged (210/20 already matched), Script → 0 (was a placeholder 120/green).
 
 - **Blockly's own standard categories were missing entirely (found 2026-07-10)**: only Logic/Text/Math had been added to the toolbox; Loops, Lists, Colour, and Variables — despite being listed above as "plus Blockly's standard categories" — were never wired in. Added Loops/Lists/Variables using Blockly's own `%{BKY_LOOPS_HUE}`/`%{BKY_LISTS_HUE}`/`%{BKY_VARIABLES_HUE}` message-reference colours (same pattern as Logic/Text/Math) and Blockly's own English category names (not translated — no German Blockly message pack is loaded). Variables uses `"custom": "VARIABLE"` (Blockly's built-in dynamic flyout), not a static block list.
 - **Colour category added, then removed again — user-verified live (2026-07-10)**: `colour_picker`/`colour_random`/`colour_rgb`/`colour_blend` threw `Uncaught TypeError: Invalid block definition for type: colour_picker` in the browser. Root cause confirmed against the installed package, not just the console error: none of the `colour_*` block types appear anywhere in `node_modules/blockly`'s distributed files (`blockly.min.js`, `blockly_compressed.js`, `blocks_compressed.js`) — unlike `controls_repeat_ext`/`text_join`/`variables_get`/`logic_ternary`/`math_random_int`, which do. Blockly 11's npm/CDN bundle simply doesn't ship the colour blocks (they've moved out of core in recent Blockly versions, not re-added here). Reimplementing them from scratch (JSON block defs + generators, plus verifying `field_colour` itself is even available) was judged not worth it for a category with little relevance to HA automations — removed from `blockly-toolbox.json` rather than fixed. Loops/Lists/Variables were **not** re-verified live after this finding at the time — see below, Variables specifically turned out to have its own real bug.
-- **Variable names were silently discarded on every save (found + fixed 2026-07-10)**: while building a Node-side test script exercising the new Variables category, round-tripping a `counter` variable through the actual save→reload path (`Blockly.serialization.workspaces.save()` → write file → `workspaces.load()`) turned a `variables_get`/`variables_set` block's variable name into Blockly's generic fallback, `i`. Root cause: `workspaces.save()` returns `{ blocks: {...}, variables: [...] }` — a variable *block* only serializes its variable's **ID** into `blocks`; the human-readable name lives solely in the separate top-level `variables` array. `blockly-editor.js`'s `getBlocklyWorkspaceState()` returned only `saved.blocks`, silently dropping `saved.variables`, and `tab-manager.js`'s save path wrote only `{ jsa, blocks }` to the `.blocks` file — no `variables` key at all. On next load, `Blockly.serialization.workspaces.load()` finds an unrecognized variable ID, can't find a name for it, and invents one (`i`) while keeping the same ID — the block doesn't break outright, but every variable's displayed name is lost. Fixed by threading a `{ blocks, variables }` shape end to end: `getBlocklyWorkspaceState()`'s return value, `tab.blocksState` (`tab-manager.js`'s `openBlocklyTab`/`switchToTab`/`saveActiveTab`), the `loadBlocklyWorkspace()` calls in both `tab-manager.js` and `creation-wizard.js`'s "refresh after metadata edit" path, and the `.blocks` file format itself (`variables` is now a third top-level sibling key next to `jsa`/`blocks` — optional/backward-compatible, since `workspaces.load()` already tolerates a missing `variables` key). Verified in Node against the real save/load pipeline, not just reasoned about — reproduced the bug first (`counter` → `i`), then confirmed the fix (`counter` stays `counter`) with the exact code path each site now runs. Not yet verified live in the browser.
+- **Variable names were silently discarded on every save (found + fixed 2026-07-10)**: while building a Node-side test script exercising the new Variables category, round-tripping a `counter` variable through the actual save→reload path (`Blockly.serialization.workspaces.save()` → write file → `workspaces.load()`) turned a `variables_get`/`variables_set` block's variable name into Blockly's generic fallback, `i`. Root cause: `workspaces.save()` returns `{ blocks: {...}, variables: [...] }` — a variable _block_ only serializes its variable's **ID** into `blocks`; the human-readable name lives solely in the separate top-level `variables` array. `blockly-editor.js`'s `getBlocklyWorkspaceState()` returned only `saved.blocks`, silently dropping `saved.variables`, and `tab-manager.js`'s save path wrote only `{ jsa, blocks }` to the `.blocks` file — no `variables` key at all. On next load, `Blockly.serialization.workspaces.load()` finds an unrecognized variable ID, can't find a name for it, and invents one (`i`) while keeping the same ID — the block doesn't break outright, but every variable's displayed name is lost. Fixed by threading a `{ blocks, variables }` shape end to end: `getBlocklyWorkspaceState()`'s return value, `tab.blocksState` (`tab-manager.js`'s `openBlocklyTab`/`switchToTab`/`saveActiveTab`), the `loadBlocklyWorkspace()` calls in both `tab-manager.js` and `creation-wizard.js`'s "refresh after metadata edit" path, and the `.blocks` file format itself (`variables` is now a third top-level sibling key next to `jsa`/`blocks` — optional/backward-compatible, since `workspaces.load()` already tolerates a missing `variables` key). Verified in Node against the real save/load pipeline, not just reasoned about — reproduced the bug first (`counter` → `i`), then confirmed the fix (`counter` stays `counter`) with the exact code path each site now runs. Not yet verified live in the browser.
 
 Still open (implementation questions, not blocked on the above):
 
@@ -495,21 +508,22 @@ Still open (implementation questions, not blocked on the above):
 - ~~**Domain awareness**~~ — done (2026-07-10). `FieldEntityDropdown.inferDomainFromContext_()` (`blockly-fields.js`) walks up from the `ha_entity` block's output connection to its parent block; if that parent is `ha_call_service`, it reads the parent's own `SERVICE` field (e.g. `light.turn_on`) and filters the suggestion list to that domain (`light.*`), falling back to the unfiltered list if the filtered result is empty (cross-domain services like `homeassistant.turn_on`, or no service chosen yet). Only wired up for `ha_call_service` — the only block where both the domain hint and the entity picker live on the same parent; other ENTITY sockets (`ha_trigger_on`, `ha_get_state`, ...) have no such hint and always see the full list. Re-evaluated on every render (not cached), so editing `SERVICE` immediately changes what the entity picker suggests next time it's opened. Not yet verified live in the browser.
 
 ### M3 — Advanced Blocks
+
 **Goal**: Async flows, persistent state, MQTT, and event bus.
 
 Deliverable: Scripts with `waitFor`, persistent counters, and MQTT triggers are buildable.
 
 - [x] Wait blocks (2026-08-08): a single `ha_wait_for_state` block ("wait for [entity] to become [state]") covers both rows of the original table via a `USE_TIMEOUT` checkbox. Went through two iterations, both user-driven after live browser feedback:
   - **v1**: an unplugged `TIMEOUT` value socket signaled "optional" (same convention as `ha_notify`'s TITLE/TARGET) — replaced after live testing showed a dangling empty socket reads as "forgot to plug something in", not "optional" (see ioBroker comparison below).
-  - **v2**: `USE_TIMEOUT` checkbox + an always-present `TIMEOUT_MS` field, shown/hidden via `Field.setVisible()` (works headless in Node) driven by the checkbox's validator — the same checkbox+field-visibility idiom ioBroker's own Blockly library uses for optional parameters (gear-icon mutators there too, but for a single value a plain checkbox is enough). `USE_TIMEOUT`+`TIMEOUT_MS` merged onto one `message1` row (not separate `message1`/`message2`) so they render inline — `message0`/`message1`/etc. are always separate display lines in Blockly regardless of `inputsInline`, which only affects layout *within* one message row.
+  - **v2**: `USE_TIMEOUT` checkbox + an always-present `TIMEOUT_MS` field, shown/hidden via `Field.setVisible()` (works headless in Node) driven by the checkbox's validator — the same checkbox+field-visibility idiom ioBroker's own Blockly library uses for optional parameters (gear-icon mutators there too, but for a single value a plain checkbox is enough). `USE_TIMEOUT`+`TIMEOUT_MS` merged onto one `message1` row (not separate `message1`/`message2`) so they render inline — `message0`/`message1`/etc. are always separate display lines in Blockly regardless of `inputsInline`, which only affects layout _within_ one message row.
   - **v3 (2026-08-08, same day)**: on a timeout, `ha.waitFor()` rejects — previously that surfaced as a generic worker runtime error, which doesn't fit a beginner-facing block. Added `SUCCESS`/`TIMEOUT_BRANCH` statement inputs, added/removed by a real mutator (`ha_wait_timeout_mutator` in `blockly-mutators.js`) when `USE_TIMEOUT` is toggled, generating a real `try { ...await ha.waitFor(...); <SUCCESS>... } catch { <TIMEOUT_BRANCH>... }` — not a new convention, mirrors the hand-written pattern already in `examples/sequential_logic.js` (bare `catch {`, no binding, matching that example). No timeout = no branches, stays the simple single-statement form.
     - **Two Blockly quirks found and verified in Node, not assumed**: (1) `Extensions.registerMixin()` cannot introduce `saveExtraState`/`loadExtraState` on a block — Blockly throws "mutation properties changed when applying a non-mutator extension"; only the dedicated `"mutator"` JSON key + `Extensions.registerMutator()` is allowed to add them, even with no gear-icon popup (`registerMutator` tolerates missing `decompose`/`compose` — no precedent for that combination elsewhere in this file, every other mutator here has a popup). (2) `Input.setVisible()` (the obvious alternative to adding/removing the branch inputs) throws `c.stopTrackingAll is not a function` on a plain headless `Connection` — that connection-tracking machinery only exists on a browser `RenderedConnection`, unlike `Field.setVisible()` (used for `TIMEOUT_MS`), which works headless. That's why branches are added/removed rather than shown/hidden.
     - **Backward-compat note**: a `.blocks` file saved under v2 (checkbox checked, no branches) still compiles under v3 (verified in Node) — but the behavior changes: it now gets empty `SUCCESS`/`TIMEOUT_BRANCH` stacks, so a timeout is silently swallowed instead of surfacing as a runtime error. Not a concern for this project's own scripts (nothing shipped yet depends on the old throwing behavior), but worth knowing if a real user script existed.
   - Verified in Node against the real `BlocklyCompiler` pipeline (all three variants — no timeout, with timeout, with both branches populated — plus save/load round-trips preserving branch contents) and `node --check` on the resulting dist files; not yet fully verified live in the browser (the mutator's shape-changing has been visually confirmed layout-wise by the user, but the actual timeout/success branch execution hasn't been triggered live yet).
 - [x] Ask block (2026-08-08): `ha_ask` — message + optional title/target (same convention as `ha_notify`) + optional custom timeout (checkbox+field, same convention as `ha_wait_for_state`) + a free-form list of action buttons via a new `ha_ask_actions_mutator` (gear icon). Each button contributes a whole "do" statement branch, not just a value like `ha_extra_data_mutator`'s fields, so `saveConnections`/`compose` needed adapting to snapshot/restore a statement connection instead of a value connection. Generator wraps everything in a bare `{ }` block (not a function) so `const answer` can't collide if two `ha_ask` blocks land in the same scope, then an `if (answer === 'X') {...} else if (...) {...} else { <no-answer> }` chain — not a new pattern, matches the `ha.ask()` JSDoc example in `ha-api.d.ts` exactly.
   - **Auto-derived action id (2026-08-08, user request)**: each button originally had two fields (an internal `action id` + the visible button text) — dropped to one. `ha.ask()`'s `action` string is never shown to the user, so the generator derives it from the button's title instead (`slugifyAskActionId()` in `blockly-blocks-shared.js`: uppercase, non-alphanumeric runs collapsed to `_`), with a numeric-suffix de-dup pass across a block's own buttons in case two share the same title (would otherwise make the second `else if` unreachable).
-  - **"if no answer" tied to the timeout checkbox (2026-08-08, user request)**: originally always present, on the reasoning that `ha.ask()` always has *some* timeout (API default 60000ms — there's no "wait forever" option like `ha_wait_for_state`). Changed to show/hide together with `USE_TIMEOUT` instead, for UI consistency with `ha_wait_for_state`'s own checkbox — the default 60s timeout still fires either way, unchecking just means "don't bother handling it specially," a user-experience call rather than a technical one.
-    - **Two real bugs found and fixed** while wiring this up, both verified via a full Node `BlocklyCompiler` round-trip, not assumed: (1) the button-count mutator's `updateShape_()` unconditionally removed-then-re-added the trailing `NO_ANSWER` input to keep it last, but `Block.prototype.removeInput()` disconnects its child rather than disposing it — without capturing and reconnecting that connection, whatever was plumbed into "if no answer" silently became an orphaned, free-floating top-level block, generated as a stray statement *outside* the `ha_ask` block entirely instead of inside its `else` branch. (2) the generator called `gen.statementToCode(block, 'NO_ANSWER')` unconditionally — throws `Input "NO_ANSWER" doesn't exist on "ha_ask"` the moment the input doesn't exist (unchecked case), unlike `valueToCode()`'s graceful `''` for an unplugged socket; fixed by checking `block.getInput('NO_ANSWER')` first.
+  - **"if no answer" tied to the timeout checkbox (2026-08-08, user request)**: originally always present, on the reasoning that `ha.ask()` always has _some_ timeout (API default 60000ms — there's no "wait forever" option like `ha_wait_for_state`). Changed to show/hide together with `USE_TIMEOUT` instead, for UI consistency with `ha_wait_for_state`'s own checkbox — the default 60s timeout still fires either way, unchecking just means "don't bother handling it specially," a user-experience call rather than a technical one.
+    - **Two real bugs found and fixed** while wiring this up, both verified via a full Node `BlocklyCompiler` round-trip, not assumed: (1) the button-count mutator's `updateShape_()` unconditionally removed-then-re-added the trailing `NO_ANSWER` input to keep it last, but `Block.prototype.removeInput()` disconnects its child rather than disposing it — without capturing and reconnecting that connection, whatever was plumbed into "if no answer" silently became an orphaned, free-floating top-level block, generated as a stray statement _outside_ the `ha_ask` block entirely instead of inside its `else` branch. (2) the generator called `gen.statementToCode(block, 'NO_ANSWER')` unconditionally — throws `Input "NO_ANSWER" doesn't exist on "ha_ask"` the moment the input doesn't exist (unchecked case), unlike `valueToCode()`'s graceful `''` for an unplugged socket; fixed by checking `block.getInput('NO_ANSWER')` first.
   - **Toolbox shadow-block placeholder text localized too (2026-08-08, user request)**: found while translating `ha_ask`'s "Question text" default — every other block's shadow placeholder ("Message text", "value", "message") had the exact same gap, never routed through i18n. Fixed generally: `localizeToolboxShadowTexts()` in `blockly-editor.js` recursively walks the fetched toolbox JSON, translating any `text` shadow block's `TEXT` field that matches a known `BLOCKLY_SHADOW_TEXT_KEYS` entry — not just ha_ask's one instance.
   - Verified in Node: shape building, a full save/load round-trip (2 buttons + no-answer branch, all field values and nested branch contents survive), generated code via the real `BlocklyCompiler` pipeline, `node --check` on both a trigger-nested case and a bare top-level case (confirms `wrapGeneratedCode()` correctly detects and wraps the latter's real top-level `await`), and both the checked and unchecked cases compiling cleanly in sequence (the exact scenario that surfaced bug #2 above). Not yet verified live in the browser (gear-icon popup interaction, like the other mutators, can only be tested there).
 - [x] Store blocks (2026-07-10): `ha_store_get` (value block, `ha.store.get(key)`), `ha_store_set` (`ha.store.set(key, value[, true])` — SECRET checkbox maps to the `isSecret` param), `ha_store_delete` (`ha.store.delete(key)`), `ha_store_on` (hat/trigger block, `ha.store.on(key, (newValue, oldValue) => {...})`, registered in `tab-manager.js`'s `BLOCKLY_TRIGGER_TYPES` — it's a legitimate top-level trigger, same as `ha.on()`). New "Store" toolbox category, hue 260 as already planned above. `ha.persistent()` deliberately **not** built — its ref-wrapper return shape (`{ value }` for primitives, direct proxy object for `GlobalStoreSchema` keys) doesn't map onto an atomic block/generator pair the way `ha.store.*` does; would need its own variable-binding mechanic, deferred. KEY is a plain `field_input` (not a value socket) on all four — store keys are typically fixed strings chosen by the author, consistent with e.g. `ha_get_attribute`'s `ATTR_NAME`. Verified in Node against the real compile pipeline (all four, including a save/load round-trip on `ha_store_set`'s SECRET checkbox); not yet verified live in the browser.
@@ -520,6 +534,7 @@ Deliverable: Scripts with `waitFor`, persistent counters, and MQTT triggers are 
 - ~~Event bus blocks: `ha.onEvent()`, `ha.fireEvent()`~~ — **out of scope** (2026-08-07): decoupled cross-script event-bus communication requires architectural thinking beyond "compose one automation," not a beginner concept.
 
 ### M4 — Extended API Blocks
+
 **Goal**: ~~Full API surface coverage for power users.~~ **Revised 2026-08-07: only the beginner-relevant subset — see "Final Scope" above.** Power users needing the rest use "Convert to JavaScript."
 
 Deliverable: Every `ha.*` API method has a corresponding block. — superseded, see above.
@@ -537,6 +552,7 @@ Deliverable: Every `ha.*` API method has a corresponding block. — superseded, 
 - [x] `BlocklyCompiler`: block-type → permission map (2026-08-08) — `BLOCK_PERMISSION_MAP` (currently just `{ ha_on_webhook: 'webhook' }` — no entry for `network` since HTTP blocks are cut entirely) derives the used set from `workspace.getAllBlocks()` on every compile and writes it into `jsa.permission`, but **only when it actually changed**: this write re-triggers `ScriptWatcher`'s own `.blocks`-change handler, which calls `compile()` again — writing unconditionally would loop forever, each write triggering another identical write. Guarded with a sorted-array comparison against the currently-stored value; verified in Node (a webhook script gets `["webhook"]` written in, a non-webhook script is left untouched — not even rewritten to an explicit `[]` — a second compile of the same file doesn't touch its mtime, and a stale/wrong hand-set permission gets corrected back to the derived value).
 
 ### M5 — UX Polish
+
 **Goal**: Production-quality editing experience.
 
 Deliverable: The Blockly editor feels native to the addon.
@@ -545,10 +561,10 @@ Deliverable: The Blockly editor feels native to the addon.
 - [x] Editor toolbar Blockly-aware branch — **done (2026-08-08)**: the Show Code toggle now occupies the `#toolbar-snippets` slot that was left empty since 2026-07-10.
 - [x] "Convert to JavaScript" — **redesigned during implementation (2026-08-08), user request**: not a warning-dialog + destructive one-way conversion as originally planned below, but a non-destructive "duplicate as JavaScript" checkbox in the existing Duplicate dialog (**must have — still satisfies the escape-hatch requirement, just without deleting the original**). See "UI Flow" above for the mechanism and why (reuses the existing create/duplicate plumbing instead of a bespoke conversion endpoint — a dedicated `/convert-to-js` server route was built, verified, then reverted in favor of this simpler approach before ever being wired into the UI).
 - [x] Block-level error visualization (2026-08-08) — the flagged-risky should-have item, done. Implemented via `javascriptGenerator.scrub_()`, Blockly's own per-block code-generation hook (called once per block in any statement chain, top-level or nested, with just that block's own code fragment — the default implementation appends the next chained block's code, preserved by delegating to it after wrapping): wraps every statement block's generated code in `try { ... } catch (__e) { if (!__e.blockId) __e.blockId = "<id>"; throw __e; }`. Applies uniformly to every block type without touching individual `forBlock` generators, and only on the Node-side `javascriptGenerator` instance `BlocklyCompiler` uses for the real dist output — the browser's separate CDN-loaded instance (Show Code) is untouched, so that panel stays free of try/catch noise. `if (!__e.blockId)` matters because an error from a deeply-nested block passes through several of these wrappers as it bubbles up — the innermost (most specific) id must win.
-  - **Full chain, threaded through 6 files**: `blockly-compiler.js` (tag) → `worker-wrapper.js` (`sendLog()`/`ha.error()` gained an optional `meta.blockId` param; every one of the ~10 catch sites around a script's own callbacks — `ha.on`, `ha.store.on`, `ha.mqtt.subscribe`, `ha.onWebhook`, `schedule`, `ha.onEvent`, `ha.action`, `onStop` — now passes `{ blockId: e.blockId }` through; the two process-level crash handlers, `uncaughtException`/`unhandledRejection`, also carry it — the latter is the *actual* arrival point for a bare triggerless `.blocks` script's error, since its unawaited async IIFE wrapper turns a thrown error into a rejection, not a caught exception) → `worker-manager.js` (`'log'` message handler adds `blockId`/`scriptId` to the emitted event) → `kernel.js` (`_onWorkerLog` passes them into `logManager.add()`) → `log-manager.js` (`add()` gained an optional 4th `meta` param, included on the stored/emitted entry) → `bridge.js` (already emitted the whole entry object as-is over the socket — no change needed) → `log-viewer.js` (`appendLog()` calls `window.highlightBlocklyError()` when a received entry carries one) → `blockly-editor.js` (new `highlightBlocklyError(scriptId, blockId, message)` — no-ops unless `scriptId` is the tab currently on screen; calls `block.setWarningText()` + `workspace.highlightBlock(id)` (found by grepping the compiled Blockly bundle for the real API — clears any previously-highlighted block itself) + `workspace.centerOnBlock(id)` to scroll it into view). `.js`/`.ts` scripts flow through the exact same widened path with `blockId` simply always absent — confirmed zero special-casing needed there.
-  - **Verified end-to-end in Node, not just per-file**: built a `.blocks` workspace with a block that throws inside a trigger, compiled it through the real `BlocklyCompiler`, executed the compiled output with a fake `ha` that throws, caught it the same way `worker-wrapper.js`'s real `ha.store.on` catch site does, fed that through the real `sendLog()`/`LogManager.add()` logic — confirmed the exact id of the block that threw survives the entire chain into the final stored log entry. Also re-verified the `scrub_()` wrapping itself doesn't change runtime behavior: a `break` inside a wrapped loop body (Blockly's own `controls_flow_statements` block, which *is* in this project's toolbox) still exits after the correct number of iterations, not looping forever.
+  - **Full chain, threaded through 6 files**: `blockly-compiler.js` (tag) → `worker-wrapper.js` (`sendLog()`/`ha.error()` gained an optional `meta.blockId` param; every one of the ~10 catch sites around a script's own callbacks — `ha.on`, `ha.store.on`, `ha.mqtt.subscribe`, `ha.onWebhook`, `schedule`, `ha.onEvent`, `ha.action`, `onStop` — now passes `{ blockId: e.blockId }` through; the two process-level crash handlers, `uncaughtException`/`unhandledRejection`, also carry it — the latter is the _actual_ arrival point for a bare triggerless `.blocks` script's error, since its unawaited async IIFE wrapper turns a thrown error into a rejection, not a caught exception) → `worker-manager.js` (`'log'` message handler adds `blockId`/`scriptId` to the emitted event) → `kernel.js` (`_onWorkerLog` passes them into `logManager.add()`) → `log-manager.js` (`add()` gained an optional 4th `meta` param, included on the stored/emitted entry) → `bridge.js` (already emitted the whole entry object as-is over the socket — no change needed) → `log-viewer.js` (`appendLog()` calls `window.highlightBlocklyError()` when a received entry carries one) → `blockly-editor.js` (new `highlightBlocklyError(scriptId, blockId, message)` — no-ops unless `scriptId` is the tab currently on screen; calls `block.setWarningText()` + `workspace.highlightBlock(id)` (found by grepping the compiled Blockly bundle for the real API — clears any previously-highlighted block itself) + `workspace.centerOnBlock(id)` to scroll it into view). `.js`/`.ts` scripts flow through the exact same widened path with `blockId` simply always absent — confirmed zero special-casing needed there.
+  - **Verified end-to-end in Node, not just per-file**: built a `.blocks` workspace with a block that throws inside a trigger, compiled it through the real `BlocklyCompiler`, executed the compiled output with a fake `ha` that throws, caught it the same way `worker-wrapper.js`'s real `ha.store.on` catch site does, fed that through the real `sendLog()`/`LogManager.add()` logic — confirmed the exact id of the block that threw survives the entire chain into the final stored log entry. Also re-verified the `scrub_()` wrapping itself doesn't change runtime behavior: a `break` inside a wrapped loop body (Blockly's own `controls_flow_statements` block, which _is_ in this project's toolbox) still exits after the correct number of iterations, not looping forever.
   - **Verified live in the browser (2026-08-08)**: `setWarningText`/`highlightBlock`/`centerOnBlock` are real functional `BlockSvg`/`WorkspaceSvg` methods, confirmed by the user actually seeing the warning triangle + red highlight appear on the right block, with a matching log entry, via `scripts/blockly_error_test.blocks` (a `ha_trend` block with a deliberately invalid period string, `ha.history.trend()`'s `parsePeriod()` throws synchronously and unconditionally for that — the only genuinely reliable way found to provoke a real error on demand: `ha_get_calendar_events`/`ha_get_todo_items` were tried first and turned out to always resolve to `[]` rather than reject, by design, on any HA-side failure).
-  - **Follow-up bug found live, fixed same day**: highlighting only ever applied when `scriptId` was the tab already on screen — for any *externally*-triggered script (store/MQTT/webhook/schedule), actually causing the error means navigating away first (e.g. to Store Explorer to set the key), so the tab is essentially never still active at the exact moment the error fires. Confirmed live: identical error, worked when the block sat triggerless at the top level (already on-screen when it ran at script start) and silently did nothing once moved inside a store trigger. Fixed by recording the error in a small `_pendingBlocklyErrors` map regardless of active tab, and re-applying it (once, then clearing it — not a persistent banner) from `tab-manager.js`'s `switchToTab()` whenever a `.blocks` tab is loaded, so coming back to look at a background script's canvas after the fact still surfaces what happened.
+  - **Follow-up bug found live, fixed same day**: highlighting only ever applied when `scriptId` was the tab already on screen — for any _externally_-triggered script (store/MQTT/webhook/schedule), actually causing the error means navigating away first (e.g. to Store Explorer to set the key), so the tab is essentially never still active at the exact moment the error fires. Confirmed live: identical error, worked when the block sat triggerless at the top level (already on-screen when it ran at script start) and silently did nothing once moved inside a store trigger. Fixed by recording the error in a small `_pendingBlocklyErrors` map regardless of active tab, and re-applying it (once, then clearing it — not a persistent banner) from `tab-manager.js`'s `switchToTab()` whenever a `.blocks` tab is loaded, so coming back to look at a background script's canvas after the fact still surfaces what happened.
 - [x] Blockly dark theme (`Blockly.Theme.defineTheme('ha_dark', ...)` in `blockly-editor.js`) — pulled forward into M2 because the default light theme was unusable next to the rest of the (dark-only, no light mode anywhere) UI. Still open for M5: fonts/shadows polish, and the toolbox category colors (currently placeholder hues, not yet the ioBroker scheme)
 - [ ] i18n: all remaining keys (`blockly_show_code`, `blockly_convert_warning`, `blockly_category_*`, error messages)
 
@@ -557,59 +573,66 @@ Deliverable: The Blockly editor feels native to the addon.
 ## Implementation Approach
 
 ### 1. Compiler pipeline first
+
 Build M1 before any block UI. Proving that `.blocks` → compiled JS → running worker round-trips correctly is the highest-risk part. Discovering issues here late (after 30+ blocks are built) is expensive.
 
 ### 2. Server-side generation is the source of truth
+
 Use `blockly/node` in `BlocklyCompiler` on the server to generate JS. The browser-side generator (for "Show Code") is a secondary concern. This eliminates divergence between what the editor renders and what actually runs.
 
 ### 3. One block = one API call
+
 Keep blocks atomic. Don't build compound "turn off all lights in area X" mega-blocks — let users chain atomic blocks together using Blockly's built-in sequence flow. This keeps generators simple and blocks composable.
 
 ### 4. Entity dropdowns: lazy load, session cache
+
 Fetch entity IDs once on workspace mount; cache them in memory for the session. Do not re-fetch on every dropdown open. Show a loading state if HA is still connecting.
 
 ### 5. `.blocks` as single source of truth, lock the compiled output
+
 Never expose `.storage/dist/script.js` for direct editing when a `.blocks` source exists. The scripts list should not show the compiled output file. **Superseded (2026-08-08)**: the "irreversibly breaks this link" framing assumed the original destructive Convert-to-JavaScript design; the shipped "duplicate as JavaScript" feature creates an independent `.js` copy alongside the `.blocks` source instead of replacing it, so this concern no longer applies to that path — the `.blocks` file's own dist output stays exactly as locked-down as before.
 
 ### 6. Reuse Monaco for "Show Code"
+
 Monaco is already loaded for JS/TS editing. Open it in `readOnly: true` mode pointing at the compiled output path. No new viewer component needed.
 
 ### 7. Block library priority order within M2
+
 Build in this order: trigger (`ha.on`) → log → service call (`ha.call`) → get state. This validates the generator architecture end-to-end with the simplest possible blocks before investing in the rest.
 
 ---
 
 ## Files to Add
 
-| File | Purpose |
-|---|---|
-| `js_automations/core/blockly-compiler.js` | Server-side `.blocks` → JS compilation |
-| `js_automations/public/js/blockly-blocks-shared.js` | Generator registration — UMD, required by both Node (`blockly-compiler.js`) and the browser (`<script>` tag). Physically under `public/js/`, not `core/` — see the M2 "Architecture correction" note |
-| `js_automations/public/js/blockly-blocks.js` | Custom block shape definitions — same UMD/cross-boundary setup as above |
-| `js_automations/public/js/blockly-mutators.js` | `ha_call_service`'s extra-data-fields mutator — same UMD/cross-boundary setup; only `saveExtraState`/`loadExtraState`/`updateShape_` matter in Node, `decompose`/`compose` are browser-only |
-| `js_automations/public/js/blockly-fields.js` | `FieldEntityDropdown`/`FieldServiceDropdown` — live entity/service dropdowns backed by `allEntities`/`haData.services`; same UMD/cross-boundary setup, Node only reads serialized values, never renders the picker |
-| `js_automations/public/js/blockly-editor.js` | Blockly workspace UI & lifecycle (browser-only, no Node counterpart) |
-| `js_automations/public/js/blockly-toolbox.json` | Toolbox category/block configuration |
+| File                                                | Purpose                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `js_automations/core/blockly-compiler.js`           | Server-side `.blocks` → JS compilation                                                                                                                                                                             |
+| `js_automations/public/js/blockly-blocks-shared.js` | Generator registration — UMD, required by both Node (`blockly-compiler.js`) and the browser (`<script>` tag). Physically under `public/js/`, not `core/` — see the M2 "Architecture correction" note               |
+| `js_automations/public/js/blockly-blocks.js`        | Custom block shape definitions — same UMD/cross-boundary setup as above                                                                                                                                            |
+| `js_automations/public/js/blockly-mutators.js`      | `ha_call_service`'s extra-data-fields mutator — same UMD/cross-boundary setup; only `saveExtraState`/`loadExtraState`/`updateShape_` matter in Node, `decompose`/`compose` are browser-only                        |
+| `js_automations/public/js/blockly-fields.js`        | `FieldEntityDropdown`/`FieldServiceDropdown` — live entity/service dropdowns backed by `allEntities`/`haData.services`; same UMD/cross-boundary setup, Node only reads serialized values, never renders the picker |
+| `js_automations/public/js/blockly-editor.js`        | Blockly workspace UI & lifecycle (browser-only, no Node counterpart)                                                                                                                                               |
+| `js_automations/public/js/blockly-toolbox.json`     | Toolbox category/block configuration                                                                                                                                                                               |
 
 ## Files to Modify
 
-| File | Change |
-|---|---|
-| `js_automations/core/script-watcher.js` | Watch `.blocks` extension, trigger BlocklyCompiler on save/delete |
-| `js_automations/core/script-header-parser.js` | `.blocks` branch in `parse()`/`updateMetadata()` (jsa key, not JSDoc) |
-| `js_automations/core/compiler-manager.js` | `pruneDist()` also recognizes a `.blocks` source |
-| `js_automations/core/kernel.js` | Instantiate `BlocklyCompiler`, forward events, initial compile pass |
-| `js_automations/core/entity-manager.js` | Thread `blocklyCompiler` through to `ScriptWatcher` |
-| `js_automations/core/worker-manager.js` | `getScripts()` + `startScript()` `.blocks` branch (found during M1 implementation — see M1 checklist) |
-| `js_automations/routes/scripts-routes.js` | `.blocks`-aware default content on create; everything else already extension-agnostic |
-| `js_automations/public/index.html` | Load Blockly via CDN (`blockly@11.2.2/blockly.min.js`); `#blockly-container`; new `<script>` tags |
+| File                                          | Change                                                                                                                                    |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `js_automations/core/script-watcher.js`       | Watch `.blocks` extension, trigger BlocklyCompiler on save/delete                                                                         |
+| `js_automations/core/script-header-parser.js` | `.blocks` branch in `parse()`/`updateMetadata()` (jsa key, not JSDoc)                                                                     |
+| `js_automations/core/compiler-manager.js`     | `pruneDist()` also recognizes a `.blocks` source                                                                                          |
+| `js_automations/core/kernel.js`               | Instantiate `BlocklyCompiler`, forward events, initial compile pass                                                                       |
+| `js_automations/core/entity-manager.js`       | Thread `blocklyCompiler` through to `ScriptWatcher`                                                                                       |
+| `js_automations/core/worker-manager.js`       | `getScripts()` + `startScript()` `.blocks` branch (found during M1 implementation — see M1 checklist)                                     |
+| `js_automations/routes/scripts-routes.js`     | `.blocks`-aware default content on create; everything else already extension-agnostic                                                     |
+| `js_automations/public/index.html`            | Load Blockly via CDN (`blockly@11.2.2/blockly.min.js`); `#blockly-container`; new `<script>` tags                                         |
 | `js_automations/public/js/creation-wizard.js` | Add "Visual (.blocks)" option; fix `initialExt`/create-payload extension handling; refresh open Blockly tabs' `jsa` after a metadata edit |
-| `js_automations/public/js/app.js` | `.blocks` branch in `getLanguageByFilename()`/`getLanguageBadge()` (found during M1 implementation) |
-| `js_automations/public/js/script-list.js` | `.blocks` branch in the script tooltip's language label |
-| `js_automations/public/css/style.css` | `.lang-badge-blocks` color, `#blockly-container` sizing |
-| `js_automations/public/js/tab-manager.js` | `type: 'blockly'` tab branch throughout open/switch/save/close (M2) |
-| `js_automations/locales/en/translation.json` | New i18n keys |
-| `js_automations/locales/de/translation.json` | New i18n keys |
+| `js_automations/public/js/app.js`             | `.blocks` branch in `getLanguageByFilename()`/`getLanguageBadge()` (found during M1 implementation)                                       |
+| `js_automations/public/js/script-list.js`     | `.blocks` branch in the script tooltip's language label                                                                                   |
+| `js_automations/public/css/style.css`         | `.lang-badge-blocks` color, `#blockly-container` sizing                                                                                   |
+| `js_automations/public/js/tab-manager.js`     | `type: 'blockly'` tab branch throughout open/switch/save/close (M2)                                                                       |
+| `js_automations/locales/en/translation.json`  | New i18n keys                                                                                                                             |
+| `js_automations/locales/de/translation.json`  | New i18n keys                                                                                                                             |
 
 ---
 
@@ -637,22 +660,26 @@ blockly_no_trigger_warning
 ## Verification (per milestone)
 
 **M1**
+
 - Create a `.blocks` script via wizard → appears in scripts list
 - Save workspace (even with only built-in Blockly blocks) → `.storage/dist/script.js` is written
 - Enable script → worker starts without error
 - Delete script → both `.blocks` and `.storage/dist/script.js` are removed
 
 **M2**
+
 - Build a trigger + service call + log in Blockly → script runs, service is called on trigger
 - Entity dropdown lists actual entities from HA
 - Saving with no trigger block shows a warning
 
 **M3–M4**
+
 - `ha.waitFor()` block produces `await ha.waitFor(...)` in generated output
 - `ha.store.set/get` block produces correct code
 - MQTT subscribe block works end-to-end
 
 **M5**
+
 - "Show Code" toggle opens and shows correct generated JS, switches back to the canvas cleanly — done, user-verified 2026-08-08
 - "Duplicate as JavaScript" checkbox appears only for `.blocks` scripts with a compiled dist, creates a working independent `.js` copy, original `.blocks` untouched — done, user-verified 2026-08-08
 

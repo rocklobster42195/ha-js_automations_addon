@@ -5,10 +5,13 @@
     "node_modules",
     "state.json",
     "store.json",
-    ".git"
+    ".git",
+    "js_automations/core/*.js",
+    "js_automations/routes/*.js",
+    "js_automations/services/*.js",
+    "js_automations/server.js"
   ],
-  "watch": [
-    "js_automations/"
-  ],
-  "ext": "js,json,html,css"
+  "watch": ["js_automations/"],
+  "ext": "js,ts,json,html,css",
+  "delay": "1000ms"
 }

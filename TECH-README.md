@@ -4,6 +4,8 @@ This document describes the technical architecture of the addon — how the subs
 
 It is intended as a contributor-level deep-dive, not a quick-start guide. For API usage examples see [API_REFERENCE.md](./API_REFERENCE.md).
 
+**A note on scope:** this document covers backend runtime architecture — how the pieces above actually behave, not how the codebase is built or how the UI is put together. Two things worth knowing as a contributor that don't otherwise show up here: the backend (`core/`, `routes/`, `services/`, `server.js`) is written in TypeScript and compiled via `tsc` to plain `.js` in place before running (mirrors the frontend's esbuild bundle step — see `nodemon.json`/`package.json`'s `build:backend`); the UI is built with [LIT](https://lit.dev/) web components (`public/js/components/*.ts`), one custom element per major panel, communicating with not-yet-migrated legacy files via a small set of `window.<component>` bridge objects. Full migration history and conventions: `docs/RFC_FRONTEND_MODERNIZATION.md`.
+
 ---
 
 ## Table of Contents
@@ -22,10 +24,11 @@ It is intended as a contributor-level deep-dive, not a quick-start guide. For AP
 12. [HA Connection: WebSocket & State Cache](#12-ha-connection-websocket--state-cache)
 13. [MQTT Manager: Broker Connection and Command Routing](#13-mqtt-manager-broker-connection-and-command-routing)
 14. [TypeScript Pipeline and IntelliSense](#14-typescript-pipeline-and-intellisense)
-15. [Settings: Schema-Driven UI](#15-settings-schema-driven-ui)
-16. [Capability & Permission System](#16-capability--permission-system)
-17. [Card Manager: Script Pack System](#17-card-manager-script-pack-system)
-18. [Resource Consumption and Known Limits](#18-resource-consumption-and-known-limits)
+15. [Blockly: Visual Scripting Compilation](#15-blockly-visual-scripting-compilation)
+16. [Settings: Schema-Driven UI](#16-settings-schema-driven-ui)
+17. [Capability & Permission System](#17-capability--permission-system)
+18. [Card Manager: Script Pack System](#18-card-manager-script-pack-system)
+19. [Resource Consumption and Known Limits](#19-resource-consumption-and-known-limits)
 
 ---
 
@@ -33,10 +36,10 @@ It is intended as a contributor-level deep-dive, not a quick-start guide. For AP
 
 The addon communicates with Home Assistant over **two independent transport channels**:
 
-| Channel | Purpose | Direction |
-|---|---|---|
-| **HA WebSocket** | Receive events, call services, query/write entity registry | Bidirectional |
-| **MQTT** | Register entities (Discovery), publish states, receive commands | Bidirectional |
+| Channel          | Purpose                                                         | Direction     |
+| ---------------- | --------------------------------------------------------------- | ------------- |
+| **HA WebSocket** | Receive events, call services, query/write entity registry      | Bidirectional |
+| **MQTT**         | Register entities (Discovery), publish states, receive commands | Bidirectional |
 
 **Why two transports?**
 
@@ -96,6 +99,7 @@ The Kernel constructs all managers itself and passes dependencies explicitly as 
 ### Global Cleanup Cycle
 
 Every 60 minutes (and once immediately after boot), `performGlobalCleanup()` runs:
+
 1. Compares the scripts currently on disk (slugified) with the registered entities in HA
 2. Removes orphaned entities (script deleted, entity still in HA)
 3. Republishes all `ha.register()` entities (integrity check)
@@ -142,18 +146,18 @@ Every script runs in its own **Node.js Worker Thread** (not a separate process).
 
 ### Message Protocol (Worker → Manager)
 
-| `msg.type` | Meaning |
-|---|---|
-| `log` | Log line from `ha.log()` or `console.log()` |
-| `call_service` | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back |
-| `update_state` | `ha.update()` — Manager forwards to EntityManager (MQTT) |
-| `create_entity` | `ha.register()` — Manager forwards to EntityManager for Discovery |
-| `subscribe` | `ha.on()` — Manager registers pattern in `subscriptions` map |
-| `store_set` | `ha.store.set()` — Manager persists via StoreManager, broadcasts to all other workers |
-| `ask` | `ha.ask()` — Manager sends HA mobile app notification, waits for action response |
-| `get_stats` | Heartbeat request; worker responds with RAM usage |
-| `install_card` | `ha.frontend.installCard()` — Manager forwards to CardManager |
-| `register_action` | `ha.action()` — Manager registers action handler name for routing |
+| `msg.type`        | Meaning                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| `log`             | Log line from `ha.log()` or `console.log()`                                           |
+| `call_service`    | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back    |
+| `update_state`    | `ha.update()` — Manager forwards to EntityManager (MQTT)                              |
+| `create_entity`   | `ha.register()` — Manager forwards to EntityManager for Discovery                     |
+| `subscribe`       | `ha.on()` — Manager registers pattern in `subscriptions` map                          |
+| `store_set`       | `ha.store.set()` — Manager persists via StoreManager, broadcasts to all other workers |
+| `ask`             | `ha.ask()` — Manager sends HA mobile app notification, waits for action response      |
+| `get_stats`       | Heartbeat request; worker responds with RAM usage                                     |
+| `install_card`    | `ha.frontend.installCard()` — Manager forwards to CardManager                         |
+| `register_action` | `ha.action()` — Manager registers action handler name for routing                     |
 
 Failed service calls (`call_service`) are caught in the WorkerManager and logged to the master process log rather than crashing silently — this ensures errors are always visible in the UI even if the script itself does not have error handling.
 
@@ -213,6 +217,7 @@ ha.fs = buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas });
 ```
 
 `fs-service.js` is a pure utility module. `buildHaFs()` returns an object with 10 methods (read, write, append, exists, list, stat, move, delete, watch, rotate). Each method:
+
 1. Checks the `@permission` declaration (when enforcement is active)
 2. Resolves the virtual path (`internal://` → `fsDataDir`, `shared://` → `/share`, `media://` → `/media`) with a traversal guard
 3. Checks the storage quota (only on write/append)
@@ -222,37 +227,37 @@ ha.fs = buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas });
 
 The wrapper constructs a global `ha` object. The following table covers the complete set of methods injected, all of which internally call `parentPort.postMessage()`:
 
-| Method | Message type | Notes |
-|---|---|---|
-| `ha.on(pattern, [filter], [threshold], cb)` | `subscribe` | Increments refCount, calls `parentPort.ref()` when first listener added |
-| `ha.call(serviceId, data)` | `call_service` | Dot-notation `'domain.service'`; preferred over deprecated `ha.callService()` |
-| `ha.callService(domain, service, data)` | `call_service` | **Deprecated** — use `ha.call()` |
-| `ha.update(entityId, state, attrs?)` | `update_state` | Replaces deprecated `ha.updateState()` |
-| `ha.update(entityId, attributesOnly)` | `update_state` | Attributes-only overload |
-| `ha.updateState(entityId, state, attrs?)` | `update_state` | **Deprecated** — use `ha.update()` |
-| `ha.register(entityId, config)` | `create_entity` | Triggers MQTT Discovery |
-| `ha.getState(entityId)` | — | Synchronous read from local state cache |
-| `ha.getStateValue(entityId)` | — | Converts `'on'`/`'off'` to boolean, numeric strings to number |
-| `ha.getAttr(entityId, attr)` | — | Synchronous attribute read from local cache |
-| `ha.getGroupMembers(entityId)` | — | Reads `attributes.entity_id` from the group entity's cached state |
-| `ha.select(pattern)` | — | Builds an `EntitySelector` from the local state cache |
-| `ha.waitFor(pattern, [filter], [threshold], opts)` | `subscribe` | Returns a Promise that resolves on the next matching state change |
-| `ha.waitUntil(condition, opts)` | — | Polls `condition()` every `pollInterval` ms (default 500 ms), resolves when true |
-| `ha.log(msg)` / `.debug` / `.warn` / `.error` | `log` | Sends log line to master process |
-| `ha.store.set(key, value)` | `store_set` | Persists and broadcasts to all other workers |
-| `ha.store.get(key)` | — | Synchronous read from local store snapshot |
-| `ha.store.delete(key)` | `store_set` | Sets value to `undefined`, triggers broadcast |
-| `ha.store.on(key, cb)` | — | Local reactive listener for store key changes |
-| `ha.persistent(key, default)` | — | Returns a deep proxy or `{ value }` ref; see §7 |
-| `ha.action(name, handler)` | `register_action` | Registers named action handler; see §8 |
-| `ha.notify(msg, opts)` | `call_service` | Calls `notify.*` HA service |
-| `ha.ask(msg, opts)` | `ask` | Actionable notification, returns Promise |
-| `ha.stop(reason)` / `.restart(reason)` | `log` + `process.exit` | Graceful stop/restart |
-| `ha.onStop(cb)` | — | Registers shutdown callback |
-| `ha.onError(cb)` | — | Registers background error handler |
-| `ha.localize(mapping, fallback)` | — | Returns string for `ha.language` |
-| `ha.frontend.installCard(opts)` | `install_card` | Triggers CardManager; see §17 |
-| `ha.entity(entityId)` | (fluent proxy) | Returns `EntityServices` proxy for chained service calls |
+| Method                                             | Message type           | Notes                                                                            |
+| -------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| `ha.on(pattern, [filter], [threshold], cb)`        | `subscribe`            | Increments refCount, calls `parentPort.ref()` when first listener added          |
+| `ha.call(serviceId, data)`                         | `call_service`         | Dot-notation `'domain.service'`; preferred over deprecated `ha.callService()`    |
+| `ha.callService(domain, service, data)`            | `call_service`         | **Deprecated** — use `ha.call()`                                                 |
+| `ha.update(entityId, state, attrs?)`               | `update_state`         | Replaces deprecated `ha.updateState()`                                           |
+| `ha.update(entityId, attributesOnly)`              | `update_state`         | Attributes-only overload                                                         |
+| `ha.updateState(entityId, state, attrs?)`          | `update_state`         | **Deprecated** — use `ha.update()`                                               |
+| `ha.register(entityId, config)`                    | `create_entity`        | Triggers MQTT Discovery                                                          |
+| `ha.getState(entityId)`                            | —                      | Synchronous read from local state cache                                          |
+| `ha.getStateValue(entityId)`                       | —                      | Converts `'on'`/`'off'` to boolean, numeric strings to number                    |
+| `ha.getAttr(entityId, attr)`                       | —                      | Synchronous attribute read from local cache                                      |
+| `ha.getGroupMembers(entityId)`                     | —                      | Reads `attributes.entity_id` from the group entity's cached state                |
+| `ha.select(pattern)`                               | —                      | Builds an `EntitySelector` from the local state cache                            |
+| `ha.waitFor(pattern, [filter], [threshold], opts)` | `subscribe`            | Returns a Promise that resolves on the next matching state change                |
+| `ha.waitUntil(condition, opts)`                    | —                      | Polls `condition()` every `pollInterval` ms (default 500 ms), resolves when true |
+| `ha.log(msg)` / `.debug` / `.warn` / `.error`      | `log`                  | Sends log line to master process                                                 |
+| `ha.store.set(key, value)`                         | `store_set`            | Persists and broadcasts to all other workers                                     |
+| `ha.store.get(key)`                                | —                      | Synchronous read from local store snapshot                                       |
+| `ha.store.delete(key)`                             | `store_set`            | Sets value to `undefined`, triggers broadcast                                    |
+| `ha.store.on(key, cb)`                             | —                      | Local reactive listener for store key changes                                    |
+| `ha.persistent(key, default)`                      | —                      | Returns a deep proxy or `{ value }` ref; see §7                                  |
+| `ha.action(name, handler)`                         | `register_action`      | Registers named action handler; see §8                                           |
+| `ha.notify(msg, opts)`                             | `call_service`         | Calls `notify.*` HA service                                                      |
+| `ha.ask(msg, opts)`                                | `ask`                  | Actionable notification, returns Promise                                         |
+| `ha.stop(reason)` / `.restart(reason)`             | `log` + `process.exit` | Graceful stop/restart                                                            |
+| `ha.onStop(cb)`                                    | —                      | Registers shutdown callback                                                      |
+| `ha.onError(cb)`                                   | —                      | Registers background error handler                                               |
+| `ha.localize(mapping, fallback)`                   | —                      | Returns string for `ha.language`                                                 |
+| `ha.frontend.installCard(opts)`                    | `install_card`         | Triggers CardManager; see §18                                                    |
+| `ha.entity(entityId)`                              | (fluent proxy)         | Returns `EntityServices` proxy for chained service calls                         |
 
 ---
 
@@ -264,12 +269,12 @@ The wrapper constructs a global `ha` object. The following table covers the comp
 
 The pattern is evaluated against the local state cache (`initialStates`) at the moment `ha.select()` is called:
 
-| Pattern type | Example | Match behavior |
-|---|---|---|
-| Exact entity ID | `'light.living_room'` | Single entity |
-| Wildcard string | `'light.*'` | All entities where `entity_id` starts with `light.` |
-| Entity ID array | `['light.a', 'light.b']` | Exact set of entities |
-| RegExp | `/^sensor\.(temp|hum)/` | Regex match against entity ID |
+| Pattern type    | Example                  | Match behavior                                      |
+| --------------- | ------------------------ | --------------------------------------------------- |
+| Exact entity ID | `'light.living_room'`    | Single entity                                       |
+| Wildcard string | `'light.*'`              | All entities where `entity_id` starts with `light.` |
+| Entity ID array | `['light.a', 'light.b']` | Exact set of entities                               |
+| RegExp          | `/^sensor\.(temp         | hum)/`                                              | Regex match against entity ID |
 
 ### EntitySelector API
 
@@ -291,8 +296,9 @@ EntitySelector
 Because the selector is typed with `SelectorServices<P>` (derived from the entity ID prefix), domain-specific methods are available directly on the selector:
 
 ```js
-await ha.select('light.*')
-  .where(e => e.attributes.brightness > 50)
+await ha
+  .select('light.*')
+  .where((e) => e.attributes.brightness > 50)
   .throttle(200)
   .turn_off();
 ```
@@ -311,13 +317,13 @@ Under the hood, `.turn_off()` (and all other domain service methods) call `ha.ca
 
 `ha.store` provides a key-value store that is shared across all running scripts and persisted to `.storage/store.json`.
 
-| API | Behavior |
-|---|---|
-| `ha.store.set(key, value, isSecret?)` | Sends `store_set` to WorkerManager → StoreManager persists, broadcasts new value to all other workers |
-| `ha.store.get(key)` | Synchronous read from the local store snapshot delivered at worker start |
-| `ha.store.delete(key)` | Equivalent to `ha.store.set(key, undefined)` |
-| `ha.store.on(key, cb)` | Registers a local change listener; called when the master broadcasts a store update |
-| `ha.store.val` | Direct reference to the local snapshot object — reads are synchronous but do **not** trigger listeners or persistence |
+| API                                   | Behavior                                                                                                              |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ha.store.set(key, value, isSecret?)` | Sends `store_set` to WorkerManager → StoreManager persists, broadcasts new value to all other workers                 |
+| `ha.store.get(key)`                   | Synchronous read from the local store snapshot delivered at worker start                                              |
+| `ha.store.delete(key)`                | Equivalent to `ha.store.set(key, undefined)`                                                                          |
+| `ha.store.on(key, cb)`                | Registers a local change listener; called when the master broadcasts a store update                                   |
+| `ha.store.val`                        | Direct reference to the local snapshot object — reads are synchronous but do **not** trigger listeners or persistence |
 
 The broadcast mechanism: when any worker calls `ha.store.set()`, WorkerManager notifies StoreManager which persists the value and then sends `{ type: 'store_update', key, value }` to every other running worker. Each worker's local `store` snapshot is updated in place, triggering any registered `.on()` listeners.
 
@@ -329,8 +335,8 @@ The broadcast mechanism: when any worker calls `ha.store.set()`, WorkerManager n
 
 ```js
 const counter = ha.persistent('counter', 0);
-counter.value++;          // reads, increments, and saves in one expression
-ha.log(counter.value);    // always reads the current persisted value
+counter.value++; // reads, increments, and saves in one expression
+ha.log(counter.value); // always reads the current persisted value
 ```
 
 The wrapper is a plain object `{ value: T }` where the `value` property is backed by a getter/setter. The setter calls `ha.store.set(key, newValue)` on every write.
@@ -339,9 +345,9 @@ The wrapper is a plain object `{ value: T }` where the `value` property is backe
 
 ```js
 const config = ha.persistent('config', { teamId: 42, interval: 30 });
-config.teamId = 99;       // automatically persisted
+config.teamId = 99; // automatically persisted
 config.nested = { x: 1 };
-config.nested.x = 2;     // deep write also persisted
+config.nested.x = 2; // deep write also persisted
 ```
 
 The wrapper uses a recursive `Proxy`. The `set` trap is applied at every level of the object tree. Whenever any nested property is written, the trap walks up to the root and calls `ha.store.set(key, root)` with the complete current state of the object. The initial value is loaded from `ha.store.get(key)` at proxy creation time; if not found, `defaultValue` is used.
@@ -424,13 +430,13 @@ WorkerManager can dispatch actions directly to a worker via `postMessage({ type:
 
 ### Event Routing from WorkerManager
 
-| Event | Handler |
-|---|---|
-| `create_entity` | `handleDynamicEntity()` — MQTT Discovery for `ha.register()` |
-| `update_entity_state` | `handleEntityStateUpdate()` — Publish state via MQTT |
-| `script_start` / `script_exit` | `handleScriptLifecycle()` — Update control entity state (on/off) |
-| `request_device_cleanup` | `checkDeviceCleanup()` — Remove MQTT device when no entities remain |
-| `sweep_entity_removed` | Clean up HA entity registry via WebSocket |
+| Event                          | Handler                                                             |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `create_entity`                | `handleDynamicEntity()` — MQTT Discovery for `ha.register()`        |
+| `update_entity_state`          | `handleEntityStateUpdate()` — Publish state via MQTT                |
+| `script_start` / `script_exit` | `handleScriptLifecycle()` — Update control entity state (on/off)    |
+| `request_device_cleanup`       | `checkDeviceCleanup()` — Remove MQTT device when no entities remain |
+| `sweep_entity_removed`         | Clean up HA entity registry via WebSocket                           |
 
 ### `@expose` Entities vs. `ha.register()` Entities
 
@@ -466,6 +472,7 @@ ha.register('sensor.outside_temp', {
 ```
 
 When `device: true` is used, EntityManager builds the device block using:
+
 - `identifiers: ['jsa_script_<scriptSlug>']`
 - `name: <script display name>`
 - `manufacturer: 'JS Automations'`
@@ -535,12 +542,12 @@ Note that when a `device` block is present, HA ignores `default_entity_id` and `
 
 ### Discovery Topic vs. State Topic
 
-| Topic | Content | Retain |
-|---|---|---|
-| `homeassistant/<domain>/<object_id>/config` | Entity configuration (JSON) | ✓ |
-| `jsa/<domain>/<object_id>/data` | Entity state + attributes (JSON) | ✓ |
-| `jsa/status` | `online` / `offline` (Birth/Will) | ✓ |
-| `jsa/<domain>/<object_id>/set` | Command from HA (e.g. toggle switch) | ✗ |
+| Topic                                       | Content                              | Retain |
+| ------------------------------------------- | ------------------------------------ | ------ |
+| `homeassistant/<domain>/<object_id>/config` | Entity configuration (JSON)          | ✓      |
+| `jsa/<domain>/<object_id>/data`             | Entity state + attributes (JSON)     | ✓      |
+| `jsa/status`                                | `online` / `offline` (Birth/Will)    | ✓      |
+| `jsa/<domain>/<object_id>/set`              | Command from HA (e.g. toggle switch) | ✗      |
 
 ### Stale Entity Detection
 
@@ -559,6 +566,7 @@ An entity from another system (e.g., a native integration) occupies exactly the 
 A state exists in HA's state machine under the desired entity ID, but no registry entry exists for it? This happens when an entity was removed from the registry in a previous run but its state remained in HA's memory.
 
 This phantom blocks in two ways:
+
 - **Entity creation**: HA's `async_generate_entity_id()` checks the state machine — if it finds the state, it appends `_2`.
 - **Registry rename**: `config/entity_registry/update` with `new_entity_id` also checks the state machine and rejects with `"Entity with this ID is already registered"` even though `config/entity_registry/list` shows no entry.
 
@@ -611,10 +619,10 @@ Both `area_id` (direct ID string) and `area` (name → automatically resolved to
 
 WorkerManager maintains three in-memory structures:
 
-| Map | Content |
-|---|---|
-| `nativeEntities` | `entityId → Discovery payload` (all registered entities) |
-| `scriptEntityMap` | `filename → Set<entityId>` (which entities belong to which script) |
+| Map                 | Content                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `nativeEntities`    | `entityId → Discovery payload` (all registered entities)                       |
+| `scriptEntityMap`   | `filename → Set<entityId>` (which entities belong to which script)             |
 | `activeRunEntities` | `filename → Set<entityId>` (which entities were registered in the current run) |
 
 The first two are persisted to `.storage/entity_registry.json` (debounced, 1 second). After an addon restart, the payloads are restored — so entities can be correctly removed even after a restart.
@@ -644,6 +652,7 @@ Entities that were registered in the previous run but did not appear in this run
 ### Connection Establishment
 
 After establishing the connection, HA immediately sends `auth_required` — the connector sends the token. On `auth_ok`, three things happen simultaneously:
+
 1. `subscribeEvents()` — subscribe to all HA events
 2. `fetchInitialStates()` — complete state dump (`get_states`)
 3. Resolve the boot Promise
@@ -660,19 +669,19 @@ Every WebSocket call gets an incremental `id`. HA's response contains the same `
 
 The following WebSocket commands are used:
 
-| Command | Purpose |
-|---|---|
-| `config/entity_registry/list` | Retrieve all registered entities |
+| Command                         | Purpose                                                           |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `config/entity_registry/list`   | Retrieve all registered entities                                  |
 | `config/entity_registry/update` | Set `area_id`, `labels`, `name`, or `new_entity_id` for an entity |
-| `config/entity_registry/remove` | Delete entity from registry |
-| `config/device_registry/list` | Retrieve device registry for device cleanup |
-| `config/area_registry/list` | Resolve area names → IDs |
-| `config/label_registry/list` | Resolve label names → IDs |
-| `config/config_entries/list` | Read MQTT broker settings for autodetect |
-| `get_states` | Initial state dump |
-| `get_config` | HA configuration (language, etc.) |
-| `get_services` | Service definitions for IntelliSense |
-| `call_service` | Call a service (with optional `return_response`) |
+| `config/entity_registry/remove` | Delete entity from registry                                       |
+| `config/device_registry/list`   | Retrieve device registry for device cleanup                       |
+| `config/area_registry/list`     | Resolve area names → IDs                                          |
+| `config/label_registry/list`    | Resolve label names → IDs                                         |
+| `config/config_entries/list`    | Read MQTT broker settings for autodetect                          |
+| `get_states`                    | Initial state dump                                                |
+| `get_config`                    | HA configuration (language, etc.)                                 |
+| `get_services`                  | Service definitions for IntelliSense                              |
+| `call_service`                  | Call a service (with optional `return_response`)                  |
 
 `updateEntityRegistry()` returns `{ success: boolean, error?: string }` — on `success: false`, `error` contains the HA error text (e.g., `"Entity with this ID is already registered"`), enabling clean error diagnosis without a separate try-catch.
 
@@ -736,18 +745,55 @@ The compiler watches for changes via `ScriptWatcher` (chokidar) and automaticall
 
 `TypeDefinitionGenerator` produces four automatically generated files in `.storage/`:
 
-| File | Content |
-|---|---|
-| `ha-api.d.ts` | Types for the `ha` object (copied from `core/types/ha-api.d.ts`) |
+| File            | Content                                                            |
+| --------------- | ------------------------------------------------------------------ |
+| `ha-api.d.ts`   | Types for the `ha` object (copied from `core/types/ha-api.d.ts`)   |
 | `entities.d.ts` | All HA entity IDs as a union type for `ha.getState()` autocomplete |
-| `store.d.ts` | Current store keys as a `TypedStore` interface |
-| `services.d.ts` | ServiceMap with all HA domains and services (from `get_services`) |
+| `store.d.ts`    | Current store keys as a `TypedStore` interface                     |
+| `services.d.ts` | ServiceMap with all HA domains and services (from `get_services`)  |
 
 Any change to store data or HA states triggers regeneration with debouncing. The frontend receives a `typings_updated` Socket.io event and reloads the definitions into the Monaco editor.
 
 ---
 
-## 15. Settings: Schema-Driven UI
+## 15. Blockly: Visual Scripting Compilation
+
+A `.blocks` file is a JSON-serialized Blockly workspace (block tree, not code) — a second script pipeline running alongside TypeScript, with its own compiler but the same execution path: the compiled output is a plain `.js` file that runs in a Worker Thread exactly like any other script (`worker-manager.js` resolves `.blocks` to its `dist/*.js` counterpart the same way it resolves `.ts`, §4).
+
+### Compilation
+
+`core/blockly-compiler.js`, driven by the same `ScriptWatcher` (chokidar) that watches for `.ts` changes:
+
+1. Parse the `.blocks` file's JSON, load it into a real (headless, server-side) `Blockly.Workspace` via `Blockly.serialization.workspaces.load()`.
+2. Generate JavaScript via `javascriptGenerator.workspaceToCode(workspace)` — the same code-generation engine the browser's own "Show Code" panel uses, but a separate instance (see below).
+3. Write the result to `dist/<name>.js`, wrapped in an async IIFE only when the generated code actually needs top-level `await` (see `wrapGeneratedCode()` in `blockly-blocks-shared.js`).
+
+Both the Node-side compiler and the browser's editor load their block _definitions_ (`public/js/blockly-blocks.js`, `blockly-blocks-shared.js`, `blockly-mutators.js`, `blockly-fields.js`) from the same files under `public/js/` via plain `<script>` tags / `require()` — there is no bundler in this project, so these files have to work unmodified in both environments.
+
+### Permission Derivation
+
+Unlike free-form JS/TS (where `@permission` is a manual, self-declared header tag), every capability-using construct in a `.blocks` file is one of JSA's own known block types — so "declared" permissions can be computed exactly from "used" block types, with no risk of an untracked code path. `BLOCK_PERMISSION_MAP` (currently just `{ ha_on_webhook: 'webhook' }`) maps block types to permissions; after each compile, the derived list is written back into the `.blocks` file's own `jsa.permission` field, same as a hand-written tag would appear for `.js`/`.ts`. The write is guarded to only happen when the value actually _changed_ — an unconditional write would loop forever, since writing to the `.blocks` source re-triggers `ScriptWatcher`'s own change handler, which calls `compile()` again.
+
+### Block-Level Error Visualization
+
+To trace a runtime error back to the specific block that threw (not just "somewhere in this script"), the Node-side `javascriptGenerator` instance overrides `scrub_()` — Blockly's own per-block code-generation hook, called once for every block in a statement chain with just that block's own code fragment. Each statement block's generated code is wrapped in:
+
+```js
+try {
+  /* block's own generated code */
+} catch (__e) {
+  if (!__e.blockId) __e.blockId = /* this block's id */;
+  throw __e;
+}
+```
+
+`if (!__e.blockId)` only sets it once, so as the error propagates up through several nested wrappers (e.g. a block inside a loop inside a trigger's body), the innermost — most specific — block's id wins. The tagged error flows through `worker-wrapper.js` → `worker-manager.js` → `bridge.js` → the frontend, which highlights the exact block in `blockly-editor.js` if that `.blocks` tab is open.
+
+This override is applied **only** to the Node-side generator instance used by `BlocklyCompiler` for real runtime output — the browser's own separate `Blockly.JavaScript` instance (loaded via CDN, used solely for the "Show Code" panel) is never touched, so Show Code stays clean and readable without try/catch noise the user never asked to see.
+
+---
+
+## 16. Settings: Schema-Driven UI
 
 `core/settings-schema.js` defines the settings structure as an array of sections with items. The same schema is used for two purposes:
 
@@ -756,15 +802,15 @@ Any change to store data or HA states triggers regeneration with debouncing. The
 
 ### Item Types
 
-| Type | Description |
-|---|---|
-| `text` / `number` / `boolean` | Standard input fields |
-| `toggle` | CSS toggle switch (visually prominent, for Danger Zone settings) |
-| `select` | Dropdown with `options: [{ value, label }]` |
-| `entity-picker` | HA entity autocomplete |
-| `mqtt-test` | Special button: tests MQTT connection without saving |
-| `mqtt-autodetect` | Special button: reads MQTT configuration from HA and pre-fills fields with in-UI feedback on success/failure |
-| `button` | Generic HTTP action button with `actionUrl` |
+| Type                          | Description                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `text` / `number` / `boolean` | Standard input fields                                                                                        |
+| `toggle`                      | CSS toggle switch (visually prominent, for Danger Zone settings)                                             |
+| `select`                      | Dropdown with `options: [{ value, label }]`                                                                  |
+| `entity-picker`               | HA entity autocomplete                                                                                       |
+| `mqtt-test`                   | Special button: tests MQTT connection without saving                                                         |
+| `mqtt-autodetect`             | Special button: reads MQTT configuration from HA and pre-fills fields with in-UI feedback on success/failure |
+| `button`                      | Generic HTTP action button with `actionUrl`                                                                  |
 
 ### Conditions
 
@@ -776,7 +822,7 @@ Items with `active: false` are defined in the schema but hidden in the UI (e.g.,
 
 ---
 
-## 16. Capability & Permission System
+## 17. Capability & Permission System
 
 ### Overview
 
@@ -810,7 +856,7 @@ New settings in the `danger` section must always be added here.
 
 ---
 
-## 17. Card Manager: Script Pack System
+## 18. Card Manager: Script Pack System
 
 `core/card-manager.js` implements the Script Pack feature — the ability to embed a Lovelace Web Component directly in a JSA script file.
 
@@ -834,6 +880,7 @@ CardManager extracts the block, decodes the Base64, writes the card JS file to `
 The main entry point. Called by WorkerManager when a worker sends an `install_card` message.
 
 **Flow:**
+
 1. `_extractCardBlock()` — Reads the script file, finds the `/* __JSA_CARD__` block, decodes Base64 → JavaScript source
 2. Hash check — SHA-256 of the card source. If `registry[scriptName].hash === hash` and `!options.force` → return early (no write needed)
 3. Preamble injection — `JSA_PREAMBLE` is prepended. The preamble contains the `__jsa__` object with `connect()` and `callAction()`; `{{SCRIPT_ID}}` is replaced with the script filename
@@ -847,6 +894,7 @@ The main entry point. Called by WorkerManager when a worker sends an `install_ca
 ### `removeCard(scriptFilePath)`
 
 Called when a Script Pack is deleted (DELETE route in `scripts-routes.js`):
+
 1. Delete the card file in `config/www/jsa-cards/` (if present)
 2. Remove the Lovelace resource via `lovelace/resources/delete` (fire-and-forget)
 3. Delete registry entry + persist
@@ -864,6 +912,7 @@ Card file = JSA_PREAMBLE(scriptId) + decodedCardSource
 ```
 
 The preamble implements:
+
 - **`__jsa__.connect(hass)`** — Subscribes to the `jsa_action_result` event on the HA WebSocket connection. Pending Promises are resolved via a `correlationId` Map.
 - **`__jsa__.callAction(name, payload)`** — Fires a `jsa_action` event on the HA event bus (`type: 'fire_event'`, `event_type: 'jsa_action'`). The script receives it via `ha.action()`. The result comes back as a `jsa_action_result` event and resolves the Promise. Timeout after 10 seconds.
 
@@ -903,6 +952,7 @@ The resource URL has the format `/local/jsa-cards/<scriptName>-card.js?v=<shortH
 ### Preview Endpoint
 
 `GET /:filename/card/preview-html` serves a complete sandboxed HTML page that:
+
 - Defines HA Web Component stubs (`ha-card`, `ha-icon`, etc.) to render Lovelace cards outside of HA
 - Provides a mock `hass` object with `states`, `callService`, `connection`, etc.
 - Injects the decoded card source directly (no file write, no Lovelace required)
@@ -911,7 +961,7 @@ The resource URL has the format `/local/jsa-cards/<scriptName>-card.js?v=<shortH
 
 ---
 
-## 18. Resource Consumption and Known Limits
+## 19. Resource Consumption and Known Limits
 
 ### RAM Overhead per Worker Thread
 

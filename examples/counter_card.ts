@@ -10,21 +10,21 @@
 const ENTITY_ID = `number.${ha.getHeader('filename', 'counter_card.ts').split('.')[0]}`;
 
 ha.register(ENTITY_ID, {
-    name: 'Counter',
-    icon: 'mdi:counter',
-    step: 1,
-    mode: 'box',
+  name: 'Counter',
+  icon: 'mdi:counter',
+  step: 1,
+  mode: 'box',
 });
 
 ha.action('increase', () => {
-    const current = Number(ha.getState(ENTITY_ID)?.state ?? 0);
-    ha.update(ENTITY_ID, current + 1);
+  const current = Number(ha.getState(ENTITY_ID)?.state ?? 0);
+  ha.update(ENTITY_ID, current + 1);
 });
 
 ha.action('decrease', () => {
-    const current = Number(ha.getState(ENTITY_ID)?.state ?? 0);
-    if (current <= 0) return;
-    ha.update(ENTITY_ID, current - 1);
+  const current = Number(ha.getState(ENTITY_ID)?.state ?? 0);
+  if (current <= 0) return;
+  ha.update(ENTITY_ID, current - 1);
 });
 
 ha.frontend.installCard();

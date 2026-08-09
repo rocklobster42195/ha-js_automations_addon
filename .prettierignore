@@ -1,0 +1,50 @@
+node_modules/
+scripts/
+js_automations_beta/
+js_automations/public/js/vendor/
+js_automations/public/js/dist/
+package-lock.json
+CHANGELOG.md
+
+# Home Assistant addon manifest — version line is rewritten with double quotes
+# by tools/update-version.js on every release; keep it out of Prettier's scope
+# so the two don't fight over quote style.
+config.yaml
+
+# Backend TS build output (tsc emits .js in-place next to its .ts source, see
+# tsconfig.backend-build.json) — one line per converted module.
+js_automations/core/config.js
+js_automations/core/dev-setup.js
+js_automations/core/state-manager.js
+js_automations/core/script-command-router.js
+js_automations/core/sibling-guard.js
+js_automations/core/type-definition-generator.js
+js_automations/core/capability-analyzer.js
+js_automations/core/log-manager.js
+js_automations/core/bridge.js
+js_automations/core/ha-history-helpers.js
+js_automations/core/store-manager.js
+js_automations/core/script-header-parser.js
+js_automations/core/blockly-compiler.js
+js_automations/core/compiler-manager.js
+js_automations/core/fs-service.js
+js_automations/core/settings-schema.js
+js_automations/core/webhook-manager.js
+js_automations/core/mqtt-manager.js
+js_automations/core/ha-connection.js
+js_automations/core/settings-manager.js
+js_automations/core/dependency-manager.js
+js_automations/core/script-watcher.js
+js_automations/core/card-manager.js
+js_automations/core/worker-manager.js
+js_automations/core/worker-wrapper.js
+js_automations/core/entity-manager.js
+js_automations/core/kernel.js
+js_automations/services/system-service.js
+js_automations/routes/settings-route.js
+js_automations/routes/webhook-route.js
+js_automations/routes/store-route.js
+js_automations/routes/ha-routes.js
+js_automations/routes/system-route.js
+js_automations/routes/scripts-routes.js
+js_automations/server.js

@@ -1,0 +1,283 @@
+/**
+ * JS AUTOMATIONS - Main Server
+ * This file is the application's entry point. It sets up the web server,
+ * boots the Kernel, and wires up the API routes.
+ */
+import * as fs from 'fs';
+import * as path from 'path';
+import { execSync } from 'child_process';
+
+// DEV SETUP CHECK
+// Skipped if running as an addon (SUPERVISOR_TOKEN), a .env file already
+// configures HA connectivity, or HA_URL is already provided via the
+// environment directly (e.g. CI, docker run -e, systemd unit).
+if (!process.env.SUPERVISOR_TOKEN && !process.env.HA_URL && !fs.existsSync(path.join(__dirname, '..', '.env'))) {
+  try {
+    execSync(`"${process.execPath}" "${path.join(__dirname, 'core', 'dev-setup.js')}"`, { stdio: 'inherit' });
+  } catch (e) {
+    process.exit(1);
+  }
+}
+
+import * as dotenv from 'dotenv';
+dotenv.config({ quiet: true });
+import express from 'express';
+import * as http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+
+import config from './core/config';
+import kernel from './core/kernel';
+import siblingGuard from './core/sibling-guard';
+import type StoreManager from './core/store-manager';
+import scriptsRoutesFactory from './routes/scripts-routes';
+import storeRouteFactory from './routes/store-route';
+import systemRouteFactory from './routes/system-route';
+import settingsRouter from './routes/settings-route';
+import haRoutesFactory from './routes/ha-routes';
+import webhookRouteFactory from './routes/webhook-route';
+
+// Ensure all necessary directories exist before proceeding
+config.ensureDirectories();
+
+const app = express();
+const server = http.createServer(app);
+const io = new SocketIOServer(server, { path: '/socket.io', cors: { origin: '*' } });
+
+// A `nodemon` dev-server restart on Windows can hit a stale EADDRINUSE even
+// with a plain (non-shell-chained) exec command: the previous process's real
+// node.exe can outlive nodemon's own kill/PID tracking by a few hundred ms.
+// Retry briefly instead of crashing - same defensive pattern already used
+// for the webhook port in webhook-manager.ts.
+let listenRetries = 0;
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code === 'EADDRINUSE' && listenRetries < 10) {
+    listenRetries++;
+    console.warn(`⚠️  Port ${config.PORT} still in use — retrying in 500ms (${listenRetries}/10)...`);
+    setTimeout(() => server.listen(Number(config.PORT), '0.0.0.0'), 500);
+    return;
+  }
+  console.error(`❌ Server error: ${e.message}`);
+  process.exit(1);
+});
+
+// --- Sibling guard gate ---
+// While the sibling addon (stable ↔ beta) is running, every request is answered
+// with the blocked page instead of the app. The gate sits in front of all other
+// middleware; once the sibling stops, blockedState is cleared and the full app
+// (wired by startApp) takes over on the same Express instance.
+let blockedState: { siblingName: string | null; isBeta: boolean } | null = null;
+app.use((req, res, next) => {
+  if (!blockedState) return next();
+  if (req.path.startsWith('/locales')) return next();
+  if (req.path === '/api/blocked-status') {
+    return res.json({ blocked: true, ...blockedState });
+  }
+  res.status(503).sendFile(path.join(__dirname, 'public', 'blocked.html'));
+});
+
+// Locales are served outside the gate so the blocked page can translate itself.
+app.use('/locales', express.static(path.join(__dirname, 'locales')));
+
+/**
+ * Boots the kernel and wires up all middleware, socket handlers, and API routes.
+ * Runs only once the sibling guard has confirmed the sibling addon is not running.
+ */
+function startApp(): void {
+  // Boot the kernel, which instantiates all managers
+  kernel.boot(io);
+
+  // --- Global Middleware & Static Files ---
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(express.json());
+
+  // --- Socket.io Connection Handling ---
+  io.on('connection', (socket) => {
+    // These are simple getters that can be fulfilled by the kernel's managers
+    socket.on('get_ha_states', (callback) => {
+      try {
+        callback(kernel.haConnector.getStates());
+      } catch (e) {
+        callback({ error: (e as Error).message });
+      }
+    });
+    socket.on('get_integration_status', async (callback) => {
+      try {
+        const status = await kernel.getSystemStatus();
+        // Adapt for the frontend expectations
+        callback({ ...status, available: status.active });
+      } catch (e) {
+        callback({ error: (e as Error).message });
+      }
+    });
+
+    // Trigger a ha.action() handler in a running script — used by Lovelace cards and the addon UI.
+    // data: { script: 'openligadb.js', action: 'refresh', payload: {} }
+    socket.on('call_action', async (data, callback) => {
+      try {
+        if (!data?.script || !data?.action) {
+          return callback({ error: 'Missing script or action' });
+        }
+        const result = await workerManager.callAction(data.script, data.action, data.payload ?? {});
+        callback({ result });
+      } catch (e) {
+        callback({ error: (e as Error).message });
+      }
+    });
+
+    // The bridge now handles broadcasting the safe mode status, so we
+    // don't need to send it on each connection here.
+  });
+
+  // --- API ROUTERS ---
+  // The kernel holds all manager instances, so we pass them to the routes.
+  const { workerManager, depManager, stateManager, storeManager, haConnector, logManager, systemService } = kernel;
+
+  const scriptsRouter = scriptsRoutesFactory(
+    workerManager,
+    depManager,
+    stateManager,
+    io,
+    config.SCRIPTS_DIR,
+    config.STORAGE_DIR,
+    config.LIBRARIES_DIR,
+    kernel.mqttManager,
+    kernel.cardManager
+  );
+
+  // We create a proxy for the StoreManager to broadcast changes to workers from the UI.
+  const storeManagerUiWrapper = new Proxy(storeManager, {
+    get(target, prop) {
+      if (prop === 'set') {
+        return (key: string, value: unknown, owner?: string, isSecret?: boolean) => {
+          const current = target.data[key]?.value;
+          const res = target.set(key, value, owner, isSecret);
+          if (current !== value) {
+            workerManager.broadcastToWorkers({ type: 'store_update', key, value });
+          }
+          return res;
+        };
+      }
+      if (prop === 'delete') {
+        return (key: string) => {
+          const exists = target.data[key] !== undefined;
+          const res = target.delete(key);
+          if (exists) {
+            workerManager.broadcastToWorkers({ type: 'store_update', key, value: undefined });
+          }
+          return res;
+        };
+      }
+      return (target as unknown as Record<string | symbol, unknown>)[prop];
+    },
+  }) as StoreManager;
+
+  const storeRouter = storeRouteFactory(storeManagerUiWrapper, workerManager);
+  const systemRouter = systemRouteFactory(
+    haConnector,
+    logManager,
+    () => kernel.systemOptions,
+    config.SCRIPTS_DIR,
+    systemService,
+    kernel.getSystemStatus.bind(kernel),
+    kernel.mqttManager,
+    workerManager
+  );
+  const haRouter = haRoutesFactory(haConnector);
+  const webhookRouter = webhookRouteFactory(kernel.webhookManager);
+
+  app.use('/api/scripts', scriptsRouter);
+  app.use('/api/store', storeRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/ha', haRouter);
+  app.use('/api/webhooks', webhookRouter);
+
+  // System Restart Route
+  app.post('/api/system/restart-ha', async (req, res) => {
+    try {
+      await haConnector.callService('homeassistant', 'restart', {});
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+
+  app.use('/api', systemRouter);
+}
+
+// --- Graceful shutdown ---
+// Node drops its default SIGTERM/SIGINT termination as soon as any handler is
+// registered (log-manager and settings-manager add flush/save hooks), so
+// without an explicit exit the process keeps running until the Supervisor
+// SIGKILLs it after its stop timeout (exit code 137). This handler shuts the
+// kernel down and exits well within the Supervisor's grace window.
+let shuttingDown = false;
+function gracefulExit(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`📴 Received ${signal} — shutting down...`);
+  try {
+    kernel.shutdown();
+  } catch (e) {
+    console.error('Shutdown error:', (e as Error).message);
+  }
+  server.close();
+  // Give workers a moment to stop cleanly, then end the process.
+  setTimeout(() => process.exit(0), 3000);
+}
+process.on('SIGTERM', () => gracefulExit('SIGTERM'));
+process.on('SIGINT', () => gracefulExit('SIGINT'));
+
+/**
+ * Main application entry point.
+ */
+async function main(): Promise<void> {
+  try {
+    // Sibling guard: never run stable and beta at the same time (shared
+    // /config/js-automations and host port 3001). If the sibling addon is
+    // running, serve only the blocked page and wait for it to stop.
+    const guardResult = await siblingGuard.check();
+    if (guardResult.blocked) {
+      blockedState = { siblingName: guardResult.siblingName, isBeta: guardResult.isBeta };
+      server.listen(Number(config.PORT), '0.0.0.0', () => {
+        console.log(
+          `⏸️  Sibling addon "${guardResult.siblingName}" is running — waiting in blocked mode on port ${config.PORT}.`
+        );
+      });
+      await siblingGuard.waitUntilFree();
+      console.log('▶️  Sibling addon stopped — activating this addon now.');
+      blockedState = null;
+    }
+
+    // Wire up the full application (kernel boot, routes, sockets)
+    startApp();
+
+    // Listen right away (unless already listening from blocked mode) so
+    // ingress reaches the UI while the kernel is still starting — HA
+    // connect, initial TS compilation, and script autostart can take a
+    // while, and the Supervisor logs ingress errors for every hit until
+    // the port is open.
+    if (!server.listening) {
+      server.listen(Number(config.PORT), '0.0.0.0', () => {
+        console.log(`🌍 Dashboard is running on http://localhost:${config.PORT}`);
+      });
+    }
+
+    // Start the kernel's main logic
+    await kernel.start();
+
+    // Start the HA auto-reconnection loop
+    let isReconnecting = false;
+    setInterval(async () => {
+      if (!isReconnecting) {
+        isReconnecting = true;
+        await kernel.handleReconnection();
+        isReconnecting = false;
+      }
+    }, 5000);
+  } catch (err) {
+    console.error('❌ A critical error occurred during startup:', err);
+    process.exit(1);
+  }
+}
+
+main();

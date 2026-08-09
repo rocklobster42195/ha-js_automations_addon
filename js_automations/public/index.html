@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JS Automations</title>
     <!-- Fonts & Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/style.css" />
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.10.0/i18next.min.js"></script>
@@ -17,257 +17,96 @@
     <!-- Monaco's AMD loader defines a global define() with .amd set. Blockly's UMD wrapper checks
          that first and would register itself as an anonymous AMD module instead of setting
          window.Blockly if we don't hide it here. -->
-    <script>window._jsaAmdDefine = window.define; window.define = undefined;</script>
+    <script>
+      window._jsaAmdDefine = window.define;
+      window.define = undefined;
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/blockly@11.2.2/blockly.min.js"></script>
-    <script>window.define = window._jsaAmdDefine; delete window._jsaAmdDefine;</script>
-</head>
+    <script>
+      window.define = window._jsaAmdDefine;
+      delete window._jsaAmdDefine;
+    </script>
+  </head>
 
-<body>
+  <body>
+    <safe-mode-banner></safe-mode-banner>
+    <integration-banner></integration-banner>
+    <card-preview></card-preview>
+    <confirm-dialog></confirm-dialog>
+    <alert-toast></alert-toast>
+    <entity-picker-modal></entity-picker-modal>
+    <store-item-modal></store-item-modal>
+    <script-modal></script-modal>
     <div class="app-wrapper">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="brand">
-                    <i class="mdi mdi-robot-happy-outline nav-logo"></i>
-                    <span data-i18n="header_title">JS AUTOMATIONS</span>
-                    <span id="app-version" class="version-tag"></span>
-                </div>
-                <div class="header-actions">
-                    <button onclick="openCreationWizard()" data-i18n="new_script_title" data-i18n-title title="New Script"><i class="mdi mdi-plus"></i></button>
-                    <button id="btn-store-explorer" class="hidden" onclick="openStoreTab()" data-i18n="global_store_explorer_title" data-i18n-title title="Global Store Explorer"><i class="mdi mdi-database-search"></i></button>
-                    <button id="btn-settings" onclick="openSettingsTab()" data-i18n="settings_button_title" data-i18n-title title="Settings"><i class="mdi mdi-cog"></i></button>
-                    <button id="btn-reference" onclick="openReferenceTab()" title="Command Reference" class="hidden"><i class="mdi mdi-help-circle-outline"></i></button>
-                    <div id="header-entity-actions"></div>
-                </div>
-            </div>
+      <app-sidebar></app-sidebar>
 
-            <div class="search-box">
-                <div class="search-container">
-                    <input type="text" id="search-input" data-i18n="search_placeholder" data-i18n-placeholder placeholder="Suchen..." oninput="filterScripts()">
-                    <button id="clear-search-btn" class="hidden" onclick="clearSearch()" title="Clear search"><i class="mdi mdi-close"></i></button>
-                </div>
-            </div>
+      <main class="main-content">
+        <div id="editor-section" class="hidden">
+          <!-- EDITOR VIEW -->
+          <editor-view>
+            <div id="blockly-container" slot="blockly" class="hidden"></div>
+          </editor-view>
 
-            <div id="script-list" class="script-list">
-                <!-- Scripts will be injected here -->
-            </div>
+          <!-- STORE VIEW -->
+          <store-explorer id="store-wrapper" class="hidden"></store-explorer>
 
-            <div id="status-bar" class="sidebar-footer">
-                <div class="status-left">
-                    <div class="stat-item" title="Backend Heartbeat">
-                        <i id="heartbeat-icon" class="mdi mdi-circle-outline heartbeat-icon"></i>
-                    </div>
-                    <div id="integration-status-item" class="stat-item" title="MQTT Status" onclick="openSettingsTab('mqtt')" style="cursor:pointer">
-                        <i id="integration-status-icon" class="mdi mdi-circle-outline integration-icon"></i>
-                    </div>
-                </div>
-                <div class="status-slots">
-                    <div id="sb-slot1" class="sb-item"></div>
-                    <div id="sb-slot2" class="sb-item"></div>
-                    <div id="sb-slot3" class="sb-item"></div>
-                </div>
-            </div>
-        </aside>
-
-        <main class="main-content">
-            <div id="editor-section" class="hidden">
-                <div id="tab-bar"></div>
-                
-                <!-- EDITOR VIEW -->
-                <div id="editor-wrapper" style="display:flex; flex-direction:column; flex:1; min-height:0;">
-                    <div class="editor-toolbar">
-                        <div class="toolbar-left">
-                            <button id="btn-script-toggle" onclick="toggleActiveScript()" data-i18n="script_action_toggle_title" data-i18n-title title="Start / Stop"><i class="mdi mdi-play"></i></button>
-                            <button id="btn-script-restart" onclick="restartActiveScript()" data-i18n="script_action_restart_title" data-i18n-title title="Neustart"><i class="mdi mdi-restart"></i></button>
-                            <div class="toolbar-separator"></div>
-                            <button class="btn-save" onclick="saveActiveTab()" data-i18n="save_title" data-i18n-title title="Speichern"><i class="mdi mdi-content-save"></i></button>
-                            <button id="btn-script-edit" onclick="editActiveScript()" title="Edit Metadata"><i class="mdi mdi-pencil"></i></button>
-                            <button id="btn-script-download" onclick="downloadActiveScript()" data-i18n="download_script_title" data-i18n-title title="Download Script"><i class="mdi mdi-download"></i></button>
-                            <button id="btn-script-duplicate" onclick="duplicateActiveScript()" data-i18n="script_action_duplicate_title" data-i18n-title title="Duplizieren"><i class="mdi mdi-content-duplicate"></i></button>
-                            <button id="btn-word-wrap" onclick="toggleWordWrap()" data-i18n="toggle_word_wrap_title" data-i18n-title title="Zeilenumbruch umschalten"><i class="mdi mdi-wrap-disabled"></i></button>
-                            <button type="button" id="btn-open-card-tab" onclick="toggleCardTab()" title="Open / Close Card Tab" class="hidden"><i class="mdi mdi-view-dashboard-edit-outline"></i></button>
-                            <div class="toolbar-separator"></div>
-                            <!-- Snippet buttons injected by editor-snippets.js → buildSnippetToolbar() -->
-                            <div id="toolbar-snippets"></div>
-                            <button type="button" id="btn-card-menu" onclick="_toggleCardPreview()" data-i18n="card_preview_toggle_title" data-i18n-title title="Show / Hide Preview"><i class="mdi mdi-monitor-dashboard"></i></button>
-                        </div>
-                        <div class="toolbar-right">
-                            <button type="button" onclick="closeAllTabs()" data-i18n="close_all_tabs_title" data-i18n-title title="Alle Tabs schließen"><i class="mdi mdi-close-box-multiple"></i></button>
-                        </div>
-                    </div>
-                    <div id="monaco-container"></div>
-                    <div id="blockly-container" class="hidden"></div>
-                </div>
-
-                <!-- STORE VIEW -->
-                <div id="store-wrapper" class="hidden">
-                    <div class="store-toolbar">
-                        <h4 data-i18n="store.title">Global Store (ha.store)</h4>
-                        <div class="store-search-box">
-                            <input type="text" id="store-search" class="store-search-input" data-i18n="store.actions.filter_placeholder" data-i18n-placeholder placeholder="Filter..." oninput="renderStoreTable()">
-                            <button id="store-search-clear" class="hidden" onclick="clearStoreSearch()" data-i18n="store.actions.clear_filter" data-i18n-title title="Clear filter"><i class="mdi mdi-close"></i></button>
-                        </div>
-                        <button onclick="clearStore()" data-i18n="store.actions.clear_all" data-i18n-title title="Clear All (Delete everything)" style="color:var(--danger)"><i class="mdi mdi-delete-alert"></i></button>
-                        <button onclick="loadStoreData()" data-i18n="store.actions.refresh" data-i18n-title title="Refresh"><i class="mdi mdi-refresh"></i></button>
-                    </div>
-                    <div class="store-content">
-                        <table class="store-table">
-                            <thead><tr>
-                                <th id="th-store-key" data-i18n="store.headers.key" onclick="sortStore('key')" style="cursor:pointer; user-select:none;">Key</th>
-                                <th id="th-store-value" data-i18n="store.headers.value" onclick="sortStore('value')" style="cursor:pointer; user-select:none;">Value</th>
-                                <th id="th-store-owner" data-i18n="store.headers.owner" onclick="sortStore('owner')" style="cursor:pointer; user-select:none;">Owner</th>
-                                <th id="th-store-updated" data-i18n="store.headers.updated" onclick="sortStore('updated')" style="cursor:pointer; user-select:none;">Updated</th>
-                                <th id="th-store-accessed" data-i18n="store.headers.accessed" onclick="sortStore('accessed')" style="cursor:pointer; user-select:none;">Accessed</th>
-                                <th></th>
-                            </tr></thead>
-                            <tbody id="store-table-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- SETTINGS VIEW -->
-                <div id="settings-wrapper" class="hidden" style="display: flex; flex-direction: column; height: 100%; background-color: #1e1e1e;">
-                    <div class="settings-header" style="padding: 10px 20px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 10px;">
-                        <h2 style="margin: 0; font-size: 1.2rem; font-weight: 400;"><i class="mdi mdi-cog"></i> <span data-i18n="settings_title">Settings</span></h2>
-                        <div style="flex: 1;"></div>
-                        <button onclick="closeSettingsTab()" style="background: none; border: none; color: #aaa; cursor: pointer; font-size: 1.2rem;" title="Close"><i class="mdi mdi-close"></i></button>
-                    </div>
-                    <div class="settings-body" style="display: flex; flex: 1; overflow: hidden;">
-                        <!-- Left: Categories -->
-                        <div id="settings-categories" style="width: 200px; border-right: 1px solid #333; padding: 10px 0; overflow-y: auto;">
-                            <!-- Injected via JS -->
-                        </div>
-                        <!-- Right: Content -->
-                        <div id="settings-content" style="flex: 1; padding: 20px; overflow-y: auto;">
-                            <!-- Injected via JS -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="resizer"></div>
-
-            <div class="log-section">
-                <div class="log-panes">
-                    <!-- LEFT: existing log console -->
-                    <div class="log-pane-left">
-                        <div class="log-header">
-                            <div style="display:flex; align-items:center; gap:20px;">
-                                <span data-i18n="log_header">LOGS</span>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <label for="logFilter" data-i18n="log_filter_label" style="font-size:0.8rem; opacity:0.7;">Filter:</label>
-                                    <select id="logFilter" onchange="filterLogs()">
-                                        <option value="ALL" data-i18n="log_filter_all">All</option>
-                                        <option value="System">System</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div style="display:flex; gap:5px;">
-                                <button onclick="clearLogView()" data-i18n="log_clear_view_title" data-i18n-title title="Clear View">
-                                    <i class="mdi mdi-trash-can-outline"></i>
-                                </button>
-                                <button id="btn-clear-server-logs" class="hidden" onclick="clearServerLogs()" data-i18n="log_clear_server_title" data-i18n-title title="Delete Server Logs">
-                                    <i class="mdi mdi-delete-forever"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="console-output" class="console"></div>
-                    </div>
-
-                    <!-- PANE RESIZER (expert mode only) -->
-                    <div id="log-pane-resizer" class="log-pane-resizer"></div>
-
-                    <!-- RIGHT: developer tools (expert mode only) -->
-                    <div class="log-pane-right">
-                        <div class="log-pane-tab-bar">
-                            <button class="log-pane-tab active" data-tab="watch">WATCH</button>
-                            <button class="log-pane-tab" data-tab="repl">REPL</button>
-                            <button class="log-pane-tab" data-tab="mqtt">MQTT</button>
-                            <button class="log-pane-tab" data-tab="events">EVENTS</button>
-                            <button class="log-pane-tab" data-tab="webhooks">WEBHOOKS</button>
-                        </div>
-                        <div class="log-pane-content">
-                            <div id="dev-tab-watch" class="dev-tab-panel"></div>
-                            <div id="dev-tab-repl" class="dev-tab-panel hidden"></div>
-                            <div id="dev-tab-mqtt" class="dev-tab-panel hidden"></div>
-                            <div id="dev-tab-events" class="dev-tab-panel hidden"></div>
-                            <div id="dev-tab-webhooks" class="dev-tab-panel hidden"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Modal for Entity Picker -->
-    <div id="entity-picker-modal" class="modal-overlay hidden">
-        <div class="modal" style="height: 80vh; display: flex; flex-direction: column;">
-            <h3 data-i18n="modal_insert_entity_title">Entity einfügen</h3>
-            <div class="search-box" style="border:none; padding: 0 0 10px 0;">
-                <div class="search-container">
-                    <input type="text" id="entity-search-input" data-i18n="entity_search_placeholder" data-i18n-placeholder placeholder="Entity suchen..." oninput="filterEntityPicker()" autocomplete="off">
-                </div>
-            </div>
-            <div id="entity-list" class="entity-list"></div>
-            <div class="modal-btns">
-                <button class="btn-text" onclick="closeEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
-            </div>
+          <!-- SETTINGS VIEW -->
+          <settings-view id="settings-wrapper" class="hidden"></settings-view>
         </div>
-    </div>
 
-    <!-- Modal for Settings Entity Picker -->
-    <div id="settings-entity-picker-modal" class="modal-overlay hidden">
-        <div class="modal" style="height: 80vh; display: flex; flex-direction: column;">
-            <h3 data-i18n="modal_select_entity_title">Entity auswählen</h3>
-            <div class="search-box" style="border:none; padding: 0 0 10px 0;">
-                <div class="search-container">
-                    <input type="text" id="settings-entity-search-input" data-i18n="entity_search_placeholder" data-i18n-placeholder placeholder="Entity suchen..." oninput="filterSettingsEntityPicker()" autocomplete="off">
-                </div>
+        <div id="resizer"></div>
+
+        <div class="log-section">
+          <div class="log-panes">
+            <!-- LEFT: existing log console -->
+            <log-viewer></log-viewer>
+
+            <!-- PANE RESIZER (expert mode only) -->
+            <div id="log-pane-resizer" class="log-pane-resizer"></div>
+
+            <!-- RIGHT: developer tools (expert mode only) -->
+            <div class="log-pane-right">
+              <div class="log-pane-tab-bar">
+                <button class="log-pane-tab active" data-tab="watch">WATCH</button>
+                <button class="log-pane-tab" data-tab="repl">REPL</button>
+                <button class="log-pane-tab" data-tab="mqtt">MQTT</button>
+                <button class="log-pane-tab" data-tab="events">EVENTS</button>
+                <button class="log-pane-tab" data-tab="webhooks">WEBHOOKS</button>
+              </div>
+              <div class="log-pane-content">
+                <watch-panel id="dev-tab-watch" class="dev-tab-panel"></watch-panel>
+                <div id="dev-tab-repl" class="dev-tab-panel hidden"></div>
+                <mqtt-monitor id="dev-tab-mqtt" class="dev-tab-panel hidden"></mqtt-monitor>
+                <event-inspector id="dev-tab-events" class="dev-tab-panel hidden"></event-inspector>
+                <webhook-panel id="dev-tab-webhooks" class="dev-tab-panel hidden"></webhook-panel>
+              </div>
             </div>
-            <div id="settings-entity-list" class="entity-list"></div>
-            <div class="modal-btns">
-                <button class="btn-text" onclick="closeSettingsEntityPicker()" data-i18n="button_cancel">ABBRECHEN</button>
-            </div>
+          </div>
         </div>
+      </main>
     </div>
 
     <!-- Connection Lost Overlay -->
     <div id="connection-lost-overlay" class="hidden">
-        <div class="reconnect-spinner"></div>
-        <h2 style="margin-bottom: 10px;">Verbindung unterbrochen</h2>
-        <p style="color: #aaa; margin-bottom: 20px;">Versuche Wiederherstellung...</p>
-        <button class="btn-primary" onclick="manualReload()">
-            <i class="mdi mdi-reload"></i> Jetzt neu laden
-        </button>
+      <div class="reconnect-spinner"></div>
+      <h2 style="margin-bottom: 10px">Verbindung unterbrochen</h2>
+      <p style="color: #aaa; margin-bottom: 20px">Versuche Wiederherstellung...</p>
+      <button class="btn-primary" onclick="manualReload()"><i class="mdi mdi-reload"></i> Jetzt neu laden</button>
     </div>
 
     <script src="js/api.js"></script>
-    <script src="js/editor-config.js"></script>
-    <script src="js/editor-snippets.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/blockly-blocks.js"></script>
     <script src="js/blockly-blocks-shared.js"></script>
     <script src="js/blockly-mutators.js"></script>
     <script src="js/blockly-fields.js"></script>
     <script src="js/blockly-editor.js"></script>
-    <script src="js/tab-manager.js"></script>
-    <script src="js/card-preview.js"></script>
-    <script src="js/script-list.js"></script>
-    <script src="js/log-viewer.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/store-explorer.js"></script>
-    <script src="js/settings.js"></script>
-    <script src="js/statusbar.js"></script>
-    <script src="js/creation-wizard.js"></script>
     <script src="js/reference.js"></script>
-    <script src="js/safe-mode.js"></script>
-    <script src="js/event-inspector.js"></script>
-    <script src="js/watch.js"></script>
     <script src="js/repl.js"></script>
-    <script src="js/mqtt-monitor.js"></script>
-    <script src="js/webhook-panel.js"></script>
-    <script src="js/integration-banner.js"></script>
-</body>
-
+    <!-- LIT components bundle (built by `npm run build`, see docs/RFC_FRONTEND_MODERNIZATION.md) -->
+    <script type="module" src="js/dist/components.js"></script>
+  </body>
 </html>

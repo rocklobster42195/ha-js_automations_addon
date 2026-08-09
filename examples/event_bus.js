@@ -16,47 +16,47 @@
 
 // React to NFC tag scans (requires HA mobile companion app or NFC integration)
 ha.onEvent('tag_scanned', (event) => {
-    const tagId = event.data.tag_id;
-    ha.log(`NFC tag scanned: ${tagId}`);
+  const tagId = event.data.tag_id;
+  ha.log(`NFC tag scanned: ${tagId}`);
 
-    // Map tag IDs to scene names and broadcast them
-    const sceneMap = {
-        'aabbccdd-1234': 'movie',
-        'eeff0011-5678': 'dinner',
-        '99887766-abcd': 'goodnight',
-    };
+  // Map tag IDs to scene names and broadcast them
+  const sceneMap = {
+    'aabbccdd-1234': 'movie',
+    'eeff0011-5678': 'dinner',
+    '99887766-abcd': 'goodnight',
+  };
 
-    const scene = sceneMap[tagId];
-    if (scene) {
-        activateScene(scene);
-    } else {
-        ha.warn(`Unknown tag: ${tagId}`);
-    }
+  const scene = sceneMap[tagId];
+  if (scene) {
+    activateScene(scene);
+  } else {
+    ha.warn(`Unknown tag: ${tagId}`);
+  }
 });
 
 // Listen to HA automation triggers (useful for cross-script coordination)
 ha.onEvent('automation_triggered', (event) => {
-    ha.debug(`Automation fired: ${event.data.name}`);
+  ha.debug(`Automation fired: ${event.data.name}`);
 });
 
 // ─── Part 2: Fire custom events (script-to-script communication) ───────────────
 
 function activateScene(scene) {
-    ha.log(`Activating scene: ${scene}`);
+  ha.log(`Activating scene: ${scene}`);
 
-    // Apply the scene in HA
-    ha.call('scene.turn_on', { entity_id: `scene.${scene}` });
+  // Apply the scene in HA
+  ha.call('scene.turn_on', { entity_id: `scene.${scene}` });
 
-    // Broadcast a custom event so other scripts can react without tight coupling.
-    // Any script can listen with: ha.onEvent('jsa_scene_activated', handler)
-    ha.fireEvent('jsa_scene_activated', { scene, activatedAt: new Date().toISOString() });
+  // Broadcast a custom event so other scripts can react without tight coupling.
+  // Any script can listen with: ha.onEvent('jsa_scene_activated', handler)
+  ha.fireEvent('jsa_scene_activated', { scene, activatedAt: new Date().toISOString() });
 }
 
 // ─── Example: trigger a scene from a button entity ────────────────────────────
 
 ha.register('button.activate_movie_scene', {
-    name: 'Movie Scene',
-    icon: 'mdi:movie-open',
+  name: 'Movie Scene',
+  icon: 'mdi:movie-open',
 });
 
 ha.on('button.activate_movie_scene', () => activateScene('movie'));

@@ -1,0 +1,29 @@
+/*
+ * Design tokens — "aus einem Guss" baseline.
+ * Dark-only by design: the addon runs inside an HA ingress iframe, which
+ * does not inherit HA's own CSS custom properties across the frame
+ * boundary, and no live sync with the user's HA theme is attempted (see
+ * docs/RFC_FRONTEND_MODERNIZATION.md section 2). A defined 3-level surface
+ * model replaces the previous 9 ad-hoc gray variables.
+ */
+:root {
+  /* Surfaces (darkest to most raised) */
+  --surface-0: #0c0c0c; /* page canvas */
+  --surface-1: #141414; /* sidebar, panels */
+  --surface-2: #222222; /* modals, inputs, cards, hover */
+
+  --border: #252525;
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #666666;
+
+  /* Semantic — not part of the neutral/gray scale */
+  --accent: #03a9f4;
+  --success: #4caf50;
+  --danger: #f44336;
+  --warn: #ff9800;
+
+  color-scheme: dark;
+}

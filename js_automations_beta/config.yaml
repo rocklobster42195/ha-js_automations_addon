@@ -14,7 +14,7 @@ ports:
   3001/tcp: 3001
 ports_description:
   3001/tcp: "Webhook receiver (ha.onWebhook)"
-panel_icon: "mdi:flask-outline"
+panel_icon: "mdi:robot-angry-outline"
 homeassistant_api: true
 hassio_api: true
 hassio_role: manager
