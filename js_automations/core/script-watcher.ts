@@ -1,7 +1,30 @@
-// core/script-watcher.js
-const path = require('path');
-const fs = require('fs');
-const ScriptHeaderParser = require('./script-header-parser');
+// core/script-watcher.ts
+import * as path from 'path';
+import * as fs from 'fs';
+import ScriptHeaderParser from './script-header-parser';
+import type StateManager from './state-manager';
+import type MqttManager from './mqtt-manager';
+import type HAConnector from './ha-connection';
+import type CompilerManager from './compiler-manager';
+import type BlocklyCompiler from './blockly-compiler';
+
+interface WorkerManagerLike {
+  scriptsDir: string;
+  workers: Map<string, unknown>;
+  emit(event: string, payload: unknown): void;
+  stopScript(filename: string, reason?: string): void;
+  startScript(filename: string): void;
+  removeScriptEntities(filename: string): Promise<void>;
+  setProtectedEntities(filename: string, entityIds: string[]): void;
+  registerEntity(filename: string, entityId: string, payload: unknown): void;
+}
+
+interface WatcherCallbacks {
+  resolveId(value: string | undefined, list: unknown[], key: string): string | undefined;
+  checkDeviceCleanup(slug: string): Promise<void>;
+  warnIconConflict(entityId: string, deviceClass: string): void;
+  onTypingsNeeded(): void;
+}
 
 /**
  * Watches the scripts directory for file changes and orchestrates the
@@ -9,17 +32,27 @@ const ScriptHeaderParser = require('./script-header-parser');
  * and MQTT Discovery updates for @expose entities.
  */
 class ScriptWatcher {
+  workerManager: WorkerManagerLike;
+  stateManager: StateManager;
+  mqttManager: MqttManager;
+  haConnection: HAConnector;
+  compilerManager: CompilerManager;
+  blocklyCompiler: BlocklyCompiler;
+  callbacks: WatcherCallbacks;
+
   /**
-   * @param {object} workerManager
-   * @param {object} stateManager
-   * @param {object} mqttManager
-   * @param {object} haConnection
-   * @param {object} compilerManager
-   * @param {object} blocklyCompiler
-   * @param {object} callbacks - EntityManager methods needed for entity sync:
+   * @param callbacks - EntityManager methods needed for entity sync:
    *   resolveId, checkDeviceCleanup, warnIconConflict, onTypingsNeeded
    */
-  constructor(workerManager, stateManager, mqttManager, haConnection, compilerManager, blocklyCompiler, callbacks) {
+  constructor(
+    workerManager: WorkerManagerLike,
+    stateManager: StateManager,
+    mqttManager: MqttManager,
+    haConnection: HAConnector,
+    compilerManager: CompilerManager,
+    blocklyCompiler: BlocklyCompiler,
+    callbacks: WatcherCallbacks
+  ) {
     this.workerManager = workerManager;
     this.stateManager = stateManager;
     this.mqttManager = mqttManager;
@@ -29,12 +62,12 @@ class ScriptWatcher {
     this.callbacks = callbacks;
   }
 
-  start() {
+  start(): void {
     if (!this.workerManager.scriptsDir) return;
 
-    const debounceTimers = new Map();
+    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-    const onWatch = (dir, eventType, filename) => {
+    const onWatch = (dir: string, eventType: string, filename: string | null): void => {
       if (filename && (filename.endsWith('.js') || filename.endsWith('.ts') || filename.endsWith('.blocks'))) {
         const fullPath = path.join(dir, filename);
         if (debounceTimers.has(fullPath)) clearTimeout(debounceTimers.get(fullPath));
@@ -63,7 +96,7 @@ class ScriptWatcher {
     }
   }
 
-  async processScript(scriptPath) {
+  async processScript(scriptPath: string): Promise<void> {
     const extension = path.extname(scriptPath);
     const scriptNameRaw = path.basename(scriptPath, extension);
     const slug = scriptNameRaw
@@ -111,9 +144,10 @@ class ScriptWatcher {
         for (const runningScriptFile of runningScripts) {
           const runningScriptPath = path.join(this.workerManager.scriptsDir, runningScriptFile);
           const runningMeta = ScriptHeaderParser.parse(runningScriptPath);
+          const includes = 'includes' in runningMeta ? runningMeta.includes : undefined;
           const depends =
-            runningMeta.includes &&
-            runningMeta.includes.some((lib) => {
+            includes &&
+            includes.some((lib) => {
               const cleanLib = lib.replace(/\.(js|ts)$/, '').toLowerCase();
               const cleanTarget = scriptNameRaw.toLowerCase();
               return (
@@ -133,7 +167,7 @@ class ScriptWatcher {
           : scriptNameRaw.replace(/[_-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
       if (!this.mqttManager.isConnected) {
-        if (meta.expose) {
+        if ('expose' in meta && meta.expose) {
           this.workerManager.emit('log', {
             source: 'System',
             message: `⚠️ Script ${displayName} has @expose but MQTT is not connected. Entity will not be available in HA.`,
@@ -143,7 +177,8 @@ class ScriptWatcher {
         return;
       }
 
-      const domain = meta.expose === 'button' ? 'button' : 'switch';
+      const expose = 'expose' in meta ? meta.expose : null;
+      const domain = expose === 'button' ? 'button' : 'switch';
 
       // --- Smart cleanup for domain type changes (switch ↔ button) ---
       const otherDomain = domain === 'button' ? 'switch' : 'button';
@@ -153,7 +188,7 @@ class ScriptWatcher {
         `js_automations_${domain}_${slug}`,
       ];
 
-      if (!meta.expose) {
+      if (!expose) {
         idsToRemove.push(`jsa_switch_${slug}`, `jsa_button_${slug}`);
       }
 
@@ -163,7 +198,7 @@ class ScriptWatcher {
       }
 
       // --- No @expose: clean up and exit ---
-      if (!meta.expose || !['switch', 'button'].includes(meta.expose)) {
+      if (!expose || !['switch', 'button'].includes(expose)) {
         this.workerManager.setProtectedEntities(fileName, []);
         await this.callbacks.checkDeviceCleanup(slug);
         return;
@@ -176,13 +211,14 @@ class ScriptWatcher {
       const entityId = `${domain}.jsa_${slug}`;
       const uniqueId = `jsa_${domain}_${slug}`;
       const initialState = domain === 'switch' && isRunning ? 'ON' : 'OFF';
-      let entityIcon = meta.icon;
+      const icon = 'icon' in meta ? meta.icon : undefined;
+      let entityIcon = icon;
       if (domain === 'button') entityIcon = 'mdi:play';
       else if (domain === 'switch') entityIcon = isRunning ? 'mdi:stop' : 'mdi:play';
 
       const discoveryTopic = `homeassistant/${domain}/${uniqueId}/config`;
 
-      const payload = {
+      const payload: Record<string, any> = {
         name: null,
         unique_id: uniqueId,
         state_topic: `jsa/${domain}/${slug}/data`,
@@ -202,12 +238,9 @@ class ScriptWatcher {
         },
       };
 
-      if (this.callbacks.resolveId(meta.area, areas, 'area_id')) {
-        payload.device.suggested_area = meta.area;
-      }
-
-      if (payload.device_class && (meta.icon || (meta.attributes && meta.attributes.icon))) {
-        this.callbacks.warnIconConflict(entityId, payload.device_class);
+      const area = 'area' in meta ? meta.area : undefined;
+      if (this.callbacks.resolveId(area, areas, 'area_id')) {
+        payload.device.suggested_area = area;
       }
 
       this.mqttManager.publish(discoveryTopic, payload, { retain: true });
@@ -225,4 +258,4 @@ class ScriptWatcher {
   }
 }
 
-module.exports = ScriptWatcher;
+export = ScriptWatcher;

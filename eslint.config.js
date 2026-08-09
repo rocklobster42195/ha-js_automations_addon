@@ -40,6 +40,7 @@ module.exports = [
       'js_automations/core/ha-connection.js',
       'js_automations/core/settings-manager.js',
       'js_automations/core/dependency-manager.js',
+      'js_automations/core/script-watcher.js',
     ],
   },
   js.configs.recommended,
