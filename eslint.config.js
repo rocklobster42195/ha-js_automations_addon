@@ -34,6 +34,7 @@ module.exports = [
       'js_automations/core/blockly-compiler.js',
       'js_automations/core/compiler-manager.js',
       'js_automations/core/fs-service.js',
+      'js_automations/core/settings-schema.js',
     ],
   },
   js.configs.recommended,

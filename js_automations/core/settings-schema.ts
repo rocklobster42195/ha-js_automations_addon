@@ -8,7 +8,44 @@
  * 3. Defaults: Initialization of settings.json
  */
 
-module.exports = [
+interface SettingOption {
+  value: string;
+  label: string;
+}
+
+interface SettingCondition {
+  key: string;
+  value: unknown;
+}
+
+interface SettingItem {
+  key: string;
+  label: string | null;
+  description?: string;
+  type: string;
+  options?: SettingOption[];
+  default?: unknown;
+  min?: number;
+  max?: number;
+  unit?: string;
+  hidden?: boolean;
+  active?: boolean;
+  indent?: boolean;
+  condition?: SettingCondition;
+  text?: string;
+  buttonLabel?: string;
+  actionUrl?: string;
+  mode?: string;
+}
+
+interface SettingSection {
+  id: string;
+  label: string;
+  icon: string;
+  items: SettingItem[];
+}
+
+const settingsSchema: SettingSection[] = [
   {
     id: 'general',
     label: 'settings.sections.general',
@@ -422,3 +459,5 @@ module.exports = [
     ],
   },
 ];
+
+export = settingsSchema;
