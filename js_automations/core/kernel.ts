@@ -29,25 +29,12 @@ import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
 import CardManager from './card-manager';
 import Bridge from './bridge';
+import SystemService from '../services/system-service';
 
 // settings-manager.ts and worker-manager.ts export a singleton instance (export = new X()),
 // not the class itself, so the type has to be derived from the module's export value.
 type SettingsManagerInstance = typeof SettingsManager;
 type WorkerManagerInstance = typeof workerManager;
-
-// services/system-service.js lives outside core/ and is out of scope for this migration,
-// so it's typed structurally (like EntityManager's SystemServiceLike) instead of imported.
-interface SystemServiceLike {
-  isSafeMode: boolean;
-  start(): void;
-  markCleanShutdown(): void;
-  on(event: 'system_stats_updated', listener: (stats: Record<string, unknown>) => void): void;
-  on(event: 'safe_mode_changed', listener: (isSafeMode: boolean) => void): void;
-}
-interface SystemServiceConstructor {
-  new (appConfig: typeof config, workerManager: WorkerManagerInstance): SystemServiceLike;
-}
-const SystemService = require('../services/system-service') as SystemServiceConstructor;
 
 interface KernelSettings {
   mqtt?: { enabled?: boolean };
@@ -107,7 +94,7 @@ class Kernel extends EventEmitter {
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
-  systemService!: SystemServiceLike;
+  systemService!: SystemService;
   bridge!: Bridge;
 
   constructor() {

@@ -1,19 +1,50 @@
-// services/system-service.js
-const EventEmitter = require('events');
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
+// services/system-service.ts
+import { EventEmitter } from 'events';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
+import type AppConfig from '../core/config';
+
+// worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
+// itself, so the type has to be derived from the module's export value.
+type WorkerManagerInstance = typeof import('../core/worker-manager');
+
+interface SystemStats {
+  cpu: number;
+  ram_used: number;
+  ram_total: number;
+  ram_used_pct: number;
+  container_mem_limit: number | null;
+  app_ram: number;
+  app_heap: number;
+  worker_count: number;
+  script_stats: Record<string, unknown>;
+}
+
+interface CpuTick {
+  idle: number;
+  total: number;
+}
+
+interface CrashData {
+  count: number;
+  lastBoot: number;
+}
 
 /**
  * The SystemService is responsible for monitoring system-level health,
  * including CPU/RAM usage, boot loop detection, and safe mode status.
  */
 class SystemService extends EventEmitter {
-  /**
-   * @param {object} config The global application config.
-   * @param {import('../core/worker-manager')} workerManager The worker manager to get script stats from.
-   */
-  constructor(config, workerManager) {
+  config: typeof AppConfig;
+  workerManager: WorkerManagerInstance;
+  CRASH_FILE: string;
+  isSafeMode: boolean;
+  statsInterval: ReturnType<typeof setInterval> | null;
+  cpuStartTick: CpuTick | null;
+  containerMemLimitMb: number | null;
+
+  constructor(config: typeof AppConfig, workerManager: WorkerManagerInstance) {
     super();
     this.config = config;
     this.workerManager = workerManager;
@@ -29,9 +60,9 @@ class SystemService extends EventEmitter {
    * Detects a cgroup memory limit (Docker/Home Assistant container), if any.
    * Returns null on hosts without cgroups (e.g. Windows dev machines) or when unlimited,
    * so callers can fall back to host-wide memory stats.
-   * @returns {number|null} Limit in MB, or null if not detected.
+   * @returns Limit in MB, or null if not detected.
    */
-  _detectContainerMemLimit() {
+  _detectContainerMemLimit(): number | null {
     try {
       // cgroup v2
       const raw = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
@@ -60,7 +91,7 @@ class SystemService extends EventEmitter {
   /**
    * Starts the system monitoring services (CPU/RAM, etc.).
    */
-  start() {
+  start(): void {
     this.detectBootloop();
 
     this.cpuStartTick = this._getCpuTick();
@@ -74,7 +105,7 @@ class SystemService extends EventEmitter {
   /**
    * Stops the monitoring services.
    */
-  stop() {
+  stop(): void {
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
     }
@@ -84,9 +115,9 @@ class SystemService extends EventEmitter {
    * Checks for a bootloop condition by reading a crash counter file.
    * If a bootloop is detected, it sets the isSafeMode flag and emits an event.
    */
-  detectBootloop() {
+  detectBootloop(): void {
     try {
-      let crashData = { count: 0, lastBoot: 0 };
+      let crashData: CrashData = { count: 0, lastBoot: 0 };
       if (fs.existsSync(this.CRASH_FILE)) {
         crashData = JSON.parse(fs.readFileSync(this.CRASH_FILE, 'utf8'));
       }
@@ -104,6 +135,10 @@ class SystemService extends EventEmitter {
       }
       this.emit('safe_mode_changed', this.isSafeMode);
     } catch (e) {
+      // A corrupt/unreadable crash file means bootloop detection just doesn't run this boot -
+      // it isn't reset here, so a persistently corrupt file would silently disable this check
+      // forever. Known gap, not fixed as part of the JS->TS conversion (see
+      // project_lit_migration memory entry from 2026-08-09).
       console.error('Bootloop check failed:', e);
     }
   }
@@ -114,7 +149,7 @@ class SystemService extends EventEmitter {
    * Without this, any 3 restarts within 60s — including ordinary ones triggered by
    * an HA/Supervisor update — trip Safe Mode indistinguishably from a real crash loop.
    */
-  markCleanShutdown() {
+  markCleanShutdown(): void {
     try {
       if (fs.existsSync(this.CRASH_FILE)) fs.unlinkSync(this.CRASH_FILE);
     } catch (e) {
@@ -124,9 +159,9 @@ class SystemService extends EventEmitter {
 
   /**
    * Resolves the safe mode status by deleting the crash file and emitting an event.
-   * @returns {boolean} True if successful, false otherwise.
+   * @returns True if successful, false otherwise.
    */
-  resolveSafeMode() {
+  resolveSafeMode(): boolean {
     try {
       if (fs.existsSync(this.CRASH_FILE)) {
         fs.unlinkSync(this.CRASH_FILE);
@@ -140,10 +175,10 @@ class SystemService extends EventEmitter {
     }
   }
 
-  _collectAndEmitStats() {
+  _collectAndEmitStats(): void {
     const endTick = this._getCpuTick();
-    const idleDiff = endTick.idle - this.cpuStartTick.idle;
-    const totalDiff = endTick.total - this.cpuStartTick.total;
+    const idleDiff = endTick.idle - this.cpuStartTick!.idle;
+    const totalDiff = endTick.total - this.cpuStartTick!.total;
     const cpuPercent = totalDiff > 0 ? 100 - Math.floor((100 * idleDiff) / totalDiff) : 0;
     this.cpuStartTick = endTick;
 
@@ -163,10 +198,10 @@ class SystemService extends EventEmitter {
         : 0;
 
     // Also include script stats
-    const scriptStats = {};
+    const scriptStats: Record<string, unknown> = {};
     this.workerManager.stats.forEach((v, k) => (scriptStats[k] = v));
 
-    const stats = {
+    const stats: SystemStats = {
       cpu: cpuPercent,
       ram_used: totalMem - freeMem,
       ram_total: totalMem,
@@ -181,7 +216,7 @@ class SystemService extends EventEmitter {
     this.emit('system_stats_updated', stats);
   }
 
-  _getCpuTick() {
+  _getCpuTick(): CpuTick {
     const cpus = os.cpus();
     let user = 0,
       nice = 0,
@@ -199,4 +234,4 @@ class SystemService extends EventEmitter {
   }
 }
 
-module.exports = SystemService;
+export = SystemService;
