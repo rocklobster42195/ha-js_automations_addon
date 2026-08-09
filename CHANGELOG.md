@@ -1,5 +1,38 @@
 <!-- NEXT -->
 
+### Harder, Better, Faster, Stronger
+
+The entire app has been rebuilt from the ground up — a new visual scripting editor, a modernized interface, and a fully typed codebase underneath.
+
+**Blockly visual editor**
+
+Scripts can now be built visually, no code required — drag-and-drop blocks for triggers, conditions, entity/service calls, MQTT, webhooks, Calendar/Todo, and more. "Show Code" reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file the moment you outgrow the blocks.
+
+**What's new**
+
+- Full Blockly block library: entity/service calls, state/schedule/webhook triggers, Store, MQTT, Area/Label lookups, Calendar/Todo, `ha.history` trend/timeSince, an interactive Ask block
+- "Show Code" panel — see the generated JavaScript instantly, no server round-trip
+- "Duplicate as JavaScript" — a safe, non-destructive way out of the visual editor once a script gets complex
+- Block-level error highlighting when a `.blocks` script throws at runtime
+- Automatic `@permission` derivation from the blocks actually used
+
+**A completely modernized interface**
+
+The whole frontend has been rewritten on LIT web components with TypeScript, and the backend is now fully TypeScript too — same features, a more consistent UI, and several long-standing edge-case bugs found and fixed along the way.
+
+- New **Mobile View** — a phone-friendly dashboard and log screen, auto-detected or toggled manually
+- State-preview toggle in the entity picker (Ctrl+E) — see an entity's live state while picking it
+- Full header-tag (`@include`, `@card`, ...) IntelliSense in the script editor
+- Refreshed, more consistent visual design (unified spacing/surface colors across every panel)
+
+**Also fixed along the way**
+
+- Expert Mode toggle needed a hard reload to apply the sidebar logo color
+- IntelliSense/snippet consistency gaps in the Monaco editor
+- System CPU/RAM sensors now correctly use `state_class` (were silently rejected by HA before)
+- Card preview panel: drag handle now works, panel stays on-screen when resized, toggle button reflects state correctly, only shows for JS/TS scripts with `@card`
+- Entity picker modal now closes on Escape
+
 ---
 
 ## [2.57.9] - 2026-08-07
