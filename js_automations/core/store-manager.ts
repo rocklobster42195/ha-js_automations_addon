@@ -2,19 +2,30 @@
  * JS AUTOMATIONS - Store Manager
  * Manages persistent global variables with usage tracking.
  */
-const fs = require('fs');
-const path = require('path');
-const EventEmitter = require('events');
+import * as fs from 'fs';
+import * as path from 'path';
+import { EventEmitter } from 'events';
+
+interface StoreEntry {
+  value: unknown;
+  owner: string | undefined;
+  isSecret: boolean;
+  updated: string;
+  accessed: string;
+}
 
 class StoreManager extends EventEmitter {
-  constructor(rootDir) {
+  storeFile: string;
+  data: Record<string, StoreEntry>;
+
+  constructor(rootDir: string) {
     super();
     this.storeFile = path.join(rootDir, 'store.json');
     this.data = {};
     this.load();
   }
 
-  load() {
+  load(): void {
     if (fs.existsSync(this.storeFile)) {
       try {
         this.data = JSON.parse(fs.readFileSync(this.storeFile, 'utf8'));
@@ -25,11 +36,11 @@ class StoreManager extends EventEmitter {
     }
   }
 
-  save() {
+  save(): void {
     fs.writeFileSync(this.storeFile, JSON.stringify(this.data, null, 2));
   }
 
-  set(key, value, scriptName, isSecret = false) {
+  set(key: string, value: unknown, scriptName?: string, isSecret = false): void {
     this.data[key] = {
       value: value,
       owner: scriptName,
@@ -41,7 +52,7 @@ class StoreManager extends EventEmitter {
     this.emit('changed', { key, item: this.data[key] });
   }
 
-  get(key) {
+  get(key: string): unknown {
     if (this.data[key]) {
       this.data[key].accessed = new Date().toISOString();
       // We don't save immediately on read for performance reasons.
@@ -51,11 +62,11 @@ class StoreManager extends EventEmitter {
     return null;
   }
 
-  getAll() {
+  getAll(): Record<string, StoreEntry> {
     return this.data;
   }
 
-  delete(key) {
+  delete(key: string): boolean {
     if (this.data[key]) {
       delete this.data[key];
       this.save();
@@ -65,16 +76,16 @@ class StoreManager extends EventEmitter {
     return false;
   }
 
-  clear() {
+  clear(): void {
     this.data = {};
     this.save();
     this.emit('changed', { cleared: true });
   }
 
   /** Deletes all variables created by a specific script. */
-  pruneByOwner(scriptName) {
+  pruneByOwner(scriptName: string): number {
     let count = 0;
-    for (let key in this.data) {
+    for (const key in this.data) {
       if (this.data[key].owner === scriptName) {
         delete this.data[key];
         count++;
@@ -87,4 +98,4 @@ class StoreManager extends EventEmitter {
   }
 }
 
-module.exports = StoreManager;
+export = StoreManager;

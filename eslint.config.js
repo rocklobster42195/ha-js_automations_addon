@@ -29,6 +29,7 @@ module.exports = [
       'js_automations/core/log-manager.js',
       'js_automations/core/bridge.js',
       'js_automations/core/ha-history-helpers.js',
+      'js_automations/core/store-manager.js',
     ],
   },
   js.configs.recommended,
