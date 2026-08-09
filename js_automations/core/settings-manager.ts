@@ -1,11 +1,17 @@
-const fs = require('fs');
-const path = require('path');
-const EventEmitter = require('events');
-const schema = require('./settings-schema');
-const config = require('./config');
+import * as fs from 'fs';
+import * as path from 'path';
+import { EventEmitter } from 'events';
+import schema from './settings-schema';
+import config from './config';
+
 const SETTINGS_FILE = path.join(config.STORAGE_DIR, 'settings.json');
 
+type SettingsData = Record<string, Record<string, unknown>>;
+
 class SettingsManager extends EventEmitter {
+  settings: SettingsData;
+  private saveTimer: ReturnType<typeof setTimeout> | null;
+
   constructor() {
     super();
     this.settings = {};
@@ -20,7 +26,7 @@ class SettingsManager extends EventEmitter {
   /**
    * Initializes the manager, loads existing settings or creates defaults.
    */
-  init() {
+  init(): void {
     // Ensure the directory exists
     if (!fs.existsSync(config.STORAGE_DIR)) {
       try {
@@ -60,7 +66,7 @@ class SettingsManager extends EventEmitter {
   /**
    * Returns the current settings.
    */
-  getSettings() {
+  getSettings(): SettingsData {
     return this.settings;
   }
 
@@ -73,9 +79,9 @@ class SettingsManager extends EventEmitter {
 
   /**
    * Updates the settings (partially) and saves them.
-   * @param {Object} updates - The object containing the changes.
+   * @param updates - The object containing the changes.
    */
-  updateSettings(updates) {
+  updateSettings(updates: SettingsData): SettingsData {
     this.settings = this._deepMerge(this.settings, updates);
     this._validateAndCleanup(); // Ensure no invalid keys are introduced during updates
     this.triggerSave();
@@ -87,7 +93,7 @@ class SettingsManager extends EventEmitter {
    * Starts the save timer (debounce).
    * Prevents frequent write access to the SD card (Raspberry Pi protection).
    */
-  triggerSave() {
+  triggerSave(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     // Saves after 2 seconds of inactivity
     this.saveTimer = setTimeout(() => this.save(), 2000);
@@ -96,7 +102,7 @@ class SettingsManager extends EventEmitter {
   /**
    * Saves the current state to the file.
    */
-  save() {
+  save(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
@@ -115,8 +121,8 @@ class SettingsManager extends EventEmitter {
   /**
    * Extracts default values from the schema.
    */
-  _getDefaultsFromSchema() {
-    const defaults = {};
+  private _getDefaultsFromSchema(): SettingsData {
+    const defaults: SettingsData = {};
     schema.forEach((category) => {
       defaults[category.id] = {};
       category.items.forEach((item) => {
@@ -130,8 +136,8 @@ class SettingsManager extends EventEmitter {
    * Removes all settings that are not defined in the schema.
    * Prevents "orphans" or typos from remaining in the JSON.
    */
-  _validateAndCleanup() {
-    const validKeys = {};
+  private _validateAndCleanup(): void {
+    const validKeys: Record<string, Set<string>> = {};
     // 1. Create a map of all allowed keys per category
     schema.forEach((cat) => {
       validKeys[cat.id] = new Set(cat.items.map((i) => i.key));
@@ -156,7 +162,7 @@ class SettingsManager extends EventEmitter {
   /**
    * Helper function for deep merging of objects.
    */
-  _deepMerge(target, source) {
+  private _deepMerge(target: Record<string, any>, source: Record<string, any>): any {
     const output = Object.assign({}, target);
     if (
       target &&
@@ -180,4 +186,4 @@ class SettingsManager extends EventEmitter {
 }
 
 // Singleton Export
-module.exports = new SettingsManager();
+export = new SettingsManager();
