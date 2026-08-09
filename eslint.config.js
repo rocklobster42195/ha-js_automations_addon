@@ -37,6 +37,7 @@ module.exports = [
       'js_automations/core/settings-schema.js',
       'js_automations/core/webhook-manager.js',
       'js_automations/core/mqtt-manager.js',
+      'js_automations/core/ha-connection.js',
     ],
   },
   js.configs.recommended,
