@@ -21,7 +21,7 @@ Date: 2026-08-09 · Goal: decide what's left before shipping Blockly + LIT/TS as
 
 - Confirm `mdi:robot-angry-outline` exists in HA's bundled MDI icon set (not just the CDN set) -> verify visually after implementing, before calling icon work done.
 - `TECH-README.md` update scope/content -> needs its own read-through of current file vs. actual architecture, not yet defined.
-- Dev-port fix root cause is a well-grounded hypothesis (timing + known Windows/nodemon behavior), not a confirmed repro -> verify live after implementing.
+- ~~Dev-port fix root cause is a well-grounded hypothesis (timing + known Windows/nodemon behavior), not a confirmed repro -> verify live after implementing.~~ **Resolved 2026-08-09**: original hypothesis was wrong (disproven live), real cause is Windows not tree-killing the process tree on stop, not a same-session restart race. Fixed via a `predev` cleanup script + server.ts retry, verified live. See `project_v3_beta_ship.md` for full detail.
 
 ## Q&A log
 
