@@ -32,6 +32,7 @@ module.exports = [
       'js_automations/core/store-manager.js',
       'js_automations/core/script-header-parser.js',
       'js_automations/core/blockly-compiler.js',
+      'js_automations/core/compiler-manager.js',
     ],
   },
   js.configs.recommended,

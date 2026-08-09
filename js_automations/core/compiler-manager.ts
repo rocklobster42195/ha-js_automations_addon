@@ -2,13 +2,19 @@
  * JS AUTOMATIONS - Compiler Manager (v1.0.0)
  * Handles TypeScript transpilation.
  */
-const ts = require('typescript');
-const path = require('path');
-const fs = require('fs');
-const EventEmitter = require('events');
+import * as ts from 'typescript';
+import * as path from 'path';
+import * as fs from 'fs';
+import { EventEmitter } from 'events';
 
 class CompilerManager extends EventEmitter {
-  constructor(scriptsDir, distDir, storageDir) {
+  scriptsDir: string;
+  distDir: string;
+  storageDir: string;
+  tsconfigPath: string;
+  options: ts.CompilerOptions;
+
+  constructor(scriptsDir: string, distDir: string, storageDir: string) {
     super();
     this.scriptsDir = scriptsDir;
     this.distDir = distDir;
@@ -24,17 +30,20 @@ class CompilerManager extends EventEmitter {
       esModuleInterop: true,
       skipLibCheck: true,
       forceConsistentCasingInFileNames: true,
-      sourceMap: true,
+      // sourceMap dropped: inlineSourceMap+inlineSources is the path actually used
+      // (embedded base64 source map in the output), and TS treats sourceMap+
+      // inlineSourceMap together as a hard error once diagnostics are checked.
       inlineSourceMap: true,
       inlineSources: true,
       baseUrl: this.scriptsDir,
+      ignoreDeprecations: '6.0', // baseUrl is deprecated as of TS 6.0, still needed for module resolution here
     };
   }
 
   /**
    * Ensures a basic tsconfig.json exists for the IDE/Monaco.
    */
-  ensureTsConfig() {
+  ensureTsConfig(): void {
     // 1. Ensure ha-api.d.ts is present in storage for the compiler
     const sourceApi = path.join(__dirname, 'types', 'ha-api.d.ts');
     const targetApi = path.join(this.storageDir, 'ha-api.d.ts');
@@ -47,7 +56,7 @@ class CompilerManager extends EventEmitter {
     // starts (or reconnects) before that first sync, a missing reference target can
     // break Monaco's whole type-checking program, making even `ha` show as unknown.
     // Guarantee both exist as valid (if empty) ambient declarations from the start.
-    const placeholders = {
+    const placeholders: Record<string, string> = {
       'entities.d.ts': 'interface HAEntities {}\ninterface GlobalStoreSchema {}\n',
       'services.d.ts': 'interface ServiceMap {}\n',
     };
@@ -66,7 +75,6 @@ class CompilerManager extends EventEmitter {
           target: 'ES2020',
           module: 'CommonJS',
           moduleResolution: 'node',
-          sourceMap: true,
           inlineSourceMap: true,
           inlineSources: true,
           outDir: './dist',
@@ -86,8 +94,8 @@ class CompilerManager extends EventEmitter {
   /**
    * Removes all .js files in the dist folder that don't have a corresponding .ts or .blocks source file.
    */
-  async pruneDist() {
-    const scanAndPrune = (dir) => {
+  async pruneDist(): Promise<void> {
+    const scanAndPrune = (dir: string): void => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
 
@@ -111,15 +119,15 @@ class CompilerManager extends EventEmitter {
     try {
       scanAndPrune(this.distDir);
     } catch (e) {
-      this.emit('log', { level: 'error', message: `Failed to prune dist directory: ${e.message}` });
+      this.emit('log', { level: 'error', message: `Failed to prune dist directory: ${(e as Error).message}` });
     }
   }
 
   /**
    * Transpiles a single TypeScript file to JavaScript in the dist folder.
-   * @param {string} sourcePath Absolute path to the .ts file.
+   * @param sourcePath Absolute path to the .ts file.
    */
-  async transpile(sourcePath) {
+  async transpile(sourcePath: string): Promise<boolean | undefined> {
     if (!sourcePath.endsWith('.ts')) return;
 
     this.emit('log', { level: 'debug', message: `Transpiling ${path.basename(sourcePath)}...` });
@@ -137,6 +145,10 @@ class CompilerManager extends EventEmitter {
       const result = ts.transpileModule(sourceCode, {
         compilerOptions: this.options,
         fileName: sourcePath,
+        // Without this, transpileModule() always returns an empty diagnostics array
+        // regardless of real syntax errors in the source - the diagnostic-processing
+        // code below (Monaco marker signals, error-level return value) never fired.
+        reportDiagnostics: true,
       });
 
       const diagnostics = result.diagnostics || [];
@@ -158,7 +170,7 @@ class CompilerManager extends EventEmitter {
 
           const type = isError ? 'TS_ERR' : isWarning ? 'TS_WARN' : 'TS_INFO';
 
-          const logMapping = {
+          const logMapping: Record<number, string> = {
             [ts.DiagnosticCategory.Error]: 'error',
             [ts.DiagnosticCategory.Warning]: 'warn',
             [ts.DiagnosticCategory.Message]: 'info',
@@ -194,7 +206,7 @@ class CompilerManager extends EventEmitter {
     } catch (e) {
       this.emit('log', {
         level: 'error',
-        message: `Transpilation failed for ${path.basename(sourcePath)}: ${e.message}`,
+        message: `Transpilation failed for ${path.basename(sourcePath)}: ${(e as Error).message}`,
       });
       return false;
     }
@@ -203,7 +215,7 @@ class CompilerManager extends EventEmitter {
   /**
    * Removes the compiled JS file when a TS file is deleted.
    */
-  cleanup(sourcePath) {
+  cleanup(sourcePath: string): void {
     const relativePath = path.relative(this.scriptsDir, sourcePath);
     const targetPath = path.join(this.distDir, relativePath.replace(/\.ts$/, '.js'));
     if (fs.existsSync(targetPath)) {
@@ -212,4 +224,4 @@ class CompilerManager extends EventEmitter {
   }
 }
 
-module.exports = CompilerManager;
+export = CompilerManager;
