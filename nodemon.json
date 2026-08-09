@@ -6,7 +6,10 @@
     "state.json",
     "store.json",
     ".git",
-    "js_automations/core/*.js"
+    "js_automations/core/*.js",
+    "js_automations/routes/*.js",
+    "js_automations/services/*.js",
+    "js_automations/server.js"
   ],
   "watch": ["js_automations/"],
   "ext": "js,ts,json,html,css",

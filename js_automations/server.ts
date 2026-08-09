@@ -3,48 +3,52 @@
  * This file is the application's entry point. It sets up the web server,
  * boots the Kernel, and wires up the API routes.
  */
+import * as fs from 'fs';
+import * as path from 'path';
+import { execSync } from 'child_process';
+
 // DEV SETUP CHECK
 // Skipped if running as an addon (SUPERVISOR_TOKEN), a .env file already
 // configures HA connectivity, or HA_URL is already provided via the
 // environment directly (e.g. CI, docker run -e, systemd unit).
-if (
-  !process.env.SUPERVISOR_TOKEN &&
-  !process.env.HA_URL &&
-  !require('fs').existsSync(require('path').join(__dirname, '..', '.env'))
-) {
+if (!process.env.SUPERVISOR_TOKEN && !process.env.HA_URL && !fs.existsSync(path.join(__dirname, '..', '.env'))) {
   try {
-    require('child_process').execSync(
-      `"${process.execPath}" "${require('path').join(__dirname, 'core', 'dev-setup.js')}"`,
-      { stdio: 'inherit' }
-    );
+    execSync(`"${process.execPath}" "${path.join(__dirname, 'core', 'dev-setup.js')}"`, { stdio: 'inherit' });
   } catch (e) {
     process.exit(1);
   }
 }
 
-require('dotenv').config({ quiet: true });
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+import * as dotenv from 'dotenv';
+dotenv.config({ quiet: true });
+import express from 'express';
+import * as http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
-const config = require('./core/config');
-const kernel = require('./core/kernel');
-const siblingGuard = require('./core/sibling-guard');
+import config from './core/config';
+import kernel from './core/kernel';
+import siblingGuard from './core/sibling-guard';
+import type StoreManager from './core/store-manager';
+import scriptsRoutesFactory from './routes/scripts-routes';
+import storeRouteFactory from './routes/store-route';
+import systemRouteFactory from './routes/system-route';
+import settingsRouter from './routes/settings-route';
+import haRoutesFactory from './routes/ha-routes';
+import webhookRouteFactory from './routes/webhook-route';
 
 // Ensure all necessary directories exist before proceeding
 config.ensureDirectories();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { path: '/socket.io', cors: { origin: '*' } });
+const io = new SocketIOServer(server, { path: '/socket.io', cors: { origin: '*' } });
 
 // --- Sibling guard gate ---
 // While the sibling addon (stable ↔ beta) is running, every request is answered
 // with the blocked page instead of the app. The gate sits in front of all other
 // middleware; once the sibling stops, blockedState is cleared and the full app
 // (wired by startApp) takes over on the same Express instance.
-let blockedState = null; // { siblingName, isBeta } while blocked, else null
+let blockedState: { siblingName: string | null; isBeta: boolean } | null = null;
 app.use((req, res, next) => {
   if (!blockedState) return next();
   if (req.path.startsWith('/locales')) return next();
@@ -61,7 +65,7 @@ app.use('/locales', express.static(path.join(__dirname, 'locales')));
  * Boots the kernel and wires up all middleware, socket handlers, and API routes.
  * Runs only once the sibling guard has confirmed the sibling addon is not running.
  */
-function startApp() {
+function startApp(): void {
   // Boot the kernel, which instantiates all managers
   kernel.boot(io);
 
@@ -76,7 +80,7 @@ function startApp() {
       try {
         callback(kernel.haConnector.getStates());
       } catch (e) {
-        callback({ error: e.message });
+        callback({ error: (e as Error).message });
       }
     });
     socket.on('get_integration_status', async (callback) => {
@@ -85,7 +89,7 @@ function startApp() {
         // Adapt for the frontend expectations
         callback({ ...status, available: status.active });
       } catch (e) {
-        callback({ error: e.message });
+        callback({ error: (e as Error).message });
       }
     });
 
@@ -99,7 +103,7 @@ function startApp() {
         const result = await workerManager.callAction(data.script, data.action, data.payload ?? {});
         callback({ result });
       } catch (e) {
-        callback({ error: e.message });
+        callback({ error: (e as Error).message });
       }
     });
 
@@ -111,7 +115,7 @@ function startApp() {
   // The kernel holds all manager instances, so we pass them to the routes.
   const { workerManager, depManager, stateManager, storeManager, haConnector, logManager, systemService } = kernel;
 
-  const scriptsRouter = require('./routes/scripts-routes')(
+  const scriptsRouter = scriptsRoutesFactory(
     workerManager,
     depManager,
     stateManager,
@@ -127,7 +131,7 @@ function startApp() {
   const storeManagerUiWrapper = new Proxy(storeManager, {
     get(target, prop) {
       if (prop === 'set') {
-        return (key, value, owner, isSecret) => {
+        return (key: string, value: unknown, owner?: string, isSecret?: boolean) => {
           const current = target.data[key]?.value;
           const res = target.set(key, value, owner, isSecret);
           if (current !== value) {
@@ -137,7 +141,7 @@ function startApp() {
         };
       }
       if (prop === 'delete') {
-        return (key) => {
+        return (key: string) => {
           const exists = target.data[key] !== undefined;
           const res = target.delete(key);
           if (exists) {
@@ -146,12 +150,12 @@ function startApp() {
           return res;
         };
       }
-      return target[prop];
+      return (target as unknown as Record<string | symbol, unknown>)[prop];
     },
-  });
+  }) as StoreManager;
 
-  const storeRouter = require('./routes/store-route')(storeManagerUiWrapper, workerManager);
-  const systemRouter = require('./routes/system-route')(
+  const storeRouter = storeRouteFactory(storeManagerUiWrapper, workerManager);
+  const systemRouter = systemRouteFactory(
     haConnector,
     logManager,
     () => kernel.systemOptions,
@@ -161,9 +165,8 @@ function startApp() {
     kernel.mqttManager,
     workerManager
   );
-  const settingsRouter = require('./routes/settings-route');
-  const haRouter = require('./routes/ha-routes')(haConnector);
-  const webhookRouter = require('./routes/webhook-route')(kernel.webhookManager);
+  const haRouter = haRoutesFactory(haConnector);
+  const webhookRouter = webhookRouteFactory(kernel.webhookManager);
 
   app.use('/api/scripts', scriptsRouter);
   app.use('/api/store', storeRouter);
@@ -177,7 +180,7 @@ function startApp() {
       await haConnector.callService('homeassistant', 'restart', {});
       res.json({ success: true });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: (e as Error).message });
     }
   });
 
@@ -191,14 +194,14 @@ function startApp() {
 // SIGKILLs it after its stop timeout (exit code 137). This handler shuts the
 // kernel down and exits well within the Supervisor's grace window.
 let shuttingDown = false;
-function gracefulExit(signal) {
+function gracefulExit(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`📴 Received ${signal} — shutting down...`);
   try {
     kernel.shutdown();
   } catch (e) {
-    console.error('Shutdown error:', e.message);
+    console.error('Shutdown error:', (e as Error).message);
   }
   server.close();
   // Give workers a moment to stop cleanly, then end the process.
@@ -210,7 +213,7 @@ process.on('SIGINT', () => gracefulExit('SIGINT'));
 /**
  * Main application entry point.
  */
-async function main() {
+async function main(): Promise<void> {
   try {
     // Sibling guard: never run stable and beta at the same time (shared
     // /config/js-automations and host port 3001). If the sibling addon is
@@ -218,7 +221,7 @@ async function main() {
     const guardResult = await siblingGuard.check();
     if (guardResult.blocked) {
       blockedState = { siblingName: guardResult.siblingName, isBeta: guardResult.isBeta };
-      server.listen(config.PORT, '0.0.0.0', () => {
+      server.listen(Number(config.PORT), '0.0.0.0', () => {
         console.log(
           `⏸️  Sibling addon "${guardResult.siblingName}" is running — waiting in blocked mode on port ${config.PORT}.`
         );
@@ -237,7 +240,7 @@ async function main() {
     // while, and the Supervisor logs ingress errors for every hit until
     // the port is open.
     if (!server.listening) {
-      server.listen(config.PORT, '0.0.0.0', () => {
+      server.listen(Number(config.PORT), '0.0.0.0', () => {
         console.log(`🌍 Dashboard is running on http://localhost:${config.PORT}`);
       });
     }

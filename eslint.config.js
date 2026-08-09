@@ -53,13 +53,13 @@ module.exports = [
       'js_automations/routes/ha-routes.js',
       'js_automations/routes/system-route.js',
       'js_automations/routes/scripts-routes.js',
+      'js_automations/server.js',
     ],
   },
   js.configs.recommended,
   {
     files: [
       'eslint.config.js',
-      'js_automations/server.js',
       'js_automations/core/**/*.js',
       'js_automations/routes/**/*.js',
       'js_automations/services/**/*.js',
