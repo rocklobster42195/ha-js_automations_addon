@@ -32,6 +32,7 @@
     // see tsconfig.backend-build.json) — one line per converted module, kept
     // out of checkJs since it's generated code, not hand-written source.
     "js_automations/core/config.js",
-    "js_automations/core/dev-setup.js"
+    "js_automations/core/dev-setup.js",
+    "js_automations/core/state-manager.js"
   ]
 }

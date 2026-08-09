@@ -5,11 +5,20 @@
  * persistence across server restarts.
  */
 
-const fs = require('fs');
-const path = require('path');
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface PersistedState {
+  enabledScripts: string[];
+}
 
 class StateManager {
-  constructor(rootDir) {
+  stateFile: string;
+  state: PersistedState;
+  liveStates: Map<string, string>;
+  entityScriptMap: Map<string, string>;
+
+  constructor(rootDir: string) {
     this.stateFile = path.join(rootDir, 'state.json');
     this.state = { enabledScripts: [] };
     this.liveStates = new Map();
@@ -18,7 +27,7 @@ class StateManager {
   }
 
   /** Load state from file */
-  load() {
+  load(): void {
     if (fs.existsSync(this.stateFile)) {
       try {
         const data = fs.readFileSync(this.stateFile, 'utf8');
@@ -30,53 +39,53 @@ class StateManager {
   }
 
   /** Save state to file */
-  save() {
+  save(): void {
     try {
       fs.writeFileSync(this.stateFile, JSON.stringify(this.state, null, 2));
     } catch (e) {
-      console.error('❌ Failed to save state.json:', e.message);
+      console.error('❌ Failed to save state.json:', (e as Error).message);
     }
   }
 
-  set(entityId, state) {
+  set(entityId: string, state: string): void {
     this.liveStates.set(entityId, state);
   }
 
-  get(entityId) {
+  get(entityId: string): string | undefined {
     return this.liveStates.get(entityId);
   }
 
-  registerEntity(entityId, scriptName) {
+  registerEntity(entityId: string, scriptName: string): void {
     this.entityScriptMap.set(entityId, scriptName);
   }
 
   /**
    * Removes a single entity's live state and script mapping.
-   * @param {string} entityId - The entity ID to remove.
+   * @param entityId - The entity ID to remove.
    */
-  unregisterEntity(entityId) {
+  unregisterEntity(entityId: string): void {
     this.liveStates.delete(entityId);
     this.entityScriptMap.delete(entityId);
   }
 
   /**
    * Removes all entity mappings associated with a specific script path.
-   * @param {string} scriptPath - The full path of the script to unregister.
+   * @param scriptPath - The full path of the script to unregister.
    */
-  unregisterScript(scriptPath) {
-    for (const [entityId, path] of this.entityScriptMap.entries()) {
-      if (path === scriptPath) {
+  unregisterScript(scriptPath: string): void {
+    for (const [entityId, mappedPath] of this.entityScriptMap.entries()) {
+      if (mappedPath === scriptPath) {
         this.entityScriptMap.delete(entityId);
       }
     }
   }
 
-  getScriptNameForEntity(entityId) {
+  getScriptNameForEntity(entityId: string): string | undefined {
     return this.entityScriptMap.get(entityId);
   }
 
   /** Mark a script as enabled */
-  saveScriptStarted(filename) {
+  saveScriptStarted(filename: string): void {
     if (!this.state.enabledScripts.includes(filename)) {
       this.state.enabledScripts.push(filename);
       this.save();
@@ -84,15 +93,15 @@ class StateManager {
   }
 
   /** Mark a script as disabled */
-  saveScriptStopped(filename) {
+  saveScriptStopped(filename: string): void {
     this.state.enabledScripts = this.state.enabledScripts.filter((f) => f !== filename);
     this.save();
   }
 
   /** Get list of all scripts that should be running */
-  getEnabledScripts() {
+  getEnabledScripts(): string[] {
     return this.state.enabledScripts;
   }
 }
 
-module.exports = StateManager;
+export = StateManager;
