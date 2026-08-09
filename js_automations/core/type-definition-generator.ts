@@ -1,6 +1,37 @@
-// core/type-definition-generator.js
-const path = require('path');
-const fs = require('fs');
+// core/type-definition-generator.ts
+import * as path from 'path';
+import * as fs from 'fs';
+
+interface HAStateEntry {
+  attributes?: { friendly_name?: string };
+}
+
+interface HaConnectionLike {
+  isReady: boolean;
+  states: Record<string, HAStateEntry>;
+}
+
+interface StoreEntry {
+  value: unknown;
+}
+
+interface StoreManagerLike {
+  getAll(): Record<string, StoreEntry>;
+}
+
+interface WorkerManagerLike {
+  storageDir: string;
+  storeManager?: StoreManagerLike;
+  emit(event: string, payload?: unknown): void;
+}
+
+const ATTR_MAPPING: Record<string, string> = {
+  light: 'LightAttributes',
+  media_player: 'MediaPlayerAttributes',
+  climate: 'ClimateAttributes',
+  sensor: 'SensorAttributes',
+  binary_sensor: 'HAAttributes',
+};
 
 /**
  * Generates the entities.d.ts TypeScript definition file used by the Monaco
@@ -10,11 +41,11 @@ const fs = require('fs');
  * Debounced to avoid redundant disk writes during state storms.
  */
 class TypeDefinitionGenerator {
-  /**
-   * @param {object} haConnection  - provides isReady and states
-   * @param {object} workerManager - provides storageDir, storeManager, emit()
-   */
-  constructor(haConnection, workerManager) {
+  haConnection: HaConnectionLike;
+  workerManager: WorkerManagerLike;
+  private _timer: ReturnType<typeof setTimeout> | null;
+
+  constructor(haConnection: HaConnectionLike, workerManager: WorkerManagerLike) {
     this.haConnection = haConnection;
     this.workerManager = workerManager;
     this._timer = null;
@@ -24,12 +55,12 @@ class TypeDefinitionGenerator {
    * Schedules a (debounced) regeneration of entities.d.ts.
    * Safe to call frequently — only the last call within 2 s triggers a write.
    */
-  schedule() {
+  schedule(): void {
     if (this._timer) clearTimeout(this._timer);
     this._timer = setTimeout(() => this._generate(), 2000);
   }
 
-  async _generate() {
+  private async _generate(): Promise<void> {
     if (!this.haConnection.isReady) return;
 
     try {
@@ -37,21 +68,13 @@ class TypeDefinitionGenerator {
       const entityIds = Object.keys(states);
       const storeData = this.workerManager.storeManager ? this.workerManager.storeManager.getAll() : {};
 
-      const attrMapping = {
-        light: 'LightAttributes',
-        media_player: 'MediaPlayerAttributes',
-        climate: 'ClimateAttributes',
-        sensor: 'SensorAttributes',
-        binary_sensor: 'HAAttributes',
-      };
-
       let content = `/** Automatically generated entity definitions **/\n\n`;
       content += `interface HAEntities {\n`;
 
       for (const id of entityIds) {
         const friendlyName = states[id].attributes?.friendly_name || '';
         const domain = id.split('.')[0];
-        const attrType = attrMapping[domain] || 'HAAttributes';
+        const attrType = ATTR_MAPPING[domain] || 'HAAttributes';
         content += `  /** ${friendlyName} */\n`;
         content += `  "${id}": HAState<${attrType}>;\n`;
       }
@@ -84,13 +107,13 @@ class TypeDefinitionGenerator {
     } catch (e) {
       this.workerManager.emit('log', {
         source: 'System',
-        message: `[TypeDefinitionGenerator] Failed to generate entities.d.ts: ${e.message}`,
+        message: `[TypeDefinitionGenerator] Failed to generate entities.d.ts: ${(e as Error).message}`,
         level: 'error',
       });
     }
   }
 
-  _inferType(value, depth = 0) {
+  private _inferType(value: unknown, depth = 0): string {
     if (depth > 3) return 'any';
     if (value === null) return 'null';
     if (typeof value === 'string') return 'string';
@@ -101,11 +124,12 @@ class TypeDefinitionGenerator {
       return `${this._inferType(value[0], depth + 1)}[]`;
     }
     if (typeof value === 'object') {
-      const keys = Object.keys(value);
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj);
       if (keys.length === 0) return 'Record<string, any>';
       let def = '{ ';
       for (const key of keys.slice(0, 10)) {
-        def += `"${key}": ${this._inferType(value[key], depth + 1)}; `;
+        def += `"${key}": ${this._inferType(obj[key], depth + 1)}; `;
       }
       if (keys.length > 10) def += '... ';
       return def + '}';
@@ -114,4 +138,4 @@ class TypeDefinitionGenerator {
   }
 }
 
-module.exports = TypeDefinitionGenerator;
+export = TypeDefinitionGenerator;
