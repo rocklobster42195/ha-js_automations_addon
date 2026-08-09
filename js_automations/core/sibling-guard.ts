@@ -1,4 +1,4 @@
-// core/sibling-guard.js
+// core/sibling-guard.ts
 //
 // The stable and beta addons share the same /config/js-automations directory
 // (scripts, libraries, data, JSA store) and the same host port 3001. Running
@@ -12,7 +12,32 @@ const STABLE_SUFFIX = 'js_automations';
 const BETA_SUFFIX = 'js_automations_beta';
 const POLL_INTERVAL_MS = 15000;
 
+interface SupervisorApiError extends Error {
+  status?: number;
+}
+
+interface SupervisorSelfInfo {
+  slug: string;
+}
+
+interface SupervisorAddonInfo {
+  name?: string;
+  state: string;
+}
+
+interface GuardCheckResult {
+  blocked: boolean;
+  siblingName: string | null;
+  isBeta: boolean;
+}
+
 class SiblingGuard {
+  token: string | undefined;
+  ownSlug: string | null;
+  siblingSlug: string | null;
+  siblingName: string | null;
+  isBeta: boolean;
+
   constructor() {
     this.token = process.env.SUPERVISOR_TOKEN;
     this.ownSlug = null;
@@ -21,16 +46,16 @@ class SiblingGuard {
     this.isBeta = false;
   }
 
-  async _supervisorGet(path) {
+  private async _supervisorGet<T>(path: string): Promise<T> {
     const res = await fetch(`${SUPERVISOR_URL}${path}`, {
       headers: { Authorization: `Bearer ${this.token}` },
     });
     if (!res.ok) {
-      const err = new Error(`Supervisor API ${path} returned ${res.status}`);
+      const err: SupervisorApiError = new Error(`Supervisor API ${path} returned ${res.status}`);
       err.status = res.status;
       throw err;
     }
-    const json = await res.json();
+    const json = (await res.json()) as { data: T };
     return json.data;
   }
 
@@ -39,10 +64,10 @@ class SiblingGuard {
    * Repository-installed addons carry a repository-hash prefix
    * (e.g. "a1b2c3d4_js_automations"), so the sibling slug is derived by
    * swapping the suffix while keeping the prefix.
-   * @returns {boolean} true if a sibling slug could be resolved.
+   * @returns true if a sibling slug could be resolved.
    */
-  async _resolveSlugs() {
-    const self = await this._supervisorGet('/addons/self/info');
+  private async _resolveSlugs(): Promise<boolean> {
+    const self = await this._supervisorGet<SupervisorSelfInfo>('/addons/self/info');
     this.ownSlug = self.slug;
 
     if (this.ownSlug.endsWith(BETA_SUFFIX)) {
@@ -58,11 +83,11 @@ class SiblingGuard {
   }
 
   /**
-   * @returns {boolean} true if the sibling addon is installed and running.
+   * @returns true if the sibling addon is installed and running.
    */
-  async isSiblingRunning() {
+  async isSiblingRunning(): Promise<boolean> {
     try {
-      const info = await this._supervisorGet(`/addons/${this.siblingSlug}/info`);
+      const info = await this._supervisorGet<SupervisorAddonInfo>(`/addons/${this.siblingSlug}/info`);
       this.siblingName = info.name || this.siblingSlug;
       return info.state === 'started';
     } catch (e) {
@@ -75,9 +100,8 @@ class SiblingGuard {
 
   /**
    * Checks whether the sibling addon is running. Never throws.
-   * @returns {Promise<{blocked: boolean, siblingName: string|null, isBeta: boolean}>}
    */
-  async check() {
+  async check(): Promise<GuardCheckResult> {
     if (!this.token) {
       // Local development — no Supervisor, nothing to guard.
       return { blocked: false, siblingName: null, isBeta: false };
@@ -89,7 +113,7 @@ class SiblingGuard {
       const running = await this.isSiblingRunning();
       return { blocked: running, siblingName: this.siblingName, isBeta: this.isBeta };
     } catch (e) {
-      console.warn(`[SiblingGuard] Check failed (${e.message}) — proceeding without guard.`);
+      console.warn(`[SiblingGuard] Check failed (${(e as Error).message}) — proceeding without guard.`);
       return { blocked: false, siblingName: null, isBeta: this.isBeta };
     }
   }
@@ -98,7 +122,7 @@ class SiblingGuard {
    * Resolves once the sibling addon is no longer running.
    * Polls the Supervisor API; logs while waiting.
    */
-  async waitUntilFree() {
+  async waitUntilFree(): Promise<void> {
     for (;;) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       const { blocked } = await this.check();
@@ -108,4 +132,4 @@ class SiblingGuard {
   }
 }
 
-module.exports = new SiblingGuard();
+export = new SiblingGuard();
