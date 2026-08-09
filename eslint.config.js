@@ -35,6 +35,7 @@ module.exports = [
       'js_automations/core/compiler-manager.js',
       'js_automations/core/fs-service.js',
       'js_automations/core/settings-schema.js',
+      'js_automations/core/webhook-manager.js',
     ],
   },
   js.configs.recommended,

@@ -1,11 +1,11 @@
-// core/webhook-manager.js
-const express = require('express');
-const http = require('http');
-const crypto = require('crypto');
-const net = require('net');
-const fs = require('fs');
-const path = require('path');
-const EventEmitter = require('events');
+// core/webhook-manager.ts
+import express, { Request, Response } from 'express';
+import * as http from 'http';
+import * as crypto from 'crypto';
+import * as net from 'net';
+import * as fs from 'fs';
+import * as path from 'path';
+import { EventEmitter } from 'events';
 
 // Fixed, not user-configurable: the container only publishes this port to the
 // host (see config.yaml `ports:`), so letting the internal listener move to a
@@ -23,6 +23,76 @@ const AUTH_BACKOFF_LOCKOUT_MS = 10 * 60 * 1000; // lockout duration once tripped
 
 const MAP_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // periodic cleanup of expired rate-limit/backoff entries
 
+interface LastCall {
+  ts: number;
+  status: number;
+}
+
+interface WebhookEntry {
+  token: string | null;
+  method: string;
+  noAuth: boolean;
+  allowlist: string[] | null;
+  owner: string | null;
+  active: boolean;
+  created: string;
+  rotated: string | null;
+  lastCall: LastCall | null;
+}
+
+interface RegisterOptions {
+  method?: string;
+  noAuth?: boolean;
+  allowlist?: string[];
+  scriptFilename: string;
+}
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+interface AuthFailureEntry {
+  count: number;
+  windowResetAt: number;
+  lockedUntil: number;
+}
+
+interface PendingRequest {
+  res: Response;
+  timer: ReturnType<typeof setTimeout>;
+  id: string;
+}
+
+interface WebhookResponse {
+  status?: number;
+  error?: string;
+  isJson?: boolean;
+  body?: unknown;
+}
+
+interface WebhookListing {
+  id: string;
+  method: string;
+  noAuth: boolean;
+  scriptFilename: string | null;
+  active: boolean;
+  created: string;
+  rotated: string | null;
+  lastCall: LastCall | null;
+  hasToken: boolean;
+  allowlist: string[] | null;
+}
+
+interface SettingsManagerLike {
+  on(event: 'settings_updated', listener: (settings: { webhook?: { trust_proxy?: boolean; external_url?: string } }) => void): void;
+  getSettings(): { webhook?: { trust_proxy?: boolean; external_url?: string } } | undefined;
+}
+
+interface LogManagerLike {
+  add(level: string, source: string, message: string): void;
+}
+
 /**
  * Checks whether `ip` matches an allowlist entry — either an exact address or an
  * IPv4 CIDR range (e.g. '192.30.252.0/22'). IPv6 CIDR ranges are not supported
@@ -30,14 +100,14 @@ const MAP_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // periodic cleanup of expired rate
  * addresses match. IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are normalized
  * to plain IPv4 before comparison.
  */
-function ipMatchesAllowlistEntry(ip, entry) {
+function ipMatchesAllowlistEntry(ip: string, entry: string): boolean {
   const normalized = typeof ip === 'string' && ip.startsWith('::ffff:') && net.isIPv4(ip.slice(7)) ? ip.slice(7) : ip;
 
   if (entry.includes('/')) {
     const [range, bitsStr] = entry.split('/');
     if (!net.isIPv4(range) || !net.isIPv4(normalized)) return false;
     const bits = parseInt(bitsStr, 10);
-    const toInt = (addr) => addr.split('.').reduce((acc, octet) => (acc << 8) + Number(octet), 0) >>> 0;
+    const toInt = (addr: string): number => addr.split('.').reduce((acc, octet) => (acc << 8) + Number(octet), 0) >>> 0;
     const mask = bits <= 0 ? 0 : (~0 << (32 - bits)) >>> 0;
     return (toInt(normalized) & mask) === (toInt(range) & mask);
   }
@@ -50,7 +120,20 @@ function ipMatchesAllowlistEntry(ip, entry) {
  * response. See docs/concept_webhook_api.md for the full design.
  */
 class WebhookManager extends EventEmitter {
-  constructor(settingsManager, logManager, storageDir) {
+  settingsManager: SettingsManagerLike;
+  logManager: LogManagerLike;
+  storageFile: string;
+  registry: Map<string, WebhookEntry>;
+  pendingRequests: Map<string, PendingRequest>;
+  private _rateLimits: Map<string, RateLimitEntry>;
+  private _authFailures: Map<string, AuthFailureEntry>;
+  private _correlationCounter: number;
+  app: express.Express | null;
+  server: http.Server | null;
+  port: number | null;
+  private _sweepTimer: ReturnType<typeof setInterval>;
+
+  constructor(settingsManager: SettingsManagerLike, logManager: LogManagerLike, storageDir: string) {
     super();
     this.settingsManager = settingsManager;
     this.logManager = logManager;
@@ -92,7 +175,7 @@ class WebhookManager extends EventEmitter {
     this._sweepTimer.unref?.();
   }
 
-  _sweepExpiredEntries() {
+  private _sweepExpiredEntries(): void {
     const now = Date.now();
     for (const [key, rl] of this._rateLimits.entries()) {
       if (rl.resetAt <= now) this._rateLimits.delete(key);
@@ -102,25 +185,25 @@ class WebhookManager extends EventEmitter {
     }
   }
 
-  _loadRegistry() {
+  private _loadRegistry(): void {
     try {
       if (fs.existsSync(this.storageFile)) {
         const data = JSON.parse(fs.readFileSync(this.storageFile, 'utf8'));
-        for (const [id, entry] of Object.entries(data)) {
+        for (const [id, entry] of Object.entries(data) as [string, Record<string, unknown>][]) {
           // owner falls back to the legacy `scriptFilename` field for entries
           // persisted before this owner/active split existed.
-          const owner = entry.owner ?? entry.scriptFilename ?? null;
-          this.registry.set(id, { ...entry, owner, active: false, lastCall: null });
+          const owner = (entry.owner ?? entry.scriptFilename ?? null) as string | null;
+          this.registry.set(id, { ...entry, owner, active: false, lastCall: null } as WebhookEntry);
         }
       }
     } catch (e) {
-      this.logManager.add('error', 'System', `[Webhook] Failed to load webhooks.json: ${e.message}`);
+      this.logManager.add('error', 'System', `[Webhook] Failed to load webhooks.json: ${(e as Error).message}`);
     }
   }
 
-  _saveRegistry() {
+  private _saveRegistry(): void {
     try {
-      const out = {};
+      const out: Record<string, Partial<WebhookEntry>> = {};
       for (const [id, entry] of this.registry.entries()) {
         out[id] = {
           token: entry.token,
@@ -134,11 +217,11 @@ class WebhookManager extends EventEmitter {
       }
       fs.writeFileSync(this.storageFile, JSON.stringify(out, null, 2));
     } catch (e) {
-      this.logManager.add('error', 'System', `[Webhook] Failed to save webhooks.json: ${e.message}`);
+      this.logManager.add('error', 'System', `[Webhook] Failed to save webhooks.json: ${(e as Error).message}`);
     }
   }
 
-  _getSettings() {
+  private _getSettings(): { trust_proxy?: boolean; external_url?: string } {
     return this.settingsManager.getSettings()?.webhook || {};
   }
 
@@ -148,7 +231,7 @@ class WebhookManager extends EventEmitter {
    * Throws if the ID is already owned by a *different, currently running* script — this stops
    * one script from silently hijacking another script's endpoint/token.
    */
-  register(id, { method = 'POST', noAuth = false, allowlist, scriptFilename }) {
+  register(id: string, { method = 'POST', noAuth = false, allowlist, scriptFilename }: RegisterOptions): void {
     const existing = this.registry.get(id);
     if (existing && existing.active && existing.owner !== scriptFilename) {
       throw new Error(`Webhook id "${id}" is already registered by "${existing.owner}".`);
@@ -187,7 +270,7 @@ class WebhookManager extends EventEmitter {
    * (e.g. on script reload, or after an addon restart) keeps the same token; requests
    * arriving while inactive get a 503.
    */
-  unregisterAllForScript(scriptFilename) {
+  unregisterAllForScript(scriptFilename: string): void {
     let changed = false;
     for (const entry of this.registry.values()) {
       if (entry.owner === scriptFilename && entry.active) {
@@ -208,7 +291,7 @@ class WebhookManager extends EventEmitter {
    * be deleted while its webhooks are already inactive (stopped earlier, or the addon
    * itself was restarted since), and this must still find and remove them.
    */
-  purgeAllForScript(scriptFilename) {
+  purgeAllForScript(scriptFilename: string): void {
     let changed = false;
     for (const [id, entry] of this.registry.entries()) {
       if (entry.owner === scriptFilename) {
@@ -223,7 +306,7 @@ class WebhookManager extends EventEmitter {
     }
   }
 
-  _ensureServer() {
+  private _ensureServer(): void {
     if (this.server) return;
 
     const settings = this._getSettings();
@@ -235,7 +318,7 @@ class WebhookManager extends EventEmitter {
     );
 
     this.server = http.createServer(this.app);
-    this.server.on('error', (e) => {
+    this.server.on('error', (e: NodeJS.ErrnoException) => {
       if (e.code === 'EADDRINUSE') {
         // Safety net: the sibling addon (stable ↔ beta) may still hold
         // port 3001 in a race the startup guard missed. Retry instead
@@ -246,7 +329,7 @@ class WebhookManager extends EventEmitter {
           `[Webhook] Port ${this.port} is in use (sibling addon still running?) — retrying in 15s.`
         );
         setTimeout(() => {
-          if (this.server) this.server.listen(this.port, '0.0.0.0');
+          if (this.server) this.server.listen(this.port as number, '0.0.0.0');
         }, 15000);
         return;
       }
@@ -257,7 +340,7 @@ class WebhookManager extends EventEmitter {
     });
   }
 
-  _maybeShutdownServer() {
+  private _maybeShutdownServer(): void {
     const anyActive = [...this.registry.values()].some((e) => e.active);
     if (!anyActive && this.server) {
       this.server.close();
@@ -267,7 +350,7 @@ class WebhookManager extends EventEmitter {
     }
   }
 
-  _handleSettingsUpdate(webhookSettings) {
+  private _handleSettingsUpdate(webhookSettings: { trust_proxy?: boolean; external_url?: string }): void {
     if (this.app) this.app.set('trust proxy', !!webhookSettings.trust_proxy);
 
     // Tell any open Webhook Panel to refresh its external URL — without this it only
@@ -278,7 +361,7 @@ class WebhookManager extends EventEmitter {
   /**
    * Constant-time token comparison to avoid leaking the token via timing differences.
    */
-  _tokensMatch(provided, expected) {
+  private _tokensMatch(provided: string | undefined, expected: string | null): boolean {
     if (!expected) return false;
     const a = Buffer.from(String(provided || ''));
     const b = Buffer.from(String(expected));
@@ -289,7 +372,7 @@ class WebhookManager extends EventEmitter {
     return crypto.timingSafeEqual(a, b);
   }
 
-  _checkRateLimit(ip, id) {
+  private _checkRateLimit(ip: string, id: string): boolean {
     const key = `${ip}:${id}`;
     const now = Date.now();
     let rl = this._rateLimits.get(key);
@@ -305,7 +388,7 @@ class WebhookManager extends EventEmitter {
    * Returns true if `ip` is currently locked out from authenticating against `id`
    * after too many failed token attempts.
    */
-  _isAuthLocked(ip, id) {
+  private _isAuthLocked(ip: string, id: string): boolean {
     const entry = this._authFailures.get(`${ip}:${id}`);
     return !!(entry && entry.lockedUntil > Date.now());
   }
@@ -314,7 +397,7 @@ class WebhookManager extends EventEmitter {
    * Records a failed token verification attempt. Trips a lockout once the
    * threshold is reached within the accumulation window.
    */
-  _recordAuthFailure(ip, id) {
+  private _recordAuthFailure(ip: string, id: string): void {
     const key = `${ip}:${id}`;
     const now = Date.now();
     let entry = this._authFailures.get(key);
@@ -334,43 +417,59 @@ class WebhookManager extends EventEmitter {
   }
 
   /** Resets the failure counter after a successful, legitimate call. */
-  _clearAuthFailures(ip, id) {
+  private _clearAuthFailures(ip: string, id: string): void {
     this._authFailures.delete(`${ip}:${id}`);
   }
 
-  _handleRequest(req, res) {
-    const id = req.params.id;
+  private _handleRequest(req: Request, res: Response): void {
+    // Express types params as string | string[] to account for repeated-segment
+    // routes; our fixed /webhook/:id pattern only ever produces a single string.
+    const id = req.params.id as string;
     const entry = this.registry.get(id);
 
-    if (!entry) return res.status(404).json({ error: 'Unknown webhook id' });
-    if (!entry.active) return res.status(503).json({ error: 'Script not running' });
-    if (req.method !== entry.method)
-      return res.status(405).json({ error: `Method not allowed, expected ${entry.method}` });
-    if (!this._checkRateLimit(req.ip, id)) return res.status(429).json({ error: 'Too many requests' });
+    if (!entry) {
+      res.status(404).json({ error: 'Unknown webhook id' });
+      return;
+    }
+    if (!entry.active) {
+      res.status(503).json({ error: 'Script not running' });
+      return;
+    }
+    if (req.method !== entry.method) {
+      res.status(405).json({ error: `Method not allowed, expected ${entry.method}` });
+      return;
+    }
+    if (!this._checkRateLimit(req.ip as string, id)) {
+      res.status(429).json({ error: 'Too many requests' });
+      return;
+    }
 
-    if (entry.allowlist && !entry.allowlist.some((e) => ipMatchesAllowlistEntry(req.ip, e))) {
+    if (entry.allowlist && !entry.allowlist.some((e) => ipMatchesAllowlistEntry(req.ip as string, e))) {
       this.logManager.add('warn', 'System', `[Webhook] "${id}": rejected request from ${req.ip} — not in allowlist`);
-      return res.status(403).json({ error: 'Forbidden' });
+      res.status(403).json({ error: 'Forbidden' });
+      return;
     }
 
     if (!entry.noAuth) {
-      if (this._isAuthLocked(req.ip, id)) {
-        return res.status(429).json({ error: 'Too many failed attempts — temporarily blocked' });
+      if (this._isAuthLocked(req.ip as string, id)) {
+        res.status(429).json({ error: 'Too many failed attempts — temporarily blocked' });
+        return;
       }
       const provided = req.get('X-Webhook-Secret');
       if (!this._tokensMatch(provided, entry.token)) {
-        this._recordAuthFailure(req.ip, id);
+        this._recordAuthFailure(req.ip as string, id);
         this.logManager.add(
           'warn',
           'System',
           `[Webhook] "${id}": rejected request with invalid/missing token from ${req.ip}`
         );
-        return res.status(401).json({ error: 'Unauthorized' });
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
       }
-      this._clearAuthFailures(req.ip, id);
+      this._clearAuthFailures(req.ip as string, id);
     }
 
-    let body;
+    let body: unknown;
     const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
     if (rawBody) {
       try {
@@ -410,7 +509,7 @@ class WebhookManager extends EventEmitter {
    * Called by WorkerManager once the owning script's handler responds via
    * postMessage({ type: 'webhook_response', ... }).
    */
-  resolveResponse(correlationId, response) {
+  resolveResponse(correlationId: string, response: WebhookResponse): void {
     const pending = this.pendingRequests.get(correlationId);
     if (!pending) return; // already timed out
     clearTimeout(pending.timer);
@@ -440,7 +539,7 @@ class WebhookManager extends EventEmitter {
    * Called by WorkerManager when the owning script isn't running (e.g. exited
    * between request arrival and dispatch).
    */
-  rejectRequest(correlationId, reason) {
+  rejectRequest(correlationId: string, reason?: string): void {
     const pending = this.pendingRequests.get(correlationId);
     if (!pending) return;
     clearTimeout(pending.timer);
@@ -449,7 +548,7 @@ class WebhookManager extends EventEmitter {
     this._recordCall(pending.id, 503);
   }
 
-  _recordCall(id, status) {
+  private _recordCall(id: string, status: number): void {
     const entry = this.registry.get(id);
     if (!entry) return;
     entry.lastCall = { ts: Date.now(), status };
@@ -459,7 +558,7 @@ class WebhookManager extends EventEmitter {
   /**
    * Returns a UI-safe listing of all registered webhooks (no tokens).
    */
-  listWebhooks() {
+  listWebhooks(): WebhookListing[] {
     return [...this.registry.entries()].map(([id, e]) => ({
       id,
       method: e.method,
@@ -474,21 +573,21 @@ class WebhookManager extends EventEmitter {
     }));
   }
 
-  getPort() {
+  getPort(): number {
     return WEBHOOK_PORT;
   }
 
-  getExternalUrl() {
+  getExternalUrl(): string {
     return this._getSettings().external_url || '';
   }
 
-  revealToken(id) {
+  revealToken(id: string): string | null {
     const e = this.registry.get(id);
     if (!e) throw new Error('Unknown webhook id');
     return e.token;
   }
 
-  rotateToken(id) {
+  rotateToken(id: string): string {
     const e = this.registry.get(id);
     if (!e) throw new Error('Unknown webhook id');
     if (e.noAuth) throw new Error('Cannot rotate a token for a no-auth webhook');
@@ -505,7 +604,7 @@ class WebhookManager extends EventEmitter {
    * active registration — stop the owning script first to avoid confusion about
    * which token is still valid.
    */
-  deleteWebhook(id) {
+  deleteWebhook(id: string): void {
     const e = this.registry.get(id);
     if (!e) throw new Error('Unknown webhook id');
     if (e.active) throw new Error('Cannot delete an active webhook — stop the owning script first.');
@@ -516,4 +615,4 @@ class WebhookManager extends EventEmitter {
   }
 }
 
-module.exports = WebhookManager;
+export = WebhookManager;
