@@ -6,10 +6,11 @@
  *   - Writing card JS to config/www/jsa-cards/
  *   - Registering / updating Lovelace resources via HA WebSocket
  */
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const ScriptHeaderParser = require('./script-header-parser');
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import ScriptHeaderParser from './script-header-parser';
+import type HAConnector from './ha-connection';
 
 const CARD_START = '__JSA_CARD__';
 const CARD_END = '__JSA_CARD_END__';
@@ -156,7 +157,7 @@ const __jsa__ = (() => {
 
       const loadStep = async () => {
         const step = steps[stepIdx];
-        show('<div class="wiz"><div class="wiz-spin">Laden\u2026</div></div>');
+        show('<div class="wiz"><div class="wiz-spin">Laden…</div></div>');
         const depPayload = {};
         if (step.depends) {
           for (const [k, v] of Object.entries(step.depends)) depPayload[k] = values[v];
@@ -170,14 +171,14 @@ const __jsa__ = (() => {
             data = await __jsa__.callAction(step.action, depPayload);
             cache[cacheKey] = data;
           } catch (e) {
-            show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '<br><small>Skript gestartet?</small></div>');
+            show('<div class="wiz-err">⚠ ' + esc(e.message) + '<br><small>Skript gestartet?</small></div>');
             return;
           }
         }
 
         if (!data || data.length === 0) {
-          show('<div class="wiz"><div class="wiz-err">\u26a0 Keine Eintr\u00e4ge gefunden. Saison oder Liga pr\u00fcfen.</div>' +
-            (stepIdx > 0 ? '<div class="wiz-btns"><button class="btn-s" id="wiz-back">Zur\u00fcck</button></div>' : '') +
+          show('<div class="wiz"><div class="wiz-err">⚠ Keine Einträge gefunden. Saison oder Liga prüfen.</div>' +
+            (stepIdx > 0 ? '<div class="wiz-btns"><button class="btn-s" id="wiz-back">Zurück</button></div>' : '') +
             '</div>');
           var backEl2 = sr.querySelector('#wiz-back');
           if (backEl2) backEl2.onclick = function() { stepIdx--; loadStep(); };
@@ -198,12 +199,12 @@ const __jsa__ = (() => {
 
         show('<div class="wiz">' +
           '<div class="wiz-title">Schritt ' + (stepIdx + 1) + ' / ' + steps.length + ': ' + esc(step.label) + '</div>' +
-          '<select id="wiz-sel"><option value="">Bitte w\u00e4hlen\u2026</option>' + optsHtml + '</select>' +
+          '<select id="wiz-sel"><option value="">Bitte wählen…</option>' + optsHtml + '</select>' +
           seasonHtml +
           freeInputHtml +
           '<div class="wiz-btns">' +
           '<button class="btn-p" id="wiz-next">' + (isLast ? 'Speichern' : 'Weiter') + '</button>' +
-          (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zur\u00fcck</button>' : '') +
+          (stepIdx > 0 ? '<button class="btn-s" id="wiz-back">Zurück</button>' : '') +
           '</div></div>');
 
         // Mutual exclusion: typing in free-input clears select, and vice versa.
@@ -242,7 +243,7 @@ const __jsa__ = (() => {
       };
 
       const finish = async () => {
-        show('<div class="wiz"><div class="wiz-spin">Speichern\u2026</div></div>');
+        show('<div class="wiz"><div class="wiz-spin">Speichern…</div></div>');
         try {
           const instanceId = genUUID();
           const config = await Promise.resolve(opts.onComplete(values, instanceId));
@@ -253,7 +254,7 @@ const __jsa__ = (() => {
           }));
           hostEl.dispatchEvent(new CustomEvent('jsa-editor-close', { bubbles: true, composed: true }));
         } catch (e) {
-          show('<div class="wiz-err">\u26a0 ' + esc(e.message) + '</div>');
+          show('<div class="wiz-err">⚠ ' + esc(e.message) + '</div>');
         }
       };
 
@@ -283,13 +284,56 @@ const __jsa__ = (() => {
 })();
 `;
 
+interface RegistryEntry {
+  hash: string;
+  resourceUrl: string;
+  resourceId: unknown;
+  cardName: string;
+}
+
+interface AssetRegistryEntry {
+  absPath: string;
+  resourceUrl: string;
+  downloadedAt: number;
+  size: number;
+}
+
+interface AssetFailure {
+  failedAt: number;
+  error: string;
+  cooldownMs: number;
+}
+
+interface InstallCardOptions {
+  force?: boolean;
+  devMode?: boolean;
+}
+
+interface CacheAssetOptions {
+  filename?: string;
+  ttl?: number;
+  force?: boolean;
+  maxSize?: number;
+}
+
 class CardManager {
+  storageDir: string;
+  wwwCardsDir: string;
+  haConnector: HAConnector | null;
+  registryPath: string;
+  registry: Record<string, RegistryEntry>;
+  assetsDir: string;
+  assetRegistryPath: string;
+  assetRegistry: Record<string, AssetRegistryEntry>;
+  private assetFailures: Map<string, AssetFailure>;
+  private _cleanupInFlight: Promise<void> | null = null;
+
   /**
-   * @param {string} storageDir  - Addon storage dir (for registry JSON)
-   * @param {string} wwwCardsDir - config/www/jsa-cards/
-   * @param {object} haConnector - HAConnector instance (may be null until connected)
+   * @param storageDir  - Addon storage dir (for registry JSON)
+   * @param wwwCardsDir - config/www/jsa-cards/
+   * @param haConnector - HAConnector instance (may be null until connected)
    */
-  constructor(storageDir, wwwCardsDir, haConnector) {
+  constructor(storageDir: string, wwwCardsDir: string, haConnector: HAConnector | null) {
     this.storageDir = storageDir;
     this.wwwCardsDir = wwwCardsDir;
     this.haConnector = haConnector;
@@ -312,13 +356,12 @@ class CardManager {
    * Installs the card embedded in a script file.
    * Called from WorkerManager when a worker sends an 'install_card' message.
    *
-   * @param {string} scriptFilePath - Absolute path to the .js script file
-   * @param {object} options
-   * @param {boolean} [options.force]  - Overwrite even if hash matches
-   * @param {boolean} [options.devMode] - @card dev — skip file write and Lovelace registration
-   * @returns {Promise<string>} Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
+   * @param scriptFilePath - Absolute path to the .js script file
+   * @param options.force  - Overwrite even if hash matches
+   * @param options.devMode - @card dev — skip file write and Lovelace registration
+   * @returns Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
    */
-  async installCard(scriptFilePath, options = {}) {
+  async installCard(scriptFilePath: string, options: InstallCardOptions = {}): Promise<string> {
     const cardCode = this._extractCardBlock(scriptFilePath);
     if (!cardCode) throw new Error('No __JSA_CARD__ block found in script.');
 
@@ -345,10 +388,12 @@ class CardManager {
     const wrappedCode = cardCode;
 
     const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
+    const metaName = 'name' in scriptMeta ? scriptMeta.name : undefined;
+    const metaDescription = 'description' in scriptMeta ? scriptMeta.description : undefined;
     const pickerEntry =
       `window.customCards = window.customCards || [];\n` +
-      `window.customCards.push({ type: '${cardName}', name: ${JSON.stringify(scriptMeta.name || scriptName)}, ` +
-      `description: ${JSON.stringify(scriptMeta.description || '')}, preview: true });\n\n`;
+      `window.customCards.push({ type: '${cardName}', name: ${JSON.stringify(metaName || scriptName)}, ` +
+      `description: ${JSON.stringify(metaDescription || '')}, preview: true });\n\n`;
     const finalCode = pickerEntry + preamble + wrappedCode;
 
     // Write card file
@@ -380,9 +425,9 @@ class CardManager {
    * Removes a script's installed card: deletes the card JS file from www/jsa-cards/,
    * removes the Lovelace resource, and clears the registry entry.
    * Called when a Script Pack script is deleted.
-   * @param {string} scriptFilePath - Absolute path to the (now deleted) script file
+   * @param scriptFilePath - Absolute path to the (now deleted) script file
    */
-  removeCard(scriptFilePath) {
+  removeCard(scriptFilePath: string): void {
     const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
     // Independent of whether a card was ever installed — a script can cache assets
     // via ha.frontend.cacheAsset() without necessarily having a __JSA_CARD__ block.
@@ -397,7 +442,7 @@ class CardManager {
       try {
         fs.unlinkSync(cardFilePath);
       } catch (e) {
-        console.error(`[CardManager] Failed to delete card file ${cardFilePath}:`, e.message);
+        console.error(`[CardManager] Failed to delete card file ${cardFilePath}:`, (e as Error).message);
       }
     }
 
@@ -406,20 +451,20 @@ class CardManager {
       if (entry.resourceId) {
         this.haConnector
           .sendCommand('lovelace/resources/delete', { resource_id: entry.resourceId }, 15000)
-          .catch((e) => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
+          .catch((e: Error) => console.warn('[CardManager] Lovelace resource removal failed:', e.message));
       } else {
         // resourceId was never persisted — scan all resources to find and delete by URL
         this.haConnector
           .sendCommand('lovelace/resources', {}, 15000)
-          .then((all) => {
+          .then((all: any) => {
             const resources = all?.resources ?? (Array.isArray(all) ? all : []);
-            const match = resources.find((r) => r.url?.includes(`/jsa-cards/${entry.cardName}.js`));
+            const match = resources.find((r: any) => r.url?.includes(`/jsa-cards/${entry.cardName}.js`));
             if (match) {
               const rid = match.id ?? match.resource_id;
-              return this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
+              return this.haConnector!.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
             }
           })
-          .catch((e) => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
+          .catch((e: Error) => console.warn('[CardManager] Lovelace resource removal (URL fallback) failed:', e.message));
       }
     }
 
@@ -436,9 +481,9 @@ class CardManager {
    * autostart with multiple card scripts, without this guard each install would kick off
    * its own concurrent `lovelace/resources` scan (up to 15s each), piling more HA
    * WebSocket traffic onto the busiest window of the boot instead of settling it.
-   * @param {string[]} knownCardNames  e.g. ['openligadb-card', 'weather-card']
+   * @param knownCardNames  e.g. ['openligadb-card', 'weather-card']
    */
-  async performStartupCleanup(knownCardNames) {
+  async performStartupCleanup(knownCardNames: string[]): Promise<void> {
     if (this._cleanupInFlight) {
       return this._cleanupInFlight;
     }
@@ -448,7 +493,7 @@ class CardManager {
     return this._cleanupInFlight;
   }
 
-  async _performStartupCleanup(knownCardNames) {
+  private async _performStartupCleanup(knownCardNames: string[]): Promise<void> {
     const known = new Set(knownCardNames);
 
     // 1. Remove orphaned JS files from www/jsa-cards/
@@ -461,7 +506,7 @@ class CardManager {
             fs.unlinkSync(path.join(this.wwwCardsDir, file));
             console.log(`[CardManager] Startup cleanup: deleted orphaned file ${file}`);
           } catch (e) {
-            console.warn(`[CardManager] Startup cleanup: could not delete ${file}: ${e.message}`);
+            console.warn(`[CardManager] Startup cleanup: could not delete ${file}: ${(e as Error).message}`);
           }
         }
       }
@@ -470,7 +515,7 @@ class CardManager {
     // 2. Remove orphaned Lovelace resources
     if (this.haConnector?.isReady) {
       try {
-        const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
+        const all: any = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
         const resources = all?.resources ?? (Array.isArray(all) ? all : []);
         for (const r of resources) {
           if (!r.url?.includes('/jsa-cards/')) continue;
@@ -481,12 +526,12 @@ class CardManager {
               await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
               console.log(`[CardManager] Startup cleanup: deleted orphaned resource ${r.url} (id=${rid})`);
             } catch (e) {
-              console.warn(`[CardManager] Startup cleanup: could not delete resource ${rid}: ${e.message}`);
+              console.warn(`[CardManager] Startup cleanup: could not delete resource ${rid}: ${(e as Error).message}`);
             }
           }
         }
       } catch (e) {
-        console.warn(`[CardManager] Startup cleanup: could not list Lovelace resources: ${e.message}`);
+        console.warn(`[CardManager] Startup cleanup: could not list Lovelace resources: ${(e as Error).message}`);
       }
     }
 
@@ -504,10 +549,8 @@ class CardManager {
 
   /**
    * Returns the raw decoded card source for a script (used by dev-mode preview).
-   * @param {string} scriptFilePath
-   * @returns {string|null}
    */
-  getCardSource(scriptFilePath) {
+  getCardSource(scriptFilePath: string): string | null {
     return this._extractCardBlock(scriptFilePath);
   }
 
@@ -523,16 +566,15 @@ class CardManager {
    * header when the host sends one) so a caller polling on a short interval can't
    * turn a single failure into a request flood against a struggling/rate-limiting host.
    *
-   * @param {string} scriptName - Script base filename (no extension), used as the cache subdir.
-   * @param {string} url - The external URL to download.
-   * @param {object} [options]
-   * @param {string} [options.filename] - Override the cached filename (incl. extension) instead of deriving one.
-   * @param {number} [options.ttl] - Re-download if the cached copy is older than this many ms.
-   * @param {boolean} [options.force] - Skip the cache and re-download unconditionally.
-   * @param {number} [options.maxSize] - Max accepted response size in bytes (default 5MB).
-   * @returns {Promise<string>} The cached asset's /local/... URL.
+   * @param scriptName - Script base filename (no extension), used as the cache subdir.
+   * @param url - The external URL to download.
+   * @param options.filename - Override the cached filename (incl. extension) instead of deriving one.
+   * @param options.ttl - Re-download if the cached copy is older than this many ms.
+   * @param options.force - Skip the cache and re-download unconditionally.
+   * @param options.maxSize - Max accepted response size in bytes (default 5MB).
+   * @returns The cached asset's /local/... URL.
    */
-  async cacheAsset(scriptName, url, options = {}) {
+  async cacheAsset(scriptName: string, url: string, options: CacheAssetOptions = {}): Promise<string> {
     if (!url || typeof url !== 'string') throw new Error('cacheAsset: url is required');
     // Keyed by the resolved output filename, not just (scriptName, url) — otherwise a
     // later call for the same URL with a different `filename` option would just hit the
@@ -589,8 +631,8 @@ class CardManager {
     } catch (err) {
       this.assetFailures.set(cacheKey, {
         failedAt: now,
-        error: err.message,
-        cooldownMs: err.cooldownMs || ASSET_FAILURE_COOLDOWN_MS,
+        error: (err as Error).message,
+        cooldownMs: (err as Error & { cooldownMs?: number }).cooldownMs || ASSET_FAILURE_COOLDOWN_MS,
       });
       throw err;
     }
@@ -605,9 +647,9 @@ class CardManager {
    * origin than the configured HA instance, so a relative path would 404 silently
    * (a broken <img>, with nothing to report to our own log panel) — prefix it with
    * the real HA_URL there instead.
-   * @param {string} relativePath - A path starting with '/', e.g. '/local/...'
+   * @param relativePath - A path starting with '/', e.g. '/local/...'
    */
-  _publicAssetUrl(relativePath) {
+  private _publicAssetUrl(relativePath: string): string {
     if (this.haConnector && !this.haConnector.isAddon && this.haConnector.baseUrl) {
       return `${this.haConnector.baseUrl}${relativePath}`;
     }
@@ -617,15 +659,14 @@ class CardManager {
   /**
    * Removes all assets cached for a script — called when its card/script is removed
    * so orphaned files don't accumulate in config/www/.
-   * @param {string} scriptName
    */
-  removeAssets(scriptName) {
+  removeAssets(scriptName: string): void {
     const dir = path.join(this.assetsDir, scriptName);
     if (fs.existsSync(dir)) {
       try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch (e) {
-        console.warn(`[CardManager] Failed to remove asset cache for ${scriptName}:`, e.message);
+        console.warn(`[CardManager] Failed to remove asset cache for ${scriptName}:`, (e as Error).message);
       }
     }
     const prefix = `${scriptName}:`;
@@ -642,7 +683,7 @@ class CardManager {
     if (dirty) this._saveJson(this.assetRegistryPath, this.assetRegistry);
   }
 
-  _deriveAssetFilename(url) {
+  private _deriveAssetFilename(url: string): string {
     const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
     let ext = '.bin';
     try {
@@ -659,8 +700,8 @@ class CardManager {
   // Private: Block Parsing
   // ---------------------------------------------------------------------------
 
-  _extractCardBlock(scriptFilePath) {
-    let raw;
+  private _extractCardBlock(scriptFilePath: string): string | null {
+    let raw: string;
     try {
       raw = fs.readFileSync(scriptFilePath, 'utf8');
     } catch {
@@ -693,17 +734,21 @@ class CardManager {
   // Private: Lovelace Resource Management
   // ---------------------------------------------------------------------------
 
-  async _upsertLovelaceResource(url, existingResourceId, cardName) {
+  private async _upsertLovelaceResource(
+    url: string,
+    existingResourceId: unknown,
+    cardName: string
+  ): Promise<unknown> {
     if (!this.haConnector?.isReady) {
       console.warn('[CardManager] HA not connected — skipping Lovelace resource registration.');
       return null;
     }
 
     // Always clean up stale registrations first to prevent duplicates in the picker
-    let foundId = null;
+    let foundId: unknown = null;
     if (cardName) {
       try {
-        const all = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
+        const all: any = await this.haConnector.sendCommand('lovelace/resources', {}, 15000);
         const resources = all?.resources ?? (Array.isArray(all) ? all : []);
         console.log(
           `[CardManager] Found ${resources.length} total Lovelace resources, existingId=${existingResourceId}`
@@ -718,18 +763,18 @@ class CardManager {
               await this.haConnector.sendCommand('lovelace/resources/delete', { resource_id: rid }, 15000);
               console.log(`[CardManager] Removed stale Lovelace resource: ${r.url} (id=${rid})`);
             } catch (delErr) {
-              console.warn(`[CardManager] Failed to delete stale resource ${rid}: ${delErr.message}`);
+              console.warn(`[CardManager] Failed to delete stale resource ${rid}: ${(delErr as Error).message}`);
             }
           }
         }
       } catch (listErr) {
-        console.warn(`[CardManager] Failed to list Lovelace resources: ${listErr.message}`);
+        console.warn(`[CardManager] Failed to list Lovelace resources: ${(listErr as Error).message}`);
       }
     }
 
     if (foundId) {
       // Update the URL on the surviving resource (cache-bust)
-      const result = await this.haConnector.sendCommand(
+      const result: any = await this.haConnector.sendCommand(
         'lovelace/resources/update',
         {
           resource_id: foundId,
@@ -743,7 +788,7 @@ class CardManager {
     }
 
     // Create a fresh resource
-    const result = await this.haConnector.sendCommand(
+    const result: any = await this.haConnector.sendCommand(
       'lovelace/resources/create',
       {
         res_type: 'module',
@@ -762,11 +807,11 @@ class CardManager {
   // Private: Hash & Registry
   // ---------------------------------------------------------------------------
 
-  _hash(content) {
+  private _hash(content: string): string {
     return crypto.createHash('sha256').update(content).digest('hex');
   }
 
-  _loadRegistry() {
+  private _loadRegistry(): Record<string, RegistryEntry> {
     try {
       return JSON.parse(fs.readFileSync(this.registryPath, 'utf8'));
     } catch {
@@ -774,21 +819,21 @@ class CardManager {
     }
   }
 
-  _saveRegistry() {
+  private _saveRegistry(): void {
     try {
       fs.writeFileSync(this.registryPath, JSON.stringify(this.registry, null, 2), 'utf8');
     } catch (e) {
-      console.error('[CardManager] Failed to save registry:', e.message);
+      console.error('[CardManager] Failed to save registry:', (e as Error).message);
     }
   }
 
-  _ensureCardsDir() {
+  private _ensureCardsDir(): void {
     if (!fs.existsSync(this.wwwCardsDir)) {
       fs.mkdirSync(this.wwwCardsDir, { recursive: true });
     }
   }
 
-  _loadJson(filePath) {
+  private _loadJson(filePath: string): Record<string, any> {
     try {
       return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch {
@@ -796,13 +841,13 @@ class CardManager {
     }
   }
 
-  _saveJson(filePath, data) {
+  private _saveJson(filePath: string, data: unknown): void {
     try {
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
     } catch (e) {
-      console.error(`[CardManager] Failed to save ${path.basename(filePath)}:`, e.message);
+      console.error(`[CardManager] Failed to save ${path.basename(filePath)}:`, (e as Error).message);
     }
   }
 }
 
-module.exports = CardManager;
+export = CardManager;
