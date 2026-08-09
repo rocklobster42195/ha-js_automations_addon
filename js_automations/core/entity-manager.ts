@@ -143,7 +143,10 @@ class EntityManager {
    * based on its running status, and publishes per-script availability so
    * ha.register() entities go unavailable when their script stops.
    */
-  async handleScriptLifecycle({ filename, meta }: { filename: string; meta: any }, action: 'start' | 'stop'): Promise<void> {
+  async handleScriptLifecycle(
+    { filename, meta }: { filename: string; meta: any },
+    action: 'start' | 'stop'
+  ): Promise<void> {
     const ext = path.extname(filename);
     const scriptNameRaw = path.basename(filename, ext);
     const slug = scriptNameRaw
@@ -187,7 +190,15 @@ class EntityManager {
    * Generates MQTT discovery payloads for these entities.
    * @param data - The registration data containing filename, entityId, and config.
    */
-  async handleDynamicEntity({ filename, entityId, config }: { filename: string; entityId: string; config: any }): Promise<void> {
+  async handleDynamicEntity({
+    filename,
+    entityId,
+    config,
+  }: {
+    filename: string;
+    entityId: string;
+    config: any;
+  }): Promise<void> {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] Registering dynamic entity: ${entityId}`,
@@ -511,7 +522,9 @@ class EntityManager {
         const { labels: allLabels } = await this.haConnection.getHAMetadata();
         const resolvedLabels = config.labels
           .map((l: string) => {
-            const found = (allLabels as any[]).find((al) => al.label_id === l || al.name?.toLowerCase() === l.toLowerCase());
+            const found = (allLabels as any[]).find(
+              (al) => al.label_id === l || al.name?.toLowerCase() === l.toLowerCase()
+            );
             return found ? found.label_id : null;
           })
           .filter(Boolean);
@@ -648,7 +661,15 @@ class EntityManager {
   /**
    * Publishes state updates for dynamic entities via MQTT.
    */
-  handleEntityStateUpdate({ entityId, state, attributes }: { entityId: string; state: unknown; attributes: any }): void {
+  handleEntityStateUpdate({
+    entityId,
+    state,
+    attributes,
+  }: {
+    entityId: string;
+    state: unknown;
+    attributes: any;
+  }): void {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] State update for ${entityId}: ${state}. Attributes: ${JSON.stringify(attributes)}`,
@@ -785,14 +806,14 @@ class EntityManager {
         name: 'System CPU Usage',
         icon: 'mdi:chip',
         unit: '%',
-        device_class: 'measurement',
+        state_class: 'measurement',
       },
       {
         slug: 'system_mem_usage',
         name: 'System RAM Usage',
         icon: 'mdi:memory',
         unit: 'MB',
-        device_class: 'measurement',
+        state_class: 'measurement',
       },
     ];
 
@@ -804,10 +825,14 @@ class EntityManager {
         state_topic: `jsa/sensor/${entity.slug}/state`,
         unit_of_measurement: entity.unit,
         icon: entity.icon,
-        // Found while converting to TypeScript: this field was defined per-entity but
-        // never actually included in the discovery payload sent to HA. Fixed to match
-        // the original apparent intent (confirmed with the user before fixing).
-        device_class: entity.device_class,
+        // Found via live testing while converting to TypeScript: this field was defined
+        // per-entity but never actually included in the discovery payload. Including it
+        // as originally labeled ("device_class: 'measurement'") turned out to be a
+        // pre-existing data bug - 'measurement' isn't a valid sensor device_class, and HA
+        // silently drops the entire discovery message for an invalid one. Renamed to
+        // state_class, which is what "measurement" actually means (enables HA long-term
+        // statistics for these sensors) - confirmed with the user before fixing.
+        state_class: entity.state_class,
         device: device,
         availability_topic: 'jsa/status',
       };
