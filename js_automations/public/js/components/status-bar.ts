@@ -210,6 +210,13 @@ export class StatusBar extends LitElement {
     this._waitForSocket();
 
     if (window.currentSettings) this._applySettings(window.currentSettings);
+
+    // On mobile this element is removed from the DOM (not just hidden) while the log
+    // screen is shown — see app-sidebar.ts's `_mobileScreen === 'log'` render branch —
+    // so a fresh instance must re-apply the last known MQTT status instead of sitting
+    // on the `false` default until the next mqtt_status_changed push.
+    const mqtt = window.currentIntegrationStatus?.mqtt;
+    if (mqtt) this._updateMqttIndicator(mqtt);
   }
 
   private _waitForSocket = (): void => {
