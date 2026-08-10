@@ -251,7 +251,8 @@ export interface JsaLogEntry {
 }
 
 export interface JsaLogViewerBridge {
-  /** Mobile per-script inline log (RFC §7) — a snapshot at call time, not a live subscription. */
+  /** Mobile per-script inline log (RFC §7) — a one-time snapshot for populating the panel when
+   * it opens; subsequent entries arrive live via the 'jsa-log-appended' window event. */
   getEntriesForSource(source: string): JsaLogEntry[];
 }
 
@@ -261,7 +262,8 @@ export interface JsaWatchTile {
 }
 
 export interface JsaWatchPanelBridge {
-  /** Mobile per-script inline status (RFC §7 follow-up) — a snapshot at call time, keyed by filename. */
+  /** Mobile per-script inline status (RFC §7 follow-up), keyed by filename — used for the
+   * initial snapshot and to re-fetch after a live 'jsa-watch-updated'/'jsa-watch-cleared' event. */
   getTilesForFilename(filename: string): JsaWatchTile[];
 }
 

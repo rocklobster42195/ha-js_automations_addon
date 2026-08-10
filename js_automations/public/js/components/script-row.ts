@@ -303,6 +303,38 @@ export class ScriptRow extends LitElement {
     return window.i18next?.t(key, { defaultValue: fallback, ...options }) ?? fallback ?? key;
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('jsa-log-appended', this._onLogAppended);
+    window.addEventListener('jsa-watch-updated', this._onWatchChanged);
+    window.addEventListener('jsa-watch-cleared', this._onWatchChanged);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('jsa-log-appended', this._onLogAppended);
+    window.removeEventListener('jsa-watch-updated', this._onWatchChanged);
+    window.removeEventListener('jsa-watch-cleared', this._onWatchChanged);
+  }
+
+  /** Keeps the open inline log panel (mobile RFC §7) live instead of the point-in-time
+   * snapshot _onRowClick() takes — only reacts while this row's own panel is expanded. */
+  private _onLogAppended = (e: Event): void => {
+    if (!this._detailsOpen) return;
+    const entry = (e as CustomEvent<JsaLogEntry>).detail;
+    if ((entry.source || 'System') !== this.script.name) return;
+    this._logSnapshot = [...(this._logSnapshot ?? []), entry].slice(-MAX_INLINE_LOG_LINES);
+  };
+
+  /** Same live-refresh as the log, for the Watch section — a script with no ha.watch() tiles
+   * yet (e.g. still stopped) when the row was opened otherwise stays empty until reopened. */
+  private _onWatchChanged = (e: Event): void => {
+    if (!this._detailsOpen) return;
+    const { filename } = (e as CustomEvent<{ filename: string }>).detail;
+    if (filename !== this.script.filename) return;
+    this._watchSnapshot = window.watchPanel?.getTilesForFilename(this.script.filename) ?? [];
+  };
+
   private _dispatch(name: string): void {
     this.dispatchEvent(
       new CustomEvent(name, { detail: { filename: this.script.filename }, bubbles: true, composed: true })

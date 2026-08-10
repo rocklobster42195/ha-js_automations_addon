@@ -65,6 +65,13 @@ export class LogViewer extends LitElement {
 
     .log-header-left {
       gap: 20px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Buttons must stay visible even if the filter select above wants to grow wide. */
+    .log-header > .log-header-right {
+      flex-shrink: 0;
     }
 
     label {
@@ -80,6 +87,11 @@ export class LogViewer extends LitElement {
       outline: none;
       padding: 2px 5px;
       font-size: 0.8rem;
+      min-width: 0;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     select option {
@@ -149,8 +161,8 @@ export class LogViewer extends LitElement {
     if (window.logViewer === this) delete window.logViewer;
   }
 
-  /** Mobile per-script inline log (RFC §7) — a read-only snapshot, not a live
-   * subscription, so callers re-call this each time they want fresh entries. */
+  /** Mobile per-script inline log (RFC §7) — a one-time snapshot for populating the panel
+   * when it opens; subsequent entries arrive live via the 'jsa-log-appended' window event. */
   getEntriesForSource(source: string): LogEntry[] {
     return this._entries.filter((e) => (e.source || 'System') === source);
   }
@@ -207,6 +219,10 @@ export class LogViewer extends LitElement {
     this._entries.push(e);
     if (this._entries.length > MAX_RETAINED_ENTRIES)
       this._entries.splice(0, this._entries.length - MAX_RETAINED_ENTRIES);
+
+    // Lets the mobile per-script inline log (script-row.ts) stay live instead of the
+    // point-in-time snapshot it took when the row was opened.
+    window.dispatchEvent(new CustomEvent('jsa-log-appended', { detail: e }));
 
     // Block-level error visualization (docs/blockly_concept.md M5, should-have) — only if the
     // .blocks script that threw is the currently active tab; a background script's error

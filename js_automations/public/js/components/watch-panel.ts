@@ -455,10 +455,10 @@ export class WatchPanel extends LitElement {
     if (window.watchPanel === this) delete window.watchPanel;
   }
 
-  /** Mobile per-script inline status (RFC §7 follow-up) — a snapshot at call
-   * time of this script's currently active watch tiles, keyed by filename
-   * (unlike log entries, watch payloads carry the real filename, not the
-   * display name). */
+  /** Mobile per-script inline status (RFC §7 follow-up) — this script's currently active watch
+   * tiles, keyed by filename (unlike log entries, watch payloads carry the real filename, not
+   * the display name). Used both for the initial snapshot and to re-fetch after a live
+   * 'jsa-watch-updated'/'jsa-watch-cleared' event (see script-row.ts). */
   getTilesForFilename(filename: string): { label: string; value: WatchValue }[] {
     return [...this._watchRows.entries()]
       .filter(([, e]) => e.filename === filename)
@@ -575,6 +575,7 @@ export class WatchPanel extends LitElement {
       if (e.attrsTr && !e.attrsTr.classList.contains('hidden')) {
         e.attrsTr.querySelector('td')!.innerHTML = this._renderAttrs(value);
       }
+      window.dispatchEvent(new CustomEvent('jsa-watch-updated', { detail: { filename } }));
       return;
     }
 
@@ -632,6 +633,10 @@ export class WatchPanel extends LitElement {
     }
 
     this._watchRows.set(label, { mainTr, attrsTr, valueEl: tdValue, iconEl, chevronEl, filename, lastValue: value });
+    // Lets the mobile per-script inline watch panel (script-row.ts) pick up a script's first
+    // tile live — e.g. a stopped script that gets started needs its Watch section to appear
+    // without the row having to be closed and reopened.
+    window.dispatchEvent(new CustomEvent('jsa-watch-updated', { detail: { filename } }));
   };
 
   onWatchClear = (data: { filename: string }): void => {
@@ -657,6 +662,7 @@ export class WatchPanel extends LitElement {
       );
       list.appendChild(hint);
     }
+    window.dispatchEvent(new CustomEvent('jsa-watch-cleared', { detail: { filename: data.filename } }));
   };
 
   onInspectSnapshot = (data: { label: string; vars?: Record<string, unknown>; name?: string }): void => {
