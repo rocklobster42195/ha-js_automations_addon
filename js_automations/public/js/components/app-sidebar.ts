@@ -562,6 +562,9 @@ export class AppSidebar extends LitElement {
   private _onSearchInput(e: Event): void {
     this._search = (e.target as HTMLInputElement).value;
     this._debounceCodeSearch();
+    // Local highlight in the editor doesn't need the code-search round-trip — Monaco already
+    // has the open script's content, so this can run immediately off the raw typed term.
+    window.monacoEditor?.highlightSearchTerm(this._search.trim());
   }
   private _clearSearch(): void {
     this._search = '';
@@ -572,6 +575,7 @@ export class AppSidebar extends LitElement {
     }
     const input = this.renderRoot.querySelector<HTMLInputElement>('.search-input');
     if (input) input.value = '';
+    window.monacoEditor?.clearSearchHighlight();
   }
 
   private _debounceCodeSearch(): void {

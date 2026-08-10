@@ -10,6 +10,25 @@ type Monaco = typeof import('monaco-editor');
 type IStandaloneCodeEditor = import('monaco-editor').editor.IStandaloneCodeEditor;
 type ITextModel = import('monaco-editor').editor.ITextModel;
 type ICodeEditorViewState = import('monaco-editor').editor.ICodeEditorViewState;
+type IEditorContribution = import('monaco-editor').editor.IEditorContribution;
+
+/** Untyped subset of the find contribution's internal API (not part of the published .d.ts —
+ * see _applySearchHighlight() for why we go through it directly instead of editor.trigger()). */
+interface FindControllerLike extends IEditorContribution {
+  start(
+    opts: {
+      forceRevealReplace: boolean;
+      seedSearchStringFromSelection: 'none' | 'single' | 'multiple';
+      seedSearchStringFromNonEmptySelection: boolean;
+      seedSearchStringFromGlobalClipboard: boolean;
+      shouldFocus: number;
+      shouldAnimate: boolean;
+      updateSearchScope: boolean;
+      loop: boolean;
+    },
+    newState?: { searchString?: string; isRegex?: boolean; wholeWord?: boolean; matchCase?: boolean }
+  ): Promise<void>;
+}
 
 declare global {
   interface Window {
@@ -677,6 +696,8 @@ export class MonacoEditorElement extends LitElement {
       loadLibraryDefinitions: this.loadLibraryDefinitions,
       isReady: () => this._ready,
       insertSnippet: this.insertSnippet,
+      highlightSearchTerm: this.highlightSearchTerm,
+      clearSearchHighlight: this.clearSearchHighlight,
     };
     window.monacoEditor = bridge;
     // Documented external call site (global.d.ts): some not-yet-migrated code may still call
@@ -817,6 +838,7 @@ export class MonacoEditorElement extends LitElement {
 
   setModel = (model: ITextModel | null): void => {
     this._editor?.setModel(model);
+    this._applySearchHighlight();
   };
 
   /** Reads the value of any model reference, not just the one currently attached to the
@@ -871,6 +893,58 @@ export class MonacoEditorElement extends LitElement {
   insertSnippet = (id: string, mode: 'full' | 'minimal' = 'full', variant: string | null = null): void => {
     this._insertSnippet(id, mode, variant);
   };
+
+  // -------------------------------------------------------------------------
+  // Sidebar code-search highlight — app-sidebar.ts's filter now searches script content
+  // (api/scripts/search), so the match needs to be visible in place once the script is open.
+  // Drives Monaco's own find widget (same as Ctrl+F) rather than hand-rolled decorations, so
+  // matches, the current-match count, and the overview-ruler/minimap ticks all come for free.
+  // -------------------------------------------------------------------------
+
+  private _lastSearchTerm = '';
+
+  /** Stores the term so it also re-opens after setModel() (e.g. opening a script that just
+   * matched the sidebar's code search), not just against whatever's open right now. */
+  highlightSearchTerm = (term: string): void => {
+    this._lastSearchTerm = term.trim();
+    this._applySearchHighlight();
+  };
+
+  clearSearchHighlight = (): void => {
+    this._lastSearchTerm = '';
+    this._applySearchHighlight();
+  };
+
+  private _applySearchHighlight(): void {
+    if (!this._editor) return;
+    if (!this._lastSearchTerm) {
+      // Unlike the action below, 'closeFindWidget' is a plain editor *command* (registerEditorCommand),
+      // which is a different dispatch path in Monaco's trigger() that does forward its payload fine.
+      this._editor.trigger('jsa-sidebar-search', 'closeFindWidget', null);
+      return;
+    }
+    // editor.trigger(source, 'editor.actions.findWithArgs', payload) looks like the documented way
+    // to open Find pre-filled, but Monaco's own editor.trigger() silently drops the payload for
+    // any *action* (registerEditorAction) — see InternalEditorAction in monaco-editor's
+    // editorAction.js, which bakes a hardcoded `null` into the run closure regardless of what's
+    // passed to trigger(). The widget opens but the search box stays empty. Going straight at the
+    // find contribution's own start() — the same call StartFindWithArgsAction makes internally —
+    // sidesteps that and actually seeds the search string.
+    const controller = this._editor.getContribution<FindControllerLike>('editor.contrib.findController');
+    controller?.start(
+      {
+        forceRevealReplace: false,
+        seedSearchStringFromSelection: 'none',
+        seedSearchStringFromNonEmptySelection: false,
+        seedSearchStringFromGlobalClipboard: false,
+        shouldFocus: 1,
+        shouldAnimate: true,
+        updateSearchScope: false,
+        loop: true,
+      },
+      { searchString: this._lastSearchTerm, isRegex: false, wholeWord: false, matchCase: false }
+    );
+  }
 
   // -------------------------------------------------------------------------
   // Icon decorations (mdi:xxx inline glyph preview) — ported from editor-config.js.

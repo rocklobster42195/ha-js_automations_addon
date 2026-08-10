@@ -232,6 +232,12 @@ export interface JsaMonacoEditorBridge {
    * model as a live, tab-stop-navigable Monaco snippet - used to pre-fill a newly created,
    * still-empty card tab with the card boilerplate instead of leaving it blank. */
   insertSnippet(id: string, mode?: 'full' | 'minimal', variant?: string | null): void;
+  /** Opens Monaco's own find widget prefilled with `term` (same as Ctrl+F) — follow-through for
+   * app-sidebar.ts's code-search filter. Sticks across setModel() so it re-opens when the
+   * matching script is opened after the search already ran. */
+  highlightSearchTerm(term: string): void;
+  /** Closes the find widget and forgets the term, so a later setModel() doesn't re-open it. */
+  clearSearchHighlight(): void;
 }
 
 export interface JsaLogEntry {
