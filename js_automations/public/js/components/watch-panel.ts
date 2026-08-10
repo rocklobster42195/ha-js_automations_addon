@@ -775,6 +775,10 @@ export class WatchPanel extends LitElement {
     this._activeBreakpoints.set(filename, { row, continueBtn, iconEl });
     this._setWatchTabBadge(this._activeBreakpoints.size);
     list.scrollTop = 0;
+    // Lets the sidebar row for this script (script-row.ts) show a paused indicator even
+    // without the DevTools/Watch tab open — the script isn't actually stuck (Stop already
+    // releases the breakpoint before stopping), but nothing else surfaces why it looks idle.
+    window.dispatchEvent(new CustomEvent('jsa-breakpoint-hit', { detail: { filename, label } }));
   };
 
   onBreakpointContinued = (data: { filename: string }): void => {
@@ -786,6 +790,7 @@ export class WatchPanel extends LitElement {
     entry.continueBtn.remove();
     this._activeBreakpoints.delete(data.filename);
     this._setWatchTabBadge(this._activeBreakpoints.size);
+    window.dispatchEvent(new CustomEvent('jsa-breakpoint-continued', { detail: { filename: data.filename } }));
   };
 
   private _continueBreakpoint(filename: string): void {

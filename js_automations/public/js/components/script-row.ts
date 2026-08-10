@@ -49,6 +49,10 @@ export class ScriptRow extends LitElement {
     .status-error {
       color: var(--danger);
     }
+    /* Matches the breakpoint accent color used in watch-panel.ts's INSPECT rows. */
+    .status-paused {
+      color: #ff9800;
+    }
 
     .script-info {
       display: flex;
@@ -298,6 +302,10 @@ export class ScriptRow extends LitElement {
   @state() private _logSnapshot: JsaLogEntry[] | null = null;
   @state() private _logClearedAt = 0;
   @state() private _watchSnapshot: JsaWatchTile[] = [];
+  /** Non-null while this script is frozen at a ha.breakpoint() call — see _onBreakpointHit().
+   * Purely a visual cue: Stop already releases the breakpoint before stopping the script, so
+   * there's nothing to unblock here beyond letting the user know why it looks idle. */
+  @state() private _breakpointLabel: string | null = null;
 
   private _t(key: string, fallback?: string, options?: Record<string, unknown>): string {
     return window.i18next?.t(key, { defaultValue: fallback, ...options }) ?? fallback ?? key;
@@ -308,6 +316,8 @@ export class ScriptRow extends LitElement {
     window.addEventListener('jsa-log-appended', this._onLogAppended);
     window.addEventListener('jsa-watch-updated', this._onWatchChanged);
     window.addEventListener('jsa-watch-cleared', this._onWatchChanged);
+    window.addEventListener('jsa-breakpoint-hit', this._onBreakpointHit);
+    window.addEventListener('jsa-breakpoint-continued', this._onBreakpointContinued);
   }
 
   disconnectedCallback() {
@@ -315,6 +325,8 @@ export class ScriptRow extends LitElement {
     window.removeEventListener('jsa-log-appended', this._onLogAppended);
     window.removeEventListener('jsa-watch-updated', this._onWatchChanged);
     window.removeEventListener('jsa-watch-cleared', this._onWatchChanged);
+    window.removeEventListener('jsa-breakpoint-hit', this._onBreakpointHit);
+    window.removeEventListener('jsa-breakpoint-continued', this._onBreakpointContinued);
   }
 
   /** Keeps the open inline log panel (mobile RFC §7) live instead of the point-in-time
@@ -333,6 +345,20 @@ export class ScriptRow extends LitElement {
     const { filename } = (e as CustomEvent<{ filename: string }>).detail;
     if (filename !== this.script.filename) return;
     this._watchSnapshot = window.watchPanel?.getTilesForFilename(this.script.filename) ?? [];
+  };
+
+  /** Unlike the log/watch live-refresh above, this one isn't gated by _detailsOpen — the
+   * paused indicator lives on the always-visible icon, not inside the expandable panel. */
+  private _onBreakpointHit = (e: Event): void => {
+    const { filename, label } = (e as CustomEvent<{ filename: string; label: string }>).detail;
+    if (filename !== this.script.filename) return;
+    this._breakpointLabel = label;
+  };
+
+  private _onBreakpointContinued = (e: Event): void => {
+    const { filename } = (e as CustomEvent<{ filename: string }>).detail;
+    if (filename !== this.script.filename) return;
+    this._breakpointLabel = null;
   };
 
   private _dispatch(name: string): void {
@@ -387,6 +413,7 @@ export class ScriptRow extends LitElement {
   }
 
   private _statusClass(): string {
+    if (this._breakpointLabel !== null) return 'status-paused';
     const s = this.script;
     return s.running ? 'status-running' : s.status === 'error' ? 'status-error' : 'status-stopped';
   }
@@ -397,10 +424,14 @@ export class ScriptRow extends LitElement {
   private _detailFields(): { text: string; sectionBreak?: boolean }[] {
     const s = this.script;
     const lang = s.filename.endsWith('.ts') ? 'TypeScript' : s.filename.endsWith('.blocks') ? 'Blockly' : 'JavaScript';
-    const fields: { text: string; sectionBreak?: boolean }[] = [
+    const fields: { text: string; sectionBreak?: boolean }[] = [];
+    if (this._breakpointLabel !== null) {
+      fields.push({ text: `Paused at breakpoint: "${this._breakpointLabel}" (Stop resumes and stops it)` });
+    }
+    fields.push(
       { text: `File: ${s.filename} (${lang})` },
-      { text: `State: ${s.running ? 'Running' : 'Stopped'}` },
-    ];
+      { text: `State: ${s.running ? 'Running' : 'Stopped'}` }
+    );
     if (s.ram_usage) fields.push({ text: `RAM: ~${s.ram_usage.toFixed(1)} MB` });
     if (s.last_started) fields.push({ text: `Started: ${new Date(s.last_started).toLocaleString()}` });
     if (s.capabilities) {
