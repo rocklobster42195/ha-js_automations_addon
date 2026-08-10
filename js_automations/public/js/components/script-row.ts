@@ -437,7 +437,7 @@ export class ScriptRow extends LitElement {
       <div class="script-details-section-header">
         <span>${this._t('script_details_log_label', 'Log')}</span>
         <i
-          class="mdi mdi-close script-details-section-clear"
+          class="mdi mdi-trash-can-outline script-details-section-clear"
           title=${this._t('log_clear_view_title', 'Clear View')}
           @click=${(e: Event) => this._clearInlineLog(e)}
         ></i>
