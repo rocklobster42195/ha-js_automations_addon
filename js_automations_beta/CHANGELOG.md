@@ -1,3 +1,14 @@
+## [3.0.0-beta.2] - 2026-08-10
+
+- style: fix prettier formatting in script-row.ts
+- feat: show a paused indicator on scripts halted at a breakpoint
+- i18n: rename "Expert Mode" setting to "DevTools"
+- fix: unlock server log deletion for all users
+- fix: keep the status bar visible on the mobile main-log screen
+- fix: stop sidebar search from stealing focus into the editor
+
+---
+
 ## [3.0.0-beta.1] - 2026-08-10
 
 - fix: use trash-can-outline icon for mobile inline log clear button
