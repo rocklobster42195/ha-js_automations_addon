@@ -267,8 +267,8 @@
       "language_auto": "Auto (Home Assistant)",
       "ui_language": "Sprache",
       "ui_language_desc": "Sprache der Benutzeroberfläche anpassen (erfordert Neuladen).",
-      "expert_mode": "Expertenmodus",
-      "expert_mode_desc": "Aktiviert das Entwickler-Toolkit: Event-Inspector, Live-REPL, Breakpoints und mehr.",
+      "expert_mode": "DevTools",
+      "expert_mode_desc": "Zeigt das Entwickler-Toolkit: Event-Inspector, Live-REPL, Breakpoints und mehr.",
       "confirm_delete": "Löschen bestätigen",
       "confirm_delete_desc": "Zeigt einen Bestätigungsdialog vor dem Löschen von Skripten.",
       "hide_mobile_toggle_in_desktop": "Mobil-Umschalter im Desktopmodus verbergen",
@@ -379,11 +379,7 @@
   "statusbar": {
     "ha_connected": "Home Assistant: Verbunden",
     "ha_disconnected": "Home Assistant: Verbindung getrennt",
-    "mqtt_connected": "MQTT: Verbunden",
-    "mqtt_disconnected": "MQTT: Verbindung getrennt",
-    "safe_mode": "Abgesicherter Modus aktiv",
-    "expert_mode": "Expertenmodus aktiv",
-    "version": "Addon Version"
+    "mqtt_connected": "MQTT: Verbunden"
   },
   "store": {
     "title": "Store Explorer (ha.store)",
