@@ -456,12 +456,10 @@ export class SettingsView extends LitElement {
 
   private _applyExpertMode(enabled: boolean | undefined): void {
     document.body.classList.toggle('expert-mode', !!enabled);
-    // app-sidebar.ts/log-viewer.ts each reflect their own `expert-mode` attribute (used by
-    // :host([expert-mode]) styles, e.g. the sidebar logo color) - i18n.js only sets these once
-    // at page load, so a live settings toggle needs to update them here too instead of
-    // requiring a hard reload to pick up the new value.
+    // app-sidebar.ts reflects its own `expert-mode` attribute (used by :host([expert-mode])
+    // styles, e.g. the sidebar logo color) - i18n.js only sets this once at page load, so a
+    // live settings toggle needs to update it here too instead of requiring a hard reload.
     document.querySelector('app-sidebar')?.toggleAttribute('expert-mode', !!enabled);
-    document.querySelector('log-viewer')?.toggleAttribute('expert-mode', !!enabled);
   }
 
   private _selectCategory(catId: string): void {

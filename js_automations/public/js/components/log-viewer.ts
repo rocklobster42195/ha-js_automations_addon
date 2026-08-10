@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { mdiStylesheetLink } from './mdi';
 
 interface LogEntry {
@@ -129,7 +129,6 @@ export class LogViewer extends LitElement {
     }
   `;
 
-  @property({ type: Boolean, attribute: 'expert-mode', reflect: true }) expertMode = false;
   @state() private _sources: string[] = ['System'];
   @state() private _filter = 'ALL';
   private _entries: LogEntry[] = [];
@@ -347,18 +346,9 @@ export class LogViewer extends LitElement {
           <button title=${this._t('log_clear_view_title', 'Clear View')} @click=${this.clearLogView}>
             <i class="mdi mdi-trash-can-outline"></i>
           </button>
-          ${
-            this.expertMode
-              ? html`
-                  <button
-                    title=${this._t('log_clear_server_title', 'Delete Server Log')}
-                    @click=${this.clearServerLogs}
-                  >
-                    <i class="mdi mdi-delete-forever"></i>
-                  </button>
-                `
-              : ''
-          }
+          <button title=${this._t('log_clear_server_title', 'Delete Server Log')} @click=${this.clearServerLogs}>
+            <i class="mdi mdi-delete-forever"></i>
+          </button>
         </div>
       </div>
       <div id="console-output" class="console"></div>
