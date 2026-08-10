@@ -710,7 +710,6 @@ export class AppSidebar extends LitElement {
                     <i class="mdi mdi-plus"></i>
                   </button>
                   <button
-                    class=${this.expertMode ? '' : 'hidden'}
                     @click=${() => window.storeExplorer?.openTab()}
                     title=${this._t('global_store_explorer_title', 'Global Store Explorer')}
                   >
