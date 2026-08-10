@@ -428,10 +428,7 @@ export class ScriptRow extends LitElement {
     if (this._breakpointLabel !== null) {
       fields.push({ text: `Paused at breakpoint: "${this._breakpointLabel}" (Stop resumes and stops it)` });
     }
-    fields.push(
-      { text: `File: ${s.filename} (${lang})` },
-      { text: `State: ${s.running ? 'Running' : 'Stopped'}` }
-    );
+    fields.push({ text: `File: ${s.filename} (${lang})` }, { text: `State: ${s.running ? 'Running' : 'Stopped'}` });
     if (s.ram_usage) fields.push({ text: `RAM: ~${s.ram_usage.toFixed(1)} MB` });
     if (s.last_started) fields.push({ text: `Started: ${new Date(s.last_started).toLocaleString()}` });
     if (s.capabilities) {
