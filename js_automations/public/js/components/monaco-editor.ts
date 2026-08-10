@@ -937,7 +937,9 @@ export class MonacoEditorElement extends LitElement {
         seedSearchStringFromSelection: 'none',
         seedSearchStringFromNonEmptySelection: false,
         seedSearchStringFromGlobalClipboard: false,
-        shouldFocus: 1,
+        // NoFocusChange — this fires on every keystroke in the sidebar filter, so grabbing focus
+        // into the find input (like Ctrl+F does) would yank the cursor away while still typing.
+        shouldFocus: 0,
         shouldAnimate: true,
         updateSearchScope: false,
         loop: true,
