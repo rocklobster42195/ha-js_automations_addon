@@ -1,3 +1,15 @@
+## [3.0.0-beta.1] - 2026-08-10
+
+- fix: use trash-can-outline icon for mobile inline log clear button
+- feat: live-update mobile per-script log and watch panels
+- fix: keep MQTT status indicator alive across mobile view switches
+- fix: unlock Store Explorer for all users
+- feat: highlight sidebar code-search matches in the editor
+- fix: resolve npm audit high-severity findings
+- fix: replace auto-generated commit-dump entry in beta CHANGELOG.md
+
+---
+
 ## [3.0.0-beta.0] - 2026-08-09
 
 ### Harder, Better, Faster, Stronger
