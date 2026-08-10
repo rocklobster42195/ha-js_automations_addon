@@ -211,10 +211,9 @@ export class StatusBar extends LitElement {
 
     if (window.currentSettings) this._applySettings(window.currentSettings);
 
-    // On mobile this element is removed from the DOM (not just hidden) while the log
-    // screen is shown — see app-sidebar.ts's `_mobileScreen === 'log'` render branch —
-    // so a fresh instance must re-apply the last known MQTT status instead of sitting
-    // on the `false` default until the next mqtt_status_changed push.
+    // Re-apply the last known MQTT status on (re)connect instead of sitting on the
+    // `false` default until the next mqtt_status_changed push — covers both the initial
+    // mount and any future remount, not just a specific screen.
     const mqtt = window.currentIntegrationStatus?.mqtt;
     if (mqtt) this._updateMqttIndicator(mqtt);
   }

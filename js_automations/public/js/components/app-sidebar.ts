@@ -803,7 +803,7 @@ export class AppSidebar extends LitElement {
               </div>
             `
       }
-      ${this.mobile && this._mobileScreen === 'log' ? nothing : html`<status-bar ?mobile=${this.mobile}></status-bar>`}
+      <status-bar ?mobile=${this.mobile}></status-bar>
     `;
   }
 }

@@ -47,8 +47,8 @@ html {
    with .main-content filling the rest below it; <app-sidebar> itself hides
    its search/list internally via its own _mobileScreen state (not via body
    classes, since those live inside its Shadow DOM) — <status-bar> stays up
-   for dashboard AND settings, only dropped for log (own condition, same
-   reasoning as Q2: give the log stream the space). -screen-log narrows which
+   for all three screens now (dashboard, log, and settings) so its MQTT/CPU/
+   RAM readout is always visible. -screen-log narrows which
    *part* of .main-content shows: the log split-pane's .log-section for log,
    or #editor-section (already home to the settings view via the same tab
    machinery desktop uses) for anything else — and for that "anything else"
@@ -90,8 +90,9 @@ body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) #editor-sectio
   flex: 1;
 }
 /* Clearance for <status-bar>'s viewport-fixed positioning on mobile (see
-   status-bar.ts) — dropped on the log screen along with the bar itself. */
-body.jsa-mobile.jsa-mobile-fullscreen:not(.jsa-mobile-screen-log) .main-content {
+   status-bar.ts) — needed on every fullscreen mobile screen now that the bar
+   stays mounted for all of them, including log. */
+body.jsa-mobile.jsa-mobile-fullscreen .main-content {
   padding-bottom: 30px;
 }
 
