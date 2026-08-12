@@ -25,11 +25,7 @@ if (!config.unifi_password) {
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
-const unifi = new Unifi.Controller({
-  host: config.unifi_ip,
-  port: config.unifi_port,
-  sslverify: false,
-});
+let unifi;
 
 ha.register('sensor.freifunk_clients', {
   name: 'Freifunk Clients',
@@ -67,15 +63,29 @@ ha.onError((err) => {
 
 ha.onStop(async () => {
   if (debounceTimer) clearTimeout(debounceTimer);
-  await unifi.removeAllListeners();
   ha.update('sensor.freifunk_clients', null);
-  await unifi.logout();
+  if (unifi) {
+    await unifi.removeAllListeners();
+    await unifi.logout();
+  }
   ha.log('Script stopped.');
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-(async () => {
+// node-unifi auto-reconnects the events WebSocket on close/error, but it does so by
+// re-sending the *original* login cookie without ever calling login() again. Once that
+// cookie expires on the controller, it retries forever with a cookie that will never
+// work again, and the sensor silently stops updating. connect() (re)creates the
+// Controller and logs in from scratch, and is re-run periodically below to guarantee
+// a fresh session before that can happen.
+async function connect() {
+  unifi = new Unifi.Controller({
+    host: config.unifi_ip,
+    port: config.unifi_port,
+    sslverify: false,
+  });
+
   try {
     await unifi.login(config.unifi_user, config.unifi_password);
     await updateClientCount();
@@ -92,4 +102,19 @@ ha.onStop(async () => {
     ha.error(`Initialization failed: ${err.message}`);
     ha.error(`Check UniFi connection settings in 'freifunk_config' (JSA Store) and ensure the password is set.`);
   }
-})();
+}
+
+// Force a clean re-login + reconnect well within any realistic UniFi session
+// timeout, so a stale cookie never gets the WebSocket stuck reconnecting forever.
+schedule('every 6 hours', async () => {
+  ha.debug('Refreshing UniFi session...');
+  try {
+    await unifi.removeAllListeners();
+    await unifi.logout();
+  } catch (err) {
+    // Old controller/session may already be unreachable - ignore and reconnect anyway.
+  }
+  await connect();
+});
+
+connect();
