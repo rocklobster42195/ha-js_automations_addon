@@ -1,3 +1,9 @@
+## [3.0.0-beta.4] - 2026-08-13
+
+- fix: prevent duplicate Monaco model creation when a tab opens twice
+
+---
+
 ## [3.0.0-beta.3] - 2026-08-13
 
 - fix: release keep-alive ref exactly once per ha.entity() service call
