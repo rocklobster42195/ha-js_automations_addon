@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [3.0.0] - 2026-08-13
+
 ### Harder, Better, Faster, Stronger
 
 The entire app has been rebuilt from the ground up — a new visual scripting editor, a modernized interface, and a fully typed codebase underneath.

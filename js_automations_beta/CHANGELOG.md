@@ -1,59 +1,8 @@
-## [3.0.0-beta.8] - 2026-08-13
-
-- fix: match the picker's advertised card type to its actual custom element tag
-- docs: fix empty beta.7 changelog entry
+<!-- NEXT -->
 
 ---
 
-## [3.0.0-beta.7] - 2026-08-13
-
-- fix: prevent stale entity publishes from clobbering fresh state
-
----
-
-## [3.0.0-beta.5] - 2026-08-13
-
-- fix: dispose stale typings before re-registering with Monaco
-
----
-
-## [3.0.0-beta.4] - 2026-08-13
-
-- fix: prevent duplicate Monaco model creation when a tab opens twice
-
----
-
-## [3.0.0-beta.3] - 2026-08-13
-
-- fix: release keep-alive ref exactly once per ha.entity() service call
-- fix: reconnect UniFi controller periodically in freifunk example
-
----
-
-## [3.0.0-beta.2] - 2026-08-10
-
-- style: fix prettier formatting in script-row.ts
-- feat: show a paused indicator on scripts halted at a breakpoint
-- i18n: rename "Expert Mode" setting to "DevTools"
-- fix: unlock server log deletion for all users
-- fix: keep the status bar visible on the mobile main-log screen
-- fix: stop sidebar search from stealing focus into the editor
-
----
-
-## [3.0.0-beta.1] - 2026-08-10
-
-- fix: use trash-can-outline icon for mobile inline log clear button
-- feat: live-update mobile per-script log and watch panels
-- fix: keep MQTT status indicator alive across mobile view switches
-- fix: unlock Store Explorer for all users
-- feat: highlight sidebar code-search matches in the editor
-- fix: resolve npm audit high-severity findings
-- fix: replace auto-generated commit-dump entry in beta CHANGELOG.md
-
----
-
-## [3.0.0-beta.0] - 2026-08-09
+## [3.0.0] - 2026-08-13
 
 ### Harder, Better, Faster, Stronger
 
@@ -87,17 +36,14 @@ The whole frontend has been rewritten on LIT web components with TypeScript, and
 - System CPU/RAM sensors now correctly use `state_class` (were silently rejected by HA before)
 - Card preview panel: drag handle now works, panel stays on-screen when resized, toggle button reflects state correctly, only shows for JS/TS scripts with `@card`
 - Entity picker modal now closes on Escape
-
----
-
-## [2.57.9] - 2026-08-07
-
-- feat: add ha.frontend.cacheAsset() for locally caching external assets (team logos, album art, ...)
-- feat: auto-restart crashed scripts and expose HA connection status to scripts
-- fix: MQTT test connection could hang forever on a dead port
-- fix: capability-analyzer now detects direct ha.mqtt.publish()/subscribe() usage
-- fix: status bar and header version badge stuck stale after a socket reconnect
-- fix: Webhook Panel could stay stuck on pre-restart state after an addon restart
+- Store Explorer and server log deletion were incorrectly locked to admin-only, now work for all users
+- Sidebar search no longer steals keyboard focus away from the editor
+- Status bar stayed hidden on the mobile main-log screen; MQTT status indicator could drop when switching mobile views
+- Script Packs: the card type advertised to Home Assistant's "Add Card" picker now always matches the card's real custom element tag (previously a script with an underscore in its filename could get stuck in an infinite loading spinner)
+- Monaco editor: fixed duplicate model creation when reopening a tab, and stale typings lingering after re-registration
+- `ha.entity()` service calls now release their keep-alive reference exactly once (potential resource leak fixed)
+- `ha.persistent()` now backfills missing top-level keys after a schema upgrade instead of leaving them undefined
+- Resolved all high-severity npm audit findings
 
 ---
 
