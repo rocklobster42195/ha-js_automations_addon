@@ -1,3 +1,10 @@
+## [3.0.0-beta.8] - 2026-08-13
+
+- fix: match the picker's advertised card type to its actual custom element tag
+- docs: fix empty beta.7 changelog entry
+
+---
+
 ## [3.0.0-beta.7] - 2026-08-13
 
 - fix: prevent stale entity publishes from clobbering fresh state
