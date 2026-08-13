@@ -1,3 +1,10 @@
+## [3.0.0-beta.3] - 2026-08-13
+
+- fix: release keep-alive ref exactly once per ha.entity() service call
+- fix: reconnect UniFi controller periodically in freifunk example
+
+---
+
 ## [3.0.0-beta.2] - 2026-08-10
 
 - style: fix prettier formatting in script-row.ts
