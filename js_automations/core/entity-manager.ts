@@ -482,12 +482,24 @@ class EntityManager {
     // For already-correct entities, skip the initial-state publish: the MQTT broker
     // already holds the retained state, so publishing 'unknown' here would overwrite
     // the live entity state before ha.update() can set the real value.
+    //
+    // The registry audit above awaits several HA round-trips, so a script that calls
+    // ha.update() for this same entity right after ha.register() (a common pattern —
+    // register with placeholder attributes, then immediately publish the real ones)
+    // can have its update land on the wire WHILE this function is still awaiting.
+    // If that happened, lastPublishedEntityState already holds the newer state by the
+    // time we get here — publishing our own stale placeholder now would clobber it.
+    const raceWinner = this.workerManager.lastPublishedEntityState.get(entityId);
     const initialState = config.initial_state !== undefined ? config.initial_state : 'unknown';
-    if (!alreadyCorrect || config.initial_state !== undefined) {
-      this.mqttManager.publishEntityState(payload, initialState, {
-        icon: fallbackIcon,
-        ...config.attributes,
+    if (raceWinner) {
+      this.mqttManager.publishEntityState(payload, raceWinner.state, raceWinner.attributes);
+    } else if (!alreadyCorrect || config.initial_state !== undefined) {
+      const initialAttributes = { icon: fallbackIcon, ...config.attributes };
+      this.workerManager.lastPublishedEntityState.set(entityId, {
+        state: initialState,
+        attributes: initialAttributes,
       });
+      this.mqttManager.publishEntityState(payload, initialState, initialAttributes);
     }
 
     // Register in managers to track ownership and state
@@ -711,6 +723,10 @@ class EntityManager {
         ...attributes,
       };
 
+      // Recorded before HA has acknowledged anything — see the field comment on
+      // lastPublishedEntityState in worker-manager.ts for why republishNativeEntities() needs
+      // this instead of haConnector.states.
+      this.workerManager.lastPublishedEntityState.set(entityId, { state, attributes: enrichedAttributes });
       this.mqttManager.publishEntityState(config, state, enrichedAttributes);
     }
   }

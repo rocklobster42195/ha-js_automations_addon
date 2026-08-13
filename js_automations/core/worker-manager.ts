@@ -69,6 +69,7 @@ class WorkerManager extends EventEmitter {
   distDir: string;
   systemLanguage: string;
   nativeEntities: Map<string, any>;
+  lastPublishedEntityState: Map<string, { state: unknown; attributes: any }>;
   activeRunEntities: Map<string, Set<string>>;
   protectedEntities: Map<string, Set<string>>;
   scriptEntityMap: Map<string, Set<string>>;
@@ -117,6 +118,12 @@ class WorkerManager extends EventEmitter {
     this.distDir = '';
     this.systemLanguage = 'en';
     this.nativeEntities = new Map(); // entityId -> Payload (Config)
+    // entityId -> the state/attributes we ourselves last sent to MQTT. Tracked separately from
+    // haConnector.states (which mirrors what HA has *acknowledged* back over its own WebSocket,
+    // arriving after an MQTT round-trip) so republishNativeEntities() can't clobber a just-sent
+    // update with a stale echo it read before that round-trip completed. See
+    // republishNativeEntities() below for the race this closes.
+    this.lastPublishedEntityState = new Map();
     this.activeRunEntities = new Map(); // filename -> Set<entityId> (Mark-and-Sweep for current run)
     this.protectedEntities = new Map(); // filename -> Set<entityId> (from @expose headers)
     this.scriptEntityMap = new Map(); // filename -> Set<entityId> (RAM Cache)
@@ -616,10 +623,14 @@ class WorkerManager extends EventEmitter {
 
       this.mqttManager.publish(configTopic, payload, { retain: true });
 
-      // Also publish the last known state if available
+      // Prefer what we ourselves last sent over haConnector.states — the latter only reflects
+      // what HA has acknowledged back over its WebSocket, which lags an MQTT round-trip behind
+      // and can still be stale here, silently reverting a script's fresh update (see the field
+      // comment on lastPublishedEntityState above).
+      const lastSent = this.lastPublishedEntityState.get(entityId);
       const stateObj = this.haConnector?.states[entityId];
-      const currentStateValue = stateObj?.state;
-      const currentAttributes = stateObj?.attributes;
+      const currentStateValue = lastSent ? lastSent.state : stateObj?.state;
+      const currentAttributes = lastSent ? lastSent.attributes : stateObj?.attributes;
       this.mqttManager.publishEntityState(payload, currentStateValue, currentAttributes);
 
       count++;
