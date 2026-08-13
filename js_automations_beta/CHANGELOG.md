@@ -1,3 +1,9 @@
+## [3.0.0-beta.5] - 2026-08-13
+
+- fix: dispose stale typings before re-registering with Monaco
+
+---
+
 ## [3.0.0-beta.4] - 2026-08-13
 
 - fix: prevent duplicate Monaco model creation when a tab opens twice
