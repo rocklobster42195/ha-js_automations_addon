@@ -275,6 +275,11 @@ export class EditorViewElement extends LitElement {
 
   /** Same array as window.openTabs — see class doc comment for why this is never reassigned. */
   private _openTabs: JsaTab[] = [];
+  /** Filenames currently mid-fetch in openOrSwitchToTab — guards against a second concurrent
+   * call for the same file (e.g. a restored-tab call racing a user click) both passing the
+   * "not open yet" check and calling monacoEditor.createModel() for the same URI twice, which
+   * throws "Cannot add model because it already exists" and leaves the editor half-initialized. */
+  private _pendingTabOpens = new Set<string>();
   /** Bumped whenever _openTabs is mutated in place, or _activeTabFilename's window-backed
    * value changes, to force a re-render (LIT can't observe either on its own). */
   @state() private _tabsVersion = 0;
@@ -408,6 +413,11 @@ export class EditorViewElement extends LitElement {
       return;
     }
 
+    // A concurrent call for the same file is already fetching/creating its model — don't
+    // race it. Once it lands, `existingTab` above will pick it up.
+    if (this._pendingTabOpens.has(filename)) return;
+    this._pendingTabOpens.add(filename);
+
     try {
       const res = await window.apiFetch!(`api/scripts/${filename}/content`);
       const data = await res.json();
@@ -447,6 +457,8 @@ export class EditorViewElement extends LitElement {
     } catch (e) {
       console.error(`Failed to open script ${filename}`, e);
       document.getElementById('editor-section')?.classList.add('hidden');
+    } finally {
+      this._pendingTabOpens.delete(filename);
     }
   };
 
