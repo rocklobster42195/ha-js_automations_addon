@@ -1,3 +1,9 @@
+## [3.0.0-beta.6] - 2026-08-13
+
+- fix: prevent stale entity publishes from clobbering fresh state
+
+---
+
 ## [3.0.0-beta.5] - 2026-08-13
 
 - fix: dispose stale typings before re-registering with Monaco
