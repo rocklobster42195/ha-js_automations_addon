@@ -340,7 +340,6 @@
       "log_level": "Log Level",
       "default_throttle": "Default Throttle (ms)",
       "default_throttle_desc": "Delay between individual entities in ha.select() calls.",
-      "restart_required_hint": "Please restart Home Assistant (YAML quick reload is not sufficient).",
       "mqtt_status": "MQTT Connection",
       "mqtt_connected": "Connected to MQTT broker",
       "mqtt_disconnected": "Connection to MQTT broker lost",
@@ -377,6 +376,11 @@
     }
   },
   "banner_close_tooltip": "Close",
+  "statusbar": {
+    "ha_connected": "Connected",
+    "ha_disconnected": "Disconnected",
+    "mqtt_connected": "MQTT connected"
+  },
   "store": {
     "title": "Global Store (ha.store)",
     "loading": "Loading data...",

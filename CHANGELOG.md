@@ -32,6 +32,14 @@ The whole frontend has been rewritten on LIT web components with TypeScript, and
 - System CPU/RAM sensors now correctly use `state_class` (were silently rejected by HA before)
 - Card preview panel: drag handle now works, panel stays on-screen when resized, toggle button reflects state correctly, only shows for JS/TS scripts with `@card`
 - Entity picker modal now closes on Escape
+- Store Explorer and server log deletion were incorrectly locked to admin-only, now work for all users
+- Sidebar search no longer steals keyboard focus away from the editor
+- Status bar stayed hidden on the mobile main-log screen; MQTT status indicator could drop when switching mobile views
+- Script Packs: the card type advertised to Home Assistant's "Add Card" picker now always matches the card's real custom element tag (previously a script with an underscore in its filename could get stuck in an infinite loading spinner)
+- Monaco editor: fixed duplicate model creation when reopening a tab, and stale typings lingering after re-registration
+- `ha.entity()` service calls now release their keep-alive reference exactly once (potential resource leak fixed)
+- `ha.persistent()` now backfills missing top-level keys after a schema upgrade instead of leaving them undefined
+- Resolved all high-severity npm audit findings
 
 ---
 

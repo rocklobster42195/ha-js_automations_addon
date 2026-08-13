@@ -3,6 +3,7 @@
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
 ![Version](https://img.shields.io/badge/version-2.57.9-darkgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/rocklobster42195/ha-js_automations_addon/actions/workflows/ci.yml/badge.svg)](https://github.com/rocklobster42195/ha-js_automations_addon/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rocklobster42195)
 
 <p align="center">
@@ -15,9 +16,6 @@
 > **Actively evolving:** JS Automations is stable enough for daily/production use, but it's still a young project under active development. New features and improvements land regularly, so expect more frequent updates than a fully mature add-on — check the [releases](https://github.com/rocklobster42195/ha-js_automations_addon/releases) for what's new. Feedback and bug reports are always welcome!
 
 > [!TIP]
-> **Try the 3.x beta!** We're working on a major frontend/backend modernization (TypeScript, LIT web components, a unified design system) for the next major version — including a brand-new **visual scripting editor (Blockly)**: build automations by dragging blocks instead of writing code, with a "Show Code" panel and a one-click "Duplicate as JavaScript" escape hatch once you outgrow the blocks. The beta channel lives in the same repository you already added — look for **"JS Automations (Beta)"** in the Add-on Store. See [js_automations_beta/README.md](js_automations_beta/README.md) for how stable/beta coexist. Feedback and bug reports on the beta are especially welcome right now!
-
-> [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/API_REFERENCE.md)
 
 > **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
@@ -28,6 +26,7 @@
 
 ## Key Features
 
+- **Visual Scripting (Blockly)** — Build automations by dragging blocks instead of writing code: triggers, conditions, entity/service calls, MQTT, webhooks, Calendar/Todo, and more. A "Show Code" panel reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file the moment you outgrow the blocks.
 - **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys. Updated automatically as your home changes.
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
 - **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped, unless opted out via `stale_ok`. Remove one at runtime with `ha.unregister()`. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
