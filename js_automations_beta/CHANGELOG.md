@@ -1,3 +1,9 @@
+## [3.0.0-beta.7] - 2026-08-13
+
+- (no commit messages collected)
+
+---
+
 ## [3.0.0-beta.6] - 2026-08-13
 
 - fix: prevent stale entity publishes from clobbering fresh state
