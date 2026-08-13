@@ -367,19 +367,12 @@ class CardManager {
 
     const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
     const cardName = `${scriptName}-card`;
-    const hash = this._hash(cardCode);
-    const shortHash = hash.slice(0, 8);
-    const resourceUrl = `/local/jsa-cards/${cardName}.js?v=${shortHash}`;
 
     if (options.devMode) {
-      // Dev mode: no file write, no Lovelace registration — preview uses live card code
-      return resourceUrl;
-    }
-
-    const existing = this.registry[scriptName];
-    const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
-    if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
-      return existing.resourceUrl;
+      // Dev mode: no file write, no Lovelace registration — preview uses live card code,
+      // so the hash only needs to reflect that raw code, not the wrapper.
+      const devHash = this._hash(cardCode).slice(0, 8);
+      return `/local/jsa-cards/${cardName}.js?v=${devHash}`;
     }
 
     // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
@@ -390,11 +383,31 @@ class CardManager {
     const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
     const metaName = 'name' in scriptMeta ? scriptMeta.name : undefined;
     const metaDescription = 'description' in scriptMeta ? scriptMeta.description : undefined;
+    // The picker's advertised type must match whatever tag the card actually registers via
+    // customElements.define() — cardName (derived from the script filename, underscores intact)
+    // is only a naming convention for the file/resourceUrl and can differ from it (e.g. authors
+    // conventionally hyphenate the element tag). A mismatch means HA creates an element that
+    // never upgrades to the real component, leaving the "Add Card" preview stuck spinning.
+    const definedTagMatch = cardCode.match(/customElements\.define\(\s*['"]([a-z0-9-]+)['"]/i);
+    const pickerType = definedTagMatch ? definedTagMatch[1] : cardName;
     const pickerEntry =
       `window.customCards = window.customCards || [];\n` +
-      `window.customCards.push({ type: '${cardName}', name: ${JSON.stringify(metaName || scriptName)}, ` +
+      `window.customCards.push({ type: '${pickerType}', name: ${JSON.stringify(metaName || scriptName)}, ` +
       `description: ${JSON.stringify(metaDescription || '')}, preview: true });\n\n`;
     const finalCode = pickerEntry + preamble + wrappedCode;
+
+    // Hash the final wrapped output, not just the raw card block — a change to the wrapping
+    // logic itself (preamble version bump, picker-entry fix, etc.) must also bust the browser's
+    // cache of the resourceUrl, or a fixed server-side file can keep serving a stale cached copy.
+    const hash = this._hash(finalCode);
+    const shortHash = hash.slice(0, 8);
+    const resourceUrl = `/local/jsa-cards/${cardName}.js?v=${shortHash}`;
+
+    const existing = this.registry[scriptName];
+    const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
+    if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
+      return existing.resourceUrl;
+    }
 
     // Write card file
     this._ensureCardsDir();
