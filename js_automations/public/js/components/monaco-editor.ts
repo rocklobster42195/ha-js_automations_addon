@@ -671,6 +671,7 @@ export class MonacoEditorElement extends LitElement {
   private _allEntities: string[] = [];
   private _allStoreKeys: StoreKeyEntry[] = [];
   private _libDisposables: { dispose(): void }[] = [];
+  private _typingsDisposables: { dispose(): void }[] = [];
   private _pendingRegisterMatch: { text: string; pos: { lineNumber: number; column: number } } | null = null;
 
   private _t(key: string, fallback?: string, options?: Record<string, unknown>): string {
@@ -1104,12 +1105,20 @@ export class MonacoEditorElement extends LitElement {
       const res = await fetch('api/scripts/typings');
       if (res.ok) {
         const typings: TypingFile[] = await res.json();
+
+        // Dispose the previous round's registrations before re-adding — this re-runs on every
+        // 'typings_updated' event (any HA state change regenerates entities.d.ts), and leaving
+        // stale addExtraLib() registrations behind can desync the TS worker's program from
+        // what's on screen, silently breaking hover/diagnostics for in-flight requests.
+        this._typingsDisposables.forEach((d) => d.dispose());
+        this._typingsDisposables = [];
+
         for (const lib of typings) {
           const uri = `file:///${lib.filename}`;
           // Registered for both TS and JS defaults — .ts tabs need these too (see the compiler
           // options split above), not just .js ones.
-          m.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri);
-          m.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri);
+          this._typingsDisposables.push(m.languages.typescript.typescriptDefaults.addExtraLib(lib.content, uri));
+          this._typingsDisposables.push(m.languages.typescript.javascriptDefaults.addExtraLib(lib.content, uri));
         }
 
         const entitiesLib = typings.find((t) => t.filename === 'entities.d.ts');
