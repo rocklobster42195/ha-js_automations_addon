@@ -469,7 +469,11 @@ class MqttManager extends EventEmitter {
 
       this.publish(entityConfig.state_topic, unifiedPayload, { retain: true });
 
-      this.logManager.add('debug', 'System', `[MQTT] Publishing unified payload: ${JSON.stringify(unifiedPayload)}`);
+      this.logManager.add(
+        'debug',
+        'System',
+        `[MQTT] Publishing unified payload to ${entityConfig.state_topic}: ${JSON.stringify(unifiedPayload)}`
+      );
       return;
     }
 
@@ -478,10 +482,20 @@ class MqttManager extends EventEmitter {
       const attrPayload =
         attributes && typeof attributes === 'object' && Object.keys(attributes).length > 0 ? attributes : null;
       this.publish(entityConfig.json_attributes_topic, attrPayload, { retain: true });
+      this.logManager.add(
+        'debug',
+        'System',
+        `[MQTT] Publishing attributes to ${entityConfig.json_attributes_topic}: ${JSON.stringify(attrPayload)}`
+      );
     }
 
     if (entityConfig.state_topic) {
       this.publish(entityConfig.state_topic, normalizedState, { retain: true });
+      this.logManager.add(
+        'debug',
+        'System',
+        `[MQTT] Publishing state to ${entityConfig.state_topic}: ${JSON.stringify(normalizedState)}`
+      );
     }
   }
 

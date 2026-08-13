@@ -1043,15 +1043,13 @@ const ha: any = {
           const callId = ++serviceCallCounter;
           _addRef(); // Prevent exit while the call is in progress
           return new Promise((resolve, reject) => {
+            // Release happens exactly once: either here on timeout, or in the shared
+            // SIMPLE_RESPONSE_TYPES handler above when the real service_response arrives —
+            // never both (a double release here previously drained the keep-alive ref count
+            // over repeated calls, eventually letting the worker exit while still in use).
             pendingServiceCalls.set(callId, {
-              resolve: () => {
-                _releaseRef();
-                resolve(apiProxy);
-              },
-              reject: (err) => {
-                _releaseRef();
-                reject(err);
-              },
+              resolve: () => resolve(apiProxy),
+              reject,
             });
             pp.postMessage({
               type: 'call_service',
@@ -1066,7 +1064,7 @@ const ha: any = {
               const pending = pendingServiceCalls.get(callId);
               if (pending) {
                 pendingServiceCalls.delete(callId);
-                // Use the wrapper which also calls parentPort.unref()
+                _releaseRef();
                 pending.reject(new Error(`Service call ${domain}.${service} for ${entityId} timed out.`));
               }
             }, 10000);
