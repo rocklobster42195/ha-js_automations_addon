@@ -1791,6 +1791,22 @@ ha.persistent = (key: string, defaultValue: any = {}) => {
   ) {
     target = defaultValue;
     ha.store.set(key, target);
+  } else if (!Array.isArray(defaultValue)) {
+    // Backfill top-level keys the script's default shape has grown since this was last
+    // persisted — otherwise a script that adds a field to its ha.persistent() default (e.g.
+    // `{ ...oldShape, newField: [] }`) sees `undefined` for every existing user's stored value
+    // until something happens to write it, instead of the intended default. Only fills keys
+    // that are genuinely absent (never overwrites an existing value, even a falsy one like
+    // `false`/`0`/`null` — that's a real persisted choice, not a gap). Arrays are exempt: they
+    // don't have "named" fields to backfill, and element-merging an array would be wrong anyway.
+    let backfilled = false;
+    for (const k of Object.keys(defaultValue)) {
+      if (!Object.prototype.hasOwnProperty.call(target, k)) {
+        target[k] = defaultValue[k];
+        backfilled = true;
+      }
+    }
+    if (backfilled) ha.store.set(key, target);
   }
 
   let saveTimeout: ReturnType<typeof setTimeout>;
