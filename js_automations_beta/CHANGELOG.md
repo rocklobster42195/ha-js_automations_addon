@@ -1,3 +1,10 @@
+## [3.0.1-beta.0] - 2026-08-15
+
+- fix: collapse editor-view host when a virtual system tab is active
+- docs: update README hero screenshot for 3.0.0
+
+---
+
 <!-- NEXT -->
 
 ---
