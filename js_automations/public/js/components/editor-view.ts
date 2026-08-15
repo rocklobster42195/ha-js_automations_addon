@@ -1116,6 +1116,16 @@ export class EditorViewElement extends LitElement {
     `;
   }
 
+  willUpdate() {
+    const activeTab = this._openTabs.find((t) => t.filename === this._activeTabFilename);
+    const showEditorBody = !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card';
+    // The host normally claims flex:1 so the editor body fills #editor-section. When a virtual
+    // tab (store/settings/reference) is active, that body is hidden and routed to a sibling
+    // element instead — without shrinking the host too, it still claims half the flex space as
+    // an empty box (see the old #editor-wrapper, which used to be hidden outright for this case).
+    this.style.flex = showEditorBody ? '1' : '0 0 auto';
+  }
+
   render() {
     const activeTab = this._openTabs.find((t) => t.filename === this._activeTabFilename);
     // Store/Settings/Reference are routed to sibling elements outside #editor-body entirely
