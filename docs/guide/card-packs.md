@@ -13,7 +13,7 @@ Traditionally, automation logic and its dashboard card are maintained, versioned
 
 This is the part that isn't obvious from looking at the code, so it's worth stating plainly: **your script and your card never call each other's functions directly.** They communicate through two separate, one-way channels — get this mental model right and everything else falls into place.
 
-**Script → Card (showing data): plain Home Assistant, nothing JSA-specific.** Every Lovelace card — custom or built-in — receives a `hass` object pushed into it by Home Assistant's own frontend, via a `set hass(hass)` setter, every time *any* entity's state changes anywhere in your HA instance. Your script doesn't push data "into the card" directly. It just calls `ha.register()`/`ha.update()` on a normal HA entity, same as any other script; HA's own state machine changes; Lovelace re-pushes `hass` into every card on the dashboard, including yours; your card reads `hass.states['sensor.your_entity']` and re-renders. From the card's point of view, an entity your script maintains is indistinguishable from any other HA entity.
+**Script → Card (showing data): plain Home Assistant, nothing JSA-specific.** Every Lovelace card — custom or built-in — receives a `hass` object pushed into it by Home Assistant's own frontend, via a `set hass(hass)` setter, every time _any_ entity's state changes anywhere in your HA instance. Your script doesn't push data "into the card" directly. It just calls `ha.register()`/`ha.update()` on a normal HA entity, same as any other script; HA's own state machine changes; Lovelace re-pushes `hass` into every card on the dashboard, including yours; your card reads `hass.states['sensor.your_entity']` and re-renders. From the card's point of view, an entity your script maintains is indistinguishable from any other HA entity.
 
 **Card → Script (triggering actions): this is what JSA actually built.** There's no standard way for a Lovelace card to call back into an arbitrary running script — so a button click needs `__jsa__.callAction(name, payload)` on the card side, matched by `ha.action(name, handler)` on the script side. It's a full round trip over the HA event bus and returns a Promise, so the card can `await` a result (see [The `__jsa__` Bridge](#the-__jsa__-bridge) below for exactly how).
 
@@ -29,7 +29,7 @@ This is the part that isn't obvious from looking at the code, so it's worth stat
    ```
 3. **Write the card as a plain Web Component.** In `set hass(h)`, read the entities you registered and render them; call `__jsa__.connect(h)` once; wire button clicks to `await __jsa__.callAction('refresh')`.
 4. **Iterate with `@card dev`** and the card editor tab's live preview — no install needed yet (see [Card states](#card-states-in-the-script-list) below).
-5. **Switch to plain `@card` when ready.** The card installs for real: it's written to `config/www/jsa-cards/`, registered as a Lovelace resource, *and* added to Lovelace's own "Add Card" picker (see [Adding it to a dashboard](#adding-it-to-a-dashboard) below) — no manual YAML required.
+5. **Switch to plain `@card` when ready.** The card installs for real: it's written to `config/www/jsa-cards/`, registered as a Lovelace resource, _and_ added to Lovelace's own "Add Card" picker (see [Adding it to a dashboard](#adding-it-to-a-dashboard) below) — no manual YAML required.
 
 ## Authoring a Script Pack
 
@@ -89,7 +89,7 @@ Either way, Home Assistant itself calls your card's standard `setConfig(config)`
 
 ### Suggesting a default config for the picker
 
-`ha.frontend.installCard({ config: {...} })` doesn't change how the card behaves once it's on a dashboard — a dashboard's own config, entered through `setConfig()`, always wins there. What it *does* do is pre-fill the "Add Card" picker's config editor the first time someone adds your card, via an injected `getStubConfig()` (only if the card doesn't already define its own):
+`ha.frontend.installCard({ config: {...} })` doesn't change how the card behaves once it's on a dashboard — a dashboard's own config, entered through `setConfig()`, always wins there. What it _does_ do is pre-fill the "Add Card" picker's config editor the first time someone adds your card, via an injected `getStubConfig()` (only if the card doesn't already define its own):
 
 ```javascript
 await ha.frontend.installCard({

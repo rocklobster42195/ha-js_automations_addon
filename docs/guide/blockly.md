@@ -14,18 +14,18 @@ Open the **+** creation wizard (see [Creation Wizard](./creation-wizard.md)) and
 
 Blocks are grouped into categories in the toolbox:
 
-| Category | Covers |
-| --- | --- |
-| Triggers | `ha.on()` state-change triggers, `schedule()` |
-| Actions | `ha.call()` service calls |
-| State | Reading state/attributes (`ha.getState`, `ha.getStateValue`, `ha.getAttr`, `ha.entityExists`) |
-| Calendar & Todo | `ha.getCalendarEvents()`, `ha.getTodoItems()` |
-| Areas & Labels | `ha.getAreas()`, `ha.getEntitiesInArea()`, `ha.getEntitiesWithLabel()` |
-| Wait | `ha.waitFor()` / `ha.waitUntil()`, `sleep()` |
-| Register/Update | `ha.register()`, `ha.update()` |
-| Store | `ha.store` reads/writes |
-| Script Utilities | `ha.log/debug/warn/error()`, `ha.stop()`, `ha.notify()` |
-| Logic, Loops, Text, Math, Lists, Variables | Standard Blockly building blocks (unrelated to the `ha` API — control flow and data) |
+| Category                                   | Covers                                                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Triggers                                   | `ha.on()` state-change triggers, `schedule()`                                                 |
+| Actions                                    | `ha.call()` service calls                                                                     |
+| State                                      | Reading state/attributes (`ha.getState`, `ha.getStateValue`, `ha.getAttr`, `ha.entityExists`) |
+| Calendar & Todo                            | `ha.getCalendarEvents()`, `ha.getTodoItems()`                                                 |
+| Areas & Labels                             | `ha.getAreas()`, `ha.getEntitiesInArea()`, `ha.getEntitiesWithLabel()`                        |
+| Wait                                       | `ha.waitFor()` / `ha.waitUntil()`, `sleep()`                                                  |
+| Register/Update                            | `ha.register()`, `ha.update()`                                                                |
+| Store                                      | `ha.store` reads/writes                                                                       |
+| Script Utilities                           | `ha.log/debug/warn/error()`, `ha.stop()`, `ha.notify()`                                       |
+| Logic, Loops, Text, Math, Lists, Variables | Standard Blockly building blocks (unrelated to the `ha` API — control flow and data)          |
 
 A fluent entity call like `ha.entity('light.living_room').turn_on({ brightness: 255 })` is deliberately **not** its own block — it would be redundant with the Actions category's service-call block (same underlying effect, just different JS syntax), so it was skipped to keep the palette focused.
 
@@ -35,7 +35,7 @@ A "Show Code" panel next to the workspace renders the JavaScript your blocks cur
 
 ## Where block errors point
 
-If a running Blockly script throws, the error is traced back to the *specific block* that caused it, not just "somewhere in this script" — click the error in the log and the offending block is highlighted directly in the editor. This works because the compiler wraps each block's generated statement in its own try/catch that tags the error with that block's id as it propagates up, so the innermost (most specific) block wins the attribution.
+If a running Blockly script throws, the error is traced back to the _specific block_ that caused it, not just "somewhere in this script" — click the error in the log and the offending block is highlighted directly in the editor. This works because the compiler wraps each block's generated statement in its own try/catch that tags the error with that block's id as it propagates up, so the innermost (most specific) block wins the attribution.
 
 ## Permissions
 

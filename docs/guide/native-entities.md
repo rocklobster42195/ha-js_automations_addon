@@ -69,7 +69,7 @@ Combine with `expire_after` if a stale value should still eventually be flagged 
 
 ## Removing entities at runtime (`ha.unregister`)
 
-Mark-and-Sweep only runs when a script restarts. A script managing a *changing* set of dynamically-created entities — one per discovered device, say — needs to remove a single one immediately when that item disappears:
+Mark-and-Sweep only runs when a script restarts. A script managing a _changing_ set of dynamically-created entities — one per discovered device, say — needs to remove a single one immediately when that item disappears:
 
 ```javascript
 ha.unregister('sensor.device_123_battery');

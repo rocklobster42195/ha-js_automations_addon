@@ -21,4 +21,4 @@ These two fields look symmetric in the form, but only one of them affects how th
 - **LABEL (`@label`)** groups scripts in the sidebar and, if a Home Assistant Label with the same name exists, **inherits that label's icon and color** for the group header — matched case-insensitively against the HA Label Registry. HA stores label colors as theme-color slugs (e.g. `light-green`), not CSS values, so the sidebar resolves them through the same palette Home Assistant's own frontend uses. No matching HA Label? The group still gets created, just with a plain folder icon and default color.
 - **AREA (`@area`)** only assigns the area of the entity this script exposes/registers (via `ha.register()`/`@expose`) in Home Assistant, and is used as extra matched text in the sidebar's search box.
 
-So for a labeled, color-coded group of related scripts, set a matching `@label` on each — `@area` is about where the *entity* lives in HA, not how the *script* is organized in the IDE.
+So for a labeled, color-coded group of related scripts, set a matching `@label` on each — `@area` is about where the _entity_ lives in HA, not how the _script_ is organized in the IDE.
