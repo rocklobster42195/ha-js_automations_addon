@@ -146,18 +146,18 @@ Every script runs in its own **Node.js Worker Thread** (not a separate process).
 
 ### Message Protocol (Worker → Manager)
 
-| `msg.type`        | Meaning                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------- |
-| `log`             | Log line from `ha.log()` or `console.log()`                                           |
-| `call_service`    | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back    |
-| `update_state`    | `ha.update()` — Manager forwards to EntityManager (MQTT)                              |
-| `create_entity`   | `ha.register()` — Manager forwards to EntityManager for Discovery                     |
-| `subscribe`       | `ha.on()` — Manager registers pattern in `subscriptions` map                          |
-| `store_set`       | `ha.store.set()` — Manager persists via StoreManager, broadcasts to all other workers |
-| `ask`             | `ha.ask()` — Manager sends HA mobile app notification, waits for action response      |
-| `get_stats`       | Heartbeat request; worker responds with RAM usage                                     |
-| `install_card`    | `ha.frontend.installCard()` — Manager forwards to CardManager                         |
-| `card_action`      | Manager → worker: dispatches an `ha.action()` call to the worker's local handler; see §8 |
+| `msg.type`      | Meaning                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `log`           | Log line from `ha.log()` or `console.log()`                                              |
+| `call_service`  | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back       |
+| `update_state`  | `ha.update()` — Manager forwards to EntityManager (MQTT)                                 |
+| `create_entity` | `ha.register()` — Manager forwards to EntityManager for Discovery                        |
+| `subscribe`     | `ha.on()` — Manager registers pattern in `subscriptions` map                             |
+| `store_set`     | `ha.store.set()` — Manager persists via StoreManager, broadcasts to all other workers    |
+| `ask`           | `ha.ask()` — Manager sends HA mobile app notification, waits for action response         |
+| `get_stats`     | Heartbeat request; worker responds with RAM usage                                        |
+| `install_card`  | `ha.frontend.installCard()` — Manager forwards to CardManager                            |
+| `card_action`   | Manager → worker: dispatches an `ha.action()` call to the worker's local handler; see §8 |
 
 Failed service calls (`call_service`) are caught in the WorkerManager and logged to the master process log rather than crashing silently — this ensures errors are always visible in the UI even if the script itself does not have error handling.
 
@@ -515,7 +515,7 @@ For a `ha.register('sensor.freifunk_clients', { name: 'Freifunk Clients' })` cal
 }
 ```
 
-**Two-level availability**: not a flat `availability_topic`/`payload_available`/`payload_not_available` triple — `availability` is a list of two topics with `availability_mode: 'all'`, so the entity is only `available` when *both* report online: the global `jsa/status` (the whole addon) and `jsa/script/<scriptSlug>/status` (this specific script). When a script stops, its own status topic flips to offline and the entity goes unavailable, independent of the addon's own status. Setting `stale_ok: true` (see [Native Entities](./guide/native-entities.md)) drops the per-script topic from the list, leaving only the global one — the entity then stays available across that script stopping.
+**Two-level availability**: not a flat `availability_topic`/`payload_available`/`payload_not_available` triple — `availability` is a list of two topics with `availability_mode: 'all'`, so the entity is only `available` when _both_ report online: the global `jsa/status` (the whole addon) and `jsa/script/<scriptSlug>/status` (this specific script). When a script stops, its own status topic flips to offline and the entity goes unavailable, independent of the addon's own status. Setting `stale_ok: true` (see [Native Entities](./guide/native-entities.md)) drops the per-script topic from the list, leaving only the global one — the entity then stays available across that script stopping.
 
 **`default_entity_id`** (HA 2025.10+, mandatory from HA 2026.4):
 This field provides the desired entity ID including domain (e.g., `"sensor.freifunk_clients"`). It is the direct successor to the deprecated `object_id` field. Without this field, HA from version 2026.4 onward would slugify the `name` field to derive the entity ID — so `name: 'Anzahl Freifunk Clients'` would become `sensor.anzahl_freifunk_clients` instead of `sensor.freifunk_clients`.
@@ -753,11 +753,11 @@ The compiler watches for changes via `ScriptWatcher` (chokidar) and automaticall
 
 Two separate generators write to `.storage/`, on different triggers:
 
-| File            | Generated by                                     | Content                                                                                  |
-| --------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `ha-api.d.ts`   | Copied from `core/types/ha-api.d.ts`               | Types for the `ha` object                                                                 |
+| File            | Generated by                                              | Content                                                                                                                                                   |
+| --------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ha-api.d.ts`   | Copied from `core/types/ha-api.d.ts`                      | Types for the `ha` object                                                                                                                                 |
 | `entities.d.ts` | `TypeDefinitionGenerator`, debounced (2s) on state change | Both `interface HAEntities` (one entry per live HA entity ID) **and** `interface GlobalStoreSchema` (current store keys, inferred types) in the same file |
-| `services.d.ts` | `WorkerManager.syncServiceDefinitions()`           | `ServiceMap` with all HA domains and services (from `get_services`)                       |
+| `services.d.ts` | `WorkerManager.syncServiceDefinitions()`                  | `ServiceMap` with all HA domains and services (from `get_services`)                                                                                       |
 
 There is no separate `store.d.ts` — store types live inside `entities.d.ts`'s `GlobalStoreSchema` interface (matching `ha-api.d.ts`'s own reference to that type name, not `TypedStore`).
 

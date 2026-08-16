@@ -389,7 +389,8 @@ await ha.entity('light.living_room').turn_on({ brightness: 150, rgb_color: [255,
 Each call resolves with the same entity handle, so actions chain naturally — combine with `.wait(ms)` to pace them:
 
 ```javascript
-await ha.entity('cover.garage_door')
+await ha
+  .entity('cover.garage_door')
   .close_cover()
   .then((e) => e.wait(2000))
   .then((e) => e.open_cover());

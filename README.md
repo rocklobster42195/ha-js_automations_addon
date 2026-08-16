@@ -112,7 +112,7 @@ ha.log('Hello World script started.');
 ```
 
 - **`@name`/`@icon`/`@description`/`@label`** — shown in the sidebar; `@label` groups scripts and, if a matching HA Label exists, inherits its icon and color (see [Creation Wizard](./docs/guide/creation-wizard.md#what-label-and-area-actually-do)).
-- **`@expose switch`** — exposes the *script itself* as a toggle entity (`On` = running, `Off` = stopped). Use `@expose button` instead for a one-off action that (re)starts the script on press.
+- **`@expose switch`** — exposes the _script itself_ as a toggle entity (`On` = running, `Off` = stopped). Use `@expose button` instead for a one-off action that (re)starts the script on press.
 - **`ha.register()`** — creates a real HA entity via MQTT Discovery; see [Native Entities](./docs/guide/native-entities.md).
 - **`ha.on()`** — reacts to a state change; combine with `ha.update()`/`ha.entity()` to act on it.
 
