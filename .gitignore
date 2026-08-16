@@ -13,6 +13,8 @@ yarn-error.log
 state.json
 # JS Automations System Data
 scripts/.storage/
+# Lokaler HA-Config-Fallback für `npm run dev` ohne echten HA-Config-Pfad/JSA_DEV_WWW_DIR
+ha_config_mock/
 
 # --- Generierte Dateien im Scripts-Ordner ---
 # Diese Dateien werden vom Addon automatisch erzeugt
@@ -30,12 +32,12 @@ Thumbs.db
 .idea/
 
 # --- Optional: User-Skripte ignorieren? ---
-# Wenn du das Projekt als "Engine" auf GitHub teilen willst, 
+# Wenn du das Projekt als "Engine" auf GitHub teilen willst,
 # möchtest du vielleicht nicht deine privaten Automatisierungen hochladen.
 # Entferne das '#' vor der nächsten Zeile, um alle Skripte zu ignorieren:
 scripts
-docs/Youtube
-docs/ideas
+docs/internal/Youtube
+docs/internal/ideas
 .release-notes.tmp
 
 # --- AI stuff
@@ -48,9 +50,9 @@ tools/track-stats.js
 .stats-history.json
 
 # --- Local docs (not for repo)
-RELEASE_PIPELINE.md
-docs/github-issues-workflow.md
-docs/create-labels.sh
+docs/internal/RELEASE_PIPELINE.md
+docs/internal/github-issues-workflow.md
+docs/internal/create-labels.sh
 
 # --- Grill-me session notes (local scratch, never commit)
 notes/*-grill.md
