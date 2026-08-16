@@ -204,6 +204,8 @@
   "wizard_tab_upload": "Upload",
   "wizard_tab_import": "Import",
   "wizard_placeholder_name": "z.B. mein_skript",
+  "wizard_placeholder_label": "Licht",
+  "wizard_placeholder_area": "Wohnzimmer",
   "wizard_option_switch": "Skript mit Schalter in HA",
   "wizard_option_button": "Skript mit Button in HA",
   "wizard_option_hidden": "Standard Skript",

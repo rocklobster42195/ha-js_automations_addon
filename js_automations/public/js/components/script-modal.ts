@@ -1199,7 +1199,7 @@ export class ScriptModal extends LitElement {
                   <input
                     type="text"
                     list="script-modal-areas"
-                    placeholder="Wohnzimmer"
+                    placeholder=${this._t('wizard_placeholder_area', 'Wohnzimmer')}
                     .value=${this._area}
                     @input=${(e: InputEvent) => (this._area = (e.target as HTMLInputElement).value)}
                   />
@@ -1231,7 +1231,7 @@ export class ScriptModal extends LitElement {
           <input
             type="text"
             list="script-modal-labels"
-            placeholder="Licht"
+            placeholder=${this._t('wizard_placeholder_label', 'Licht')}
             .value=${this._label}
             @input=${(e: InputEvent) => (this._label = (e.target as HTMLInputElement).value)}
           />
@@ -1245,7 +1245,7 @@ export class ScriptModal extends LitElement {
                   <input
                     type="text"
                     list="script-modal-areas"
-                    placeholder="Wohnzimmer"
+                    placeholder=${this._t('wizard_placeholder_area', 'Wohnzimmer')}
                     .value=${this._area}
                     @input=${(e: InputEvent) => (this._area = (e.target as HTMLInputElement).value)}
                   />
