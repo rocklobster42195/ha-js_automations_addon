@@ -1,3 +1,13 @@
+## [3.0.1-beta.1] - 2026-08-16
+
+- fix: translate hardcoded LABEL/AREA placeholders in New Script wizard
+- docs: remove old root API_REFERENCE.md/TECH-README.md (moved to docs/ in previous commit)
+- docs: restructure into docs/guide + docs/internal, slim README
+- fix: honor ha.frontend.installCard's config option via getStubConfig
+- fix: resolve HA theme-color slugs for label group headers
+
+---
+
 ## [3.0.1-beta.0] - 2026-08-15
 
 - fix: collapse editor-view host when a virtual system tab is active
