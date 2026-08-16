@@ -307,6 +307,13 @@ interface AssetFailure {
 interface InstallCardOptions {
   force?: boolean;
   devMode?: boolean;
+  /**
+   * Default config Lovelace should pre-fill when a user adds this card via the "Add Card"
+   * picker. Implemented as an injected `getStubConfig()` static — HA's own card-picker
+   * convention for suggesting a starting config, not a substitute for the dashboard's own
+   * setConfig() call (which always wins once the card is actually placed on a dashboard).
+   */
+  config?: Record<string, unknown>;
 }
 
 interface CacheAssetOptions {
@@ -394,7 +401,21 @@ class CardManager {
       `window.customCards = window.customCards || [];\n` +
       `window.customCards.push({ type: '${pickerType}', name: ${JSON.stringify(metaName || scriptName)}, ` +
       `description: ${JSON.stringify(metaDescription || '')}, preview: true });\n\n`;
-    const finalCode = pickerEntry + preamble + wrappedCode;
+
+    // Suggest a default config for the "Add Card" picker's YAML editor, if the script provided
+    // one via ha.frontend.installCard({ config }). Only sets it when the card doesn't already
+    // define its own getStubConfig() — never overrides an author-provided default. Runs after
+    // wrappedCode so customElements.get() can see the class the card just registered.
+    const stubConfigInjection =
+      options.config && Object.keys(options.config).length > 0
+        ? `\n\n(function () {\n` +
+          `  var Ctor = customElements.get('${pickerType}');\n` +
+          `  if (Ctor && typeof Ctor.getStubConfig !== 'function') {\n` +
+          `    Ctor.getStubConfig = function () { return ${JSON.stringify(options.config)}; };\n` +
+          `  }\n` +
+          `})();\n`
+        : '';
+    const finalCode = pickerEntry + preamble + wrappedCode + stubConfigInjection;
 
     // Hash the final wrapped output, not just the raw card block — a change to the wrapping
     // logic itself (preamble version bump, picker-entry fix, etc.) must also bust the browser's

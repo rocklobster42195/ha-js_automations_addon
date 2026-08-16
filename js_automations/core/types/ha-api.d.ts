@@ -334,11 +334,15 @@ interface HA {
      *
      * @example
      * await ha.frontend.installCard({
-     *   config: { entity_id: 'sensor.openligadb_bvb', title: 'BVB' },
+     *   config: { entity_id: 'sensor.openligadb_bmg', title: 'BMG' },
      * });
      */
     installCard(options?: {
-      /** Config object passed to the card's setConfig() on first connect. */
+      /**
+       * Default config Lovelace pre-fills when a user adds this card via the "Add Card"
+       * picker (implemented as an injected `getStubConfig()`). Has no effect once the card
+       * is actually placed on a dashboard — the dashboard's own config always wins there.
+       */
       config?: Record<string, unknown>;
       /** Force reinstall even if the card source hash has not changed. */
       force?: boolean;
