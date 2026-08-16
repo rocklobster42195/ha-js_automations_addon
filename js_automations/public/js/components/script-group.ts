@@ -6,6 +6,45 @@ import './script-row';
 import type { JsaScript } from './global';
 
 /**
+ * HA label colors arrive as theme-color slugs (e.g. "light-green"), not CSS
+ * values — HA's own frontend resolves them via a hardcoded palette
+ * (home-assistant/frontend src/resources/theme/color/color.globals.ts).
+ * Hyphenated slugs aren't valid CSS color literals, so they must be mapped
+ * here too; unmapped values (hex codes, plain CSS names) pass through as-is.
+ */
+const HA_THEME_COLORS: Record<string, string> = {
+  primary: '#03a9f4',
+  accent: '#ff9800',
+  red: '#f44336',
+  pink: '#e91e63',
+  purple: '#926bc7',
+  'deep-purple': '#6e41ab',
+  indigo: '#3f51b5',
+  blue: '#2196f3',
+  'light-blue': '#03a9f4',
+  cyan: '#00bcd4',
+  teal: '#009688',
+  green: '#4caf50',
+  'light-green': '#8bc34a',
+  lime: '#cddc39',
+  yellow: '#ffeb3b',
+  amber: '#ffc107',
+  orange: '#ff9800',
+  'deep-orange': '#ff6f22',
+  brown: '#795548',
+  'light-grey': '#bdbdbd',
+  grey: '#9e9e9e',
+  'dark-grey': '#606060',
+  'blue-grey': '#607d8b',
+  black: '#000000',
+  white: '#ffffff',
+};
+
+function resolveHaColor(color: string): string {
+  return HA_THEME_COLORS[color] ?? color;
+}
+
+/**
  * One collapsible section in the sidebar script list (a label, "no group",
  * or the passive Libraries section). Resolves its own header name/icon
  * (including HA label color/icon overrides) — `<app-sidebar>` only does
@@ -99,7 +138,7 @@ export class ScriptGroup extends LitElement {
     if (haLabel) {
       name = haLabel.name;
       if (haLabel.icon) icon = haLabel.icon.replace(':', '-');
-      if (haLabel.color) style = `color: ${haLabel.color};`;
+      if (haLabel.color) style = `color: ${resolveHaColor(haLabel.color)};`;
     }
     return { name, icon, style };
   }

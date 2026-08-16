@@ -49,6 +49,18 @@ describe('script-group', () => {
     expect(icon.getAttribute('style')).to.contain('#ffaa00');
   });
 
+  it('resolves HA theme-color slugs (e.g. "light-green") to their hex value', async () => {
+    window.haData = {
+      areas: [],
+      labels: [{ name: 'Garden', icon: 'mdi:flower', color: 'light-green' }],
+      services: {},
+      language: null,
+    };
+    const el = await fixture<ScriptGroup>(html`<script-group group-key="garden"></script-group>`);
+    const icon = el.shadowRoot!.querySelector('.header-left i') as HTMLElement;
+    expect(icon.getAttribute('style')).to.contain('#8bc34a');
+  });
+
   it('dispatches jsa-toggle-group with the group key on header click', async () => {
     const el = await fixture<ScriptGroup>(html`<script-group group-key="lighting"></script-group>`);
     const header = el.shadowRoot!.querySelector<HTMLElement>('.section-header')!;
