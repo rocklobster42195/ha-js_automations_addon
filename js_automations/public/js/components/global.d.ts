@@ -101,10 +101,23 @@ export interface JsaEditorSettings {
   showToolbar?: boolean;
 }
 
+export interface JsaBackupSettings {
+  schedule_enabled?: boolean;
+  schedule_frequency?: 'daily' | 'weekly';
+  schedule_weekday?: string;
+  schedule_time?: string;
+  retention_count?: number;
+  webdav_enabled?: boolean;
+  webdav_url?: string;
+  webdav_username?: string;
+  webdav_password?: string;
+}
+
 export interface JsaSettings {
   statusbar?: JsaStatusBarSettings;
   mqtt?: { enabled?: boolean };
   editor?: JsaEditorSettings;
+  backup?: JsaBackupSettings;
   [key: string]: unknown;
 }
 

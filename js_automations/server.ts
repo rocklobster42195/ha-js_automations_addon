@@ -35,6 +35,7 @@ import systemRouteFactory from './routes/system-route';
 import settingsRouter from './routes/settings-route';
 import haRoutesFactory from './routes/ha-routes';
 import webhookRouteFactory from './routes/webhook-route';
+import backupRouteFactory from './routes/backup-route';
 
 // Ensure all necessary directories exist before proceeding
 config.ensureDirectories();
@@ -180,16 +181,19 @@ function startApp(): void {
     systemService,
     kernel.getSystemStatus.bind(kernel),
     kernel.mqttManager,
-    workerManager
+    workerManager,
+    kernel.backupManager
   );
   const haRouter = haRoutesFactory(haConnector);
   const webhookRouter = webhookRouteFactory(kernel.webhookManager);
+  const backupRouter = backupRouteFactory(kernel.backupManager);
 
   app.use('/api/scripts', scriptsRouter);
   app.use('/api/store', storeRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/ha', haRouter);
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/backup', backupRouter);
 
   // System Restart Route
   app.post('/api/system/restart-ha', async (req, res) => {

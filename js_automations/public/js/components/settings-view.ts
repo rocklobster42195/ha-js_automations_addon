@@ -15,6 +15,8 @@ type SettingsItemType =
   | 'button'
   | 'mqtt-test'
   | 'mqtt-autodetect'
+  | 'webdav-test'
+  | 'backup-run-now'
   | 'info'
   | 'text'
   | 'password';
@@ -345,6 +347,8 @@ export class SettingsView extends LitElement {
   @state() private _entityOptions: JsaHaState[] = [];
   @state() private _mqttTesting = false;
   @state() private _mqttDiscovering = false;
+  @state() private _webdavTesting = false;
+  @state() private _backupRunning = false;
 
   private _entitiesLoaded = false;
   private _pendingScrollTarget: string | null = null;
@@ -614,6 +618,55 @@ export class SettingsView extends LitElement {
     }
   }
 
+  private async _testWebDavConnection(): Promise<void> {
+    this._webdavTesting = true;
+    try {
+      const backup = this._settings.backup ?? {};
+      const res = await window.apiFetch!('api/backup/webdav/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: backup.webdav_url,
+          username: backup.webdav_username,
+          password: backup.webdav_password,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const result = await res.json();
+      if (result.success) {
+        alert(this._t('settings.backup.webdav_test_success'));
+      } else {
+        alert(this._t('settings.backup.webdav_test_error', undefined, { error: result.error }));
+      }
+    } catch (e) {
+      alert(
+        this._t('settings.backup.webdav_test_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
+    } finally {
+      this._webdavTesting = false;
+    }
+  }
+
+  private async _runBackupNow(): Promise<void> {
+    this._backupRunning = true;
+    try {
+      const res = await window.apiFetch!('api/backup/run', { method: 'POST' });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const result = await res.json();
+      if (result.success) {
+        alert(this._t('settings.backup.run_now_success', undefined, { filename: result.filename }));
+      } else {
+        alert(this._t('settings.backup.run_now_error', undefined, { error: result.error }));
+      }
+    } catch (e) {
+      alert(
+        this._t('settings.backup.run_now_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
+    } finally {
+      this._backupRunning = false;
+    }
+  }
+
   private _renderCategorySidebar() {
     if (!this._schema) return nothing;
     return this._schema.map((cat) => {
@@ -736,6 +789,36 @@ export class SettingsView extends LitElement {
                 ? html`<i class="mdi mdi-loading mdi-spin"></i>
                     ${this._t('settings.mqtt.mqtt_detecting', 'Detecting...')}`
                 : this._t('settings.mqtt.mqtt_autodetect_btn')
+            }
+          </button>
+        `;
+      case 'webdav-test':
+        return html`
+          <button
+            class="settings-btn settings-btn-outline"
+            ?disabled=${this._webdavTesting}
+            @click=${() => this._testWebDavConnection()}
+          >
+            ${
+              this._webdavTesting
+                ? html`<i class="mdi mdi-loading mdi-spin"></i>
+                    ${this._t('settings.backup.webdav_testing', 'Testing...')}`
+                : this._t('settings.backup.webdav_test_btn')
+            }
+          </button>
+        `;
+      case 'backup-run-now':
+        return html`
+          <button
+            class="settings-btn settings-btn-primary"
+            ?disabled=${this._backupRunning}
+            @click=${() => this._runBackupNow()}
+          >
+            ${
+              this._backupRunning
+                ? html`<i class="mdi mdi-loading mdi-spin"></i>
+                    ${this._t('settings.backup.run_now_running', 'Running...')}`
+                : this._t('settings.backup.run_now_btn')
             }
           </button>
         `;

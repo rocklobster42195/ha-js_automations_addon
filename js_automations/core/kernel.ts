@@ -30,6 +30,7 @@ import BlocklyCompiler from './blockly-compiler';
 import CardManager from './card-manager';
 import Bridge from './bridge';
 import SystemService from '../services/system-service';
+import BackupManager from './backup-manager';
 
 // settings-manager.ts and worker-manager.ts export a singleton instance (export = new X()),
 // not the class itself, so the type has to be derived from the module's export value.
@@ -95,6 +96,7 @@ class Kernel extends EventEmitter {
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
   systemService!: SystemService;
+  backupManager!: BackupManager;
   bridge!: Bridge;
 
   constructor() {
@@ -152,6 +154,7 @@ class Kernel extends EventEmitter {
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
       this.workerManager = workerManager;
 
       // Initialize WorkerManager paths immediately so other managers can use them.
@@ -318,6 +321,7 @@ class Kernel extends EventEmitter {
   async start(): Promise<void> {
     this.bridge.connect();
     this.systemService.start();
+    this.backupManager.start();
 
     console.log('🚀 Kernel starting application...');
 
@@ -756,6 +760,7 @@ class Kernel extends EventEmitter {
     // window — only unexpected crashes/kills should be able to trip Safe Mode.
     if (this.systemService) this.systemService.markCleanShutdown();
     if (this.workerManager) this.workerManager.shutdown();
+    if (this.backupManager) this.backupManager.stop();
     // HAConnector has no disconnect() method — close the raw WebSocket
     if (this.haConnector?.ws) {
       try {

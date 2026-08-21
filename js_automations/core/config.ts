@@ -18,6 +18,8 @@ interface JsaConfig {
   ensureDirectories: () => void;
   HA_CONFIG_DIR: string;
   WWW_CARDS_DIR: string;
+  BACKUP_DIR: string;
+  PRE_RESTORE_BACKUP_DIR: string;
 }
 
 const IS_ADDON = !!process.env.SUPERVISOR_TOKEN;
@@ -63,6 +65,10 @@ const ensureDirectories = (): void => {
       console.log(`Creating data directory at: ${DATA_DIR}`);
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+    if (!fs.existsSync(PRE_RESTORE_BACKUP_DIR)) {
+      console.log(`Creating backup directory at: ${PRE_RESTORE_BACKUP_DIR}`);
+      fs.mkdirSync(PRE_RESTORE_BACKUP_DIR, { recursive: true });
+    }
   } catch (error) {
     console.error('Failed to create necessary directories.', error);
     // Exit if we can't create essential folders
@@ -85,6 +91,11 @@ const WWW_CARDS_DIR =
     ? path.join(path.resolve(process.env.JSA_DEV_WWW_DIR), 'jsa-cards')
     : path.join(HA_CONFIG_DIR, 'www', 'jsa-cards');
 
+// Deliberately outside SCRIPTS_DIR — a backup living inside the directory it
+// backs up would recursively include earlier backups of itself.
+const BACKUP_DIR = path.join(HA_CONFIG_DIR, 'js-automations-backups');
+const PRE_RESTORE_BACKUP_DIR = path.join(BACKUP_DIR, 'pre-restore');
+
 const config: JsaConfig = {
   IS_ADDON,
   SCRIPTS_DIR,
@@ -100,6 +111,8 @@ const config: JsaConfig = {
   ensureDirectories,
   HA_CONFIG_DIR,
   WWW_CARDS_DIR,
+  BACKUP_DIR,
+  PRE_RESTORE_BACKUP_DIR,
 };
 
 export = config;

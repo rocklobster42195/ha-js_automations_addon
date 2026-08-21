@@ -1,11 +1,12 @@
 import * as express from 'express';
 import * as https from 'https';
-import { ZipArchive } from 'archiver';
+import * as fs from 'fs';
 import * as packageJson from '../../package.json';
 import type HAConnector from '../core/ha-connection';
 import type LogManager from '../core/log-manager';
 import type SystemService from '../services/system-service';
 import MqttManager from '../core/mqtt-manager';
+import BackupManager from '../core/backup-manager';
 // worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
 // itself, so the type has to be derived from the module's export value.
 type WorkerManagerInstance = typeof import('../core/worker-manager');
@@ -18,7 +19,8 @@ export = (
   systemService: SystemService,
   getCombinedStatus: () => Promise<unknown>,
   mqttManager: MqttManager,
-  workerManager: WorkerManagerInstance
+  workerManager: WorkerManagerInstance,
+  backupManager: BackupManager
 ) => {
   const router = express.Router();
 
@@ -96,32 +98,19 @@ export = (
     }
   });
 
-  // Backup Route (ZIP Download).
-  router.get('/system/backup', (req, res) => {
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-
-    const filename = `js-automations-backup-${yyyy}${mm}${dd}-${hh}${min}.zip`;
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Cache-Control', 'no-store');
-
-    archive.pipe(res);
-
-    // Add scripts folder recursively, but ignore node_modules and git.
-    archive.glob('**/*', {
-      cwd: SCRIPTS_DIR,
-      ignore: ['**/node_modules/**', '**/.git/**'],
-    });
-
-    archive.finalize();
+  // Backup Route (ZIP Download). Also persists the zip into BackupManager's local
+  // history (applying retention + best-effort WebDAV upload) so a manual download
+  // and a scheduled backup share one unified history list instead of two.
+  router.get('/system/backup', async (req, res) => {
+    try {
+      const { path: filePath, filename } = await backupManager.createBackup('manual');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-store');
+      fs.createReadStream(filePath).pipe(res);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
   });
 
   router.post('/debug/repl', async (req, res) => {
