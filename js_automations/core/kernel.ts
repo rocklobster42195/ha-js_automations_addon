@@ -31,6 +31,7 @@ import CardManager from './card-manager';
 import Bridge from './bridge';
 import SystemService from '../services/system-service';
 import BackupManager from './backup-manager';
+import GitManager from './git-manager';
 
 // settings-manager.ts and worker-manager.ts export a singleton instance (export = new X()),
 // not the class itself, so the type has to be derived from the module's export value.
@@ -97,6 +98,7 @@ class Kernel extends EventEmitter {
   cardManager!: CardManager;
   systemService!: SystemService;
   backupManager!: BackupManager;
+  gitManager!: GitManager;
   bridge!: Bridge;
 
   constructor() {
@@ -155,6 +157,7 @@ class Kernel extends EventEmitter {
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
+      this.gitManager = new GitManager(this.settingsManager, this.logManager, SCRIPTS_DIR);
       this.workerManager = workerManager;
 
       // Initialize WorkerManager paths immediately so other managers can use them.
@@ -312,6 +315,16 @@ class Kernel extends EventEmitter {
     });
     this.webhookManager.on('config_changed', (webhookConfig: unknown) => {
       if (this.io) this.io.emit('webhook_config_changed', webhookConfig);
+    });
+
+    // Forward git status changes to the UI (status-bar icon)
+    this.gitManager.on('git_status_changed', async () => {
+      if (!this.io) return;
+      try {
+        this.io.emit('git_status_changed', await this.gitManager.getStatus());
+      } catch {
+        // Best-effort — a failed status refresh just means the icon stays stale until the next change.
+      }
     });
   }
 

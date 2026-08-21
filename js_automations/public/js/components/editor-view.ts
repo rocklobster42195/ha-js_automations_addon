@@ -6,6 +6,7 @@ import { mdiStylesheetLink } from './mdi';
 import type { JsaTab, JsaSettings } from './global';
 import type { MonacoEditorElement } from './monaco-editor';
 import './monaco-editor';
+import './git-history-panel';
 
 // Not real files — virtual view of a script's __JSA_CARD__ block.
 const CARD_TAB_SUFFIX = '[card]';
@@ -242,10 +243,17 @@ export class EditorViewElement extends LitElement {
       flex: 1;
       min-height: 0;
     }
+    .editor-row {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      min-height: 0;
+    }
     .editor-body {
       display: flex;
       flex-direction: column;
       flex: 1;
+      min-width: 0;
       min-height: 0;
     }
     .editor-body monaco-editor {
@@ -301,6 +309,8 @@ export class EditorViewElement extends LitElement {
   /** Toolbar-visibility half of the old applyEditorSettings() — the Monaco-options half
    * (fontSize/wordWrap/minimap) lives in <monaco-editor> itself. */
   @state() private _toolbarHidden = false;
+  /** Git history side panel toggle, next to Commit in the toolbar. */
+  @state() private _historyPanelOpen = false;
 
   @query('monaco-editor') private _monacoEditorEl?: MonacoEditorElement;
 
@@ -777,6 +787,47 @@ export class EditorViewElement extends LitElement {
     await window.loadScripts?.();
   };
 
+  /** Explicit action, deliberately NOT tied to save/deploy — save hot-reloads a running script's
+   * worker (scripts-routes.ts's POST .../content), so a commit-on-save/deploy rule would fire on
+   * every save of an active script. Auto-saves first if the tab is dirty so a commit never
+   * captures stale content, then opens the message dialog. */
+  commitActiveTab = async (): Promise<void> => {
+    if (!this._activeTabFilename || isVirtualTab(this._activeTabFilename)) return;
+    const activeTab = this._openTabs.find((t) => t.filename === this._activeTabFilename);
+    if (!activeTab) return;
+
+    const wasDirty = !!activeTab.isDirty;
+    if (wasDirty) await this.saveActiveTab();
+
+    const message = await window.commitDialog?.prompt(`update: ${this._activeTabFilename}`, wasDirty);
+    if (!message) return;
+
+    try {
+      const res = await window.apiFetch!('api/git/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const result = await res.json();
+      if (result.hash === null) {
+        window.alertToast?.show(this._t('commit_nothing_to_commit', 'Nothing to commit — no changes since the last commit.'), {
+          variant: 'info',
+        });
+      } else {
+        window.alertToast?.show(
+          this._t('commit_success', 'Committed ({{hash}}).', { hash: (result.hash as string).slice(0, 7) }),
+          { variant: 'success' }
+        );
+        window.dispatchEvent(new CustomEvent('git-status-refresh'));
+      }
+    } catch (e) {
+      window.alertToast?.show(
+        this._t('commit_error', 'Commit failed: {{error}}', { error: e instanceof Error ? e.message : String(e) })
+      );
+    }
+  };
+
   closeAllTabs = async (): Promise<void> => {
     if (
       this._openTabs.some((t) => t.isDirty) &&
@@ -1021,6 +1072,14 @@ export class EditorViewElement extends LitElement {
             <i class="mdi mdi-content-save"></i>
           </button>
           <button
+            ?disabled=${isSystemTab}
+            style=${isSystemTab ? 'opacity:0.1' : ''}
+            title=${this._t('commit_button_title', 'Commit')}
+            @click=${() => this.commitActiveTab()}
+          >
+            <i class="mdi mdi-source-commit"></i>
+          </button>
+          <button
             ?disabled=${scriptControlsDisabled}
             style=${scriptControlsDisabled ? 'opacity:0.1' : ''}
             title="Edit Metadata"
@@ -1108,6 +1167,14 @@ export class EditorViewElement extends LitElement {
           }
         </div>
         <div class="toolbar-right">
+          <button
+            ?disabled=${isSystemTab}
+            style=${isSystemTab ? 'opacity:0.1' : this._historyPanelOpen ? 'color: var(--accent)' : ''}
+            title=${this._t('history_panel_title', 'History')}
+            @click=${() => (this._historyPanelOpen = !this._historyPanelOpen)}
+          >
+            <i class="mdi mdi-history"></i>
+          </button>
           <button title=${this._t('close_all_tabs_title', 'Close all tabs')} @click=${() => this.closeAllTabs()}>
             <i class="mdi mdi-close-box-multiple"></i>
           </button>
@@ -1137,15 +1204,39 @@ export class EditorViewElement extends LitElement {
       ${mdiStylesheetLink} ${this._renderTabBar()}
       <div class="editor-panel" style=${showEditorBody ? '' : 'display:none'}>
         ${this._renderToolbar(activeTab)} ${this._renderModeBanner(activeTab)}
-        <div class="editor-body">
-          <monaco-editor
-            @save-requested=${() => this.saveActiveTab()}
-            @word-wrap-changed=${() => this.requestUpdate()}
-          ></monaco-editor>
-          <slot name="blockly"></slot>
+        <div class="editor-row">
+          <div class="editor-body">
+            <monaco-editor
+              @save-requested=${() => this.saveActiveTab()}
+              @word-wrap-changed=${() => this.requestUpdate()}
+            ></monaco-editor>
+            <slot name="blockly"></slot>
+          </div>
+          ${
+            this._historyPanelOpen && this._activeTabFilename && !isVirtualTab(this._activeTabFilename)
+              ? html`
+                  <git-history-panel
+                    .filename=${this._activeTabFilename}
+                    @close=${() => (this._historyPanelOpen = false)}
+                    @restore-into-editor=${(e: CustomEvent<{ content: string }>) =>
+                      this._loadContentIntoActiveEditor(e.detail.content)}
+                  ></git-history-panel>
+                `
+              : nothing
+          }
         </div>
       </div>
     `;
+  }
+
+  /** Loads historical content into the active tab's Monaco model for review — does NOT commit
+   * and does NOT save; the user reviews/edits, then goes through the normal save+Commit flow. */
+  private _loadContentIntoActiveEditor(content: string): void {
+    const activeTab = this._openTabs.find((t) => t.filename === this._activeTabFilename);
+    if (!activeTab || !window.monacoEditor) return;
+    window.monacoEditor.setModelValue(activeTab.model, content);
+    activeTab.isDirty = window.monacoEditor.getModelValue(activeTab.model) !== activeTab.originalContent;
+    this._renderTabs();
   }
 }
 

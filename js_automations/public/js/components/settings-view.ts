@@ -17,6 +17,7 @@ type SettingsItemType =
   | 'mqtt-autodetect'
   | 'webdav-test'
   | 'backup-run-now'
+  | 'github-test'
   | 'info'
   | 'text'
   | 'password';
@@ -349,6 +350,7 @@ export class SettingsView extends LitElement {
   @state() private _mqttDiscovering = false;
   @state() private _webdavTesting = false;
   @state() private _backupRunning = false;
+  @state() private _githubTesting = false;
 
   private _entitiesLoaded = false;
   private _pendingScrollTarget: string | null = null;
@@ -667,6 +669,33 @@ export class SettingsView extends LitElement {
     }
   }
 
+  private async _testGitHubConnection(): Promise<void> {
+    this._githubTesting = true;
+    try {
+      const versioning = this._settings.versioning ?? {};
+      const res = await window.apiFetch!('api/git/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: versioning.github_repo_url, token: versioning.github_token }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const result = await res.json();
+      if (result.success) {
+        alert(this._t('settings.versioning.github_test_success'));
+      } else {
+        alert(this._t('settings.versioning.github_test_error', undefined, { error: result.error }));
+      }
+    } catch (e) {
+      alert(
+        this._t('settings.versioning.github_test_error', undefined, {
+          error: e instanceof Error ? e.message : String(e),
+        })
+      );
+    } finally {
+      this._githubTesting = false;
+    }
+  }
+
   private _renderCategorySidebar() {
     if (!this._schema) return nothing;
     return this._schema.map((cat) => {
@@ -819,6 +848,21 @@ export class SettingsView extends LitElement {
                 ? html`<i class="mdi mdi-loading mdi-spin"></i>
                     ${this._t('settings.backup.run_now_running', 'Running...')}`
                 : this._t('settings.backup.run_now_btn')
+            }
+          </button>
+        `;
+      case 'github-test':
+        return html`
+          <button
+            class="settings-btn settings-btn-outline"
+            ?disabled=${this._githubTesting}
+            @click=${() => this._testGitHubConnection()}
+          >
+            ${
+              this._githubTesting
+                ? html`<i class="mdi mdi-loading mdi-spin"></i>
+                    ${this._t('settings.versioning.github_testing', 'Testing...')}`
+                : this._t('settings.versioning.github_test_btn')
             }
           </button>
         `;

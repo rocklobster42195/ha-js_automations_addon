@@ -171,6 +171,13 @@ export class StatusBar extends LitElement {
   @state() private _mqttEnabled = false;
   @state() private _mqttConnected = false;
   @state() private _mqttError = '';
+  @state() private _gitStatus: {
+    hasRepo: boolean;
+    hasRemote: boolean;
+    ahead: number;
+    dirty: boolean;
+    lastPushError: string | null;
+  } | null = null;
   @state() private _slots: [SlotConfig, SlotConfig, SlotConfig] = [
     { ...DEFAULT_SLOT },
     { ...DEFAULT_SLOT },
@@ -187,6 +194,19 @@ export class StatusBar extends LitElement {
 
   private _t(key: string, fallback: string, options?: Record<string, unknown>): string {
     return window.i18next?.t(key, options) ?? fallback;
+  }
+
+  /** Color alone signals state — no second icon (a mockup review corrected an earlier draft that
+   * paired the branch icon with a redundant check/alert glyph per state). */
+  private _gitIconInfo(): { color: string; title: string } {
+    const s = this._gitStatus;
+    if (s?.lastPushError) {
+      return { color: 'var(--danger)', title: this._t('statusbar.git_push_failed', 'Git: push failed') + ` — ${s.lastPushError}` };
+    }
+    if (s?.hasRepo && s?.hasRemote) {
+      return { color: 'var(--success)', title: this._t('statusbar.git_connected', 'Git: connected & synced') };
+    }
+    return { color: '#888', title: this._t('statusbar.git_no_remote', 'Git: local only (no GitHub remote configured)') };
   }
 
   connectedCallback() {
@@ -207,7 +227,9 @@ export class StatusBar extends LitElement {
     window.statusBar = bridge;
 
     window.addEventListener('settings-changed', this._onSettingsChanged);
+    window.addEventListener('git-status-refresh', this._refreshGitStatus);
     this._waitForSocket();
+    this._refreshGitStatus();
 
     if (window.currentSettings) this._applySettings(window.currentSettings);
 
@@ -226,6 +248,9 @@ export class StatusBar extends LitElement {
     window.socket.on('mqtt_status_changed', (status: { connected: boolean; error?: string }) =>
       this._updateMqttIndicator(status)
     );
+    window.socket.on('git_status_changed', (status: typeof this._gitStatus) => {
+      this._gitStatus = status;
+    });
     window.socket.on('system_stats', (data: Record<string, number>) => this._updateSystemStats(data));
     window.socket.on(
       'ha_state_changed',
@@ -244,9 +269,19 @@ export class StatusBar extends LitElement {
     );
   };
 
+  private _refreshGitStatus = async (): Promise<void> => {
+    try {
+      const res = await window.apiFetch!('api/git/status');
+      this._gitStatus = await res.json();
+    } catch {
+      // Best-effort — icon just stays in its last-known (or default) state.
+    }
+  };
+
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('settings-changed', this._onSettingsChanged);
+    window.removeEventListener('git-status-refresh', this._refreshGitStatus);
     if (window.statusBar?.setConnected === undefined) return;
   }
 
@@ -567,6 +602,14 @@ export class StatusBar extends LitElement {
           @click=${() => (window.appSidebar ? window.appSidebar.openSettings('mqtt') : window.openSettingsTab?.('mqtt'))}
         >
           <i class="mdi ${mqttIconClass} integration-icon" style="color: ${mqttColor}; opacity: ${mqttOpacity}"></i>
+        </div>
+        <div
+          id="git-status-item"
+          class="stat-item"
+          title=${this._gitIconInfo().title}
+          @click=${() => (window.appSidebar ? window.appSidebar.openSettings('versioning') : window.openSettingsTab?.('versioning'))}
+        >
+          <i class="mdi mdi-source-branch integration-icon" style="color: ${this._gitIconInfo().color}"></i>
         </div>
       </div>
       <div class=${slotsClass}>

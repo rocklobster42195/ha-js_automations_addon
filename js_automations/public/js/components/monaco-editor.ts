@@ -686,6 +686,7 @@ export class MonacoEditorElement extends LitElement {
       setModel: this.setModel,
       getValue: this.getValue,
       getModelValue: this.getModelValue,
+      setModelValue: this.setModelValue,
       saveViewState: this.saveViewState,
       restoreViewState: this.restoreViewState,
       focus: this.focus,
@@ -846,6 +847,13 @@ export class MonacoEditorElement extends LitElement {
    * editor — used for dirty-comparison against a tab's own model when it may not be active. */
   getModelValue = (model: ITextModel | null | undefined): string => {
     return model?.getValue() ?? '';
+  };
+
+  /** Writes to any model reference, not just the one currently attached to the editor — used by
+   * the git history panel's "load into editor" action (restoring a past version for review, not
+   * a fresh model swap, so this preserves undo history/cursor position unlike createModel+setModel). */
+  setModelValue = (model: ITextModel | null | undefined, value: string): void => {
+    model?.setValue(value);
   };
 
   getValue = (): string => {

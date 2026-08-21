@@ -16,6 +16,21 @@
   "toggle_word_wrap_title": "Zeilenumbruch umschalten",
   "card_preview_toggle_title": "Vorschau ein-/ausblenden",
   "close_all_tabs_title": "Alle Tabs schließen",
+  "commit_button_title": "Commit",
+  "commit_dialog_title": "Commit",
+  "commit_dialog_label": "Nachricht",
+  "commit_dialog_autosave_note": "Ungespeicherte Änderungen werden zuerst gespeichert.",
+  "commit_dialog_prefilled_note": "Vorausgefüllt — überschreiben oder direkt bestätigen.",
+  "commit_dialog_confirm": "Commit",
+  "commit_success": "Committet ({{hash}}).",
+  "commit_error": "Commit fehlgeschlagen: {{error}}",
+  "commit_nothing_to_commit": "Nichts zu committen — keine Änderungen seit dem letzten Commit.",
+  "history_panel_title": "Historie",
+  "history_no_commits": "Noch keine Commits.",
+  "history_diff_label": "Diff gegen vorherigen Commit",
+  "history_load_into_editor": "In den Editor laden",
+  "history_restore_hint": "Lädt in den Editor zur Ansicht — committet nicht automatisch.",
+  "history_restore_error": "Version konnte nicht geladen werden: {{error}}",
   "log_header": "LOGS",
   "clear_logs_title": "Logs löschen",
   "log_clear_view_title": "Ansicht leeren",
@@ -203,6 +218,12 @@
   "wizard_tab_new": "Neu",
   "wizard_tab_upload": "Upload",
   "wizard_tab_import": "Import",
+  "wizard_tab_from_repo": "Aus Repo",
+  "wizard_from_repo_intro": "In Git vorhanden, aber lokal nicht mehr auf der Festplatte:",
+  "wizard_from_repo_empty": "Keine gelöschten Skripte in der Git-Historie.",
+  "wizard_from_repo_restore_btn": "Wiederherstellen",
+  "wizard_from_repo_restore_success": "{{path}} wiederhergestellt.",
+  "wizard_from_repo_restore_error": "Wiederherstellung fehlgeschlagen: {{error}}",
   "wizard_placeholder_name": "z.B. mein_skript",
   "wizard_placeholder_label": "Licht",
   "wizard_placeholder_area": "Wohnzimmer",
@@ -263,7 +284,8 @@
       "danger": "Gefahrenzone",
       "mqtt": "MQTT Broker",
       "webhook": "Webhooks",
-      "backup": "Backup"
+      "backup": "Backup",
+      "versioning": "Versionierung"
     },
     "general": {
       "language": "Sprache",
@@ -312,7 +334,10 @@
       "tooltip_scripts": "Aktive Skripte: {{count}}",
       "tooltip_limit": "Container-Limit: {{value}} MB",
       "tooltip_leak_warning": "⚠ Steigender Speichertrend (möglicher Leak)",
-      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck"
+      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck",
+      "git_connected": "Git: verbunden & synchron",
+      "git_no_remote": "Git: nur lokal (kein GitHub-Remote konfiguriert)",
+      "git_push_failed": "Git: Push fehlgeschlagen"
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",
@@ -371,6 +396,20 @@
       "webdav_testing": "Teste Verbindung...",
       "webdav_test_success": "Verbindung erfolgreich!",
       "webdav_test_error": "Verbindung fehlgeschlagen: {{error}}"
+    },
+    "versioning": {
+      "about_hint": "Skripte werden automatisch in einem lokalen Git-Repository versioniert (Commit-Button in der Editor-Toolbar, daneben das Historie-Panel). Kein Account nötig. Ein GitHub-Remote unten ist optional.",
+      "author_name": "Autor-Name",
+      "author_email": "Autor-E-Mail",
+      "github_enabled": "GitHub-Remote aktivieren",
+      "github_enabled_desc": "Pusht jeden Commit zusätzlich dorthin, best-effort — der Commit selbst hängt nie davon ab, ob GitHub erreichbar ist.",
+      "github_repo_url": "Repository-URL",
+      "github_token": "Personal Access Token",
+      "github_token_desc": "GitHub-PAT mit Schreibzugriff auf das Repo. Gleiches Sicherheitsniveau wie das MQTT-Passwort, wird pro Push-Anfrage in die URL eingesetzt und nie in .git/config geschrieben.",
+      "github_test_btn": "Verbindung testen",
+      "github_testing": "Teste Verbindung...",
+      "github_test_success": "Verbindung erfolgreich!",
+      "github_test_error": "Verbindung fehlgeschlagen: {{error}}"
     },
     "system": {
       "title": "System-Einstellungen",

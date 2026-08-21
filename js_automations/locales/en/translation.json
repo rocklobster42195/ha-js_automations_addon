@@ -16,6 +16,21 @@
   "toggle_word_wrap_title": "Toggle Word Wrap",
   "card_preview_toggle_title": "Show / Hide Preview",
   "close_all_tabs_title": "Close All Tabs",
+  "commit_button_title": "Commit",
+  "commit_dialog_title": "Commit",
+  "commit_dialog_label": "Message",
+  "commit_dialog_autosave_note": "Unsaved changes will be saved first.",
+  "commit_dialog_prefilled_note": "Prefilled — overwrite it or just confirm as-is.",
+  "commit_dialog_confirm": "Commit",
+  "commit_success": "Committed ({{hash}}).",
+  "commit_error": "Commit failed: {{error}}",
+  "commit_nothing_to_commit": "Nothing to commit — no changes since the last commit.",
+  "history_panel_title": "History",
+  "history_no_commits": "No commits yet.",
+  "history_diff_label": "Diff vs. previous commit",
+  "history_load_into_editor": "Load into editor",
+  "history_restore_hint": "Loads into the editor for review — does not commit automatically.",
+  "history_restore_error": "Failed to load version: {{error}}",
   "log_header": "LOGS",
   "clear_logs_title": "Clear Logs",
   "log_clear_view_title": "Clear View",
@@ -203,6 +218,12 @@
   "wizard_tab_new": "New",
   "wizard_tab_upload": "Upload",
   "wizard_tab_import": "Import",
+  "wizard_tab_from_repo": "From Repo",
+  "wizard_from_repo_intro": "In Git, but no longer on disk:",
+  "wizard_from_repo_empty": "No deleted scripts in the Git history.",
+  "wizard_from_repo_restore_btn": "Restore",
+  "wizard_from_repo_restore_success": "Restored {{path}}.",
+  "wizard_from_repo_restore_error": "Restore failed: {{error}}",
   "wizard_placeholder_name": "e.g. my_script",
   "wizard_placeholder_label": "Lighting",
   "wizard_placeholder_area": "Living Room",
@@ -262,7 +283,8 @@
       "danger": "Danger Zone",
       "mqtt": "MQTT Broker",
       "webhook": "Webhooks",
-      "backup": "Backup"
+      "backup": "Backup",
+      "versioning": "Versioning"
     },
     "general": {
       "language": "Language",
@@ -311,7 +333,10 @@
       "tooltip_scripts": "Active Scripts: {{count}}",
       "tooltip_limit": "Container Limit: {{value}} MB",
       "tooltip_leak_warning": "⚠ Rising memory trend (possible leak)",
-      "tooltip_pressure_warning": "⚠ High memory pressure"
+      "tooltip_pressure_warning": "⚠ High memory pressure",
+      "git_connected": "Git: connected & synced",
+      "git_no_remote": "Git: local only (no GitHub remote configured)",
+      "git_push_failed": "Git: push failed"
     },
     "mqtt": {
       "enabled": "Enable MQTT",
@@ -370,6 +395,20 @@
       "webdav_testing": "Testing...",
       "webdav_test_success": "Connection successful!",
       "webdav_test_error": "Connection failed: {{error}}"
+    },
+    "versioning": {
+      "about_hint": "Scripts are versioned automatically in a local Git repository (Commit button in the editor toolbar, History panel next to it). No account needed. A GitHub remote below is optional.",
+      "author_name": "Author Name",
+      "author_email": "Author Email",
+      "github_enabled": "Enable GitHub Remote",
+      "github_enabled_desc": "Pushes every commit there too, best-effort — commit itself never depends on GitHub being reachable.",
+      "github_repo_url": "Repository URL",
+      "github_token": "Personal Access Token",
+      "github_token_desc": "GitHub PAT with repo write access. Same security level as the MQTT password, injected into the push URL per-request and never written to .git/config.",
+      "github_test_btn": "Test Connection",
+      "github_testing": "Testing...",
+      "github_test_success": "Connection successful!",
+      "github_test_error": "Connection failed: {{error}}"
     },
     "system": {
       "title": "System Settings",

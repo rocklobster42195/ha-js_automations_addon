@@ -113,11 +113,20 @@ export interface JsaBackupSettings {
   webdav_password?: string;
 }
 
+export interface JsaVersioningSettings {
+  author_name?: string;
+  author_email?: string;
+  github_enabled?: boolean;
+  github_repo_url?: string;
+  github_token?: string;
+}
+
 export interface JsaSettings {
   statusbar?: JsaStatusBarSettings;
   mqtt?: { enabled?: boolean };
   editor?: JsaEditorSettings;
   backup?: JsaBackupSettings;
+  versioning?: JsaVersioningSettings;
   [key: string]: unknown;
 }
 
@@ -212,6 +221,12 @@ export interface JsaConfirmDialogBridge {
   ): Promise<boolean>;
 }
 
+export interface JsaCommitDialogBridge {
+  /** Resolves the (possibly edited) commit message, or null if the user cancelled. wasDirty
+   * surfaces a one-line "unsaved changes will be saved first" note in the dialog. */
+  prompt(defaultMessage: string, wasDirty?: boolean): Promise<string | null>;
+}
+
 export interface JsaAlertToastBridge {
   show(message: string, opts?: { variant?: 'error' | 'info' | 'success' | 'warning'; duration?: number }): void;
 }
@@ -230,6 +245,8 @@ export interface JsaMonacoEditorBridge {
   getValue(): string;
   /** Reads the value of any model reference, not just the one currently attached to the editor. */
   getModelValue(model: unknown): string;
+  /** Writes to any model reference, not just the one currently attached to the editor. */
+  setModelValue(model: unknown, value: string): void;
   saveViewState(): unknown;
   restoreViewState(state: unknown): void;
   focus(): void;
@@ -373,6 +390,7 @@ declare global {
     loadLibraryDefinitions?: () => Promise<void>;
     CardPreview?: JsaCardPreviewBridge;
     confirmDialog?: JsaConfirmDialogBridge;
+    commitDialog?: JsaCommitDialogBridge;
     alertToast?: JsaAlertToastBridge;
     entityPickerModal?: JsaEntityPickerModalBridge;
     monacoEditor?: JsaMonacoEditorBridge;

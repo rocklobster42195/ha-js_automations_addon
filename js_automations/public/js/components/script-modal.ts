@@ -4,7 +4,7 @@ import { mdiStylesheetLink } from './mdi';
 import type { JsaOpenScriptModalData, JsaTab } from './global';
 
 type WizardMode = 'create' | 'edit' | 'duplicate';
-type WizardTab = 'new' | 'upload' | 'import';
+type WizardTab = 'new' | 'upload' | 'import' | 'fromRepo';
 type NpmPkgStatus = 'loading' | 'valid' | 'invalid';
 type Extension = '.js' | '.ts' | '.blocks';
 
@@ -387,6 +387,79 @@ export class ScriptModal extends LitElement {
       font-size: 1.2rem;
     }
 
+    .from-repo-intro {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    .from-repo-empty {
+      padding: 20px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .repo-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .repo-row .mdi-file-outline {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .repo-row-info {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .repo-row-path {
+      font-size: 0.85rem;
+      font-family: monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .repo-row-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .repo-restore-btn {
+      flex-shrink: 0;
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+    }
+
+    .repo-restore-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .repo-restore-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
     .url-hint {
       color: var(--text-muted);
       display: block;
@@ -551,6 +624,12 @@ export class ScriptModal extends LitElement {
   @state() private _importPreview: CapabilityPreviewData | null = null;
   @state() private _importLoading = false;
 
+  // "Aus Repo" tab — only shown when a local git repo exists
+  @state() private _gitRepoExists = false;
+  @state() private _deletedScripts: { path: string; lastCommitHash: string; lastCommitDate: string }[] = [];
+  @state() private _deletedScriptsLoading = false;
+  @state() private _restoringPath: string | null = null;
+
   @state() private _areas: string[] = [];
   @state() private _labels: string[] = [];
 
@@ -646,6 +725,18 @@ export class ScriptModal extends LitElement {
     }
 
     this._open = true;
+    this._gitRepoExists = false;
+    this._deletedScripts = [];
+
+    if (mode === 'create') {
+      try {
+        const res = await window.apiFetch!('api/git/status');
+        const status = await res.json();
+        this._gitRepoExists = !!status.hasRepo;
+      } catch (e) {
+        console.warn('Failed to load git status', e);
+      }
+    }
 
     try {
       const res = await window.apiFetch!('api/ha/metadata');
@@ -672,6 +763,45 @@ export class ScriptModal extends LitElement {
     this._importPreviewed = false;
     this._importPreview = null;
     this._uploadPreview = null;
+    if (tab === 'fromRepo') this._loadDeletedScripts();
+  }
+
+  private async _loadDeletedScripts(): Promise<void> {
+    this._deletedScriptsLoading = true;
+    try {
+      const res = await window.apiFetch!('api/git/deleted-scripts');
+      this._deletedScripts = await res.json();
+    } catch (e) {
+      console.warn('Failed to load deleted scripts', e);
+    } finally {
+      this._deletedScriptsLoading = false;
+    }
+  }
+
+  private async _restoreDeletedScript(path: string): Promise<void> {
+    this._restoringPath = path;
+    try {
+      const res = await window.apiFetch!('api/git/restore-deleted', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      window.alertToast?.show(this._t('wizard_from_repo_restore_success', 'Restored {{path}}.', { path }), {
+        variant: 'success',
+      });
+      this._deletedScripts = this._deletedScripts.filter((d) => d.path !== path);
+      await window.loadScripts?.();
+      this.close();
+    } catch (e) {
+      window.alertToast?.show(
+        this._t('wizard_from_repo_restore_error', 'Restore failed: {{error}}', {
+          error: e instanceof Error ? e.message : String(e),
+        })
+      );
+    } finally {
+      this._restoringPath = null;
+    }
   }
 
   private get _librarySuggestions(): string[] {
@@ -1452,6 +1582,45 @@ export class ScriptModal extends LitElement {
     `;
   }
 
+  /** Scoped deliberately narrow: scripts deleted from disk but still in git history — reviving a
+   * deleted script is conceptually a "create," so it belongs in the wizard. Older versions of
+   * scripts that still exist on disk stay in the editor's History panel instead — one place per
+   * purpose. */
+  private _renderFromRepoTab() {
+    if (this._deletedScriptsLoading) {
+      return html`<div class="cap-preview-panel cap-preview-loading">
+        <i class="mdi mdi-loading mdi-spin"></i> ${this._t('cap_preview_loading')}
+      </div>`;
+    }
+    if (this._deletedScripts.length === 0) {
+      return html`<div class="from-repo-empty">${this._t('wizard_from_repo_empty', 'Keine gelöschten Skripte in der Git-Historie.')}</div>`;
+    }
+    return html`
+      <div class="from-repo-intro">${this._t('wizard_from_repo_intro', 'In Git vorhanden, aber lokal nicht mehr auf der Festplatte:')}</div>
+      ${this._deletedScripts.map(
+        (d) => html`
+          <div class="repo-row">
+            <i class="mdi mdi-file-outline"></i>
+            <div class="repo-row-info">
+              <div class="repo-row-path">${d.path}</div>
+              <div class="repo-row-meta">
+                ${new Date(d.lastCommitDate).toLocaleDateString()} &middot; ${d.lastCommitHash.slice(0, 7)}
+              </div>
+            </div>
+            <button
+              class="repo-restore-btn"
+              ?disabled=${this._restoringPath === d.path}
+              @click=${() => this._restoreDeletedScript(d.path)}
+            >
+              <i class="mdi mdi-restore"></i>
+              ${this._t('wizard_from_repo_restore_btn', 'Wiederherstellen')}
+            </button>
+          </div>
+        `
+      )}
+    `;
+  }
+
   render() {
     if (!this._open) return html``;
     const isEdit = this._mode === 'edit';
@@ -1492,6 +1661,18 @@ export class ScriptModal extends LitElement {
                     >
                       ${this._t('wizard_tab_import', 'Import')}
                     </button>
+                    ${
+                      this._gitRepoExists
+                        ? html`
+                            <button
+                              class="wizard-tab ${this._activeTab === 'fromRepo' ? 'active' : ''}"
+                              @click=${() => this._switchTab('fromRepo')}
+                            >
+                              ${this._t('wizard_tab_from_repo', 'Aus Repo')}
+                            </button>
+                          `
+                        : nothing
+                    }
                   </div>
                 `
               : nothing
@@ -1501,7 +1682,9 @@ export class ScriptModal extends LitElement {
               ? this._renderNewTab()
               : this._activeTab === 'upload'
                 ? this._renderUploadTab()
-                : this._renderImportTab()
+                : this._activeTab === 'import'
+                  ? this._renderImportTab()
+                  : this._renderFromRepoTab()
           }
           ${
             this._showDuplicateAsJs
@@ -1519,9 +1702,15 @@ export class ScriptModal extends LitElement {
           }
 
           <div class="modal-btns">
-            <button class="btn-primary" ?disabled=${this._actionDisabled} @click=${() => this._execute()}>
-              ${this._actionLabel}
-            </button>
+            ${
+              this._activeTab === 'fromRepo'
+                ? nothing
+                : html`
+                    <button class="btn-primary" ?disabled=${this._actionDisabled} @click=${() => this._execute()}>
+                      ${this._actionLabel}
+                    </button>
+                  `
+            }
             <button class="btn-text" @click=${() => this.close()}>${this._t('button_cancel', 'Abbrechen')}</button>
           </div>
         </div>

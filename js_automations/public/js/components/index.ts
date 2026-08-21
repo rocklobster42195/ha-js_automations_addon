@@ -18,11 +18,13 @@ import './script-group';
 import './app-sidebar';
 import './card-preview';
 import './confirm-dialog';
+import './commit-dialog';
 import './alert-toast';
 import './entity-picker-modal';
 import './store-item-modal';
 import './script-modal';
 import './monaco-editor';
+import './git-history-panel';
 import './editor-view';
 import { observeTabVisibility } from './tab-visibility';
 
