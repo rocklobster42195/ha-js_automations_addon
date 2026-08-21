@@ -148,6 +148,14 @@ export class GitHistoryPanel extends LitElement {
     .diff-container .lightbulb-glyph {
       display: none !important;
     }
+    /* renderSideBySide: false still keeps a separate ".editor.original" pane alive internally —
+     * a redundant ~33px gutter sliver showing the original file's own line numbers (e.g. a stray
+     * "1" for an otherwise-empty original) plus a diagonal no-content hatch. The actual deleted
+     * line text is rendered inline inside the modified pane's view zones, so this sliver is pure
+     * visual noise here (confirmed live: hiding it leaves the red/green inline diff intact). */
+    .diff-container .editor.original {
+      display: none !important;
+    }
 
     .restore-footer {
       padding: 10px 14px;
