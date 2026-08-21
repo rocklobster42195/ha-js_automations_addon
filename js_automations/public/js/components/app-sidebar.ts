@@ -481,6 +481,8 @@ export class AppSidebar extends LitElement {
       return s.includes.some((inc) => inc === filename || inc === filename.replace(/\.(js|ts)$/, ''));
     });
 
+    let includeGitDeletion = false;
+
     if (dependents.length > 0) {
       const depNames = dependents.map((s) => s.name).join(', ');
       const msg = this._t('warn_library_in_use', undefined, { filename, count: dependents.length, scripts: depNames });
@@ -488,14 +490,24 @@ export class AppSidebar extends LitElement {
     } else {
       const shouldConfirm =
         (window.currentSettings?.general as { confirm_delete?: boolean } | undefined)?.confirm_delete ?? true;
-      if (
-        shouldConfirm &&
-        !(await window.confirmDialog!.confirm(this._t('confirm_delete_script', undefined, { filename })))
-      )
-        return;
+      if (shouldConfirm) {
+        // Deletions are never auto-staged in git (see git-manager.ts) — this is the one opt-in
+        // point. Unchecked by default: a deleted script stays recoverable via the Creation
+        // Wizard's "Aus Repo" tab unless the user explicitly asks to also remove it from history.
+        const result = await window.confirmDialog!.confirmWithCheckbox(
+          this._t('confirm_delete_script', undefined, { filename }),
+          { checkboxLabel: this._t('confirm_delete_also_git', 'Auch aus Git-Repository löschen') }
+        );
+        if (!result.confirmed) return;
+        includeGitDeletion = result.checked;
+      }
     }
 
-    await window.apiFetch!(`api/scripts/${filename}`, { method: 'DELETE' });
+    await window.apiFetch!(`api/scripts/${filename}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ includeGitDeletion }),
+    });
 
     const t = window.openTabs?.find((t) => t.filename === filename);
     if (t) t.isDirty = false;

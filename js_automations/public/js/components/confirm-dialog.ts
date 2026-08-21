@@ -7,6 +7,15 @@ export interface ConfirmDialogOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** Adds an optional checkbox row below the message — used by confirmWithCheckbox(), ignored
+   * by plain confirm(). */
+  checkboxLabel?: string;
+  checkboxDefault?: boolean;
+}
+
+export interface ConfirmCheckboxResult {
+  confirmed: boolean;
+  checked: boolean;
 }
 
 /**
@@ -101,12 +110,30 @@ export class ConfirmDialog extends LitElement {
     .btn-text:hover {
       color: var(--text-primary);
     }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .checkbox-row input {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
   `;
 
   @state() private _open = false;
   @state() private _message = '';
   @state() private _opts: ConfirmDialogOptions = {};
+  @state() private _checkboxChecked = false;
   private _resolve: ((value: boolean) => void) | null = null;
+  private _resolveWithCheckbox: ((value: ConfirmCheckboxResult) => void) | null = null;
 
   private _t(key: string, fallback: string): string {
     return window.i18next?.t(key) ?? fallback;
@@ -114,7 +141,7 @@ export class ConfirmDialog extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    window.confirmDialog = { confirm: this.confirm };
+    window.confirmDialog = { confirm: this.confirm, confirmWithCheckbox: this.confirmWithCheckbox };
   }
 
   disconnectedCallback() {
@@ -129,6 +156,7 @@ export class ConfirmDialog extends LitElement {
     this._finish(false);
     this._message = message;
     this._opts = opts;
+    this._checkboxChecked = false;
     this._open = true;
     document.addEventListener('keydown', this._onKeydown);
     return new Promise<boolean>((resolve) => {
@@ -136,13 +164,30 @@ export class ConfirmDialog extends LitElement {
     });
   };
 
+  /** Same modal, plus an optional checkbox row (e.g. "Also delete from git repository") —
+   * resolves both whether the user confirmed and the checkbox's final state. */
+  confirmWithCheckbox = (message: string, opts: ConfirmDialogOptions = {}): Promise<ConfirmCheckboxResult> => {
+    this._finish(false);
+    this._message = message;
+    this._opts = opts;
+    this._checkboxChecked = !!opts.checkboxDefault;
+    this._open = true;
+    document.addEventListener('keydown', this._onKeydown);
+    return new Promise<ConfirmCheckboxResult>((resolve) => {
+      this._resolveWithCheckbox = resolve;
+    });
+  };
+
   private _finish(result: boolean): void {
-    if (!this._open && !this._resolve) return;
+    if (!this._open && !this._resolve && !this._resolveWithCheckbox) return;
     this._open = false;
     document.removeEventListener('keydown', this._onKeydown);
     const resolve = this._resolve;
+    const resolveWithCheckbox = this._resolveWithCheckbox;
     this._resolve = null;
+    this._resolveWithCheckbox = null;
     resolve?.(result);
+    resolveWithCheckbox?.({ confirmed: result, checked: this._checkboxChecked });
   }
 
   private _onKeydown = (e: KeyboardEvent): void => {
@@ -151,13 +196,27 @@ export class ConfirmDialog extends LitElement {
 
   render() {
     if (!this._open) return html``;
-    const { title, confirmLabel, cancelLabel, danger } = this._opts;
+    const { title, confirmLabel, cancelLabel, danger, checkboxLabel } = this._opts;
     return html`
       ${mdiStylesheetLink}
       <div class="modal-overlay" @click=${() => this._finish(false)}>
         <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
           ${title ? html`<h3>${title}</h3>` : ''}
           <p>${this._message}</p>
+          ${
+            checkboxLabel
+              ? html`
+                  <label class="checkbox-row">
+                    <input
+                      type="checkbox"
+                      .checked=${this._checkboxChecked}
+                      @change=${(e: Event) => (this._checkboxChecked = (e.target as HTMLInputElement).checked)}
+                    />
+                    ${checkboxLabel}
+                  </label>
+                `
+              : ''
+          }
           <div class="modal-btns">
             <button class="btn-text" @click=${() => this._finish(false)}>
               ${cancelLabel ?? this._t('button_cancel', 'CANCEL')}

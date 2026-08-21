@@ -8,6 +8,7 @@ import type DependencyManager from '../core/dependency-manager';
 import type StateManager from '../core/state-manager';
 import type MqttManager from '../core/mqtt-manager';
 import type CardManager from '../core/card-manager';
+import type GitManager from '../core/git-manager';
 import multer from 'multer';
 const upload = multer({ storage: multer.memoryStorage() });
 // worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
@@ -23,7 +24,8 @@ export = (
   STORAGE_DIR: string,
   LIBRARIES_DIR: string,
   mqttManager: MqttManager,
-  cardManager: CardManager
+  cardManager: CardManager,
+  gitManager: GitManager
 ) => {
   const router = express.Router();
 
@@ -132,12 +134,26 @@ export = (
     const filename = req.params.filename;
     const fullPath = getFilePath(filename);
     if (!fullPath) return res.status(404).json({ error: 'File not found' });
+    const { includeGitDeletion } = req.body || {};
 
     workerManager.stopScript(filename, 'deleted');
     fs.unlinkSync(fullPath);
     workerManager.purgeWebhooksForScript(filename);
     if (cardManager) cardManager.removeCard(fullPath);
     await depManager.prune();
+
+    // Deletions are never auto-staged in git (see git-manager.ts) — this is the opt-in point
+    // from the delete dialog's checkbox. Best-effort: a git failure here shouldn't undo an
+    // already-completed file deletion or block the response.
+    if (includeGitDeletion) {
+      const relPath = path.relative(SCRIPTS_DIR, fullPath).split(path.sep).join('/');
+      try {
+        await gitManager.commit(`delete: ${filename}`, { includeDeletions: true, paths: [relPath] });
+      } catch (e) {
+        console.warn(`[Scripts] Failed to commit deletion of ${filename} to git:`, (e as Error).message);
+      }
+    }
+
     io.emit('status_update');
     res.json({ ok: true });
   });

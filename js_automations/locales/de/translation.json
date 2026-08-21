@@ -194,6 +194,7 @@
   "blockly_mqtt_publish_msg1": "behalten (retain) %1",
   "blockly_mqtt_publish_tooltip": "Veröffentlicht eine Nachricht auf einem MQTT-Topic. Objekte werden automatisch als JSON gesendet. \"retain\" aktivieren, damit neue Abonnenten sofort den zuletzt veröffentlichten Wert erhalten.",
   "confirm_delete_script": "Skript '{{filename}}' löschen?",
+  "confirm_delete_also_git": "Auch aus Git-Repository löschen",
   "snippet_log": "Log-Ausgabe",
   "snippet_service": "HA: Service Aufruf",
   "snippet_listener": "HA: Event Listener",

@@ -144,7 +144,8 @@ function startApp(): void {
     config.STORAGE_DIR,
     config.LIBRARIES_DIR,
     kernel.mqttManager,
-    kernel.cardManager
+    kernel.cardManager,
+    kernel.gitManager
   );
 
   // We create a proxy for the StoreManager to broadcast changes to workers from the UI.

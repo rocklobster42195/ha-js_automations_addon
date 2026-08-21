@@ -676,7 +676,10 @@ export class EditorViewElement extends LitElement {
     this._renderTabs();
   };
 
-  async closeTab(filename: string): Promise<void> {
+  // Arrow-bound like every other method assigned to window.* in this class — a plain method
+  // here loses `this` when invoked as window.closeTab(filename) (its only real-world call
+  // shape, e.g. app-sidebar.ts's delete flow), throwing on `this._openTabs` being undefined.
+  closeTab = async (filename: string): Promise<void> => {
     const tabToClose = this._openTabs.find((t) => t.filename === filename);
     if (!tabToClose) return;
 
@@ -717,7 +720,7 @@ export class EditorViewElement extends LitElement {
     }
 
     this._renderTabs();
-  }
+  };
 
   saveActiveTab = async (): Promise<void> => {
     if (!this._activeTabFilename) return;

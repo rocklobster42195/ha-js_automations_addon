@@ -256,6 +256,13 @@ export class GitHistoryPanel extends LitElement {
         minimap: { enabled: false },
         theme: 'vs-dark',
         fontSize: 12,
+        // This is a compact, read-only glance at one commit's diff — Monaco's interactive chrome
+        // for editing a diff (copy/revert arrows in the gutter, collapsible unchanged-region
+        // widget) has no use here and was reported as visibly broken (crossed-out cursor icons,
+        // a tofu glyph at the fold point) at this panel's narrow width. Disabled outright rather
+        // than just hidden via CSS, so nothing half-renders.
+        renderMarginRevertIcon: false,
+        hideUnchangedRegions: { enabled: false },
       });
     }
 

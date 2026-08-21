@@ -214,11 +214,21 @@ export interface JsaCardPreviewBridge {
   isOpen(): boolean;
 }
 
+export interface JsaConfirmDialogOptions {
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  checkboxLabel?: string;
+  checkboxDefault?: boolean;
+}
+
 export interface JsaConfirmDialogBridge {
-  confirm(
+  confirm(message: string, opts?: JsaConfirmDialogOptions): Promise<boolean>;
+  confirmWithCheckbox(
     message: string,
-    opts?: { title?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }
-  ): Promise<boolean>;
+    opts?: JsaConfirmDialogOptions
+  ): Promise<{ confirmed: boolean; checked: boolean }>;
 }
 
 export interface JsaCommitDialogBridge {
