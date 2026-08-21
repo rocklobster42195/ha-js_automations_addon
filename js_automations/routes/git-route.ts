@@ -6,10 +6,13 @@ export = (gitManager: GitManager) => {
   const router = express.Router();
 
   router.post('/commit', async (req, res) => {
-    const { message, includeDeletions } = req.body || {};
+    const { message, includeDeletions, paths } = req.body || {};
     if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Missing message' });
     try {
-      const result = await gitManager.commit(message, { includeDeletions: !!includeDeletions });
+      const result = await gitManager.commit(message, {
+        includeDeletions: !!includeDeletions,
+        paths: Array.isArray(paths) ? paths : undefined,
+      });
       res.json({ success: true, ...result });
     } catch (e) {
       res.status(500).json({ success: false, error: (e as Error).message });

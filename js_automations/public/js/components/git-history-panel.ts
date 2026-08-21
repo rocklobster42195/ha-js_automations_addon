@@ -266,6 +266,14 @@ export class GitHistoryPanel extends LitElement {
     this._diffEditor.setModel({ original, modified });
     oldModels?.original?.dispose();
     oldModels?.modified?.dispose();
+
+    // The panel mounts this while the commit list above it is still showing its loading
+    // spinner (a single short row) — the moment loading finishes, the real commit list is
+    // taller and pushes/resizes this container. automaticLayout's own ResizeObserver doesn't
+    // always recover cleanly from a resize that happens in the same tick as initial mount
+    // (garbled/overlapping line positions, reproduced live). Force a fresh layout pass a
+    // couple of frames later, once the surrounding layout has actually settled.
+    requestAnimationFrame(() => requestAnimationFrame(() => this._diffEditor?.layout()));
   }
 
   private async _restoreSelected(): Promise<void> {

@@ -806,7 +806,9 @@ export class EditorViewElement extends LitElement {
       const res = await window.apiFetch!('api/git/commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        // Scoped to just this file — clicking Commit on one script must never sweep up
+        // unrelated pending changes elsewhere in the repo.
+        body: JSON.stringify({ message, paths: [this._activeTabFilename] }),
       });
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
       const result = await res.json();

@@ -110,28 +110,40 @@ class GitManager extends EventEmitter {
   }
 
   /** Commits currently staged-worthy changes (new + modified, deletions only if opted in via the
-   * delete-dialog checkbox). Returns hash: null when there was nothing to commit. */
+   * delete-dialog checkbox). Returns hash: null when there was nothing to commit.
+   *
+   * `paths`, when given, scopes staging to exactly those paths — this is what the editor's
+   * per-script Commit button passes (just the open file), so clicking Commit on one script
+   * never sweeps up unrelated pending changes elsewhere in the repo. Omitting `paths` stages
+   * everything pending (used by nothing in the UI today, kept as the flexible default). */
   async commit(
     message: string,
-    options: { includeDeletions?: boolean } = {}
+    options: { includeDeletions?: boolean; paths?: string[] } = {}
   ): Promise<{ hash: string | null; filesChanged: number }> {
     await this.ensureRepo();
     await this.applyAuthorConfig();
 
     const status = await this.git.status();
-    const toStage = [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)];
+    let toStage = [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)];
     if (options.includeDeletions) toStage.push(...status.deleted);
-    if (toStage.length > 0) await this.git.add(toStage);
-
-    const staged = (await this.git.status()).staged;
-    if (staged.length === 0) {
+    if (options.paths) {
+      const scope = new Set(options.paths);
+      // .gitignore is infrastructure ensureRepo() creates, not a user file the wizard could ever
+      // let someone select — fold it into every scoped commit so it doesn't sit untracked forever.
+      toStage = toStage.filter((p) => scope.has(p) || p === '.gitignore');
+    }
+    if (toStage.length === 0) {
       return { hash: null, filesChanged: 0 };
     }
+    await this.git.add(toStage);
 
-    const result = await this.git.commit(message);
-    this.logManager.add('debug', 'Git', `[Git] Committed ${staged.length} file(s): ${result.commit}.`);
+    // Pathspec-scoped commit (not a bare `git commit`) — even if something unrelated was
+    // already sitting staged in the index for any reason, only toStage's paths end up in this
+    // commit. Belt-and-suspenders on top of the add() above already only staging that scope.
+    const result = await this.git.commit(message, toStage);
+    this.logManager.add('debug', 'Git', `[Git] Committed ${toStage.length} file(s): ${result.commit}.`);
     this.emit('git_status_changed');
-    return { hash: result.commit || null, filesChanged: staged.length };
+    return { hash: result.commit || null, filesChanged: toStage.length };
   }
 
   async log(filePath?: string): Promise<CommitEntry[]> {
