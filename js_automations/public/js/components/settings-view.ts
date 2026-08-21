@@ -18,6 +18,7 @@ type SettingsItemType =
   | 'webdav-test'
   | 'backup-run-now'
   | 'github-test'
+  | 'restore-open'
   | 'info'
   | 'text'
   | 'password';
@@ -864,6 +865,12 @@ export class SettingsView extends LitElement {
                     ${this._t('settings.versioning.github_testing', 'Testing...')}`
                 : this._t('settings.versioning.github_test_btn')
             }
+          </button>
+        `;
+      case 'restore-open':
+        return html`
+          <button class="settings-btn settings-btn-outline" @click=${() => window.restoreModal?.open()}>
+            <i class="mdi mdi-backup-restore"></i> ${this._t('settings.backup.restore_open_btn', 'Backup wiederherstellen...')}
           </button>
         `;
       case 'info':

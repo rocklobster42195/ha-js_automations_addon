@@ -94,6 +94,7 @@ js_automations/core/entity-manager.js
 js_automations/core/kernel.js
 js_automations/core/backup-manager.js
 js_automations/core/git-manager.js
+js_automations/core/restore-manager.js
 js_automations/services/system-service.js
 js_automations/routes/settings-route.js
 js_automations/routes/webhook-route.js
@@ -103,4 +104,5 @@ js_automations/routes/system-route.js
 js_automations/routes/scripts-routes.js
 js_automations/routes/backup-route.js
 js_automations/routes/git-route.js
+js_automations/routes/restore-route.js
 js_automations/server.js

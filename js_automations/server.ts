@@ -37,6 +37,7 @@ import haRoutesFactory from './routes/ha-routes';
 import webhookRouteFactory from './routes/webhook-route';
 import backupRouteFactory from './routes/backup-route';
 import gitRouteFactory from './routes/git-route';
+import restoreRouteFactory from './routes/restore-route';
 
 // Ensure all necessary directories exist before proceeding
 config.ensureDirectories();
@@ -189,6 +190,7 @@ function startApp(): void {
   const webhookRouter = webhookRouteFactory(kernel.webhookManager);
   const backupRouter = backupRouteFactory(kernel.backupManager);
   const gitRouter = gitRouteFactory(kernel.gitManager);
+  const restoreRouter = restoreRouteFactory(kernel.restoreManager, kernel.backupManager);
 
   app.use('/api/scripts', scriptsRouter);
   app.use('/api/store', storeRouter);
@@ -197,6 +199,7 @@ function startApp(): void {
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/backup', backupRouter);
   app.use('/api/git', gitRouter);
+  app.use('/api/restore', restoreRouter);
 
   // System Restart Route
   app.post('/api/system/restart-ha', async (req, res) => {

@@ -32,6 +32,7 @@ import Bridge from './bridge';
 import SystemService from '../services/system-service';
 import BackupManager from './backup-manager';
 import GitManager from './git-manager';
+import RestoreManager from './restore-manager';
 
 // settings-manager.ts and worker-manager.ts export a singleton instance (export = new X()),
 // not the class itself, so the type has to be derived from the module's export value.
@@ -99,6 +100,7 @@ class Kernel extends EventEmitter {
   systemService!: SystemService;
   backupManager!: BackupManager;
   gitManager!: GitManager;
+  restoreManager!: RestoreManager;
   bridge!: Bridge;
 
   constructor() {
@@ -183,6 +185,18 @@ class Kernel extends EventEmitter {
         this.mqttManager,
         this.compilerManager,
         this.blocklyCompiler
+      );
+
+      this.restoreManager = new RestoreManager(
+        this.logManager,
+        this.settingsManager,
+        this.stateManager,
+        this.depManager,
+        this.workerManager,
+        this.cardManager,
+        this.backupManager,
+        this.entityManager.watcher,
+        config
       );
     } catch (err) {
       console.error('❌ Critical error during Kernel boot:', err);

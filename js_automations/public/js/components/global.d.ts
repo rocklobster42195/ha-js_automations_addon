@@ -227,6 +227,10 @@ export interface JsaCommitDialogBridge {
   prompt(defaultMessage: string, wasDirty?: boolean): Promise<string | null>;
 }
 
+export interface JsaRestoreModalBridge {
+  open(): void;
+}
+
 export interface JsaAlertToastBridge {
   show(message: string, opts?: { variant?: 'error' | 'info' | 'success' | 'warning'; duration?: number }): void;
 }
@@ -391,6 +395,7 @@ declare global {
     CardPreview?: JsaCardPreviewBridge;
     confirmDialog?: JsaConfirmDialogBridge;
     commitDialog?: JsaCommitDialogBridge;
+    restoreModal?: JsaRestoreModalBridge;
     alertToast?: JsaAlertToastBridge;
     entityPickerModal?: JsaEntityPickerModalBridge;
     monacoEditor?: JsaMonacoEditorBridge;

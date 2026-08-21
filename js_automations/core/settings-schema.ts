@@ -433,6 +433,12 @@ const settingsSchema: SettingSection[] = [
         type: 'webdav-test',
         condition: { key: 'webdav_enabled', value: true },
       },
+      {
+        key: 'restore_open',
+        label: 'settings.backup.restore_open',
+        description: 'settings.backup.restore_open_desc',
+        type: 'restore-open',
+      },
     ],
   },
   {

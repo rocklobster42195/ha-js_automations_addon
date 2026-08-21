@@ -177,6 +177,17 @@ class BackupManager extends EventEmitter {
     return { path: filePath, filename };
   }
 
+  /** Writes a pre-restore safety snapshot into the dedicated pre-restore bucket (separate fixed
+   * retention from the normal scheduled/manual backups — see applyRetention()). This is the
+   * "undo for the undo": if a restore turns out wrong, this snapshot is itself just restored. */
+  async createPreRestoreSnapshot(): Promise<{ path: string; filename: string }> {
+    const filename = `pre-restore-${Date.now()}.zip`;
+    const filePath = path.join(this.preRestoreDir, filename);
+    await this.writeZipTo(filePath);
+    this.applyRetentionIn(this.preRestoreDir, PRE_RESTORE_RETENTION_COUNT);
+    return { path: filePath, filename };
+  }
+
   /** Deletes the oldest backups in a directory beyond a retention count. Local .zip files only. */
   private applyRetentionIn(dir: string, retentionCount: number): void {
     let entries: fs.Dirent[];
@@ -214,16 +225,24 @@ class BackupManager extends EventEmitter {
   }
 
   listBackups(): BackupEntry[] {
+    return this._listZips(this.backupDir);
+  }
+
+  listPreRestoreSnapshots(): BackupEntry[] {
+    return this._listZips(this.preRestoreDir);
+  }
+
+  private _listZips(dir: string): BackupEntry[] {
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(this.backupDir, { withFileTypes: true });
+      entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
       return [];
     }
     return entries
       .filter((e) => e.isFile() && e.name.endsWith('.zip'))
       .map((e) => {
-        const filePath = path.join(this.backupDir, e.name);
+        const filePath = path.join(dir, e.name);
         const stat = fs.statSync(filePath);
         return { filename: e.name, size: stat.size, created: stat.mtime.toISOString(), location: 'local' as const };
       })

@@ -39,6 +39,12 @@ class ScriptWatcher {
   compilerManager: CompilerManager;
   blocklyCompiler: BlocklyCompiler;
   callbacks: WatcherCallbacks;
+  /** Suppressed during a bulk restore (restore-manager.ts) — the restore's own orchestration
+   * already stops/starts workers and rebuilds cards deliberately, so this watcher's per-file
+   * reactions (delete -> teardown, modify -> recompile) would just be redundant churn, and its
+   * delete-triggered teardown would actively race the restore if left enabled while it writes
+   * many files at once. */
+  private _paused = false;
 
   /**
    * @param callbacks - EntityManager methods needed for entity sync:
@@ -96,7 +102,12 @@ class ScriptWatcher {
     }
   }
 
+  setPaused(paused: boolean): void {
+    this._paused = paused;
+  }
+
   async processScript(scriptPath: string): Promise<void> {
+    if (this._paused) return;
     const extension = path.extname(scriptPath);
     const scriptNameRaw = path.basename(scriptPath, extension);
     const slug = scriptNameRaw
