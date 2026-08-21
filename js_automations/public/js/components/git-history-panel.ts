@@ -257,13 +257,19 @@ export class GitHistoryPanel extends LitElement {
         theme: 'vs-dark',
         fontSize: 12,
         // This is a compact, read-only glance at one commit's diff — Monaco's interactive chrome
-        // for editing a diff (copy/revert arrows in the gutter, collapsible unchanged-region
-        // widget) has no use here and was reported as visibly broken (crossed-out cursor icons,
-        // a tofu glyph at the fold point) at this panel's narrow width. Disabled outright rather
-        // than just hidden via CSS, so nothing half-renders.
+        // for editing a diff (copy/revert arrows in the gutter, +/- indicator glyphs, collapsible
+        // unchanged-region widget, quick-fix lightbulb) has no use in a read-only viewer and was
+        // reported as visibly broken (stray gutter icons, a broken-looking glyph) at this panel's
+        // narrow width. Disabled outright rather than just hidden via CSS, so nothing half-renders.
         renderMarginRevertIcon: false,
+        renderIndicators: false,
         hideUnchangedRegions: { enabled: false },
       });
+      // The diff editor doesn't forward `lightbulb` from its own construction options down to
+      // the two inner standalone editors (reproduced live — the glyph stayed even with it set
+      // above), so it has to be disabled directly on each side.
+      this._diffEditor.getOriginalEditor().updateOptions({ lightbulb: { enabled: false } });
+      this._diffEditor.getModifiedEditor().updateOptions({ lightbulb: { enabled: false } });
     }
 
     const language = this.filename.endsWith('.ts') ? 'typescript' : 'javascript';
