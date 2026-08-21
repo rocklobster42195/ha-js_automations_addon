@@ -239,6 +239,8 @@
   "wizard_tab_from_repo": "From Repo",
   "wizard_from_repo_intro": "In Git, but no longer on disk:",
   "wizard_from_repo_empty": "No deleted scripts in the Git history.",
+  "wizard_from_repo_loading": "Loading Git history...",
+  "wizard_from_repo_error": "Failed to load: {{error}}",
   "wizard_from_repo_restore_btn": "Restore",
   "wizard_from_repo_restore_success": "Restored {{path}}.",
   "wizard_from_repo_restore_error": "Restore failed: {{error}}",

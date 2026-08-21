@@ -239,6 +239,8 @@
   "wizard_tab_from_repo": "Aus Repo",
   "wizard_from_repo_intro": "In Git vorhanden, aber lokal nicht mehr auf der Festplatte:",
   "wizard_from_repo_empty": "Keine gelöschten Skripte in der Git-Historie.",
+  "wizard_from_repo_loading": "Lade Git-Historie...",
+  "wizard_from_repo_error": "Fehler beim Laden: {{error}}",
   "wizard_from_repo_restore_btn": "Wiederherstellen",
   "wizard_from_repo_restore_success": "{{path}} wiederhergestellt.",
   "wizard_from_repo_restore_error": "Wiederherstellung fehlgeschlagen: {{error}}",

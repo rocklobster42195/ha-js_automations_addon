@@ -628,6 +628,7 @@ export class ScriptModal extends LitElement {
   @state() private _gitRepoExists = false;
   @state() private _deletedScripts: { path: string; lastCommitHash: string; lastCommitDate: string }[] = [];
   @state() private _deletedScriptsLoading = false;
+  @state() private _deletedScriptsError: string | null = null;
   @state() private _restoringPath: string | null = null;
 
   @state() private _areas: string[] = [];
@@ -768,11 +769,16 @@ export class ScriptModal extends LitElement {
 
   private async _loadDeletedScripts(): Promise<void> {
     this._deletedScriptsLoading = true;
+    this._deletedScriptsError = null;
     try {
       const res = await window.apiFetch!('api/git/deleted-scripts');
-      this._deletedScripts = await res.json();
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || `Status ${res.status}`);
+      this._deletedScripts = Array.isArray(body) ? body : [];
     } catch (e) {
       console.warn('Failed to load deleted scripts', e);
+      this._deletedScriptsError = e instanceof Error ? e.message : String(e);
+      this._deletedScripts = [];
     } finally {
       this._deletedScriptsLoading = false;
     }
@@ -1589,7 +1595,12 @@ export class ScriptModal extends LitElement {
   private _renderFromRepoTab() {
     if (this._deletedScriptsLoading) {
       return html`<div class="cap-preview-panel cap-preview-loading">
-        <i class="mdi mdi-loading mdi-spin"></i> ${this._t('cap_preview_loading')}
+        <i class="mdi mdi-loading mdi-spin"></i> ${this._t('wizard_from_repo_loading', 'Lade Git-Historie...')}
+      </div>`;
+    }
+    if (this._deletedScriptsError) {
+      return html`<div class="from-repo-empty" style="color: var(--danger);">
+        ${this._t('wizard_from_repo_error', 'Fehler beim Laden: {{error}}', { error: this._deletedScriptsError })}
       </div>`;
     }
     if (this._deletedScripts.length === 0) {
