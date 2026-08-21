@@ -156,6 +156,14 @@ export class GitHistoryPanel extends LitElement {
     .diff-container .editor.original {
       display: none !important;
     }
+    /* Monaco's "moved code" connector-line overlay — only ever populated when
+     * renderSideBySide is true (see diffEditorOptions.js's showMoves derivation), which this
+     * panel disables, so it's always empty of content. Its <svg> element still gets a non-zero
+     * position/size from general layout metrics even with nothing to draw, though. Hidden
+     * defensively since it has no function in this read-only, inline-only view either way. */
+    .diff-container .moved-blocks-lines {
+      display: none !important;
+    }
 
     .restore-footer {
       padding: 10px 14px;
