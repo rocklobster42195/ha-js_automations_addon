@@ -351,11 +351,7 @@
       "tooltip_scripts": "Active Scripts: {{count}}",
       "tooltip_limit": "Container Limit: {{value}} MB",
       "tooltip_leak_warning": "⚠ Rising memory trend (possible leak)",
-      "tooltip_pressure_warning": "⚠ High memory pressure",
-      "git_connected": "Git: connected & synced",
-      "git_no_remote": "Git: local only (no GitHub remote configured)",
-      "git_push_failed": "Git: push failed",
-      "git_unpushed_commits": "Git: {{count}} unpushed commit(s)"
+      "tooltip_pressure_warning": "⚠ High memory pressure"
     },
     "mqtt": {
       "enabled": "Enable MQTT",
@@ -482,7 +478,11 @@
   "statusbar": {
     "ha_connected": "Connected",
     "ha_disconnected": "Disconnected",
-    "mqtt_connected": "MQTT connected"
+    "mqtt_connected": "MQTT connected",
+    "git_connected": "Git: connected & synced",
+    "git_no_remote": "Git: local only (no GitHub remote configured)",
+    "git_push_failed": "Git: push failed",
+    "git_unpushed_commits": "Git: {{count}} unpushed commit(s)"
   },
   "store": {
     "title": "Global Store (ha.store)",

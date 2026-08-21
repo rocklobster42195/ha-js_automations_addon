@@ -352,11 +352,7 @@
       "tooltip_scripts": "Aktive Skripte: {{count}}",
       "tooltip_limit": "Container-Limit: {{value}} MB",
       "tooltip_leak_warning": "⚠ Steigender Speichertrend (möglicher Leak)",
-      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck",
-      "git_connected": "Git: verbunden & synchron",
-      "git_no_remote": "Git: nur lokal (kein GitHub-Remote konfiguriert)",
-      "git_push_failed": "Git: Push fehlgeschlagen",
-      "git_unpushed_commits": "Git: {{count}} ungepushte(r) Commit(s)"
+      "tooltip_pressure_warning": "⚠ Hoher Speicherdruck"
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",
@@ -482,7 +478,11 @@
   "statusbar": {
     "ha_connected": "Home Assistant: Verbunden",
     "ha_disconnected": "Home Assistant: Verbindung getrennt",
-    "mqtt_connected": "MQTT: Verbunden"
+    "mqtt_connected": "MQTT: Verbunden",
+    "git_connected": "Git: verbunden & synchron",
+    "git_no_remote": "Git: nur lokal (kein GitHub-Remote konfiguriert)",
+    "git_push_failed": "Git: Push fehlgeschlagen",
+    "git_unpushed_commits": "Git: {{count}} ungepushte(r) Commit(s)"
   },
   "store": {
     "title": "Store Explorer (ha.store)",
