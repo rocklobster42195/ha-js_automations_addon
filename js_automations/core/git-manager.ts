@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { simpleGit } from 'simple-git';
+import { simpleGit, CheckRepoActions } from 'simple-git';
 import type { SimpleGit } from 'simple-git';
 
 interface VersioningSettings {
@@ -73,9 +73,17 @@ class GitManager extends EventEmitter {
     return this.settingsManager.getSettings().versioning || {};
   }
 
+  /** Checks whether SCRIPTS_DIR itself is a repo ROOT (has its own .git directly inside it) —
+   * deliberately NOT the default checkIsRepo(), which checks "is this path inside ANY repo's
+   * work tree" and returns true whenever SCRIPTS_DIR happens to be a subdirectory of an
+   * unrelated outer repo (e.g. this addon's own project checkout in local dev mode, where
+   * SCRIPTS_DIR defaults to `<repo>/scripts`). That false positive meant ensureRepo() never
+   * actually ran `git init` there, and every commit() silently operated on the addon's own
+   * project history instead of a dedicated scripts repo — caught live when a user's first
+   * commit reported "nothing to commit" despite never having versioned anything. */
   async hasRepo(): Promise<boolean> {
     try {
-      return await this.git.checkIsRepo();
+      return await this.git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
     } catch {
       return false;
     }
