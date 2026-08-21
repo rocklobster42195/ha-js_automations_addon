@@ -288,12 +288,13 @@ export class GitHistoryPanel extends LitElement {
         renderMarginRevertIcon: false,
         renderIndicators: false,
         hideUnchangedRegions: { enabled: false },
+        folding: false,
       });
-      // The diff editor doesn't forward `lightbulb` from its own construction options down to
-      // the two inner standalone editors (reproduced live — the glyph stayed even with it set
-      // above), so it has to be disabled directly on each side.
-      this._diffEditor.getOriginalEditor().updateOptions({ lightbulb: { enabled: false } });
-      this._diffEditor.getModifiedEditor().updateOptions({ lightbulb: { enabled: false } });
+      // The diff editor doesn't forward `lightbulb`/`folding` from its own construction options
+      // down to the two inner standalone editors (reproduced live for lightbulb — the glyph
+      // stayed even with it set above), so they have to be disabled directly on each side too.
+      this._diffEditor.getOriginalEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
+      this._diffEditor.getModifiedEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
     }
 
     const language = this.filename.endsWith('.ts') ? 'typescript' : 'javascript';
