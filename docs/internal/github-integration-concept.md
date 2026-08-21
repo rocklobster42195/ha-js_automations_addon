@@ -1,247 +1,94 @@
-# Concept: GitHub Integration
+# Concept: Script Versioning (Git / GitHub)
+
+Redesigned 2026-08-19 (see `notes/2026-08-19-backup-versioning-grill.md` for the full discovery session). Replaces the previous version of this document.
 
 ## Motivation
 
-Scripts written in JS Automations are valuable automations that deserve version control. By pointing the scripts directory at a GitHub repository, users get a full commit history, easy recovery of deleted scripts, and the ability to sync their scripts across installations — all without leaving the IDE.
+Scripts deserve version history: recovering from "I broke this script" should be a fast, granular, in-editor action — not a full disaster-recovery zip restore (see `backup-concept.md`, which is deliberately scoped to that rarer case). Monaco itself has no built-in history — that's a VS Code workbench feature, not part of the bare `monaco-editor` npm package this app uses ([monaco-editor.ts](../../js_automations/public/js/components/monaco-editor.ts)), so this needs to be built.
 
----
+## Repository model
 
-## Layout
+`SCRIPTS_DIR` becomes **one** real local git repository — not one repo per script. Works fully offline, no account required. Per-script history is just git's normal per-path log (`git log -- scripts/x.ts`) filtered within that single repo.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  [▷][↺] | [💾][✎][⬇][⎘][⇔] | [✂…snippets…] | [⊞ commit][⬆ push] │
-└──────────────────────────────────────────────────────────────────┘
-                                                  ↑
-                                    GitHub toolbar group (new)
-                                    Only visible when gh_enabled: true
-```
+A GitHub remote is **optional**, same pattern as the WebDAV backup target: configured in Settings > Versioning (repo URL + PAT), and if set, every commit is additionally pushed there, best-effort — giving an offsite copy and GitHub's own browsing UI. One GitHub repo overall, holding all scripts — not one per script.
 
-The existing toolbar groups remain unchanged. A new separator + two buttons are appended to `toolbar-left`: **Commit** and **Push**. Both are hidden unless GitHub is enabled in settings.
+Only `scripts/*.ts` and `libraries/*.ts` are versioned. `settings.json` and `data/` are excluded — they change constantly at runtime (sensor values, counters) and would flood history with noise instead of real code changes. That data stays the responsibility of the zip backup (`backup-concept.md`), not git.
 
----
+## Commit trigger — explicit button, NOT save or deploy
 
-## Configuration
+**Important correction made during the design session:** the first pass of this concept assumed commits could ride on "deploy." That turned out to be wrong — `POST /:filename/content` (the save endpoint, [scripts-routes.ts:707](../../js_automations/routes/scripts-routes.ts#L707)) **is** the deploy/activation mechanism for a running script: saving a live script immediately stops and hot-reloads the worker ([scripts-routes.ts:717-722](../../js_automations/routes/scripts-routes.ts#L717-L722)). There is no separate "deploy" step. Tying commits to it would have meant a commit on every single save of an active script — exactly the noise a meaningful history is supposed to avoid.
 
-New section `github` in Settings (alongside General, Editor, MQTT, etc.):
+Instead: committing is a **fully separate, explicit user action** via a dedicated Commit button in the script editor toolbar (next to Save). Save keeps behaving exactly as it does today, completely unchanged.
 
-| Key               | Type            | Description                                     |
-| ----------------- | --------------- | ----------------------------------------------- |
-| `gh_enabled`      | boolean         | Enables the GitHub integration                  |
-| `gh_repo`         | text            | Remote URL (`https://github.com/user/repo.git`) |
-| `gh_token`        | text (password) | GitHub Personal Access Token                    |
-| `gh_author_name`  | text            | Commit author name                              |
-| `gh_author_email` | text            | Commit author email                             |
-
-Empty `gh_repo` / `gh_token` disables push silently (commit still works locally).
-
----
-
-## Commit Flow
+### Commit flow
 
 ```
-User clicks [commit]
-  → Modal opens: textarea for commit message
-  → User types message, clicks OK
+User clicks [Commit]
+  → Dialog opens: text field prefilled with a default message (e.g. "update: smart_watering.ts")
+  → User can overwrite it or just confirm as-is — never forced to type
   → POST /api/github/commit { message }
-  → Backend: git add --no-all .   ← new + modified only, NO deletions
-  → git commit -m message --author "Name <email>"
-  → Response logged: "Committed abc1234"
+  → Backend: git add <changed source files>; git commit -m message --author "Name <email>"
 ```
 
-### Key detail: deletions are never auto-staged
+Deletions are not auto-staged by a blanket commit — carried forward from the prior design as a sensible default: deleting a script in the JSA UI does not by itself remove it from git history, so accidentally deleted scripts stay recoverable. An explicit opt-in (e.g. a checkbox in the delete dialog) is needed to actually stage a deletion.
 
-`git add --no-all .` stages new and modified files but skips deleted files. This means:
+## UI placement
 
-- Deleting a script in JSA does **not** remove it from the repository.
-- Deleted scripts remain in git history and are recoverable at any time.
-- To explicitly delete a file from the repo, the user can opt-in via the delete dialog (see below).
+Grounded in the app's existing component structure rather than invented from scratch:
 
----
+- **Global git status** — ONE icon in the sidebar status bar (`status-bar.ts`), next to the existing HA-heartbeat and MQTT indicators, which is already the home for this kind of connection/sync state. Color alone signals the state (green connected / gray no-remote-configured / red push-failed) — no second icon needed, color already carries it. Click opens Settings > Versioning.
+  - **Open risk, needs testing in the real app, not resolved here:** the sidebar is only 310px wide (`app-sidebar.ts` `:host { width: 310px }`), and with 3 stat slots + sparklines active, room for a new icon + separator next to heartbeat/MQTT is genuinely tight. `status-bar.ts` already has a `hide_sparkline_on_dense` fallback for the 3-slot case, but it only affects the stat slots, not this new icon/separator, so it doesn't automatically solve the fit problem. If it doesn't fit: drop the separator before the git icon, or move the git icon to a different position (e.g. before the stat slots) instead of next to heartbeat/MQTT.
+- **Per-script history** — NOT a file tab (the editor's existing tabs are open-file tabs, VS Code style, and a "History" tab would collide with that concept). Instead, a toggle icon in the script editor's toolbar (next to Save/Commit) opens a **side panel**: commit list with timestamps, diff view against the current content. Note: the VS Code Source Control sidebar (changes list, commit box, graph — as seen in code-server) is workbench + extension-host chrome, not part of the `monaco-editor` npm package this app embeds, so it can't be reused directly and this panel needs to be built custom. Monaco's diff editor (`monaco.editor.createDiffEditor`), however, IS part of that package already in use elsewhere in the app and is the natural fit for rendering the diff view itself.
+- **Restore an old version** — clicking a commit in the history panel loads that version's content into the editor for review/editing. It does **not** commit automatically. The user then commits explicitly via the Commit button, same as any other change.
 
-## Push Flow
+## Creation Wizard: "Restore from repo" tab
 
-```
-User clicks [push]
-  → POST /api/github/push
-  → Backend: injects token into remote URL at request time
-    → https://TOKEN@github.com/user/repo.git
-  → git push --set-upstream origin HEAD  (first push sets tracking)
-  → Token is NEVER written to .git/config
-  → Response logged: "Pushed to origin/main"
-```
+A 4th tab alongside the existing `new` / `upload` / `import` tabs ([script-modal.ts:7](../../js_automations/public/js/components/script-modal.ts#L7)), rendered only when a git repo exists in `SCRIPTS_DIR`.
 
----
-
-## Delete Dialog Extension
-
-When `gh_enabled: true`, the script delete confirmation dialog gains an extra checkbox:
-
-```
-┌─────────────────────────────────────────┐
-│  Delete "my-script.ts"?                 │
-│                                         │
-│  ☐ Also delete from git repository     │
-│                                         │
-│          [CANCEL]  [DELETE]             │
-└─────────────────────────────────────────┘
-```
-
-- **Unchecked (default):** file is deleted from disk, stays in git → recoverable
-- **Checked:** after local deletion, `POST /api/github/remove` is called
-  - Backend: `git rm --cached <path>` — stages the deletion, ready for next commit
-  - No auto-commit; user commits manually via toolbar
-
----
-
-## Restore from Git (Creation Wizard)
-
-When `gh_enabled: true` and a git repo exists, the Creation Wizard shows a second tab:
+Scoped deliberately narrow: it lists only scripts that are **deleted from disk but still present in git history** — not a full repo browser. "Reviving a deleted script" is conceptually the same job as "create a new script," so it belongs in the Creation Wizard. Older versions of scripts that still exist on disk are handled by the per-script History panel in the editor (above) instead — keeping one place per purpose rather than two paths to the same outcome.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  New Script  |  Restore from Git             │
+│  New  |  Upload  |  Import  |  Aus Repo       │
 ├──────────────────────────────────────────────┤
-│  Files deleted locally but still in repo:    │
-│                                              │
-│  • backup-runner.ts            [Restore]     │
-│  • old-notify.ts               [Restore]     │
-│  • weather-fetch.ts            [Restore]     │
+│  In Git, aber nicht mehr auf Platte:         │
+│                                                │
+│  • backup-runner.ts            [Wiederherstellen] │
+│  • old-notify.ts               [Wiederherstellen] │
 └──────────────────────────────────────────────┘
 ```
 
-Clicking **Restore** calls `POST /api/github/checkout { path }` → `git checkout -- <path>` → file reappears in the script list.
+Clicking "Wiederherstellen" writes the file back to disk from its last committed content (`git show HEAD:<path>` or `git checkout HEAD -- <path>` after re-adding the path) — does not auto-commit; the file just reappears as an uncommitted-clean script, same as anything restored from history.
 
----
+## Carried-forward implementation details (not re-litigated in the redesign session, still sound)
 
-## Backend API
+These come from the prior version of this concept and don't conflict with anything decided above — kept here as implementation guidance:
 
-| Method | Path                       | Description                                                          |
-| ------ | -------------------------- | -------------------------------------------------------------------- |
-| `GET`  | `/api/github/status`       | `{ isRepo, branch, hasChanges, ahead, behind }`                      |
-| `POST` | `/api/github/commit`       | Stage new+modified, commit with message                              |
-| `POST` | `/api/github/push`         | Push to remote with token-injected URL                               |
-| `POST` | `/api/github/remove`       | Stage deletion of a specific file (`git rm --cached`)                |
-| `GET`  | `/api/github/deleted`      | List files tracked in git but missing on disk                        |
-| `POST` | `/api/github/checkout`     | Restore a deleted file from git                                      |
-| `GET`  | `/api/github/log`          | Recent commit history `[{ hash, shortHash, message, date, author }]` |
-| `POST` | `/api/github/revert`       | Undo last commit safely via `git revert HEAD`                        |
-| `POST` | `/api/github/restore-file` | Restore single file to a past commit: `{ hash, path }`               |
+- **First-time setup:** if no `.git` exists in `SCRIPTS_DIR`, the first commit runs `git init`, sets `user.name`/`user.email` from settings, and creates the initial commit. The GitHub remote is added on first push.
+- **Push:** token is injected into the remote URL per-request (`https://TOKEN@github.com/user/repo.git`) and never written to `.git/config` or cached.
+- **Token storage:** in `settings.json`, same security level as the existing MQTT password field.
+- **Revert safety matrix** — only non-destructive git operations are exposed in the UI:
 
----
+  | Action                           | Destructive?            | Offered? |
+  | --------------------------------- | ------------------------ | -------- |
+  | `git revert HEAD`                 | No — creates a new commit | Yes      |
+  | `git checkout <hash> -- <file>`   | No — working tree only    | Yes      |
+  | `git reset --hard`                | Yes — loses commits       | No       |
 
-## First-Time Setup
+- **Per-file restore-to-commit:** in addition to loading a version into the editor (the primary flow above), a commit entry can expose "restore this file to this commit" directly, via `git checkout <hash> -- <path>` — still requires an explicit commit afterward, never auto-commits.
 
-If no `.git` exists in `SCRIPTS_DIR`, the first commit automatically:
-
-1. Runs `git init`
-2. Sets `user.name` and `user.email` from settings
-3. Adds all files and creates the initial commit
-
-The remote is added on first push (using `gh_repo` from settings).
-
----
-
-## Rollback
-
-### History Panel
-
-A `mdi-history` button in the toolbar opens a modal listing the last N commits:
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  History                                          [✕]    │
-├──────────────────────────────────────────────────────────┤
-│  abc1234  Fix sensor threshold         2026-04-11  [↩]   │
-│  def5678  Add weather script           2026-04-10  [↩]   │
-│  ghi9012  Initial commit               2026-04-09  [↩]   │
-└──────────────────────────────────────────────────────────┘
-```
-
-`GET /api/github/log?limit=20` → `git log --oneline --format="%H|%h|%s|%ai|%an" -N`
-
-### Revert (safe)
-
-Clicking **[↩]** next to a commit opens a confirmation:
-
-> "Revert commit 'Fix sensor threshold'? This creates a new commit that undoes the changes."
-
-- `POST /api/github/revert` → `git revert HEAD --no-edit`
-- Only HEAD is supported (reverts the most recent commit)
-- Non-destructive: history is preserved, a new "Revert …" commit is added
-- `git reset --hard` is intentionally **not** offered — it would destroy history
-
-### Per-File Restore
-
-In addition to full revert, each commit entry can expand to list affected files.
-Clicking a file → `POST /api/github/restore-file { hash, path }` → `git checkout <hash> -- <path>`
-
-- Restores only that one file to its state at the selected commit
-- Does not create a commit automatically — user reviews the change and commits manually
-- Safe: no other files are touched
-
-### Safety Matrix
-
-| Action                          | Destructive?           | Recommended    |
-| ------------------------------- | ---------------------- | -------------- |
-| `git revert HEAD`               | No — new commit        | ✅             |
-| `git checkout <hash> -- <file>` | No — working tree only | ✅             |
-| `git reset --hard`              | Yes — loses commits    | ❌ not offered |
-
----
-
-## Security
-
-- The GitHub token is stored in `settings.json` (same security level as MQTT password).
-- The token is **never written to `.git/config`** or `.gitconfig`.
-- It is injected per-request into the remote URL: `https://TOKEN@github.com/user/repo.git`.
-- After the request, the URL with token is discarded — not cached.
-
----
-
-## i18n
-
-New keys under `settings.sections.github` and `settings.github.*`:
-
-| Key                            | EN                                  | DE                                         |
-| ------------------------------ | ----------------------------------- | ------------------------------------------ |
-| `settings.sections.github`     | GitHub                              | GitHub                                     |
-| `settings.github.enabled`      | Enable GitHub Integration           | GitHub-Integration aktivieren              |
-| `settings.github.repo`         | Repository URL                      | Repository-URL                             |
-| `settings.github.repo_desc`    | HTTPS URL of your GitHub repository | HTTPS-URL deines GitHub-Repositories       |
-| `settings.github.token`        | Personal Access Token               | Personal Access Token                      |
-| `settings.github.token_desc`   | GitHub PAT with repo write access   | GitHub PAT mit Schreibzugriff auf das Repo |
-| `settings.github.author_name`  | Author Name                         | Autorenname                                |
-| `settings.github.author_email` | Author Email                        | Autoren-E-Mail                             |
-| `git_commit_title`             | Commit                              | Commit                                     |
-| `git_push_title`               | Push to GitHub                      | Zu GitHub pushen                           |
-| `git_commit_placeholder`       | Commit message...                   | Commit-Nachricht...                        |
-| `git_restore_tab`              | Restore from Git                    | Aus Git wiederherstellen                   |
-| `git_also_delete_repo`         | Also delete from git repository     | Auch aus dem Repo löschen                  |
-
----
-
-## Implementation Roadmap
-
-| Phase             | Files                          | Change                  |
-| ----------------- | ------------------------------ | ----------------------- |
-| 1 — Dependency    | `package.json`                 | Add `simple-git`        |
-| 2 — Settings      | `core/settings-schema.js`      | New `github` section    |
-| 3 — Backend       | `routes/github-route.js`       | All 6 API endpoints     |
-| 4 — Server        | `server.js`                    | Register `githubRouter` |
-| 5 — Toolbar       | `public/index.html`            | Commit + Push buttons   |
-| 6 — JS            | `public/js/github.js`          | Frontend logic          |
-| 7 — Delete Dialog | `public/js/script-list.js`     | Checkbox extension      |
-| 8 — Wizard        | `public/js/creation-wizard.js` | Restore tab             |
-| 9 — i18n          | `locales/en/` + `locales/de/`  | All new keys            |
-
----
-
-## Not in Scope
+## Not in scope
 
 - Pull / sync from remote
 - Branch switching or creation
 - Merge conflict resolution
-- Diff viewer inside the IDE
+- A full diff/merge UI beyond the simple version-vs-current view
 - Auto-commit on save
 - `.gitignore` management
+
+## Open implementation details
+
+Not blocking, decide at build time:
+
+- Whether the Commit button also saves first if the editor has unsaved changes.
+- Exact commit-author identity mechanism (fixed bot identity vs. Settings-configured name/email).
