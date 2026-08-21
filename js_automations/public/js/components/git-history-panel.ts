@@ -140,6 +140,14 @@ export class GitHistoryPanel extends LitElement {
       flex: 1;
       min-height: 0;
     }
+    /* Monaco's inline diff view creates a "..." actions button (reusing the lightbulb icon
+     * purely for styling) in the margin of every deleted-line region, revealed on hover — no
+     * construction option gates it, only CSS. Not useful in a read-only viewer (this panel's
+     * own "Load into editor" button is the one recovery action offered), and its 16px icon in a
+     * ~40px-wide margin reads as a broken glyph at this panel's narrow width. */
+    .diff-container .lightbulb-glyph {
+      display: none !important;
+    }
 
     .restore-footer {
       padding: 10px 14px;
