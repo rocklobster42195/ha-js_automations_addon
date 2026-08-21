@@ -164,6 +164,16 @@ export class GitHistoryPanel extends LitElement {
     .diff-container .moved-blocks-lines {
       display: none !important;
     }
+    /* Broad catch-all: every Monaco toolbar/gutter icon uses the base "codicon" class (plus a
+     * modifier like codicon-light-bulb), and every one found so far in this narrow, read-only
+     * panel has turned out to be interactive editing chrome (revert/copy actions, fold controls,
+     * quick-fix) with no purpose here — this panel's own explicit buttons are the only actions
+     * offered. Hiding the whole family instead of chasing them one at a time as new diff content
+     * (more/longer changed lines) surfaces ones the specific cases above don't cover. */
+    .diff-container .codicon,
+    .diff-container [class$='-glyph'] {
+      display: none !important;
+    }
 
     .restore-footer {
       padding: 10px 14px;
