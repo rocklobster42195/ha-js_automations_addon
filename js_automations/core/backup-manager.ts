@@ -117,7 +117,11 @@ class BackupManager extends EventEmitter {
     const cronExpr = `${minute} ${hour} * * ${dayField}`;
 
     if (!cron.validate(cronExpr)) {
-      this.logManager.add('warn', 'Backup', `[Backup] Generated invalid cron expression "${cronExpr}" — schedule not set.`);
+      this.logManager.add(
+        'warn',
+        'Backup',
+        `[Backup] Generated invalid cron expression "${cronExpr}" — schedule not set.`
+      );
       return;
     }
 
@@ -170,7 +174,11 @@ class BackupManager extends EventEmitter {
     if (settings?.webdav_enabled) {
       const result = await this.uploadToWebDav(filePath);
       if (!result.success) {
-        this.logManager.add('warn', 'Backup', `[Backup] WebDAV upload failed, local copy stays authoritative: ${result.error}`);
+        this.logManager.add(
+          'warn',
+          'Backup',
+          `[Backup] WebDAV upload failed, local copy stays authoritative: ${result.error}`
+        );
       }
     }
 
@@ -209,7 +217,11 @@ class BackupManager extends EventEmitter {
       try {
         fs.unlinkSync(old.filePath);
       } catch (e) {
-        this.logManager.add('warn', 'Backup', `[Backup] Failed to delete old backup ${old.filePath}: ${(e as Error).message}`);
+        this.logManager.add(
+          'warn',
+          'Backup',
+          `[Backup] Failed to delete old backup ${old.filePath}: ${(e as Error).message}`
+        );
       }
     }
   }

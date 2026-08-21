@@ -493,6 +493,13 @@ const settingsSchema: SettingSection[] = [
         type: 'github-test',
         condition: { key: 'github_enabled', value: true },
       },
+      {
+        key: 'github_push',
+        label: 'settings.versioning.push',
+        description: 'settings.versioning.push_desc',
+        type: 'github-push',
+        condition: { key: 'github_enabled', value: true },
+      },
     ],
   },
   {

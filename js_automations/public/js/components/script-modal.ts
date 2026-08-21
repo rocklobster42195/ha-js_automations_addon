@@ -1593,10 +1593,14 @@ export class ScriptModal extends LitElement {
       </div>`;
     }
     if (this._deletedScripts.length === 0) {
-      return html`<div class="from-repo-empty">${this._t('wizard_from_repo_empty', 'Keine gelöschten Skripte in der Git-Historie.')}</div>`;
+      return html`<div class="from-repo-empty">
+        ${this._t('wizard_from_repo_empty', 'Keine gelöschten Skripte in der Git-Historie.')}
+      </div>`;
     }
     return html`
-      <div class="from-repo-intro">${this._t('wizard_from_repo_intro', 'In Git vorhanden, aber lokal nicht mehr auf der Festplatte:')}</div>
+      <div class="from-repo-intro">
+        ${this._t('wizard_from_repo_intro', 'In Git vorhanden, aber lokal nicht mehr auf der Festplatte:')}
+      </div>
       ${this._deletedScripts.map(
         (d) => html`
           <div class="repo-row">

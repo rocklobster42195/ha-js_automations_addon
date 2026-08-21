@@ -186,9 +186,7 @@ export class CommitDialog extends LitElement {
               : html`<div class="hint">${this._t('commit_dialog_prefilled_note')}</div>`
           }
           <div class="modal-btns">
-            <button class="btn-text" @click=${() => this._finish(null)}>
-              ${this._t('button_cancel', 'Cancel')}
-            </button>
+            <button class="btn-text" @click=${() => this._finish(null)}>${this._t('button_cancel', 'Cancel')}</button>
             <button class="btn-primary" @click=${() => this._confirm()}>
               ${this._t('commit_dialog_confirm', 'Commit')}
             </button>

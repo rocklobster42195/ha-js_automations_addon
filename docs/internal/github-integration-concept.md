@@ -69,11 +69,11 @@ These come from the prior version of this concept and don't conflict with anythi
 - **Token storage:** in `settings.json`, same security level as the existing MQTT password field.
 - **Revert safety matrix** — only non-destructive git operations are exposed in the UI:
 
-  | Action                           | Destructive?            | Offered? |
-  | --------------------------------- | ------------------------ | -------- |
-  | `git revert HEAD`                 | No — creates a new commit | Yes      |
-  | `git checkout <hash> -- <file>`   | No — working tree only    | Yes      |
-  | `git reset --hard`                | Yes — loses commits       | No       |
+  | Action                          | Destructive?              | Offered? |
+  | ------------------------------- | ------------------------- | -------- |
+  | `git revert HEAD`               | No — creates a new commit | Yes      |
+  | `git checkout <hash> -- <file>` | No — working tree only    | Yes      |
+  | `git reset --hard`              | Yes — loses commits       | No       |
 
 - **Per-file restore-to-commit:** in addition to loading a version into the editor (the primary flow above), a commit entry can expose "restore this file to this commit" directly, via `git checkout <hash> -- <path>` — still requires an explicit commit afterward, never auto-commits.
 

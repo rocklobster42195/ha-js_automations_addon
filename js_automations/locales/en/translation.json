@@ -354,7 +354,8 @@
       "tooltip_pressure_warning": "⚠ High memory pressure",
       "git_connected": "Git: connected & synced",
       "git_no_remote": "Git: local only (no GitHub remote configured)",
-      "git_push_failed": "Git: push failed"
+      "git_push_failed": "Git: push failed",
+      "git_unpushed_commits": "Git: {{count}} unpushed commit(s)"
     },
     "mqtt": {
       "enabled": "Enable MQTT",
@@ -429,7 +430,13 @@
       "github_test_btn": "Test Connection",
       "github_testing": "Testing...",
       "github_test_success": "Connection successful!",
-      "github_test_error": "Connection failed: {{error}}"
+      "github_test_error": "Connection failed: {{error}}",
+      "push": "Push",
+      "push_desc": "Separate from Commit — a flaky GitHub connection never blocks committing. Pushes whatever's currently unpushed.",
+      "push_btn": "Push to GitHub",
+      "pushing": "Pushing...",
+      "push_success": "Pushed successfully.",
+      "push_error": "Push failed: {{error}}"
     },
     "system": {
       "title": "System Settings",

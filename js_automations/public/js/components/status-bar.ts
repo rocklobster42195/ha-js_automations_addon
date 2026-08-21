@@ -201,12 +201,22 @@ export class StatusBar extends LitElement {
   private _gitIconInfo(): { color: string; title: string } {
     const s = this._gitStatus;
     if (s?.lastPushError) {
-      return { color: 'var(--danger)', title: this._t('statusbar.git_push_failed', 'Git: push failed') + ` — ${s.lastPushError}` };
+      return {
+        color: 'var(--danger)',
+        title: this._t('statusbar.git_push_failed', 'Git: push failed') + ` — ${s.lastPushError}`,
+      };
     }
     if (s?.hasRepo && s?.hasRemote) {
-      return { color: 'var(--success)', title: this._t('statusbar.git_connected', 'Git: connected & synced') };
+      const title =
+        s.ahead > 0
+          ? this._t('statusbar.git_unpushed_commits', 'Git: {{count}} unpushed commit(s)', { count: s.ahead })
+          : this._t('statusbar.git_connected', 'Git: connected & synced');
+      return { color: s.ahead > 0 ? 'var(--warn)' : 'var(--success)', title };
     }
-    return { color: '#888', title: this._t('statusbar.git_no_remote', 'Git: local only (no GitHub remote configured)') };
+    return {
+      color: '#888',
+      title: this._t('statusbar.git_no_remote', 'Git: local only (no GitHub remote configured)'),
+    };
   }
 
   connectedCallback() {

@@ -811,9 +811,12 @@ export class EditorViewElement extends LitElement {
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
       const result = await res.json();
       if (result.hash === null) {
-        window.alertToast?.show(this._t('commit_nothing_to_commit', 'Nothing to commit — no changes since the last commit.'), {
-          variant: 'info',
-        });
+        window.alertToast?.show(
+          this._t('commit_nothing_to_commit', 'Nothing to commit — no changes since the last commit.'),
+          {
+            variant: 'info',
+          }
+        );
       } else {
         window.alertToast?.show(
           this._t('commit_success', 'Committed ({{hash}}).', { hash: (result.hash as string).slice(0, 7) }),

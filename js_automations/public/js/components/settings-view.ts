@@ -18,6 +18,7 @@ type SettingsItemType =
   | 'webdav-test'
   | 'backup-run-now'
   | 'github-test'
+  | 'github-push'
   | 'restore-open'
   | 'info'
   | 'text'
@@ -352,6 +353,7 @@ export class SettingsView extends LitElement {
   @state() private _webdavTesting = false;
   @state() private _backupRunning = false;
   @state() private _githubTesting = false;
+  @state() private _githubPushing = false;
 
   private _entitiesLoaded = false;
   private _pendingScrollTarget: string | null = null;
@@ -662,11 +664,29 @@ export class SettingsView extends LitElement {
         alert(this._t('settings.backup.run_now_error', undefined, { error: result.error }));
       }
     } catch (e) {
-      alert(
-        this._t('settings.backup.run_now_error', undefined, { error: e instanceof Error ? e.message : String(e) })
-      );
+      alert(this._t('settings.backup.run_now_error', undefined, { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       this._backupRunning = false;
+    }
+  }
+
+  private async _pushToGitHub(): Promise<void> {
+    this._githubPushing = true;
+    try {
+      const res = await window.apiFetch!('api/git/push', { method: 'POST' });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const result = await res.json();
+      if (result.success) {
+        alert(this._t('settings.versioning.push_success'));
+      } else {
+        alert(this._t('settings.versioning.push_error', undefined, { error: result.error }));
+      }
+    } catch (e) {
+      alert(
+        this._t('settings.versioning.push_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
+    } finally {
+      this._githubPushing = false;
     }
   }
 
@@ -867,10 +887,25 @@ export class SettingsView extends LitElement {
             }
           </button>
         `;
+      case 'github-push':
+        return html`
+          <button
+            class="settings-btn settings-btn-primary"
+            ?disabled=${this._githubPushing}
+            @click=${() => this._pushToGitHub()}
+          >
+            ${
+              this._githubPushing
+                ? html`<i class="mdi mdi-loading mdi-spin"></i> ${this._t('settings.versioning.pushing', 'Pushing...')}`
+                : this._t('settings.versioning.push_btn')
+            }
+          </button>
+        `;
       case 'restore-open':
         return html`
           <button class="settings-btn settings-btn-outline" @click=${() => window.restoreModal?.open()}>
-            <i class="mdi mdi-backup-restore"></i> ${this._t('settings.backup.restore_open_btn', 'Backup wiederherstellen...')}
+            <i class="mdi mdi-backup-restore"></i>
+            ${this._t('settings.backup.restore_open_btn', 'Backup wiederherstellen...')}
           </button>
         `;
       case 'info':

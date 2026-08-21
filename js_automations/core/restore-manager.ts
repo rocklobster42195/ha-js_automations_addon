@@ -281,7 +281,11 @@ class RestoreManager {
         const dependencies = 'dependencies' in meta ? meta.dependencies : [];
         if (dependencies.length > 0) await this.depManager.install(dependencies, false);
       } catch (e) {
-        this.logManager.add('warn', 'Restore', `[Restore] Dependency install failed for ${file}: ${(e as Error).message}`);
+        this.logManager.add(
+          'warn',
+          'Restore',
+          `[Restore] Dependency install failed for ${file}: ${(e as Error).message}`
+        );
       }
       this.workerManager.startScript(file);
       await new Promise((r) => setTimeout(r, AUTOSTART_STAGGER_MS));

@@ -328,30 +328,40 @@ export class RestoreModal extends LitElement {
                     />
                   </div>
                   <div class="modal-btns">
-                    <button class="btn-text" @click=${() => this.close()}>${this._t('button_cancel', 'Abbrechen')}</button>
+                    <button class="btn-text" @click=${() => this.close()}>
+                      ${this._t('button_cancel', 'Abbrechen')}
+                    </button>
                   </div>
                 `
               : nothing
           }
           ${
             this._step === 'uploading'
-              ? html`<div class="center-status"><i class="mdi mdi-loading mdi-spin"></i>${this._t('restore_uploading', 'Lade hoch...')}</div>`
+              ? html`<div class="center-status">
+                  <i class="mdi mdi-loading mdi-spin"></i>${this._t('restore_uploading', 'Lade hoch...')}
+                </div>`
               : nothing
           }
           ${
             this._step === 'diff' && this._diff
               ? html`
-                  <p>${this._t('restore_diff_intro', 'Unterschiede zum aktuellen Stand — wähle aus, was übernommen werden soll.')}</p>
+                  <p>
+                    ${this._t('restore_diff_intro', 'Unterschiede zum aktuellen Stand — wähle aus, was übernommen werden soll.')}
+                  </p>
                   ${this._renderDiffGroup(this._t('restore_diff_changed', 'Geändert'), 'var(--warn)', this._diff.changed, false)}
                   ${this._renderDiffGroup(this._t('restore_diff_added', 'Neu'), 'var(--success)', this._diff.added, false)}
                   ${this._renderDiffGroup(this._t('restore_diff_deleted', 'Gelöscht'), 'var(--danger)', this._diff.deleted, true)}
                   ${
                     this._diff.added.length + this._diff.changed.length + this._diff.deleted.length === 0
-                      ? html`<div class="diff-empty">${this._t('restore_diff_empty', 'Keine Unterschiede gefunden.')}</div>`
+                      ? html`<div class="diff-empty">
+                          ${this._t('restore_diff_empty', 'Keine Unterschiede gefunden.')}
+                        </div>`
                       : nothing
                   }
                   <div class="modal-btns">
-                    <button class="btn-text" @click=${() => this.close()}>${this._t('button_cancel', 'Abbrechen')}</button>
+                    <button class="btn-text" @click=${() => this.close()}>
+                      ${this._t('button_cancel', 'Abbrechen')}
+                    </button>
                     <div class="modal-btns-right">
                       <button
                         class="btn-primary"
@@ -368,13 +378,19 @@ export class RestoreModal extends LitElement {
           ${
             this._step === 'confirm'
               ? html`
-                  <p>${this._t('restore_confirm_summary', '{{count}} Änderungen werden angewendet. Der Server startet dabei kurz neu.', { count: this._selected.size })}</p>
+                  <p>
+                    ${this._t('restore_confirm_summary', '{{count}} Änderungen werden angewendet. Der Server startet dabei kurz neu.', { count: this._selected.size })}
+                  </p>
                   <div class="info-box">
                     <i class="mdi mdi-shield-check"></i>
-                    <span>${this._t('restore_confirm_snapshot_hint', 'Vor dem Anwenden wird automatisch ein Snapshot des aktuellen Stands erstellt — jederzeit rückgängig machbar.')}</span>
+                    <span
+                      >${this._t('restore_confirm_snapshot_hint', 'Vor dem Anwenden wird automatisch ein Snapshot des aktuellen Stands erstellt — jederzeit rückgängig machbar.')}</span
+                    >
                   </div>
                   <div class="modal-btns">
-                    <button class="btn-text" @click=${() => (this._step = 'diff')}>${this._t('button_back', 'Zurück')}</button>
+                    <button class="btn-text" @click=${() => (this._step = 'diff')}>
+                      ${this._t('button_back', 'Zurück')}
+                    </button>
                     <div class="modal-btns-right">
                       <button class="btn-primary warn" @click=${() => this._apply()}>
                         ${this._t('restore_confirm_btn', 'Wiederherstellen')}
@@ -386,7 +402,10 @@ export class RestoreModal extends LitElement {
           }
           ${
             this._step === 'applying'
-              ? html`<div class="center-status"><i class="mdi mdi-loading mdi-spin"></i>${this._t('restore_in_progress', 'Wiederherstellung läuft...')}</div>`
+              ? html`<div class="center-status">
+                  <i class="mdi mdi-loading mdi-spin"></i
+                  >${this._t('restore_in_progress', 'Wiederherstellung läuft...')}
+                </div>`
               : nothing
           }
           ${
@@ -394,9 +413,13 @@ export class RestoreModal extends LitElement {
               ? html`
                   <div class="info-box">
                     <i class="mdi mdi-check-circle"></i>
-                    <span>${this._t('restore_success_body', 'Wiederherstellung abgeschlossen. Sicherheits-Snapshot: {{filename}}.', { filename: this._resultSnapshot })}</span>
+                    <span
+                      >${this._t('restore_success_body', 'Wiederherstellung abgeschlossen. Sicherheits-Snapshot: {{filename}}.', { filename: this._resultSnapshot })}</span
+                    >
                   </div>
-                  <p>${this._t('restore_success_restart_hint', 'Ein Neustart des Addons wird empfohlen, damit MQTT/Webhooks die wiederhergestellte Konfiguration vollständig übernehmen.')}</p>
+                  <p>
+                    ${this._t('restore_success_restart_hint', 'Ein Neustart des Addons wird empfohlen, damit MQTT/Webhooks die wiederhergestellte Konfiguration vollständig übernehmen.')}
+                  </p>
                   <div class="modal-btns">
                     <div class="modal-btns-right">
                       <button class="btn-primary" @click=${() => (this._open = false)}>OK</button>
@@ -411,8 +434,12 @@ export class RestoreModal extends LitElement {
                   <p style="color: var(--danger)">${this._t('restore_error_title', 'Fehler')}: ${this._errorMessage}</p>
                   <div class="modal-btns">
                     <div class="modal-btns-right">
-                      <button class="btn-text" @click=${() => this.close()}>${this._t('button_cancel', 'Abbrechen')}</button>
-                      <button class="btn-primary" @click=${() => this.open()}>${this._t('button_retry', 'Erneut versuchen')}</button>
+                      <button class="btn-text" @click=${() => this.close()}>
+                        ${this._t('button_cancel', 'Abbrechen')}
+                      </button>
+                      <button class="btn-primary" @click=${() => this.open()}>
+                        ${this._t('button_retry', 'Erneut versuchen')}
+                      </button>
                     </div>
                   </div>
                 `

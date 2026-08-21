@@ -355,7 +355,8 @@
       "tooltip_pressure_warning": "⚠ Hoher Speicherdruck",
       "git_connected": "Git: verbunden & synchron",
       "git_no_remote": "Git: nur lokal (kein GitHub-Remote konfiguriert)",
-      "git_push_failed": "Git: Push fehlgeschlagen"
+      "git_push_failed": "Git: Push fehlgeschlagen",
+      "git_unpushed_commits": "Git: {{count}} ungepushte(r) Commit(s)"
     },
     "mqtt": {
       "enabled": "MQTT Aktivieren",
@@ -430,7 +431,13 @@
       "github_test_btn": "Verbindung testen",
       "github_testing": "Teste Verbindung...",
       "github_test_success": "Verbindung erfolgreich!",
-      "github_test_error": "Verbindung fehlgeschlagen: {{error}}"
+      "github_test_error": "Verbindung fehlgeschlagen: {{error}}",
+      "push": "Push",
+      "push_desc": "Getrennt vom Commit — eine wackelige GitHub-Verbindung blockiert nie das Committen. Pusht, was gerade noch nicht gepusht ist.",
+      "push_btn": "Zu GitHub pushen",
+      "pushing": "Pushe...",
+      "push_success": "Erfolgreich gepusht.",
+      "push_error": "Push fehlgeschlagen: {{error}}"
     },
     "system": {
       "title": "System-Einstellungen",
