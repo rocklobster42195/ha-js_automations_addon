@@ -260,6 +260,23 @@ export class EditorViewElement extends LitElement {
       flex: 1;
       min-height: 0;
     }
+    .diff-tab-container {
+      flex: 1;
+      min-height: 0;
+      display: none;
+    }
+    /* Same suppressions git-history-panel.ts's narrow inline diff needed — these are about
+     * read-only interactivity (revert/copy actions, fold controls, quick-fix), not panel width,
+     * so they still apply at full tab width. Unlike that panel, this one uses
+     * renderSideBySide:true, so its ".editor.original" pane is the real left-hand diff view and
+     * must NOT be hidden, and ".moved-blocks-lines" can show real moved-code connectors. */
+    .diff-tab-container .lightbulb-glyph {
+      display: none !important;
+    }
+    .diff-tab-container .codicon,
+    .diff-tab-container [class$='-glyph'] {
+      display: none !important;
+    }
 
     .mode-banner {
       padding: 4px 10px;
@@ -314,6 +331,11 @@ export class EditorViewElement extends LitElement {
 
   @query('monaco-editor') private _monacoEditorEl?: MonacoEditorElement;
 
+  /** One shared diff-editor widget for all 'diff' tabs — model-swapped per active tab, same
+   * "one shared editor, swap model" pattern this file already uses for <monaco-editor> itself,
+   * rather than a new Monaco widget instance per tab. */
+  private _diffEditorInstance: import('monaco-editor').editor.IStandaloneDiffEditor | null = null;
+
   private _t(key: string, fallback?: string, options?: Record<string, unknown>): string {
     return window.i18next?.t(key, { defaultValue: fallback, ...options }) ?? fallback ?? key;
   }
@@ -324,6 +346,7 @@ export class EditorViewElement extends LitElement {
     window.renderTabs = this._renderTabs;
     window.openOrSwitchToTab = this.openOrSwitchToTab;
     window.openCardTab = this.openCardTab;
+    window.openDiffTab = this.openDiffTab;
     window.toggleCardTab = this.toggleCardTab;
     window.switchToTab = this.switchToTab;
     window.closeTab = this.closeTab;
@@ -361,6 +384,8 @@ export class EditorViewElement extends LitElement {
     document.removeEventListener('keydown', this._onGlobalKeydown);
     window.removeEventListener('settings-changed', this._onSettingsChanged);
     window.removeEventListener('card-preview-toggled', this._onCardPreviewToggled);
+    this._diffEditorInstance?.dispose();
+    this._diffEditorInstance = null;
   }
 
   private _onCardPreviewToggled = (): void => {
@@ -577,6 +602,53 @@ export class EditorViewElement extends LitElement {
     }
   };
 
+  /** Opens one commit's diff (vs. its previous commit) as a full-width tab — triggered from
+   * git-history-panel.ts's "Open diff in tab" button, since its own inline diff was too cramped
+   * in that 380px side panel. One tab per commit; re-opening an already-open commit's diff just
+   * switches to the existing tab rather than duplicating. */
+  openDiffTab = async (subjectFilename: string, hash: string, shortHash: string, message?: string): Promise<void> => {
+    const tabFilename = `System: Diff: ${subjectFilename}@${hash}`;
+    const existing = this._openTabs.find((t) => t.filename === tabFilename);
+    if (existing) {
+      this.switchToTab(tabFilename);
+      return;
+    }
+
+    try {
+      const res = await window.apiFetch!(
+        `api/git/diff?hash1=${encodeURIComponent(hash + '~1')}&hash2=${encodeURIComponent(hash)}&file=${encodeURIComponent(subjectFilename)}`
+      );
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const { before, after } = await res.json();
+      const language = subjectFilename.endsWith('.ts') ? 'typescript' : 'javascript';
+      const original = window.monaco!.editor.createModel(before ?? '', language);
+      const modified = window.monaco!.editor.createModel(after ?? '', language);
+
+      const newTab: JsaTab = {
+        filename: tabFilename,
+        icon: 'file-compare',
+        type: 'diff',
+        isDirty: false,
+        model: null,
+        diffSubjectFilename: subjectFilename,
+        diffHash: hash,
+        diffShortHash: shortHash,
+        diffMessage: message,
+        diffOriginalModel: original,
+        diffModifiedModel: modified,
+      };
+      this._openTabs.push(newTab);
+      this.switchToTab(tabFilename);
+    } catch (e) {
+      console.error(`[DiffTab] Failed to load diff for ${subjectFilename}@${hash}`, e);
+      window.alertToast?.show(
+        this._t('history_diff_load_error', 'Failed to load diff: {{error}}', {
+          error: e instanceof Error ? e.message : String(e),
+        })
+      );
+    }
+  };
+
   /** Toggles the card tab for the currently active script tab open or closed — called from the
    * card-tab-toggle toolbar button. */
   toggleCardTab = async (): Promise<void> => {
@@ -601,7 +673,13 @@ export class EditorViewElement extends LitElement {
         // No persistent Monaco-style model for Blockly — snapshot the live workspace into the
         // tab before swapping it out, so in-progress edits survive the tab switch.
         if (window.getBlocklyWorkspaceState) oldTab.blocksState = window.getBlocklyWorkspaceState();
-      } else if (oldTab && oldTab.type !== 'store' && oldTab.type !== 'settings' && oldTab.type !== 'reference') {
+      } else if (
+        oldTab &&
+        oldTab.type !== 'store' &&
+        oldTab.type !== 'settings' &&
+        oldTab.type !== 'reference' &&
+        oldTab.type !== 'diff'
+      ) {
         oldTab.viewState = window.monacoEditor?.saveViewState() ?? null;
       }
     }
@@ -624,6 +702,7 @@ export class EditorViewElement extends LitElement {
     document.getElementById('reference-wrapper')?.classList.add('hidden');
 
     const blocklyContainer = this.querySelector<HTMLElement>('#blockly-container');
+    const diffContainer = this.renderRoot.querySelector<HTMLElement>('#diff-tab-container');
 
     if (newTab.type === 'store') {
       document.getElementById('store-wrapper')?.classList.remove('hidden');
@@ -639,6 +718,7 @@ export class EditorViewElement extends LitElement {
       // and squishes the Blockly canvas into half the available height.
       if (this._monacoEditorEl) this._monacoEditorEl.style.display = 'none';
       blocklyContainer?.classList.remove('hidden');
+      if (diffContainer) diffContainer.style.display = 'none';
 
       if (window.isBlocklyReady?.()) {
         window.loadBlocklyWorkspace?.({
@@ -651,9 +731,75 @@ export class EditorViewElement extends LitElement {
         // Explorer, MQTT devtools, an external webhook call, ...).
         window.reapplyBlocklyError?.(newTab.filename);
       }
+    } else if (newTab.type === 'diff') {
+      // A diff editor is a structurally different Monaco widget (createDiffEditor, not
+      // createModel+setModel) — it can't reuse <monaco-editor>'s shared single-model registry,
+      // so it gets its own dedicated container, toggled the same way #blockly-container is.
+      if (this._monacoEditorEl) this._monacoEditorEl.style.display = 'none';
+      blocklyContainer?.classList.add('hidden');
+      // The container's baseline CSS is `display:none` (see static styles) — clearing the
+      // inline style here would just fall back to that, not show it, so this needs an explicit
+      // non-none value rather than ''. Must be 'block', not 'flex': Monaco's own root div isn't
+      // a flex child (no explicit width), so a flex container collapses it to content width
+      // (reproduced live — only the overview-ruler strip showed, no diff text).
+      if (diffContainer) diffContainer.style.display = 'block';
+
+      if (!this._diffEditorInstance && window.monaco && diffContainer) {
+        this._diffEditorInstance = window.monaco.editor.createDiffEditor(diffContainer, {
+          readOnly: true,
+          automaticLayout: true,
+          renderSideBySide: true,
+          minimap: { enabled: false },
+          theme: 'vs-dark',
+          fontSize: 12,
+          renderMarginRevertIcon: false,
+          renderIndicators: false,
+          hideUnchangedRegions: { enabled: false },
+          folding: false,
+        });
+        // See git-history-panel.ts's identical comment — the diff editor doesn't forward
+        // `lightbulb`/`folding` from its own construction options down to the two inner
+        // standalone editors, so they have to be disabled directly on each side too.
+        this._diffEditorInstance.getOriginalEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
+        this._diffEditorInstance.getModifiedEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
+        // Long single-line changes (e.g. a JSDoc @description) are common in these scripts, and
+        // an unscrolled long line can leave the actual character-level diff off-screen to the
+        // right, making a real change look like "no changes" at a glance. Tried diffWordWrap
+        // instead (reproduced live: it breaks renderSideBySide's line alignment between panes —
+        // Monaco doesn't correctly pad the shorter side to match wrapped-taller-side line
+        // heights, corrupting the whole layout, not just the long line). Auto-scrolling to the
+        // exact position of the first change on every diff update is the safe fix — no wrapping,
+        // no alignment risk, and revealPositionNearTop scrolls horizontally too (unlike
+        // revealLineNearTop, which only handles vertical position and would leave a change on a
+        // long line just as invisible as not scrolling at all).
+        this._diffEditorInstance.onDidUpdateDiff(() => {
+          const changes = this._diffEditorInstance?.getLineChanges();
+          const firstCharChange = changes?.[0]?.charChanges?.[0];
+          if (firstCharChange) {
+            this._diffEditorInstance?.getModifiedEditor().revealPositionNearTop({
+              lineNumber: firstCharChange.modifiedStartLineNumber,
+              column: firstCharChange.modifiedStartColumn,
+            });
+            return;
+          }
+          const firstLineChange = changes?.[0];
+          if (firstLineChange) {
+            const line = firstLineChange.modifiedStartLineNumber || firstLineChange.originalStartLineNumber || 1;
+            this._diffEditorInstance?.getModifiedEditor().revealLineNearTop(line);
+          }
+        });
+      }
+      this._diffEditorInstance?.setModel({
+        original: newTab.diffOriginalModel as import('monaco-editor').editor.ITextModel,
+        modified: newTab.diffModifiedModel as import('monaco-editor').editor.ITextModel,
+      });
+      // Same same-tick-resize layout glitch git-history-panel.ts's diff view had to work around
+      // — force a fresh layout pass once the tab-switch's own layout has actually settled.
+      requestAnimationFrame(() => requestAnimationFrame(() => this._diffEditorInstance?.layout()));
     } else {
       if (this._monacoEditorEl) this._monacoEditorEl.style.display = '';
       blocklyContainer?.classList.add('hidden');
+      if (diffContainer) diffContainer.style.display = 'none';
 
       window.monacoEditor?.setMode(newTab.type === 'card' ? 'card' : 'script');
       window.monacoEditor?.setModel(newTab.model);
@@ -694,6 +840,14 @@ export class EditorViewElement extends LitElement {
     this._openTabs.splice(index, 1);
 
     window.monacoEditor?.disposeModel(tabToClose.model);
+    if (tabToClose.type === 'diff') {
+      // The shared diff-editor widget stays alive for other diff tabs — only clear its model
+      // if this closed tab was the one it was currently showing, before disposing that tab's
+      // own models (avoids disposing models still attached to a live widget).
+      if (this._activeTabFilename === filename) this._diffEditorInstance?.setModel(null);
+      (tabToClose.diffOriginalModel as import('monaco-editor').editor.ITextModel | undefined)?.dispose();
+      (tabToClose.diffModifiedModel as import('monaco-editor').editor.ITextModel | undefined)?.dispose();
+    }
 
     // Cascade-close the paired card tab when its parent script is closed
     if (tabToClose.type !== 'card') {
@@ -929,6 +1083,7 @@ export class EditorViewElement extends LitElement {
 
   private _tabIcon(tab: JsaTab): { iconName: string; statusClass: string } {
     if (tab.type === 'card') return { iconName: 'view-dashboard', statusClass: '' };
+    if (tab.type === 'diff') return { iconName: 'file-compare', statusClass: '' };
     const scriptFromList = window.allScripts?.find((s) => s.filename === tab.filename);
     const effectiveIcon = scriptFromList ? scriptFromList.icon : tab.icon;
     let iconName = effectiveIcon ? effectiveIcon.split(':').pop()! : 'script-text';
@@ -945,6 +1100,12 @@ export class EditorViewElement extends LitElement {
 
   private _tabDisplayName(tab: JsaTab): string {
     if (tab.type === 'card') return (tab.parentScript ?? '').replace(/\.[^.]+$/, '') + ' ‹card›';
+    if (tab.type === 'diff') {
+      return this._t('history_diff_tab_title', 'Diff: {{filename}} @ {{hash}}', {
+        filename: tab.diffSubjectFilename ?? '',
+        hash: tab.diffShortHash ?? '',
+      });
+    }
     return tab.filename;
   }
 
@@ -957,7 +1118,8 @@ export class EditorViewElement extends LitElement {
           (tab, index) => {
             const { iconName, statusClass } = this._tabIcon(tab);
             const isCardTab = tab.type === 'card';
-            const badge = !isCardTab && window.getLanguageBadge ? window.getLanguageBadge(tab.filename) : '';
+            const badge =
+              !isCardTab && tab.type !== 'diff' && window.getLanguageBadge ? window.getLanguageBadge(tab.filename) : '';
             return html`
               <div
                 class="tab ${tab.filename === this._activeTabFilename ? 'active' : ''} ${
@@ -1035,9 +1197,15 @@ export class EditorViewElement extends LitElement {
   private _renderToolbar(activeTab: JsaTab | undefined) {
     const filename = this._activeTabFilename;
     const isCardTab = !!filename?.endsWith(CARD_TAB_SUFFIX);
+    // Type-based rather than a hardcoded filename list — a diff tab's synthetic filename varies
+    // per commit, so it can't be matched literally the way the other three system views can.
     const isSystemTab =
-      filename === 'System: Store' || filename === 'System: Settings' || filename === 'System: Reference';
+      activeTab?.type === 'store' ||
+      activeTab?.type === 'settings' ||
+      activeTab?.type === 'reference' ||
+      activeTab?.type === 'diff';
     const isBlocklyTab = activeTab?.type === 'blockly';
+    const isDiffTab = activeTab?.type === 'diff';
     const isDirty = !!activeTab?.isDirty;
 
     const script = filename && !isCardTab ? window.allScripts?.find((s) => s.filename === filename) : undefined;
@@ -1112,7 +1280,7 @@ export class EditorViewElement extends LitElement {
             <i class="mdi mdi-content-duplicate"></i>
           </button>
           ${
-            isBlocklyTab
+            isBlocklyTab || isDiffTab
               ? nothing
               : html`
                   <button
@@ -1148,17 +1316,19 @@ export class EditorViewElement extends LitElement {
                     <i class="mdi mdi-code-braces"></i>
                   </button>
                 `
-              : html`
-                  <button
-                    title=${this._t('snippet_toolbar_title', 'Insert snippet')}
-                    @click=${(e: Event) => {
-                      e.stopPropagation();
-                      this._monacoEditorEl?.openSnippetMenu(e.currentTarget as HTMLElement);
-                    }}
-                  >
-                    <i class="mdi mdi-puzzle-outline"></i>
-                  </button>
-                `
+              : isDiffTab
+                ? nothing
+                : html`
+                    <button
+                      title=${this._t('snippet_toolbar_title', 'Insert snippet')}
+                      @click=${(e: Event) => {
+                        e.stopPropagation();
+                        this._monacoEditorEl?.openSnippetMenu(e.currentTarget as HTMLElement);
+                      }}
+                    >
+                      <i class="mdi mdi-puzzle-outline"></i>
+                    </button>
+                  `
           }
           ${
             !isBlocklyTab && (isCardTab || hasCard)
@@ -1193,7 +1363,8 @@ export class EditorViewElement extends LitElement {
 
   willUpdate() {
     const activeTab = this._openTabs.find((t) => t.filename === this._activeTabFilename);
-    const showEditorBody = !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card';
+    const showEditorBody =
+      !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card' || activeTab.type === 'diff';
     // The host normally claims flex:1 so the editor body fills #editor-section. When a virtual
     // tab (store/settings/reference) is active, that body is hidden and routed to a sibling
     // element instead — without shrinking the host too, it still claims half the flex space as
@@ -1206,7 +1377,8 @@ export class EditorViewElement extends LitElement {
     // Store/Settings/Reference are routed to sibling elements outside #editor-body entirely
     // (see switchToTab) — the tab bar itself stays visible regardless so those views don't
     // strand you unable to click back to an open script tab.
-    const showEditorBody = !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card';
+    const showEditorBody =
+      !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card' || activeTab.type === 'diff';
 
     return html`
       ${mdiStylesheetLink} ${this._renderTabBar()}
@@ -1219,6 +1391,7 @@ export class EditorViewElement extends LitElement {
               @word-wrap-changed=${() => this.requestUpdate()}
             ></monaco-editor>
             <slot name="blockly"></slot>
+            <div id="diff-tab-container" class="diff-tab-container"></div>
           </div>
           ${
             this._historyPanelOpen && this._activeTabFilename && !isVirtualTab(this._activeTabFilename)
@@ -1228,6 +1401,15 @@ export class EditorViewElement extends LitElement {
                     @close=${() => (this._historyPanelOpen = false)}
                     @restore-into-editor=${(e: CustomEvent<{ content: string }>) =>
                       this._loadContentIntoActiveEditor(e.detail.content)}
+                    @open-diff-tab=${(
+                      e: CustomEvent<{ filename: string; hash: string; shortHash?: string; message?: string }>
+                    ) =>
+                      this.openDiffTab(
+                        e.detail.filename,
+                        e.detail.hash,
+                        e.detail.shortHash ?? e.detail.hash.slice(0, 7),
+                        e.detail.message
+                      )}
                   ></git-history-panel>
                 `
               : nothing

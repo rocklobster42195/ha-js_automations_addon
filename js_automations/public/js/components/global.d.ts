@@ -75,6 +75,9 @@ export interface JsaIntegrationStatus {
   is_connected?: boolean;
   is_running?: boolean;
   mqtt?: { enabled: boolean; connected: boolean };
+  /** Set while `is_connected` is false — `expected: true` means a `homeassistant.restart`
+   *  service call was observed just before the drop (status icon shows orange, not red). */
+  reconnect?: { expected: boolean } | null;
 }
 
 export interface JsaStatusBarSettings {
@@ -149,6 +152,10 @@ export interface JsaStatusBarBridge {
   setConnected(isConnected: boolean): void;
   isDisconnected(): boolean;
   showConnectionLost(): void;
+  /** Reflects the addon's own connection to Home Assistant (distinct from setConnected(), which
+   *  tracks the browser's socket.io link to the addon server) — drives the heartbeat icon's
+   *  orange/red distinction while reconnecting. */
+  setHaConnectionState(isConnected: boolean, expectedRestart: boolean): void;
 }
 
 export interface JsaStoreExplorerBridge {
@@ -189,7 +196,7 @@ export interface JsaTab {
   filename: string;
   icon: string;
   isDirty: boolean;
-  type?: 'store' | 'settings' | 'reference' | 'blockly' | 'card';
+  type?: 'store' | 'settings' | 'reference' | 'blockly' | 'card' | 'diff';
   model: unknown;
   viewState?: unknown;
   /** Monaco tabs only — last-saved content, compared against the live model to derive isDirty.
@@ -204,6 +211,14 @@ export interface JsaTab {
   /** Blockly tabs only — last-saved workspace JSON, compared against the live workspace to
    * derive isDirty. */
   originalBlocksJson?: string;
+  /** Diff tabs only (type: 'diff') — the real script this diff is about, and the commit it shows. */
+  diffSubjectFilename?: string;
+  diffHash?: string;
+  diffShortHash?: string;
+  diffMessage?: string;
+  /** Diff tabs only — live Monaco ITextModel instances, typed unknown like `model`. */
+  diffOriginalModel?: unknown;
+  diffModifiedModel?: unknown;
 }
 
 export interface JsaCardPreviewBridge {
@@ -353,6 +368,7 @@ declare global {
     closeTab?: (filename: string) => Promise<void>;
     openCardTab?: (scriptFilename: string) => Promise<void>;
     toggleCardTab?: () => Promise<void>;
+    openDiffTab?: (subjectFilename: string, hash: string, shortHash: string, message?: string) => Promise<void>;
     saveActiveTab?: () => Promise<void>;
     closeAllTabs?: () => Promise<void>;
     toggleActiveScript?: () => Promise<void>;
