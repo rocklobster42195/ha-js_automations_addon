@@ -41,6 +41,13 @@ function isLibraryScript(filename: string): boolean {
   return !!(script?.path && (script.path.includes('/libraries/') || script.path.includes('\\libraries\\')));
 }
 
+// The git repo root is SCRIPTS_DIR, so library scripts are tracked as "libraries/<name>" — but
+// the API only ever exposes a bare basename as `filename` (scripts-routes.ts). Git-facing calls
+// (log/diff/show) need the real repo-relative path or they silently find no history at all.
+function gitPathFor(filename: string): string {
+  return isLibraryScript(filename) ? `libraries/${filename}` : filename;
+}
+
 /**
  * Tab lifecycle + toolbar shell for the script editor (RFC Phase B item 8), replacing
  * tab-manager.js. Embeds `<monaco-editor>` for the Monaco-tab path; the Blockly-tab path keeps
@@ -606,7 +613,13 @@ export class EditorViewElement extends LitElement {
    * git-history-panel.ts's "Open diff in tab" button, since its own inline diff was too cramped
    * in that 380px side panel. One tab per commit; re-opening an already-open commit's diff just
    * switches to the existing tab rather than duplicating. */
-  openDiffTab = async (subjectFilename: string, hash: string, shortHash: string, message?: string): Promise<void> => {
+  openDiffTab = async (
+    subjectFilename: string,
+    hash: string,
+    shortHash: string,
+    message?: string,
+    gitPath?: string
+  ): Promise<void> => {
     const tabFilename = `System: Diff: ${subjectFilename}@${hash}`;
     const existing = this._openTabs.find((t) => t.filename === tabFilename);
     if (existing) {
@@ -615,8 +628,9 @@ export class EditorViewElement extends LitElement {
     }
 
     try {
+      const gitFile = gitPath || gitPathFor(subjectFilename);
       const res = await window.apiFetch!(
-        `api/git/diff?hash1=${encodeURIComponent(hash + '~1')}&hash2=${encodeURIComponent(hash)}&file=${encodeURIComponent(subjectFilename)}`
+        `api/git/diff?hash1=${encodeURIComponent(hash + '~1')}&hash2=${encodeURIComponent(hash)}&file=${encodeURIComponent(gitFile)}`
       );
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
       const { before, after } = await res.json();
@@ -748,7 +762,12 @@ export class EditorViewElement extends LitElement {
         this._diffEditorInstance = window.monaco.editor.createDiffEditor(diffContainer, {
           readOnly: true,
           automaticLayout: true,
-          renderSideBySide: true,
+          // Word-wrap needs the inline (single-column) diff, not side-by-side: Monaco's
+          // side-by-side renderer doesn't correctly pad the shorter pane to match a
+          // wrapped-taller line's height on the other side, corrupting the whole layout once any
+          // line wraps (reproduced live). Inline diff has no second pane to misalign against.
+          renderSideBySide: false,
+          wordWrap: 'on',
           minimap: { enabled: false },
           theme: 'vs-dark',
           fontSize: 12,
@@ -758,20 +777,17 @@ export class EditorViewElement extends LitElement {
           folding: false,
         });
         // See git-history-panel.ts's identical comment — the diff editor doesn't forward
-        // `lightbulb`/`folding` from its own construction options down to the two inner
-        // standalone editors, so they have to be disabled directly on each side too.
-        this._diffEditorInstance.getOriginalEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
-        this._diffEditorInstance.getModifiedEditor().updateOptions({ lightbulb: { enabled: false }, folding: false });
-        // Long single-line changes (e.g. a JSDoc @description) are common in these scripts, and
-        // an unscrolled long line can leave the actual character-level diff off-screen to the
-        // right, making a real change look like "no changes" at a glance. Tried diffWordWrap
-        // instead (reproduced live: it breaks renderSideBySide's line alignment between panes —
-        // Monaco doesn't correctly pad the shorter side to match wrapped-taller-side line
-        // heights, corrupting the whole layout, not just the long line). Auto-scrolling to the
-        // exact position of the first change on every diff update is the safe fix — no wrapping,
-        // no alignment risk, and revealPositionNearTop scrolls horizontally too (unlike
-        // revealLineNearTop, which only handles vertical position and would leave a change on a
-        // long line just as invisible as not scrolling at all).
+        // `lightbulb`/`folding`/`wordWrap` from its own construction options down to the two
+        // inner standalone editors, so they have to be set directly on each side too.
+        this._diffEditorInstance
+          .getOriginalEditor()
+          .updateOptions({ lightbulb: { enabled: false }, folding: false, wordWrap: 'on' });
+        this._diffEditorInstance
+          .getModifiedEditor()
+          .updateOptions({ lightbulb: { enabled: false }, folding: false, wordWrap: 'on' });
+        // Auto-scrolls to the first change on every diff update — still worth doing with word
+        // wrap on: a diff can open scrolled to the top of a long file with the actual change
+        // several screens down.
         this._diffEditorInstance.onDidUpdateDiff(() => {
           const changes = this._diffEditorInstance?.getLineChanges();
           const firstCharChange = changes?.[0]?.charChanges?.[0];
@@ -1381,7 +1397,18 @@ export class EditorViewElement extends LitElement {
       !activeTab?.type || activeTab.type === 'blockly' || activeTab.type === 'card' || activeTab.type === 'diff';
 
     return html`
-      ${mdiStylesheetLink} ${this._renderTabBar()}
+      ${mdiStylesheetLink}
+      <!-- The diff tab (#diff-tab-container below) builds a Monaco diff editor directly into
+           this component's own Shadow DOM. Monaco's AMD loader injects editor.main.css — which
+           defines the actual diff colors (.line-insert/.line-delete/.char-insert/.char-delete)
+           — into document.head only, so it never reaches here (same class of bug monaco-editor.ts
+           already had to work around). Without this, the diff editor computes real changes and
+           applies the right CSS classes, but nothing colors them — it just looks like "no diff". -->
+      <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.css"
+      />
+      ${this._renderTabBar()}
       <div class="editor-panel" style=${showEditorBody ? '' : 'display:none'}>
         ${this._renderToolbar(activeTab)} ${this._renderModeBanner(activeTab)}
         <div class="editor-row">
@@ -1398,17 +1425,25 @@ export class EditorViewElement extends LitElement {
               ? html`
                   <git-history-panel
                     .filename=${this._activeTabFilename}
+                    .gitPath=${gitPathFor(this._activeTabFilename)}
                     @close=${() => (this._historyPanelOpen = false)}
                     @restore-into-editor=${(e: CustomEvent<{ content: string }>) =>
                       this._loadContentIntoActiveEditor(e.detail.content)}
                     @open-diff-tab=${(
-                      e: CustomEvent<{ filename: string; hash: string; shortHash?: string; message?: string }>
+                      e: CustomEvent<{
+                        filename: string;
+                        gitPath?: string;
+                        hash: string;
+                        shortHash?: string;
+                        message?: string;
+                      }>
                     ) =>
                       this.openDiffTab(
                         e.detail.filename,
                         e.detail.hash,
                         e.detail.shortHash ?? e.detail.hash.slice(0, 7),
-                        e.detail.message
+                        e.detail.message,
+                        e.detail.gitPath
                       )}
                   ></git-history-panel>
                 `

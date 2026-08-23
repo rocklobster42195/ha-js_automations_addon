@@ -155,6 +155,10 @@ function initSocket() {
       statusBar.updateMqttIndicator(data.mqtt);
     }
 
+    // Sync the heartbeat icon's HA-link state (distinct from the browser socket) — orange while
+    // a detected homeassistant.restart is still within its grace window, red otherwise.
+    window.statusBar?.setHaConnectionState(!!data?.is_connected, !!data?.reconnect?.expected);
+
     // Immediately update status bar slots if stats are included in the status.
     if (data.stats && typeof window.updateStatusBarUI === 'function') {
       window.updateStatusBarUI(data.stats);
@@ -198,6 +202,7 @@ function initSocket() {
         window.currentIntegrationStatus = response;
         // Update MQTT indicator in status bar
         if (response?.mqtt && typeof statusBar !== 'undefined') statusBar.updateMqttIndicator(response.mqtt);
+        window.statusBar?.setHaConnectionState(!!response?.is_connected, !!response?.reconnect?.expected);
         // Update integration banner
         if (typeof window.handleIntegrationStatus === 'function') window.handleIntegrationStatus(response);
         if (typeof window.updateSystemNotifications === 'function') window.updateSystemNotifications();

@@ -42,6 +42,7 @@ class SettingsManager extends EventEmitter {
       try {
         const fileContent = fs.readFileSync(SETTINGS_FILE, 'utf8');
         const userSettings = JSON.parse(fileContent);
+        this._migrateLegacyKeys(userSettings);
 
         // Merge: Defaults as basis, user settings overwrite them
         // This ensures that new schema fields also end up in the settings
@@ -60,6 +61,27 @@ class SettingsManager extends EventEmitter {
       console.log('SettingsManager: No settings.json found. Creating new from schema.');
       this.settings = defaults;
       this.save();
+    }
+  }
+
+  /**
+   * One-time rename of settings.versioning's github_* keys to git_* (the versioning feature was
+   * generalized beyond GitHub-only). Without this, _validateAndCleanup() below would silently
+   * drop an existing user's already-configured remote URL/token since the old keys no longer
+   * exist in the schema — copies forward only, doesn't touch the file until the next save().
+   */
+  private _migrateLegacyKeys(userSettings: SettingsData): void {
+    const versioning = userSettings.versioning as Record<string, unknown> | undefined;
+    if (!versioning) return;
+    const renames: [string, string][] = [
+      ['github_enabled', 'git_enabled'],
+      ['github_repo_url', 'git_repo_url'],
+      ['github_token', 'git_token'],
+    ];
+    for (const [oldKey, newKey] of renames) {
+      if (versioning[oldKey] !== undefined && versioning[newKey] === undefined) {
+        versioning[newKey] = versioning[oldKey];
+      }
     }
   }
 

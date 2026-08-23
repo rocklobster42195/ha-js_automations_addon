@@ -119,9 +119,9 @@ export interface JsaBackupSettings {
 export interface JsaVersioningSettings {
   author_name?: string;
   author_email?: string;
-  github_enabled?: boolean;
-  github_repo_url?: string;
-  github_token?: string;
+  git_enabled?: boolean;
+  git_repo_url?: string;
+  git_token?: string;
 }
 
 export interface JsaSettings {

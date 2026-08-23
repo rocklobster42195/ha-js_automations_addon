@@ -168,6 +168,10 @@ export class StatusBar extends LitElement {
 
   @state() private _connected = true;
   @state() private _connectionLost = false;
+  // The addon's own link to Home Assistant — separate from `_connected` (the browser's
+  // socket.io link to the addon server), which stays green through an HA-side outage.
+  @state() private _haConnected = true;
+  @state() private _haReconnectExpected = false;
   @state() private _mqttEnabled = false;
   @state() private _mqttConnected = false;
   @state() private _mqttError = '';
@@ -215,7 +219,7 @@ export class StatusBar extends LitElement {
     }
     return {
       color: '#888',
-      title: this._t('statusbar.git_no_remote', 'Git: local only (no GitHub remote configured)'),
+      title: this._t('statusbar.git_no_remote', 'Git: local only (no remote configured)'),
     };
   }
 
@@ -232,6 +236,10 @@ export class StatusBar extends LitElement {
       isDisconnected: () => !this._connected,
       showConnectionLost: () => {
         this._connectionLost = true;
+      },
+      setHaConnectionState: (isConnected, expectedRestart) => {
+        this._haConnected = isConnected;
+        this._haReconnectExpected = expectedRestart;
       },
     };
     window.statusBar = bridge;
@@ -568,6 +576,26 @@ export class StatusBar extends LitElement {
     const dense = activeSlots >= 3;
     const slotsClass = `status-slots${dense ? ' has-three-slots' : ''}${dense && this._hideSparklinesWhenDense ? ' hide-sparklines' : ''}`;
 
+    // Heartbeat icon: browser-socket loss always wins (worst case, nothing below applies).
+    // Otherwise reflects the addon's own HA link — orange while a detected planned restart is
+    // still within its grace window, red for any other HA disconnect (including a deliberate
+    // `homeassistant.stop`, which has no known end and should keep reading as an error).
+    const haOk = this._connected && this._haConnected;
+    const haTitle = !this._connected
+      ? this._t('statusbar.ha_disconnected', 'Disconnected')
+      : !this._haConnected
+        ? this._haReconnectExpected
+          ? this._t('statusbar.ha_reconnecting_planned', 'Home Assistant is restarting — reconnecting…')
+          : this._t('statusbar.ha_disconnected', 'Disconnected')
+        : this._t('statusbar.ha_connected', 'Connected');
+    const haColor = !this._connected
+      ? 'var(--danger)'
+      : !this._haConnected
+        ? this._haReconnectExpected
+          ? 'var(--warn)'
+          : 'var(--danger)'
+        : '#fff';
+
     // Socket itself is down and no MQTT status has arrived yet — repurpose
     // the same icon to show "connection lost" (matches the original
     // app.js updateSystemNotifications() fallback behavior).
@@ -596,13 +624,10 @@ export class StatusBar extends LitElement {
     return html`
       ${mdiStylesheetLink}
       <div class="status-left">
-        <div
-          class="stat-item"
-          title=${this._connected ? this._t('statusbar.ha_connected', 'Connected') : this._t('statusbar.ha_disconnected', 'Disconnected')}
-        >
+        <div class="stat-item" title=${haTitle}>
           <i
-            class="mdi ${this._connected ? 'mdi-circle-slice-8' : 'mdi-circle-outline'} heartbeat-icon"
-            style="color: ${this._connected ? '#fff' : 'var(--danger)'}"
+            class="mdi ${haOk ? 'mdi-circle-slice-8' : 'mdi-circle-outline'} heartbeat-icon"
+            style="color: ${haColor}"
           ></i>
         </div>
         <div

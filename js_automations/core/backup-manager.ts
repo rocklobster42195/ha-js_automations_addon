@@ -160,8 +160,13 @@ class BackupManager extends EventEmitter {
     const dd = String(now.getDate()).padStart(2, '0');
     const hh = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
+    // Seconds resolution, not just minutes: the manual "Run backup now" button (POST
+    // /api/backup/run) and the separate System page's "Download Backup" (GET /system/backup) both
+    // call createBackup('manual') independently — a minute-resolution filename let two triggers
+    // within the same minute collide on one path, with two archiver writers racing on one file.
+    const ss = String(now.getSeconds()).padStart(2, '0');
     const suffix = reason === 'scheduled' ? '-auto' : '';
-    const filename = `js-automations-backup-${yyyy}${mm}${dd}-${hh}${min}${suffix}.zip`;
+    const filename = `js-automations-backup-${yyyy}${mm}${dd}-${hh}${min}${ss}${suffix}.zip`;
     const filePath = path.join(this.backupDir, filename);
 
     await this.writeZipTo(filePath);

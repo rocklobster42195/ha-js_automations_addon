@@ -17,8 +17,8 @@ type SettingsItemType =
   | 'mqtt-autodetect'
   | 'webdav-test'
   | 'backup-run-now'
-  | 'github-test'
-  | 'github-push'
+  | 'git-test'
+  | 'git-push'
   | 'restore-open'
   | 'info'
   | 'text'
@@ -352,8 +352,8 @@ export class SettingsView extends LitElement {
   @state() private _mqttDiscovering = false;
   @state() private _webdavTesting = false;
   @state() private _backupRunning = false;
-  @state() private _githubTesting = false;
-  @state() private _githubPushing = false;
+  @state() private _gitTesting = false;
+  @state() private _gitPushing = false;
 
   private _entitiesLoaded = false;
   private _pendingScrollTarget: string | null = null;
@@ -670,8 +670,8 @@ export class SettingsView extends LitElement {
     }
   }
 
-  private async _pushToGitHub(): Promise<void> {
-    this._githubPushing = true;
+  private async _pushToGit(): Promise<void> {
+    this._gitPushing = true;
     try {
       const res = await window.apiFetch!('api/git/push', { method: 'POST' });
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
@@ -686,34 +686,34 @@ export class SettingsView extends LitElement {
         this._t('settings.versioning.push_error', undefined, { error: e instanceof Error ? e.message : String(e) })
       );
     } finally {
-      this._githubPushing = false;
+      this._gitPushing = false;
     }
   }
 
-  private async _testGitHubConnection(): Promise<void> {
-    this._githubTesting = true;
+  private async _testGitConnection(): Promise<void> {
+    this._gitTesting = true;
     try {
       const versioning = this._settings.versioning ?? {};
       const res = await window.apiFetch!('api/git/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: versioning.github_repo_url, token: versioning.github_token }),
+        body: JSON.stringify({ url: versioning.git_repo_url, token: versioning.git_token }),
       });
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
       const result = await res.json();
       if (result.success) {
-        alert(this._t('settings.versioning.github_test_success'));
+        alert(this._t('settings.versioning.git_test_success'));
       } else {
-        alert(this._t('settings.versioning.github_test_error', undefined, { error: result.error }));
+        alert(this._t('settings.versioning.git_test_error', undefined, { error: result.error }));
       }
     } catch (e) {
       alert(
-        this._t('settings.versioning.github_test_error', undefined, {
+        this._t('settings.versioning.git_test_error', undefined, {
           error: e instanceof Error ? e.message : String(e),
         })
       );
     } finally {
-      this._githubTesting = false;
+      this._gitTesting = false;
     }
   }
 
@@ -872,30 +872,30 @@ export class SettingsView extends LitElement {
             }
           </button>
         `;
-      case 'github-test':
+      case 'git-test':
         return html`
           <button
             class="settings-btn settings-btn-outline"
-            ?disabled=${this._githubTesting}
-            @click=${() => this._testGitHubConnection()}
+            ?disabled=${this._gitTesting}
+            @click=${() => this._testGitConnection()}
           >
             ${
-              this._githubTesting
+              this._gitTesting
                 ? html`<i class="mdi mdi-loading mdi-spin"></i>
-                    ${this._t('settings.versioning.github_testing', 'Testing...')}`
-                : this._t('settings.versioning.github_test_btn')
+                    ${this._t('settings.versioning.git_testing', 'Testing...')}`
+                : this._t('settings.versioning.git_test_btn')
             }
           </button>
         `;
-      case 'github-push':
+      case 'git-push':
         return html`
           <button
             class="settings-btn settings-btn-primary"
-            ?disabled=${this._githubPushing}
-            @click=${() => this._pushToGitHub()}
+            ?disabled=${this._gitPushing}
+            @click=${() => this._pushToGit()}
           >
             ${
-              this._githubPushing
+              this._gitPushing
                 ? html`<i class="mdi mdi-loading mdi-spin"></i> ${this._t('settings.versioning.pushing', 'Pushing...')}`
                 : this._t('settings.versioning.push_btn')
             }

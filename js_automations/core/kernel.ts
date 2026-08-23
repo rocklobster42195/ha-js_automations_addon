@@ -14,6 +14,12 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// How long a detected `homeassistant.restart` service call keeps the following disconnect
+// classified as "planned" (softer log severity, orange status icon instead of red) — long
+// enough for a normal HA core restart or a Supervisor-driven core/OS update, short enough that
+// a connection still down past this point gets treated as a real problem again.
+const EXPECTED_RESTART_GRACE_MS = 3 * 60 * 1000;
+
 // Manager Imports
 import HAConnector from './ha-connection';
 import DependencyManager from './dependency-manager';
@@ -77,7 +83,17 @@ class Kernel extends EventEmitter {
   lastStats: Record<string, unknown> | null;
   _mqttEverConnected: boolean;
   _startupCompleted: boolean;
-  _reconnectState: { attempts: number; startedAt: number } | null;
+  _reconnectState: {
+    attempts: number;
+    startedAt: number;
+    expected: boolean;
+    expectedUntil: number;
+    escalated: boolean;
+  } | null;
+  // Set when a `homeassistant.restart` service call is observed on the event bus — consulted by
+  // handleReconnection() when the connection actually drops, so a HA-initiated restart doesn't
+  // read the same as an unexplained outage.
+  _expectedRestartSignal: { detectedAt: number } | null;
 
   // Manager instances are only ever used after boot() has run, which unconditionally
   // assigns every one of them (or exits the process on failure) - so they're declared
@@ -110,6 +126,7 @@ class Kernel extends EventEmitter {
     this._mqttEverConnected = false; // Tracks whether MQTT has connected at least once
     this._startupCompleted = false; // Post-connect startup (autostart etc.) has run
     this._reconnectState = null;
+    this._expectedRestartSignal = null;
   }
 
   /**
@@ -135,6 +152,11 @@ class Kernel extends EventEmitter {
       // Lets clients that (re)connect after the boot-time 'safe_mode' event fired
       // still learn the current state, instead of only reacting to that one broadcast.
       safe_mode: this.systemService?.isSafeMode || false,
+      // Tells the UI whether the current (or most recent) reconnect attempt stems from a
+      // detected `homeassistant.restart` call, so the status icon can go orange instead of red.
+      reconnect: this._reconnectState
+        ? { expected: this._reconnectState.expected && Date.now() < this._reconnectState.expectedUntil }
+        : null,
     };
   }
 
@@ -582,6 +604,23 @@ class Kernel extends EventEmitter {
         // Forward to UI for Status Bar and card preview live data
         this.emit('ha_state_changed', { entity_id, new_state });
       }
+      // A `homeassistant.restart` service call reliably precedes the WS drop it causes —
+      // remember it so the upcoming disconnect (handleReconnection()) can be logged/shown as a
+      // planned outage instead of an unexplained one. `homeassistant.stop` is deliberately NOT
+      // handled here: that outage has no known end, so it should keep reading as an error.
+      if (
+        event.event_type === 'call_service' &&
+        event.data?.domain === 'homeassistant' &&
+        event.data?.service === 'restart'
+      ) {
+        this._expectedRestartSignal = { detectedAt: Date.now() };
+        this.logManager.add(
+          'info',
+          'System',
+          'Home Assistant restart requested — the next disconnect will be treated as planned.'
+        );
+      }
+
       // Forward all events to the Event Inspector (opt-in via bridge)
       this.emit('ha_event', event);
 
@@ -718,10 +757,23 @@ class Kernel extends EventEmitter {
 
     if (!this.haConnector.isReady) {
       if (!this._reconnectState) {
-        this._reconnectState = { attempts: 0, startedAt: Date.now() };
-        console.log('⚠️ HA Connection lost. Attempting to reconnect...');
-        this.logManager.add('warn', 'System', 'HA Connection lost. Attempting to reconnect...');
+        const expected =
+          !!this._expectedRestartSignal &&
+          Date.now() - this._expectedRestartSignal.detectedAt < EXPECTED_RESTART_GRACE_MS;
+        this._reconnectState = {
+          attempts: 0,
+          startedAt: Date.now(),
+          expected,
+          expectedUntil: (this._expectedRestartSignal?.detectedAt ?? Date.now()) + EXPECTED_RESTART_GRACE_MS,
+          escalated: false,
+        };
+        const message = expected
+          ? 'HA Connection lost (planned restart detected). Attempting to reconnect...'
+          : 'HA Connection lost. Attempting to reconnect...';
+        console.log(`⚠️ ${message}`);
+        this.logManager.add('warn', 'System', message);
         this._notifyConnectionChange(false);
+        this.emit('integration_status_changed', await this.getSystemStatus());
       }
       const state = this._reconnectState;
       state.attempts++;
@@ -736,6 +788,7 @@ class Kernel extends EventEmitter {
           `HA Reconnected! (after ${state.attempts} attempt(s), ${downtimeSec}s downtime)`
         );
         this._reconnectState = null;
+        this._expectedRestartSignal = null;
         this._notifyConnectionChange(true);
 
         // If the initial connect during start() failed, the whole
@@ -766,13 +819,25 @@ class Kernel extends EventEmitter {
         // from kernel.start() stuck. Force a fresh MQTT attempt if still not connected.
         if (this.mqttManager) this.mqttManager.ensureConnected();
       } catch (e) {
+        const stillExpected = state.expected && Date.now() < state.expectedUntil;
         console.error(`❌ Reconnection failed (attempt ${state.attempts}):`, (e as Error).message);
         if (state.attempts === 1 || state.attempts % RECONNECT_LOG_EVERY === 0) {
           this.logManager.add(
-            'error',
+            stillExpected ? 'warn' : 'error',
             'System',
             `Reconnection failed (attempt ${state.attempts}): ${(e as Error).message}`
           );
+        }
+        // The grace window just ran out while still down — flip the log severity/status icon
+        // from "planned restart" back to a real error, once, instead of staying orange forever.
+        if (state.expected && !stillExpected && !state.escalated) {
+          state.escalated = true;
+          this.logManager.add(
+            'error',
+            'System',
+            `Still reconnecting after the planned-restart window (${Math.round(EXPECTED_RESTART_GRACE_MS / 1000)}s) — treating this outage as unexpected.`
+          );
+          this.emit('integration_status_changed', await this.getSystemStatus());
         }
       }
     }

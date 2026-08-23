@@ -1,4 +1,14 @@
-# Concept: Script Versioning (Git / GitHub)
+# Concept: Script Versioning (Git / GitHub / GitLab / any HTTPS remote)
+
+> **2026-08-23 update:** the remote push was always generic (`simple-git` over HTTPS, no
+> GitHub-specific API calls) — only the settings fields, UI labels, and function names were
+> hard-coded to "GitHub". Both were generalized: settings keys are now `git_enabled`/
+> `git_repo_url`/`git_token` (was `github_*`), and any HTTPS git host (GitLab, Gitea, Bitbucket, a
+> self-hosted bare repo, ...) works the same way GitHub does — see the Access Token field's help
+> text for per-host token-format differences (GitHub takes the bare token; GitLab/Bitbucket
+> usually expect `oauth2:TOKEN` or `username:TOKEN`). The rest of this document is left as written
+> during the original design session below; read "GitHub" wherever it appears as "your configured
+> git remote".
 
 Redesigned 2026-08-19 (see `notes/2026-08-19-backup-versioning-grill.md` for the full discovery session). Replaces the previous version of this document.
 

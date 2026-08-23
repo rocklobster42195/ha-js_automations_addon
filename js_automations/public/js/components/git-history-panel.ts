@@ -163,6 +163,10 @@ export class GitHistoryPanel extends LitElement {
   `;
 
   @property({ type: String }) filename = '';
+  // Repo-relative path git actually tracks the file under (e.g. "libraries/foo.ts") — differs
+  // from `filename` (a bare basename) for library scripts, since SCRIPTS_DIR is the repo root.
+  // Falls back to `filename` when unset so callers that never set it (none today) still work.
+  @property({ type: String }) gitPath = '';
 
   @state() private _commits: CommitEntry[] = [];
   @state() private _loading = false;
@@ -182,13 +186,17 @@ export class GitHistoryPanel extends LitElement {
     if (changed.has('filename')) this._loadCommits();
   }
 
+  private get _gitFile(): string {
+    return this.gitPath || this.filename;
+  }
+
   private async _loadCommits(): Promise<void> {
     if (!this.filename) return;
     this._loading = true;
     this._commits = [];
     this._selectedHash = null;
     try {
-      const res = await window.apiFetch!(`api/git/log?file=${encodeURIComponent(this.filename)}`);
+      const res = await window.apiFetch!(`api/git/log?file=${encodeURIComponent(this._gitFile)}`);
       this._commits = await res.json();
       if (this._commits.length > 0) this._selectCommit(this._commits[0].hash);
     } catch (e) {
@@ -211,6 +219,7 @@ export class GitHistoryPanel extends LitElement {
       new CustomEvent('open-diff-tab', {
         detail: {
           filename: this.filename,
+          gitPath: this._gitFile,
           hash: this._selectedHash,
           shortHash: commit?.shortHash,
           message: commit?.message,
@@ -226,7 +235,7 @@ export class GitHistoryPanel extends LitElement {
     this._restoring = true;
     try {
       const res = await window.apiFetch!(
-        `api/git/show?hash=${encodeURIComponent(this._selectedHash)}&file=${encodeURIComponent(this.filename)}`
+        `api/git/show?hash=${encodeURIComponent(this._selectedHash)}&file=${encodeURIComponent(this._gitFile)}`
       );
       if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
       const { content } = await res.json();

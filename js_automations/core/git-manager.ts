@@ -8,9 +8,9 @@ import type { SimpleGit } from 'simple-git';
 interface VersioningSettings {
   author_name?: string;
   author_email?: string;
-  github_enabled?: boolean;
-  github_repo_url?: string;
-  github_token?: string;
+  git_enabled?: boolean;
+  git_repo_url?: string;
+  git_token?: string;
 }
 
 interface SettingsManagerLike {
@@ -232,24 +232,33 @@ class GitManager extends EventEmitter {
     const status = await this.git.status();
     return {
       hasRepo: true,
-      hasRemote: !!settings.github_enabled && !!settings.github_repo_url,
+      hasRemote: !!settings.git_enabled && !!settings.git_repo_url,
       ahead: status.ahead,
       dirty: !status.isClean(),
       lastPushError: this.lastPushError,
     };
   }
 
-  /** https://github.com/user/repo.git -> https://TOKEN@github.com/user/repo.git. Built fresh per
-   * call and never persisted — the caller must never `git remote set-url` with this. */
+  /** https://github.com/user/repo.git -> https://TOKEN@github.com/user/repo.git (works the same
+   * for any HTTPS git host, e.g. GitLab/Gitea/Bitbucket — nothing here is GitHub-specific). Built
+   * fresh per call and never persisted — the caller must never `git remote set-url` with this. */
   static buildAuthenticatedUrl(repoUrl: string, token: string): string {
     return repoUrl.replace(/^https:\/\//, `https://${token}@`);
   }
 
-  /** Separate from commit() by design — a flaky GitHub connection should never block committing. */
+  /** git's own auth-failure messages routinely echo the remote URL verbatim — which embeds the
+   * token via buildAuthenticatedUrl() above. Error messages get surfaced to the UI (status-bar
+   * tooltip, settings alert) and written to the persisted log, so the raw token must never reach
+   * either. Called with the token value that was actually used to build the URL for this attempt. */
+  private static redactToken(message: string, token: string | undefined): string {
+    return token ? message.split(token).join('***') : message;
+  }
+
+  /** Separate from commit() by design — a flaky remote connection should never block committing. */
   async push(): Promise<GitResult> {
     const settings = this.getVersioningSettings();
-    if (!settings.github_enabled || !settings.github_repo_url) {
-      return { success: false, error: 'No GitHub remote configured' };
+    if (!settings.git_enabled || !settings.git_repo_url) {
+      return { success: false, error: 'No git remote configured' };
     }
     if (!(await this.hasRepo())) {
       return { success: false, error: 'No local repository yet — commit something first' };
@@ -257,30 +266,30 @@ class GitManager extends EventEmitter {
     try {
       const status = await this.git.status();
       const branch = status.current || 'main';
-      const url = settings.github_token
-        ? GitManager.buildAuthenticatedUrl(settings.github_repo_url, settings.github_token)
-        : settings.github_repo_url;
+      const url = settings.git_token
+        ? GitManager.buildAuthenticatedUrl(settings.git_repo_url, settings.git_token)
+        : settings.git_repo_url;
       await this.git.push([url, `HEAD:refs/heads/${branch}`]);
       this.lastPushError = null;
-      this.logManager.add('debug', 'Git', `[Git] Pushed to ${settings.github_repo_url}.`);
+      this.logManager.add('debug', 'Git', `[Git] Pushed to ${settings.git_repo_url}.`);
       this.emit('git_status_changed');
       return { success: true };
     } catch (e) {
-      this.lastPushError = (e as Error).message;
+      this.lastPushError = GitManager.redactToken((e as Error).message, settings.git_token);
       this.logManager.add('warn', 'Git', `[Git] Push failed: ${this.lastPushError}`);
       this.emit('git_status_changed');
       return { success: false, error: this.lastPushError };
     }
   }
 
-  static async testGitHubConnection(repoUrl: string, token: string): Promise<GitResult> {
+  static async testGitConnection(repoUrl: string, token: string): Promise<GitResult> {
     if (!repoUrl) return { success: false, error: 'No repository URL configured' };
     try {
       const url = token ? GitManager.buildAuthenticatedUrl(repoUrl, token) : repoUrl;
       await simpleGit().listRemote([url]);
       return { success: true };
     } catch (e) {
-      return { success: false, error: (e as Error).message };
+      return { success: false, error: GitManager.redactToken((e as Error).message, token) };
     }
   }
 }
