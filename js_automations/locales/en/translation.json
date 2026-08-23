@@ -41,6 +41,7 @@
   "restore_upload_prompt": "Select a backup ZIP file",
   "restore_uploading": "Uploading...",
   "restore_diff_intro": "Differences from the current state — select what should be applied.",
+  "restore_diff_toggle_all": "Select all / deselect all",
   "restore_diff_changed": "Changed",
   "restore_diff_added": "New",
   "restore_diff_deleted": "Deleted",

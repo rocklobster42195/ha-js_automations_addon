@@ -99,6 +99,13 @@ export class RestoreModal extends LitElement {
       margin-bottom: 10px;
     }
 
+    .diff-toggle-all {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
     .diff-group-head {
       display: flex;
       align-items: center;
@@ -260,6 +267,15 @@ export class RestoreModal extends LitElement {
     this._selected = next;
   }
 
+  private get _allDiffPaths(): string[] {
+    if (!this._diff) return [];
+    return [...this._diff.changed, ...this._diff.added, ...this._diff.deleted];
+  }
+
+  private _toggleAll(): void {
+    this._selected = this._selected.size === this._allDiffPaths.length ? new Set() : new Set(this._allDiffPaths);
+  }
+
   private async _apply(): Promise<void> {
     if (!this._restoreId) return;
     this._step = 'applying';
@@ -348,6 +364,21 @@ export class RestoreModal extends LitElement {
                   <p>
                     ${this._t('restore_diff_intro', 'Unterschiede zum aktuellen Stand — wähle aus, was übernommen werden soll.')}
                   </p>
+                  ${
+                    this._allDiffPaths.length > 0
+                      ? html`
+                          <label class="diff-row diff-toggle-all">
+                            <input
+                              type="checkbox"
+                              .checked=${this._selected.size === this._allDiffPaths.length}
+                              .indeterminate=${this._selected.size > 0 && this._selected.size < this._allDiffPaths.length}
+                              @change=${() => this._toggleAll()}
+                            />
+                            <span>${this._t('restore_diff_toggle_all', 'Alle auswählen / abwählen')}</span>
+                          </label>
+                        `
+                      : nothing
+                  }
                   ${this._renderDiffGroup(this._t('restore_diff_changed', 'Geändert'), 'var(--warn)', this._diff.changed, false)}
                   ${this._renderDiffGroup(this._t('restore_diff_added', 'Neu'), 'var(--success)', this._diff.added, false)}
                   ${this._renderDiffGroup(this._t('restore_diff_deleted', 'Gelöscht'), 'var(--danger)', this._diff.deleted, true)}

@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import * as yauzl from 'yauzl';
 import ScriptHeaderParser from './script-header-parser';
 import BackupManager from './backup-manager';
+import { isDerivedArtifact } from './backup-scope';
 
 interface LogManagerLike {
   add(level: string, source: string, message: string): void;
@@ -179,10 +180,14 @@ class RestoreManager {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (IGNORED_DIR_NAMES.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
+      const rel = path.relative(base, full).split(path.sep).join('/');
       if (entry.isDirectory()) {
         results = results.concat(this._walk(full, base));
-      } else {
-        results.push(path.relative(base, full).split(path.sep).join('/'));
+      } else if (!isDerivedArtifact(rel)) {
+        // Same exclusion list backup-manager.ts uses when writing the zip (backup-scope.ts) —
+        // these can never be IN the zip by design, so without this they'd show up as "deleted"
+        // on every single restore diff even though nothing was actually lost.
+        results.push(rel);
       }
     }
     return results;

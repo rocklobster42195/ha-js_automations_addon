@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { ZipArchive } from 'archiver';
 import { createClient } from 'webdav';
 import * as cron from 'node-cron';
+import { DERIVED_ARTIFACT_GLOBS } from './backup-scope';
 
 interface BackupSettings {
   schedule_enabled?: boolean;
@@ -146,7 +147,18 @@ class BackupManager extends EventEmitter {
       archive.pipe(output);
       archive.glob('**/*', {
         cwd: this.scriptsDir,
-        ignore: ['**/node_modules/**', '**/.git/**'],
+        // CRITICAL: without this, readdir-glob's underlying minimatch never matches a
+        // dot-prefixed path segment — meaning the entire `.storage/` directory (settings.json,
+        // entity_registry.json, ...) was silently excluded from every backup ever made, despite
+        // being the whole point of the feature. Confirmed live: a restore's diff-against-current
+        // showed all of .storage/* as "will be deleted" because it was never actually in the zip.
+        dot: true,
+        // Derived/regenerated-on-boot artifacts (see backup-scope.ts) aren't real user state —
+        // including them just bloats the zip and, worse, floods the restore diff with confusing
+        // "deleted" entries for files never meant to survive a restore as-is (checking one back
+        // in would restore a stale compiled bundle or an out-of-date ha-api.d.ts for the CURRENT
+        // addon version). Real state (settings.json, data/, entity_registry.json) is untouched.
+        ignore: ['**/node_modules/**', '**/.git/**', ...DERIVED_ARTIFACT_GLOBS],
       });
       archive.finalize();
     });

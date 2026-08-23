@@ -41,6 +41,7 @@
   "restore_upload_prompt": "Backup-ZIP-Datei auswählen",
   "restore_uploading": "Lade hoch...",
   "restore_diff_intro": "Unterschiede zum aktuellen Stand — wähle aus, was übernommen werden soll.",
+  "restore_diff_toggle_all": "Alle auswählen / abwählen",
   "restore_diff_changed": "Geändert",
   "restore_diff_added": "Neu",
   "restore_diff_deleted": "Gelöscht",
