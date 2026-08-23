@@ -35,6 +35,11 @@ interface GitStatus {
   ahead: number;
   dirty: boolean;
   lastPushError: string | null;
+  // Repo-relative paths with staged-worthy changes (new/modified/renamed — the same set commit()
+  // stages by default). Lets the UI disable the per-file Commit button instead of only reporting
+  // "nothing to commit" after the message dialog. Deletions deliberately excluded, matching
+  // commit()'s own opt-in-only handling of them.
+  changedFiles: string[];
 }
 
 interface DeletedScriptEntry {
@@ -226,7 +231,14 @@ class GitManager extends EventEmitter {
   async getStatus(): Promise<GitStatus> {
     const hasRepo = await this.hasRepo();
     if (!hasRepo) {
-      return { hasRepo: false, hasRemote: false, ahead: 0, dirty: false, lastPushError: this.lastPushError };
+      return {
+        hasRepo: false,
+        hasRemote: false,
+        ahead: 0,
+        dirty: false,
+        lastPushError: this.lastPushError,
+        changedFiles: [],
+      };
     }
     const settings = this.getVersioningSettings();
     const status = await this.git.status();
@@ -236,6 +248,7 @@ class GitManager extends EventEmitter {
       ahead: status.ahead,
       dirty: !status.isClean(),
       lastPushError: this.lastPushError,
+      changedFiles: [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)],
     };
   }
 

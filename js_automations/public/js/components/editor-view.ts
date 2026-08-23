@@ -336,6 +336,14 @@ export class EditorViewElement extends LitElement {
   /** Git history side panel toggle, next to Commit in the toolbar. */
   @state() private _historyPanelOpen = false;
 
+  /** Repo-relative paths with staged-worthy git changes, for disabling the Commit button when
+   * the active tab's file has nothing to commit instead of only reporting that after the message
+   * dialog. `_gitStatusLoaded` gates the check so the button isn't misleadingly disabled for the
+   * brief window before the first status fetch resolves. */
+  @state() private _gitChangedPaths = new Set<string>();
+  @state() private _gitRepoExists = true;
+  @state() private _gitStatusLoaded = false;
+
   @query('monaco-editor') private _monacoEditorEl?: MonacoEditorElement;
 
   /** One shared diff-editor widget for all 'diff' tabs — model-swapped per active tab, same
@@ -384,6 +392,11 @@ export class EditorViewElement extends LitElement {
     // <card-preview> dispatches this on open/close — see that component's own _syncPreviewBtn()
     // doc comment for why a window event is needed instead of a direct DOM query.
     window.addEventListener('card-preview-toggled', this._onCardPreviewToggled);
+
+    // Same event git-history-panel.ts's commit flow and status-bar.ts's git icon already refresh
+    // on — one more listener here rather than threading a shared store through both components.
+    window.addEventListener('git-status-refresh', this._refreshGitStatus);
+    this._refreshGitStatus();
   }
 
   disconnectedCallback() {
@@ -391,8 +404,36 @@ export class EditorViewElement extends LitElement {
     document.removeEventListener('keydown', this._onGlobalKeydown);
     window.removeEventListener('settings-changed', this._onSettingsChanged);
     window.removeEventListener('card-preview-toggled', this._onCardPreviewToggled);
+    window.removeEventListener('git-status-refresh', this._refreshGitStatus);
     this._diffEditorInstance?.dispose();
     this._diffEditorInstance = null;
+  }
+
+  private _refreshGitStatus = async (): Promise<void> => {
+    try {
+      const res = await window.apiFetch!('api/git/status');
+      if (!res.ok) return;
+      const status = await res.json();
+      this._gitRepoExists = !!status.hasRepo;
+      this._gitChangedPaths = new Set(status.changedFiles ?? []);
+    } catch {
+      // Best-effort — leave whatever state we had rather than getting the button stuck disabled
+      // on a transient fetch failure.
+    } finally {
+      this._gitStatusLoaded = true;
+    }
+  };
+
+  /** Whether the active tab's file has anything for the Commit button to actually do. Unsaved
+   * edits always count (saving happens automatically before the commit dialog opens, so they'll
+   * produce a change); otherwise falls back to the last known git status for that file. */
+  private get _canCommitActiveTab(): boolean {
+    const filename = this._activeTabFilename;
+    if (!filename || isVirtualTab(filename)) return false;
+    const activeTab = this._openTabs.find((t) => t.filename === filename);
+    if (activeTab?.isDirty) return true;
+    if (!this._gitStatusLoaded || !this._gitRepoExists) return true;
+    return this._gitChangedPaths.has(gitPathFor(filename));
   }
 
   private _onCardPreviewToggled = (): void => {
@@ -929,6 +970,7 @@ export class EditorViewElement extends LitElement {
       activeTab.originalBlocksJson = JSON.stringify(blocksState);
       activeTab.isDirty = false;
       this._renderTabs();
+      this._refreshGitStatus();
       await window.loadScripts?.();
       return;
     }
@@ -944,6 +986,9 @@ export class EditorViewElement extends LitElement {
       activeTab.originalContent = content;
       activeTab.isDirty = false;
       this._renderTabs();
+      // Card content lives inside the parent script's file, not this virtual tab — refresh so
+      // the Commit button is correct if/when the user switches back to the parent script tab.
+      this._refreshGitStatus();
       if (window.CardPreview?.isOpen()) window.CardPreview.reload();
       return;
     }
@@ -957,6 +1002,7 @@ export class EditorViewElement extends LitElement {
     activeTab.originalContent = content;
     activeTab.isDirty = false;
     this._renderTabs();
+    this._refreshGitStatus();
     await window.loadScripts?.();
   };
 
@@ -1264,9 +1310,13 @@ export class EditorViewElement extends LitElement {
             <i class="mdi mdi-content-save"></i>
           </button>
           <button
-            ?disabled=${isSystemTab}
-            style=${isSystemTab ? 'opacity:0.1' : ''}
-            title=${this._t('commit_button_title', 'Commit')}
+            ?disabled=${isSystemTab || !this._canCommitActiveTab}
+            style=${isSystemTab ? 'opacity:0.1' : `opacity:${this._canCommitActiveTab ? '1' : '0.3'}`}
+            title=${
+              !isSystemTab && !this._canCommitActiveTab
+                ? this._t('commit_nothing_to_commit', 'Nothing to commit — no changes since the last commit.')
+                : this._t('commit_button_title', 'Commit')
+            }
             @click=${() => this.commitActiveTab()}
           >
             <i class="mdi mdi-source-commit"></i>

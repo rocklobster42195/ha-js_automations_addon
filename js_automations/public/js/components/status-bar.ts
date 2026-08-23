@@ -268,6 +268,10 @@ export class StatusBar extends LitElement {
     );
     window.socket.on('git_status_changed', (status: typeof this._gitStatus) => {
       this._gitStatus = status;
+      // Server-initiated changes (push/revert/a commit from another tab) need to reach
+      // editor-view.ts's Commit-button state too — same event its own local actions already
+      // dispatch, so it doesn't need its own socket-connection-waiting logic duplicated here.
+      window.dispatchEvent(new CustomEvent('git-status-refresh'));
     });
     window.socket.on('system_stats', (data: Record<string, number>) => this._updateSystemStats(data));
     window.socket.on(
