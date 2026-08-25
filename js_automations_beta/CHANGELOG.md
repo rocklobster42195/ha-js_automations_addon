@@ -1,3 +1,10 @@
+## [3.0.1-beta.2] - 2026-08-25
+
+- fix: don't silently drop ha.update() when ha.register() hasn't landed yet
+- fix: merge webhook registry writes onto disk instead of overwriting
+
+---
+
 ## [3.0.1-beta.1] - 2026-08-16
 
 - fix: translate hardcoded LABEL/AREA placeholders in New Script wizard
