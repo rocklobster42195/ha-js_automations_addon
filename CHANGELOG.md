@@ -2,11 +2,19 @@
 
 ---
 
-## [3.0.1] - 2026-08-25
+## [3.0.2] - 2026-08-25
 
+- style: prettier formatting pass on new docs
 - fix: clear cached revealed webhook token on registry resync
 - fix: don't silently drop ha.update() when ha.register() hasn't landed yet
 - fix: merge webhook registry writes onto disk instead of overwriting
+- fix: translate hardcoded LABEL/AREA placeholders in New Script wizard
+- docs: remove old root API_REFERENCE.md/TECH-README.md (moved to docs/ in previous commit)
+- docs: restructure into docs/guide + docs/internal, slim README
+- fix: honor ha.frontend.installCard's config option via getStubConfig
+- fix: resolve HA theme-color slugs for label group headers
+- fix: collapse editor-view host when a virtual system tab is active
+- docs: update README hero screenshot for 3.0.0
 
 ---
 
