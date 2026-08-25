@@ -167,6 +167,11 @@ export class WebhookPanel extends LitElement {
     }
     window.socket.on('webhook_registry_changed', (webhooks: Webhook[]) => {
       this._webhooks = webhooks;
+      // Registry state moved out from under us (e.g. a rotate from another
+      // tab/session) - drop any cached reveal so we never keep showing a
+      // token that may no longer be the real one. Re-revealing always hits
+      // the backend fresh.
+      this._revealedTokens = new Map();
     });
     // 'webhook_registry_changed' is only broadcast at the moment a script
     // (re-)registers. If that happens while this client's socket is still
@@ -194,6 +199,10 @@ export class WebhookPanel extends LitElement {
       this._port = data.port;
       this._externalUrl = data.externalUrl;
       this._webhooks = data.webhooks;
+      // Same reasoning as the webhook_registry_changed handler above - a
+      // resync (initial load or reconnect after e.g. an addon restart) can
+      // mean the backend's token no longer matches whatever we cached.
+      this._revealedTokens = new Map();
     } catch (e) {
       console.error('Failed to load webhooks:', e);
     }
