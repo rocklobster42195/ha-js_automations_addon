@@ -2,6 +2,14 @@
 
 ---
 
+## [3.0.1] - 2026-08-25
+
+- fix: clear cached revealed webhook token on registry resync
+- fix: don't silently drop ha.update() when ha.register() hasn't landed yet
+- fix: merge webhook registry writes onto disk instead of overwriting
+
+---
+
 ## [3.0.0] - 2026-08-13
 
 ### Harder, Better, Faster, Stronger
