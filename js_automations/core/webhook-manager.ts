@@ -204,23 +204,67 @@ class WebhookManager extends EventEmitter {
     }
   }
 
-  private _saveRegistry(): void {
+  private _readDiskState(): Record<string, Record<string, unknown>> {
     try {
-      const out: Record<string, Partial<WebhookEntry>> = {};
-      for (const [id, entry] of this.registry.entries()) {
-        out[id] = {
-          token: entry.token,
-          method: entry.method,
-          noAuth: entry.noAuth,
-          allowlist: entry.allowlist || null,
-          owner: entry.owner,
-          created: entry.created,
-          rotated: entry.rotated,
-        };
-      }
-      fs.writeFileSync(this.storageFile, JSON.stringify(out, null, 2));
+      if (!fs.existsSync(this.storageFile)) return {};
+      return JSON.parse(fs.readFileSync(this.storageFile, 'utf8'));
+    } catch (e) {
+      this.logManager.add('error', 'System', `[Webhook] Failed to read webhooks.json: ${(e as Error).message}`);
+      return {};
+    }
+  }
+
+  /**
+   * Persists a single registry mutation by merging it onto the *current* on-disk
+   * state, instead of overwriting the whole file from this process's in-memory
+   * snapshot. Stable and beta addons deliberately share the same storage directory
+   * (see beta-channel design), so a second JSA process can legitimately be writing
+   * this same file — a blind overwrite would clobber whatever it just wrote. Also
+   * absorbs any ids present on disk but unknown to this process, so this instance's
+   * own registry doesn't silently diverge from what's actually persisted.
+   */
+  private _persistEntry(id: string, removed = false): void {
+    const disk = this._readDiskState();
+    let foreignEntry = false;
+    for (const diskId of Object.keys(disk)) {
+      if (diskId !== id && !this.registry.has(diskId)) foreignEntry = true;
+    }
+
+    if (removed) {
+      delete disk[id];
+    } else {
+      const entry = this.registry.get(id);
+      if (!entry) return;
+      disk[id] = {
+        token: entry.token,
+        method: entry.method,
+        noAuth: entry.noAuth,
+        allowlist: entry.allowlist || null,
+        owner: entry.owner,
+        created: entry.created,
+        rotated: entry.rotated,
+      };
+    }
+
+    try {
+      fs.writeFileSync(this.storageFile, JSON.stringify(disk, null, 2));
     } catch (e) {
       this.logManager.add('error', 'System', `[Webhook] Failed to save webhooks.json: ${(e as Error).message}`);
+    }
+
+    for (const [diskId, diskEntry] of Object.entries(disk)) {
+      if (diskId === id || this.registry.has(diskId)) continue;
+      const owner = (diskEntry.owner ?? diskEntry.scriptFilename ?? null) as string | null;
+      this.registry.set(diskId, { ...diskEntry, owner, active: false, lastCall: null } as WebhookEntry);
+    }
+
+    if (foreignEntry) {
+      this.logManager.add(
+        'warn',
+        'System',
+        `[Webhook] Found webhook registration(s) in webhooks.json written by another process ` +
+          `(e.g. the sibling stable/beta addon sharing this storage directory) — merged instead of overwritten.`
+      );
     }
   }
 
@@ -257,7 +301,7 @@ class WebhookManager extends EventEmitter {
       lastCall: existing?.lastCall || null,
     });
 
-    this._saveRegistry();
+    this._persistEntry(id);
     this._ensureServer();
     this.logManager.add(
       'debug',
@@ -295,15 +339,15 @@ class WebhookManager extends EventEmitter {
    * itself was restarted since), and this must still find and remove them.
    */
   purgeAllForScript(scriptFilename: string): void {
-    let changed = false;
+    const idsToRemove: string[] = [];
     for (const [id, entry] of this.registry.entries()) {
-      if (entry.owner === scriptFilename) {
-        this.registry.delete(id);
-        changed = true;
-      }
+      if (entry.owner === scriptFilename) idsToRemove.push(id);
     }
-    if (changed) {
-      this._saveRegistry();
+    for (const id of idsToRemove) {
+      this.registry.delete(id);
+      this._persistEntry(id, true);
+    }
+    if (idsToRemove.length) {
       this._maybeShutdownServer();
       this.emit('registry_changed');
     }
@@ -596,7 +640,7 @@ class WebhookManager extends EventEmitter {
     if (e.noAuth) throw new Error('Cannot rotate a token for a no-auth webhook');
     e.token = crypto.randomBytes(24).toString('hex');
     e.rotated = new Date().toISOString();
-    this._saveRegistry();
+    this._persistEntry(id);
     this.emit('registry_changed');
     return e.token;
   }
@@ -612,7 +656,7 @@ class WebhookManager extends EventEmitter {
     if (!e) throw new Error('Unknown webhook id');
     if (e.active) throw new Error('Cannot delete an active webhook — stop the owning script first.');
     this.registry.delete(id);
-    this._saveRegistry();
+    this._persistEntry(id, true);
     this._maybeShutdownServer();
     this.emit('registry_changed');
   }
