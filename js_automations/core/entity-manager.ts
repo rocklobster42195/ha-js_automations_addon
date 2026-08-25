@@ -673,7 +673,7 @@ class EntityManager {
   /**
    * Publishes state updates for dynamic entities via MQTT.
    */
-  handleEntityStateUpdate({
+  async handleEntityStateUpdate({
     entityId,
     state,
     attributes,
@@ -681,7 +681,7 @@ class EntityManager {
     entityId: string;
     state: unknown;
     attributes: any;
-  }): void {
+  }): Promise<void> {
     this.workerManager.emit('log', {
       source: 'System',
       message: `[EntityManager] State update for ${entityId}: ${state}. Attributes: ${JSON.stringify(attributes)}`,
@@ -690,45 +690,65 @@ class EntityManager {
 
     if (!this.mqttManager.isConnected) return;
 
-    const config: any = this.workerManager.nativeEntities.get(entityId);
-    if (config) {
-      if (config.device_class && attributes && (attributes.icon || attributes.entity_icon)) {
-        this._warnIconConflict(entityId, config.device_class);
+    // ha.register() can still be mid-flight (its own async registry-audit chain in
+    // handleDynamicEntity()) when this fires, e.g. a script that calls ha.register()
+    // immediately followed by ha.update() for a brand-new entity, or right after an
+    // addon restart before nativeEntities has been fully repopulated. Wait briefly
+    // instead of silently dropping the update.
+    let config: any = this.workerManager.nativeEntities.get(entityId);
+    if (!config) {
+      const RETRY_INTERVAL_MS = 250;
+      const MAX_ATTEMPTS = 60; // ~15s
+      for (let attempt = 0; attempt < MAX_ATTEMPTS && !config; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL_MS));
+        config = this.workerManager.nativeEntities.get(entityId);
       }
-
-      // If a new icon is provided, re-publish the discovery payload with the updated icon.
-      // icon_template is deprecated in HA 2024+, so we update the static icon field directly.
-      const newIcon = attributes?.icon || attributes?.entity_icon;
-      if (newIcon && newIcon !== config.icon) {
-        config.icon = newIcon;
-
-        const domain = entityId.split('.')[0];
-        const topicId = config.object_id || config.unique_id;
-        const discoveryTopic = `homeassistant/${domain}/${topicId}/config`;
-        this.mqttManager.publish(discoveryTopic, config, { retain: true });
-
-        // Persist the updated icon to disk so republishNativeEntities uses the
-        // correct icon after a restart instead of the original ha.register() value.
-        this.workerManager.saveRegistry();
-
+      if (!config) {
         this.workerManager.emit('log', {
           source: 'System',
-          message: `[EntityManager] Re-publishing discovery for ${entityId} with new icon: ${newIcon}`,
-          level: 'debug',
+          message: `[EntityManager] ha.update() for "${entityId}" timed out waiting for its ha.register() to complete (${MAX_ATTEMPTS * RETRY_INTERVAL_MS}ms) — update dropped.`,
+          level: 'warn',
         });
+        return;
       }
-
-      const enrichedAttributes = {
-        ...(config.icon ? { icon: config.icon } : {}),
-        ...attributes,
-      };
-
-      // Recorded before HA has acknowledged anything — see the field comment on
-      // lastPublishedEntityState in worker-manager.ts for why republishNativeEntities() needs
-      // this instead of haConnector.states.
-      this.workerManager.lastPublishedEntityState.set(entityId, { state, attributes: enrichedAttributes });
-      this.mqttManager.publishEntityState(config, state, enrichedAttributes);
     }
+
+    if (config.device_class && attributes && (attributes.icon || attributes.entity_icon)) {
+      this._warnIconConflict(entityId, config.device_class);
+    }
+
+    // If a new icon is provided, re-publish the discovery payload with the updated icon.
+    // icon_template is deprecated in HA 2024+, so we update the static icon field directly.
+    const newIcon = attributes?.icon || attributes?.entity_icon;
+    if (newIcon && newIcon !== config.icon) {
+      config.icon = newIcon;
+
+      const domain = entityId.split('.')[0];
+      const topicId = config.object_id || config.unique_id;
+      const discoveryTopic = `homeassistant/${domain}/${topicId}/config`;
+      this.mqttManager.publish(discoveryTopic, config, { retain: true });
+
+      // Persist the updated icon to disk so republishNativeEntities uses the
+      // correct icon after a restart instead of the original ha.register() value.
+      this.workerManager.saveRegistry();
+
+      this.workerManager.emit('log', {
+        source: 'System',
+        message: `[EntityManager] Re-publishing discovery for ${entityId} with new icon: ${newIcon}`,
+        level: 'debug',
+      });
+    }
+
+    const enrichedAttributes = {
+      ...(config.icon ? { icon: config.icon } : {}),
+      ...attributes,
+    };
+
+    // Recorded before HA has acknowledged anything — see the field comment on
+    // lastPublishedEntityState in worker-manager.ts for why republishNativeEntities() needs
+    // this instead of haConnector.states.
+    this.workerManager.lastPublishedEntityState.set(entityId, { state, attributes: enrichedAttributes });
+    this.mqttManager.publishEntityState(config, state, enrichedAttributes);
   }
 
   /**
