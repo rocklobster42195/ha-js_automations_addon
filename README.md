@@ -1,7 +1,7 @@
 # JS Automations for Home Assistant
 
 ![Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant)
-![Version](https://img.shields.io/badge/version-3.0.0-darkgreen)
+![Version](https://img.shields.io/badge/version-3.0.1-darkgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 [![CI](https://github.com/rocklobster42195/ha-js_automations_addon/actions/workflows/ci.yml/badge.svg)](https://github.com/rocklobster42195/ha-js_automations_addon/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rocklobster42195)
