@@ -108,7 +108,7 @@ export = (gitManager: GitManager) => {
 
   router.post('/test', async (req, res) => {
     const { url, token } = req.body || {};
-    const result = await GitManager.testGitConnection(url, token);
+    const result = await gitManager.testConnection({ url, token });
     res.json(result);
   });
 

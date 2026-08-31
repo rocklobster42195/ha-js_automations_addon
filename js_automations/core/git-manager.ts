@@ -4,6 +4,7 @@ import * as path from 'path';
 import { EventEmitter } from 'events';
 import { simpleGit, CheckRepoActions } from 'simple-git';
 import type { SimpleGit } from 'simple-git';
+import { SECRET_MASK } from './secret-sentinels';
 
 interface VersioningSettings {
   author_name?: string;
@@ -293,6 +294,16 @@ class GitManager extends EventEmitter {
       this.emit('git_status_changed');
       return { success: false, error: this.lastPushError };
     }
+  }
+
+  /** Tests the remote connection. A missing or masked url/token falls back to the stored
+   * versioning settings, so the settings UI can run the test without ever holding the raw
+   * token (the field is served masked — see settings-route.ts). */
+  async testConnection(override: { url?: string; token?: string } = {}): Promise<GitResult> {
+    const settings = this.getVersioningSettings();
+    const url = override.url && override.url !== SECRET_MASK ? override.url : settings.git_repo_url || '';
+    const token = override.token && override.token !== SECRET_MASK ? override.token : settings.git_token || '';
+    return GitManager.testGitConnection(url, token);
   }
 
   static async testGitConnection(repoUrl: string, token: string): Promise<GitResult> {

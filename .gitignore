@@ -96,6 +96,7 @@ js_automations/core/backup-manager.js
 js_automations/core/backup-scope.js
 js_automations/core/git-manager.js
 js_automations/core/restore-manager.js
+js_automations/core/secret-sentinels.js
 js_automations/services/system-service.js
 js_automations/routes/settings-route.js
 js_automations/routes/webhook-route.js

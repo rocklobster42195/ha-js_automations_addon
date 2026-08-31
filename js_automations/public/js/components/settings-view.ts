@@ -6,6 +6,12 @@ import type { JsaSettings, JsaHaState } from './global';
 
 const SETTINGS_TAB_ID = 'System: Settings';
 
+// Wire sentinels for masked secret fields — kept in sync with core/secret-sentinels.ts.
+// The server sends SECRET_MASK for a stored `mode:'password'` value; we send it (or a blank
+// field) back to mean "unchanged", and SECRET_CLEAR to wipe it.
+const SECRET_MASK = '__JSA_SECRET_KEPT__';
+const SECRET_CLEAR = '__JSA_SECRET_CLEAR__';
+
 type SettingsItemType =
   | 'toggle'
   | 'boolean'
@@ -269,6 +275,40 @@ export class SettingsView extends LitElement {
       width: 200px;
     }
 
+    .secret-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 400px;
+    }
+    .secret-field .settings-input-text {
+      flex: 1;
+      max-width: none;
+    }
+    .secret-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      background: transparent;
+      color: #ccc;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .secret-btn:hover {
+      color: #fff;
+      border-color: #777;
+    }
+    .secret-hint {
+      margin-top: 4px;
+      font-size: 0.75rem;
+      color: var(--text-dim, #888);
+    }
+
     /* Toggle switch */
     .setting-toggle {
       position: relative;
@@ -354,6 +394,9 @@ export class SettingsView extends LitElement {
   @state() private _backupRunning = false;
   @state() private _gitTesting = false;
   @state() private _gitPushing = false;
+  // Raw secret values fetched via the reveal endpoint, keyed `${catId}.${key}`. Never
+  // persisted; dropped on every _load() so a stale token is never shown.
+  @state() private _revealedSecrets = new Map<string, string>();
 
   private _entitiesLoaded = false;
   private _pendingScrollTarget: string | null = null;
@@ -424,6 +467,7 @@ export class SettingsView extends LitElement {
 
   private _load = async (isBackgroundRefresh = false): Promise<void> => {
     try {
+      this._revealedSecrets = new Map();
       const [schemaRes, settingsRes] = await Promise.all([
         window.apiFetch!('api/settings/schema'),
         window.apiFetch!('api/settings'),
@@ -911,15 +955,99 @@ export class SettingsView extends LitElement {
       case 'info':
         return html`<div class="settings-info-box">${unsafeHTML(this._t(item.text ?? ''))}</div>`;
       default:
+        if (item.mode === 'password') return this._renderSecretInput(catId, item, (value as string) ?? '');
         return html`
           <input
-            type=${item.mode === 'password' ? 'password' : 'text'}
+            type="text"
             class="settings-input settings-input-text"
             .value=${value as string}
             @change=${(e: Event) => this._saveSetting(catId, item.key, (e.target as HTMLInputElement).value)}
           />
         `;
     }
+  }
+
+  private _renderSecretInput(catId: string, item: SettingsItem, value: string) {
+    const id = `${catId}.${item.key}`;
+    const revealed = this._revealedSecrets.get(id);
+    const isRevealed = revealed !== undefined;
+    const isSet = value === SECRET_MASK;
+    return html`
+      <div class="secret-field">
+        <input
+          type=${isRevealed ? 'text' : 'password'}
+          class="settings-input settings-input-text"
+          .value=${isRevealed ? revealed : ''}
+          placeholder=${isSet ? '••••••••' : ''}
+          autocomplete="off"
+          @change=${(e: Event) => this._onSecretChange(catId, item.key, id, (e.target as HTMLInputElement).value)}
+        />
+        <button
+          class="secret-btn"
+          title=${this._t(
+            isRevealed ? 'settings.secret_hide' : 'settings.secret_reveal',
+            isRevealed ? 'Verbergen' : 'Anzeigen'
+          )}
+          @click=${() => this._toggleSecretReveal(catId, item.key, id)}
+        >
+          <i class="mdi ${isRevealed ? 'mdi-eye-off-outline' : 'mdi-eye-outline'}"></i>
+        </button>
+        ${
+          isSet
+            ? html`<button
+                class="secret-btn"
+                title=${this._t('settings.secret_clear', 'Löschen')}
+                @click=${() => this._clearSecret(catId, item.key, id)}
+              >
+                <i class="mdi mdi-close"></i>
+              </button>`
+            : nothing
+        }
+      </div>
+      <div class="secret-hint">${this._t('settings.secret_blank_hint', 'Leer lassen = unverändert')}</div>
+    `;
+  }
+
+  private async _onSecretChange(catId: string, key: string, id: string, raw: string): Promise<void> {
+    const next = raw.trim();
+    if (next === '' || next === SECRET_MASK) return; // blank field = keep the stored value
+    await this._saveSetting(catId, key, next);
+    // Keep what the user just typed visible, but treat the stored value as masked from here on.
+    this._revealedSecrets = new Map(this._revealedSecrets).set(id, next);
+    this._settings = {
+      ...this._settings,
+      [catId]: { ...(this._settings[catId] as object), [key]: SECRET_MASK },
+    };
+  }
+
+  private async _toggleSecretReveal(catId: string, key: string, id: string): Promise<void> {
+    if (this._revealedSecrets.has(id)) {
+      const next = new Map(this._revealedSecrets);
+      next.delete(id);
+      this._revealedSecrets = next;
+      return;
+    }
+    try {
+      const res = await window.apiFetch!(
+        `api/settings/${encodeURIComponent(catId)}/${encodeURIComponent(key)}/reveal`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      this._revealedSecrets = new Map(this._revealedSecrets).set(id, (data.value as string) ?? '');
+    } catch (e) {
+      console.error('Failed to reveal secret:', e);
+    }
+  }
+
+  private async _clearSecret(catId: string, key: string, id: string): Promise<void> {
+    await this._saveSetting(catId, key, SECRET_CLEAR);
+    const next = new Map(this._revealedSecrets);
+    next.delete(id);
+    this._revealedSecrets = next;
+    this._settings = {
+      ...this._settings,
+      [catId]: { ...(this._settings[catId] as object), [key]: '' },
+    };
   }
 
   private _renderItem(catId: string, item: SettingsItem) {

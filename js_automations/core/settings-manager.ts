@@ -100,6 +100,21 @@ class SettingsManager extends EventEmitter {
   }
 
   /**
+   * [section, key] pairs for every schema field flagged `mode: 'password'` — the set that
+   * gets masked on GET /api/settings, preserved when POSTed back blank/masked, and served
+   * individually via the reveal endpoint.
+   */
+  getSecretPaths(): [string, string][] {
+    const paths: [string, string][] = [];
+    schema.forEach((section) => {
+      section.items.forEach((item) => {
+        if (item.mode === 'password') paths.push([section.id, item.key]);
+      });
+    });
+    return paths;
+  }
+
+  /**
    * Updates the settings (partially) and saves them.
    * @param updates - The object containing the changes.
    */

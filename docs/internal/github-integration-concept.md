@@ -76,7 +76,7 @@ These come from the prior version of this concept and don't conflict with anythi
 
 - **First-time setup:** if no `.git` exists in `SCRIPTS_DIR`, the first commit runs `git init`, sets `user.name`/`user.email` from settings, and creates the initial commit. The GitHub remote is added on first push.
 - **Push:** token is injected into the remote URL per-request (`https://TOKEN@github.com/user/repo.git`) and never written to `.git/config` or cached.
-- **Token storage:** in `settings.json`, same security level as the existing MQTT password field.
+- **Token storage:** the raw token lives in `settings.json` (backend consumers read it straight from `settingsManager`), but it is **masked at the HTTP boundary** — every `mode:'password'` settings field (`versioning.git_token`, `mqtt.password`, `backup.webdav_password`) comes back from `GET /api/settings` as a `__JSA_SECRET_KEPT__` sentinel, is served individually only via `GET /api/settings/:section/:key/reveal`, and on save a blank/masked field means "unchanged" (`__JSA_SECRET_CLEAR__` is the one explicit wipe). See `core/secret-sentinels.ts` and `routes/settings-route.ts`.
 - **Revert safety matrix** — only non-destructive git operations are exposed in the UI:
 
   | Action                          | Destructive?              | Offered? |

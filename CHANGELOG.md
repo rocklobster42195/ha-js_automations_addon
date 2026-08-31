@@ -1,5 +1,7 @@
 <!-- NEXT -->
 
+- security: mask secret settings fields (`git_token`, MQTT/WebDAV passwords) server-side — the raw value never leaves the server via `GET /api/settings`, is shown only via an explicit reveal action, and a blank field on save keeps the stored value
+
 ---
 
 ## [3.0.2] - 2026-08-25

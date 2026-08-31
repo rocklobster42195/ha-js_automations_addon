@@ -292,6 +292,10 @@
   "settings_title": "Einstellungen",
   "banner_close_tooltip": "Schließen",
   "settings": {
+    "secret_blank_hint": "Leer lassen = unverändert",
+    "secret_reveal": "Anzeigen",
+    "secret_hide": "Verbergen",
+    "secret_clear": "Löschen",
     "categories": {
       "language": "Sprache",
       "general": "Allgemein",

@@ -291,6 +291,10 @@
   "sibling_guard_waiting": "Waiting…",
   "settings_title": "Settings",
   "settings": {
+    "secret_blank_hint": "Leave blank to keep unchanged",
+    "secret_reveal": "Reveal",
+    "secret_hide": "Hide",
+    "secret_clear": "Clear",
     "categories": {
       "language": "Language",
       "general": "General",
