@@ -55,6 +55,7 @@ tools/track-stats.js
 docs/internal/RELEASE_PIPELINE.md
 docs/internal/github-issues-workflow.md
 docs/internal/create-labels.sh
+docs/internal/bug_*.md
 
 # --- Grill-me session notes (local scratch, never commit)
 notes/*-grill.md
