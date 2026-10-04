@@ -9,6 +9,7 @@ yarn-error.log
 .env
 .env.portainer-admin
 .env.nginxrp
+.env.unifi
 
 # --- Laufzeit-Daten & Status ---
 # Der Merkzettel, welche Skripte gerade laufen
