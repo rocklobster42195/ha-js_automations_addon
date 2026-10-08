@@ -74,6 +74,9 @@ interface HAMetadata {
   language: string;
 }
 
+const WATCHDOG_INTERVAL_MS = 30000;
+const WATCHDOG_TIMEOUT_MS = 75000;
+
 class HAConnector {
   isAddon: boolean;
   storageDir: string;
@@ -89,6 +92,8 @@ class HAConnector {
   private _iconsCache: Record<string, unknown> | null;
   private _iconsInFlight: Promise<Record<string, unknown>> | null;
   private _entityRegistryInFlight: Promise<unknown[]> | null;
+  private _watchdog: NodeJS.Timeout | null = null;
+  private _lastMessageAt = 0;
 
   /**
    * @param url - HA URL
@@ -117,11 +122,24 @@ class HAConnector {
   connect(): Promise<void> {
     this._subscribed = false; // reset per-connection subscription guard
     this._iconsCache = null; // re-fetch icon translations in case HA core was updated
+    this._stopWatchdog();
+    if (this.ws) {
+      // Drop a stale socket so it can't keep delivering (duplicate) events
+      this.ws.removeAllListeners();
+      this.ws.on('error', () => {});
+      try {
+        this.ws.terminate();
+      } catch {
+        /* already closed */
+      }
+    }
     return new Promise((resolve, reject) => {
       console.log(`🔌 WebSocket: Connecting to ${this.url}...`);
-      this.ws = new WebSocket(this.url, { rejectUnauthorized: false });
-      this.ws.setMaxListeners(0); // Remove the default 10 listener limit for this central component
-      this.ws.on('message', (data) => {
+      const ws = new WebSocket(this.url, { rejectUnauthorized: false });
+      this.ws = ws;
+      ws.setMaxListeners(0); // Remove the default 10 listener limit for this central component
+      ws.on('message', (data) => {
+        this._lastMessageAt = Date.now();
         try {
           const msg = JSON.parse(data.toString());
           this.handleMessage(msg, resolve);
@@ -129,11 +147,42 @@ class HAConnector {
           /* ignore malformed message */
         }
       });
-      this.ws.on('error', (err) => reject(err));
-      this.ws.on('close', () => {
+      ws.on('error', (err) => reject(err));
+      ws.on('close', () => {
+        if (this.ws !== ws) return;
+        this._stopWatchdog();
         this.isReady = false;
       });
     });
+  }
+
+  /**
+   * Detects half-open connections: if the TCP link dies without a 'close' event,
+   * isReady would stay true while no events arrive anymore. HA answers an
+   * application-level ping with a pong, so any silence beyond the timeout means
+   * the socket is dead and gets terminated, which hands over to the kernel's
+   * reconnect loop.
+   */
+  private _startWatchdog(): void {
+    this._stopWatchdog();
+    this._lastMessageAt = Date.now();
+    const ws = this.ws;
+    this._watchdog = setInterval(() => {
+      if (this.ws !== ws || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const silentMs = Date.now() - this._lastMessageAt;
+      if (silentMs > WATCHDOG_TIMEOUT_MS) {
+        console.warn(`⚠️ WebSocket: No data from HA for ${Math.round(silentMs / 1000)}s, dropping dead connection.`);
+        this.isReady = false;
+        ws.terminate();
+        return;
+      }
+      this.send({ id: this.msgId++, type: 'ping' });
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  private _stopWatchdog(): void {
+    if (this._watchdog) clearInterval(this._watchdog);
+    this._watchdog = null;
   }
 
   private handleMessage(msg: Record<string, any>, resolve: () => void): void {
@@ -142,6 +191,7 @@ class HAConnector {
     } else if (msg.type === 'auth_ok') {
       console.log('✅ WebSocket: Authenticated.');
       this.isReady = true;
+      this._startWatchdog();
       this.subscribeEvents();
       this.fetchInitialStates().then(resolve);
     } else if (msg.type === 'event') {
