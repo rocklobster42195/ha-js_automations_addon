@@ -131,7 +131,7 @@ class TypeDefinitionGenerator {
       for (const key of keys.slice(0, 10)) {
         def += `"${key}": ${this._inferType(obj[key], depth + 1)}; `;
       }
-      if (keys.length > 10) def += '... ';
+      if (keys.length > 10) def += '[key: string]: any; ';
       return def + '}';
     }
     return 'any';
