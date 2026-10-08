@@ -9,6 +9,7 @@ yarn-error.log
 .env
 .env.portainer-admin
 .env.nginxrp
+.env.proxmox
 .env.unifi
 
 # --- Laufzeit-Daten & Status ---
