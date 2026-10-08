@@ -1,3 +1,47 @@
+## [3.0.3-beta.0] - 2026-10-08
+
+- fix: emit valid index signature instead of "..." for large objects in generated types
+- chore: add .env.proxmox to .gitignore
+- fix: add HA websocket watchdog and drop stale socket on reconnect
+- chore: add .env.unifi to .gitignore
+- chore: gitignore local docs/internal bug write-ups
+- feat: mask secret settings fields server-side (git_token, mqtt/webdav passwords)
+- fix: clear cached revealed webhook token on registry resync
+- fix: don't silently drop ha.update() when ha.register() hasn't landed yet
+- fix: merge webhook registry writes onto disk instead of overwriting
+- feat: disable Commit button when the active tab has nothing to commit
+- fix: back up .storage/ properly, exclude derived artifacts, add restore select-all
+- fix: repair diff-view highlighting, generalize git remote beyond GitHub, harden backup/push
+- feat: open git-diff as a full-width editor tab
+- fix: broaden diff icon suppression to a catch-all codicon rule
+- fix: disable code-folding controls in diff view
+- fix: hide inert moved-code-lines SVG overlay in diff view
+- fix: hide redundant original-pane gutter sliver in diff view
+- fix: hide diff editor's hover-triggered lightbulb action button
+- fix: diff-editor chrome was still leaking gutter icons and lightbulb glyph
+- feat: add missing git-on-delete checkbox, fix Monaco diff chrome, closeTab binding
+- fix: commit swept up every pending file, diff editor garbled on first paint
+- fix: git-manager mistook the addon's own repo for the scripts repo
+- fix: wizard 'Aus Repo' tab could get stuck on a failed response
+- fix: git status-bar tooltip i18n keys were in the wrong namespace
+- fix: add missing GitHub Push button, run prettier
+- feat: zip-restore engine — upload, selective diff, worker orchestration
+- feat: local git versioning for scripts, optional GitHub push
+- feat: automated backup — cron schedule, WebDAV target, retention
+- chore: gitignore local infra credential files
+- docs: redesign backup and script-versioning concepts
+- build: add i18n key-parity check between de/en translation.json
+- style: prettier formatting pass on new docs
+- fix: translate hardcoded LABEL/AREA placeholders in New Script wizard
+- docs: remove old root API_REFERENCE.md/TECH-README.md (moved to docs/ in previous commit)
+- docs: restructure into docs/guide + docs/internal, slim README
+- fix: honor ha.frontend.installCard's config option via getStubConfig
+- fix: resolve HA theme-color slugs for label group headers
+- fix: collapse editor-view host when a virtual system tab is active
+- docs: update README hero screenshot for 3.0.0
+
+---
+
 <!-- NEXT -->
 
 ---
