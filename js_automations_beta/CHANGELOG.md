@@ -1,3 +1,9 @@
+## [3.0.3-beta.1] - 2026-10-08
+
+- style: format settings-view.ts
+
+---
+
 ## [3.0.3-beta.0] - 2026-10-08
 
 - fix: emit valid index signature instead of "..." for large objects in generated types
