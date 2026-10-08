@@ -1028,9 +1028,7 @@ export class SettingsView extends LitElement {
       return;
     }
     try {
-      const res = await window.apiFetch!(
-        `api/settings/${encodeURIComponent(catId)}/${encodeURIComponent(key)}/reveal`
-      );
+      const res = await window.apiFetch!(`api/settings/${encodeURIComponent(catId)}/${encodeURIComponent(key)}/reveal`);
       if (!res.ok) return;
       const data = await res.json();
       this._revealedSecrets = new Map(this._revealedSecrets).set(id, (data.value as string) ?? '');
