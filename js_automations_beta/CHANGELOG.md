@@ -1,3 +1,18 @@
+## [3.0.3-beta.2] - 2026-10-11
+
+> **⚠️ Secret encryption is opt-in.** Set the add-on option `store_encryption` to `true` and restart to encrypt `ha.store` secrets.
+> **Before going back to the stable add-on, set it to `false` and restart once** — otherwise the secrets stay unreadable there.
+
+- NOTE: secret encryption is opt-in (add-on option store_encryption) - set it to false and restart BEFORE going back to the stable add-on, otherwise secrets stay unreadable there
+- feat(store): opt-in secret encryption with rollback switch and pre-encryption safety copy
+- fix(store): live ha.store.get() without listeners, SECRET badge, no per-char wrapping of revealed secrets
+- Merge cloud work: encrypted ha.store secrets with per-script sharing
+- feat(store): mark deleted scripts in a secret's sharing list
+- feat(store): keep secret sharing intact on script rename, document secrets
+- feat(store): encrypt ha.store secrets at rest and add per-script sharing
+
+---
+
 ## [3.0.3-beta.1] - 2026-10-08
 
 - style: format settings-view.ts
