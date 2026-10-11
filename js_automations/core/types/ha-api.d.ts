@@ -10,6 +10,17 @@
 // This will be replaced by the actual content of entities.d.ts
 interface HAEntities {}
 
+/** Options for `ha.store.set()` when storing a secret. */
+interface StoreSetOptions {
+  /** Store the value as a secret (encrypted at rest, masked in the UI). */
+  secret?: boolean;
+  /**
+   * Script file names (e.g. `'garage.js'`) allowed to read and overwrite the secret, or `'*'` for
+   * all scripts. The script performing the write always keeps access.
+   */
+  sharedWith?: string[] | '*';
+}
+
 // Placeholder for dynamically generated store.d.ts content
 // This will be replaced by the actual content of store.d.ts
 interface GlobalStoreSchema /*__JSA_STORE_SCHEMA__*/ {}
@@ -1136,12 +1147,28 @@ interface HA {
 
     /**
      * Sets a value in the Global Store.
+     *
+     * Secrets (credentials, tokens) are encrypted at rest and masked in the UI. A secret is only
+     * visible to the script that created it unless you share it via `sharedWith`; other scripts
+     * get `undefined` from `ha.store.get()` and their writes are rejected.
+     *
+     * Omitting the third argument keeps an existing secret a secret. Pass `false` to turn it back
+     * into a normal value.
+     *
      * @param key The key to store the value under.
      * @param value The value to store.
-     * @param isSecret If true, the value will be masked in the UI.
+     * @param secret `true` to store as secret, or options `{ secret, sharedWith }`.
+     * @example
+     * ha.store.set('wifi_password', 'hunter2', true);                          // only this script
+     * ha.store.set('api_token', token, { secret: true, sharedWith: ['a.js', 'b.js'] });
+     * ha.store.set('shared_token', token, { secret: true, sharedWith: '*' });  // every script
      */
-    set<K extends keyof GlobalStoreSchema>(key: K, value: GlobalStoreSchema[K], isSecret?: boolean): void;
-    set<T = any>(key: string & { _?: never }, value: T, isSecret?: boolean): void;
+    set<K extends keyof GlobalStoreSchema>(
+      key: K,
+      value: GlobalStoreSchema[K],
+      secret?: boolean | StoreSetOptions
+    ): void;
+    set<T = any>(key: string & { _?: never }, value: T, secret?: boolean | StoreSetOptions): void;
 
     /**
      * Retrieves a value from the Global Store.

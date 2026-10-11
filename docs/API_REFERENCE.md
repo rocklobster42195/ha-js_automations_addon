@@ -468,6 +468,28 @@ ha.store.on('guest_mode', (newValue, oldValue) => {
 ha.store.delete('temp_variable');
 ```
 
+#### Secrets (credentials, tokens)
+
+Pass `true` as the third argument to store a value as a **secret**. Secrets are encrypted on disk, masked in the Store Explorer, and never included in backups in readable form.
+
+```javascript
+// Only this script can read it (default)
+ha.store.set('wifi_password', 'hunter2', true);
+
+// Share with specific scripts (file names)
+ha.store.set('api_token', token, { secret: true, sharedWith: ['garage.js', 'alarm.js'] });
+
+// Share with every script
+ha.store.set('shared_token', token, { secret: true, sharedWith: '*' });
+```
+
+- **Access:** a secret is visible only to the script that created it and to the scripts in `sharedWith`. Any other script gets `undefined` from `ha.store.get()`, and its `set()`/`delete()` on that key is rejected with a warning in the log. The script that writes a secret always keeps access.
+- **Updating:** `ha.store.set('wifi_password', newValue)` without the third argument keeps the value a secret and keeps its sharing. Pass `false` to turn it back into a normal value.
+- **Sharing in the UI:** the Store Explorer lets you edit the list of scripts per secret. Values are only shown after you click the eye icon.
+- **Renaming a script** updates its entries in all sharing lists automatically. Renaming the file outside of JS Automations (e.g. via the file editor) does not; re-share the secret in the Store Explorer afterwards.
+- **Deleting a script** does not delete its secrets, since other scripts may use them. Remove them in the Store Explorer when no longer needed. Names of deleted scripts stay in the sharing list (marked as missing in the edit dialog); uncheck them there to clean up while keeping the secret.
+- This protects secrets against leaked backups and config folders. It is not a sandbox: scripts that are allowed to read a secret can of course use or log it.
+
 ### 13. Automatic Persistent State (`ha.persistent`)
 
 `ha.persistent` offers a "magic" way to store data that saves automatically. It's perfect for managing complex state objects like arrays or nested data without manually calling `ha.store.set()` after every change.

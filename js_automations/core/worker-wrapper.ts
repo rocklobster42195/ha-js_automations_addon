@@ -497,17 +497,22 @@ function ensureMessageListener(): void {
     // Real-time global store sync
     if (msg.type === 'store_update') {
       const oldValue = storeValues[msg.key];
-      if (msg.value === undefined) delete storeValues[msg.key];
-      else storeValues[msg.key] = msg.value;
+      // A key this script may not see (secret not shared with it) is reported as undefined; if it
+      // never had a value there is no change to react to.
+      const noChange = msg.value === undefined && oldValue === undefined;
+      if (!noChange) {
+        if (msg.value === undefined) delete storeValues[msg.key];
+        else storeValues[msg.key] = msg.value;
 
-      if (storeListeners[msg.key]) {
-        storeListeners[msg.key].forEach((cb) => {
-          try {
-            cb(msg.value, oldValue);
-          } catch (e: any) {
-            ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
-          }
-        });
+        if (storeListeners[msg.key]) {
+          storeListeners[msg.key].forEach((cb) => {
+            try {
+              cb(msg.value, oldValue);
+            } catch (e: any) {
+              ha.error(`Store Listener Error (${msg.key}): ${e.message}\n${e.stack}`, { blockId: e.blockId });
+            }
+          });
+        }
       }
     }
 
@@ -1559,9 +1564,15 @@ const ha: any = {
   // Persistent Store
   store: {
     val: storeValues,
-    set: (key: string, value: unknown, isSecret = false) => {
+    set: (key: string, value: unknown, secret?: boolean | { secret?: boolean; sharedWith?: string[] | '*' }) => {
+      // Omitted flag/options are sent as undefined so the host keeps an existing secret a secret.
+      const opts = typeof secret === 'object' && secret !== null ? secret : { secret };
+      // The host answers a refused write (secret not shared with this script) with a corrective
+      // store_update; make sure it is processed even if the script registered no other listener.
+      // The listener is unref'd, so this does not keep the worker alive.
+      ensureMessageListener();
       storeValues[key] = value;
-      pp.postMessage({ type: 'store_set', key, value, isSecret });
+      pp.postMessage({ type: 'store_set', key, value, isSecret: opts.secret, sharedWith: (opts as any).sharedWith });
     },
     get: (key: string) => storeValues[key], // Safe now as it's filtered above
     delete: (key: string) => {

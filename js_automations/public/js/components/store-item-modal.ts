@@ -157,6 +157,52 @@ export class StoreItemModal extends LitElement {
       text-transform: none;
     }
 
+    .sharing {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid var(--border, #444);
+      border-radius: 6px;
+    }
+
+    .sharing-title {
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .sharing-list {
+      max-height: 140px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+
+    .sharing-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      text-transform: none;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+
+    .sharing-item input[type='checkbox'] {
+      width: auto;
+    }
+
+    .sharing-missing {
+      font-size: 0.75rem;
+      opacity: 0.6;
+      font-style: italic;
+    }
+
+    .sharing-hint {
+      margin-top: 6px;
+      font-size: 0.75rem;
+      opacity: 0.7;
+    }
+
     .form-error-msg {
       color: var(--danger);
       font-size: 0.75rem;
@@ -204,6 +250,11 @@ export class StoreItemModal extends LitElement {
   @state() private _type: StoreValueType | 'null' = 'string';
   @state() private _isSecret = false;
   @state() private _valueMasked = false;
+  /** Secrets only: shared with every script, or with the selected script file names. */
+  @state() private _sharedAll = false;
+  @state() private _sharedWith: Set<string> = new Set();
+  @state() private _scripts: string[] = [];
+  @state() private _locked = false;
   @state() private _keyError = '';
   @state() private _valueError = '';
 
@@ -228,36 +279,55 @@ export class StoreItemModal extends LitElement {
     }
     const item = window.storeExplorer?.getItem(key);
     if (item === undefined) return;
-    const val =
-      item && typeof item === 'object' && 'value' in (item as Record<string, unknown>)
-        ? (item as { value: unknown }).value
-        : item;
-    const isSecret = (item as { isSecret?: boolean } | undefined)?.isSecret ?? false;
+    const meta = item as { value?: unknown; isSecret?: boolean; sharedWith?: string[] | '*'; locked?: boolean };
+    const isSecret = meta.isSecret ?? false;
 
-    const valStr = typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '');
+    const present = (val: unknown): void => {
+      const valStr = typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '');
 
-    let type: StoreValueType | 'null' = typeof val as StoreValueType;
-    if (val === null) type = 'null';
-    else if (Array.isArray(val)) type = 'json';
-    else if (typeof val === 'object') type = 'json';
+      let type: StoreValueType | 'null' = typeof val as StoreValueType;
+      if (val === null) type = 'null';
+      else if (Array.isArray(val)) type = 'json';
+      else if (typeof val === 'object') type = 'json';
 
-    this._show(key, valStr, isSecret, type);
+      this._show(key, valStr, isSecret, type, meta.sharedWith, meta.locked === true);
+    };
+
+    // The list endpoint never carries secret values; fetch the plaintext explicitly.
+    if (isSecret && !meta.locked) {
+      void window.storeExplorer?.revealSecret(key).then((revealed) => {
+        if (revealed) present(revealed.value);
+      });
+      return;
+    }
+    present(isSecret ? '' : meta.value);
   };
 
   close = (): void => {
     this._open = false;
   };
 
-  private _show(key: string, value: string, isSecret: boolean, type: StoreValueType | 'null'): void {
+  private _show(
+    key: string,
+    value: string,
+    isSecret: boolean,
+    type: StoreValueType | 'null',
+    sharedWith?: string[] | '*',
+    locked = false
+  ): void {
     this._mode = key ? 'edit' : 'create';
     this._key = key;
     this._value = value;
     this._type = type;
     this._isSecret = isSecret;
     this._valueMasked = isSecret;
+    this._locked = locked;
+    this._sharedAll = sharedWith === '*';
+    this._sharedWith = new Set(Array.isArray(sharedWith) ? sharedWith : []);
     this._keyError = '';
     this._valueError = '';
     this._open = true;
+    void this._loadScripts();
   }
 
   private _validateKey(showEmptyError = false): boolean {
@@ -310,6 +380,80 @@ export class StoreItemModal extends LitElement {
   private _onValueInput(e: InputEvent): void {
     this._value = (e.target as HTMLTextAreaElement).value;
     this._validateValue();
+  }
+
+  private async _loadScripts(): Promise<void> {
+    try {
+      const res = await window.apiFetch!('api/scripts');
+      if (!res.ok) return;
+      const list = (await res.json()) as { filename?: string }[];
+      this._scripts = list.map((s) => s.filename || '').filter(Boolean);
+    } catch {
+      // The picker degrades to the already-shared scripts only.
+    }
+  }
+
+  private _toggleShared(filename: string, checked: boolean): void {
+    const next = new Set(this._sharedWith);
+    if (checked) next.add(filename);
+    else next.delete(filename);
+    this._sharedWith = next;
+  }
+
+  private _renderSharing() {
+    if (!this._isSecret) return nothing;
+    // Keep scripts that are shared but no longer exist visible, so they can be unshared.
+    const names = [...new Set([...this._scripts, ...this._sharedWith])].sort();
+    return html`
+      <div class="sharing">
+        <div class="sharing-title">${this._t('store.modal.sharing_title', 'Scripts that may use this secret')}</div>
+        <label class="sharing-item">
+          <input
+            type="checkbox"
+            .checked=${this._sharedAll}
+            @change=${(e: Event) => (this._sharedAll = (e.target as HTMLInputElement).checked)}
+          />
+          ${this._t('store.modal.sharing_all', 'All scripts')}
+        </label>
+        ${
+          this._sharedAll
+            ? nothing
+            : html`
+                <div class="sharing-list">
+                  ${names.map(
+                    (n) => html`
+                      <label class="sharing-item">
+                        <input
+                          type="checkbox"
+                          .checked=${this._sharedWith.has(n)}
+                          @change=${(e: Event) => this._toggleShared(n, (e.target as HTMLInputElement).checked)}
+                        />
+                        ${n}
+                        ${
+                          this._scripts.length > 0 && !this._scripts.includes(n)
+                            ? html`<span class="sharing-missing"
+                                >${this._t('store.modal.sharing_missing', '(script no longer exists)')}</span
+                              >`
+                            : nothing
+                        }
+                      </label>
+                    `
+                  )}
+                </div>
+                <div class="sharing-hint">
+                  ${
+                    this._sharedWith.size === 0
+                      ? this._t('store.modal.sharing_none', 'No script can read this secret yet.')
+                      : this._t(
+                          'store.modal.sharing_hint',
+                          'Other scripts get undefined when reading it and cannot overwrite it.'
+                        )
+                  }
+                </div>
+              `
+        }
+      </div>
+    `;
   }
 
   private _onSecretChange(e: Event): void {
@@ -368,7 +512,12 @@ export class StoreItemModal extends LitElement {
       await window.apiFetch!('api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value, isSecret }),
+        body: JSON.stringify({
+          key,
+          value,
+          isSecret,
+          sharedWith: isSecret ? (this._sharedAll ? '*' : [...this._sharedWith]) : undefined,
+        }),
       });
       this.close();
       // The server echoes this write back via the 'store_changed' socket event, which
@@ -442,6 +591,16 @@ export class StoreItemModal extends LitElement {
             </div>
             <div class="form-error-msg">${this._valueError}</div>
           </div>
+          ${
+            this._locked
+              ? html`<div class="form-error-msg">
+                  ${this._t(
+                    'store.locked_hint',
+                    'This secret was encrypted with a key that is not available. Enter the value again to restore it.'
+                  )}
+                </div>`
+              : nothing
+          }
           <div class="secret-row">
             <input
               type="checkbox"
@@ -451,6 +610,7 @@ export class StoreItemModal extends LitElement {
             />
             <label for="store-secret-check">${this._t('store.modal.label_secret')}</label>
           </div>
+          ${this._renderSharing()}
           <div class="modal-btns">
             <button class="btn-primary" @click=${() => this._save()}>${this._t('store.btn_save', 'SAVE')}</button>
             <button class="btn-text" @click=${() => this.close()}>${this._t('store.btn_cancel', 'CANCEL')}</button>

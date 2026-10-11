@@ -855,12 +855,10 @@ class WorkerManager extends EventEmitter {
     setTimeout(() => this._sweepOrphanedDynamicEntities(scriptId), 10000);
 
     // Prepare initial data dump for the worker
-    const initialStoreValues: Record<string, unknown> = {};
-    if (this.storeManager) {
-      for (const k in this.storeManager.data) {
-        initialStoreValues[k] = this.storeManager.data[k].value;
-      }
-    }
+    // Only values this script may see: secrets are filtered by their sharedWith list.
+    const initialStoreValues: Record<string, unknown> = this.storeManager
+      ? this.storeManager.valuesFor(scriptMeta.filename)
+      : {};
 
     // Determine Memory Limit (Priority: Script Header > Settings > Default)
     let memoryLimit = this.settings.node_memory || 256;
@@ -1027,18 +1025,34 @@ class WorkerManager extends EventEmitter {
 
         // 4. Store Operations
         if (msg.type === 'store_set' && this.storeManager) {
-          const currentEntry = this.storeManager.data[msg.key];
-          const currentValue = currentEntry ? currentEntry.value : undefined;
+          const existing = this.storeManager.data[msg.key];
+          const optionsGiven = msg.isSecret !== undefined || msg.sharedWith !== undefined;
+          const shouldWrite = existing ? optionsGiven || existing.value !== msg.value : msg.value !== undefined;
 
-          if (currentValue !== msg.value) {
-            this.storeManager.set(msg.key, msg.value, name, msg.isSecret);
-            this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value }, worker);
+          if (shouldWrite) {
+            let written = false;
+            try {
+              written = this.storeManager.set(msg.key, msg.value, name, msg.isSecret, {
+                sharedWith: msg.sharedWith,
+                scriptId: scriptMeta.filename,
+              });
+              if (!written) this._warnStoreDenied(name, msg.key, 'write');
+            } catch (e: any) {
+              this._warnStoreDenied(name, msg.key, 'write', e.message);
+            }
+            if (written) this.broadcastStoreUpdate(msg.key, worker);
+            // Undo the worker's optimistic local write when it was refused.
+            else this._postStoreKey(worker, scriptMeta.filename, msg.key);
           }
         }
         if (msg.type === 'store_delete' && this.storeManager) {
           if (this.storeManager.data[msg.key] !== undefined) {
-            this.storeManager.delete(msg.key);
-            this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined }, worker);
+            if (this.storeManager.delete(msg.key, scriptMeta.filename)) {
+              this.broadcastStoreUpdate(msg.key, worker);
+            } else {
+              this._warnStoreDenied(name, msg.key, 'delete');
+              this._postStoreKey(worker, scriptMeta.filename, msg.key);
+            }
           }
         }
 
@@ -1391,6 +1405,38 @@ class WorkerManager extends EventEmitter {
   /**
    * Sends a message to all running workers.
    */
+  /** Logs a refused store access by a script (secret not shared with it, or invalid options). */
+  private _warnStoreDenied(scriptName: string, key: string, op: 'write' | 'delete', detail?: string): void {
+    this.emit('log', {
+      source: scriptName,
+      message: detail
+        ? `ha.store ${op} of '${key}' rejected: ${detail}`
+        : `ha.store ${op} of '${key}' denied: this is a secret that is not shared with this script.`,
+      level: 'warn',
+    });
+  }
+
+  /**
+   * Sends one worker the current truth for a store key: the value if the script may see it,
+   * otherwise undefined (which also removes a stale optimistic local copy).
+   */
+  private _postStoreKey(worker: Worker, scriptId: string, key: string): void {
+    const sm = this.storeManager;
+    const visible = !!sm && sm.canRead(key, scriptId);
+    worker.postMessage({ type: 'store_update', key, value: visible ? sm!.data[key].value : undefined });
+  }
+
+  /**
+   * Propagates a store key change to all script workers, filtering secrets per script so a value
+   * is only ever sent to workers it is shared with.
+   */
+  broadcastStoreUpdate(key: string, exceptWorker: Worker | null = null): void {
+    for (const [scriptId, worker] of this.workers) {
+      if (worker === exceptWorker) continue;
+      this._postStoreKey(worker, scriptId, key);
+    }
+  }
+
   broadcastToWorkers(payload: unknown, exceptWorker: Worker | null = null): void {
     for (const worker of this.workers.values()) {
       if (worker === exceptWorker) continue;
@@ -1433,12 +1479,8 @@ class WorkerManager extends EventEmitter {
         return resolve({ logs: [], error: `Write error: ${(e as Error).message}` });
       }
 
-      const initialStoreValues: Record<string, unknown> = {};
-      if (this.storeManager) {
-        for (const k in this.storeManager.data) {
-          initialStoreValues[k] = this.storeManager.data[k].value;
-        }
-      }
+      // The REPL is an administrative context (like the UI): it sees every unlocked value.
+      const initialStoreValues: Record<string, unknown> = this.storeManager ? this.storeManager.valuesFor() : {};
       const language =
         this.settings.ui_language && this.settings.ui_language !== 'auto'
           ? this.settings.ui_language
@@ -1538,12 +1580,16 @@ class WorkerManager extends EventEmitter {
           }
         }
         if (msg.type === 'store_set' && this.storeManager) {
-          this.storeManager.set(msg.key, msg.value, 'REPL', msg.isSecret);
-          this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: msg.value });
+          try {
+            this.storeManager.set(msg.key, msg.value, 'REPL', msg.isSecret, { sharedWith: msg.sharedWith });
+            this.broadcastStoreUpdate(msg.key);
+          } catch (e: any) {
+            logs.push({ level: 'warn', message: `ha.store.set('${msg.key}') failed: ${e.message}` });
+          }
         }
         if (msg.type === 'store_delete' && this.storeManager) {
           this.storeManager.delete(msg.key);
-          this.broadcastToWorkers({ type: 'store_update', key: msg.key, value: undefined });
+          this.broadcastStoreUpdate(msg.key);
         }
 
         // ha.history.get() and the computed history helpers built on it

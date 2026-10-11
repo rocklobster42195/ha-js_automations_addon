@@ -161,6 +161,8 @@ export interface JsaStatusBarBridge {
 export interface JsaStoreExplorerBridge {
   getItem(key: string): unknown;
   hasKey(key: string): boolean;
+  /** Fetches the plaintext of a secret (the list API withholds it). */
+  revealSecret(key: string): Promise<{ value: unknown } | undefined>;
   refreshIfSocketDown(): void;
   openTab(): void;
 }
