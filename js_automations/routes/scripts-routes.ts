@@ -914,6 +914,14 @@ export = (
       }
       fs.renameSync(fullPath, newFullPath);
       fullPath = newFullPath; // Update path for subsequent write
+
+      // Secrets are shared by script file name: carry the rename over before the script restarts,
+      // otherwise it would lose access to its own secrets.
+      if (isRenaming && workerManager.storeManager) {
+        for (const key of workerManager.storeManager.renameScript(oldFilename, newFilename)) {
+          workerManager.broadcastStoreUpdate(key);
+        }
+      }
     }
 
     // Use Parser to update metadata (handles @expose and formatting centrally)

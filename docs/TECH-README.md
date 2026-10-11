@@ -146,18 +146,18 @@ Every script runs in its own **Node.js Worker Thread** (not a separate process).
 
 ### Message Protocol (Worker → Manager)
 
-| `msg.type`      | Meaning                                                                                  |
-| --------------- | ---------------------------------------------------------------------------------------- |
-| `log`           | Log line from `ha.log()` or `console.log()`                                              |
-| `call_service`  | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back       |
-| `update_state`  | `ha.update()` — Manager forwards to EntityManager (MQTT)                                 |
-| `create_entity` | `ha.register()` — Manager forwards to EntityManager for Discovery                        |
-| `subscribe`     | `ha.on()` — Manager registers pattern in `subscriptions` map                             |
-| `store_set`     | `ha.store.set()` — Manager persists via StoreManager, broadcasts to all other workers    |
-| `ask`           | `ha.ask()` — Manager sends HA mobile app notification, waits for action response         |
-| `get_stats`     | Heartbeat request; worker responds with RAM usage                                        |
-| `install_card`  | `ha.frontend.installCard()` — Manager forwards to CardManager                            |
-| `card_action`   | Manager → worker: dispatches an `ha.action()` call to the worker's local handler; see §8 |
+| `msg.type`      | Meaning                                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `log`           | Log line from `ha.log()` or `console.log()`                                                                             |
+| `call_service`  | `ha.call()` / `ha.callService()` — Manager calls HA WebSocket, sends response back                                      |
+| `update_state`  | `ha.update()` — Manager forwards to EntityManager (MQTT)                                                                |
+| `create_entity` | `ha.register()` — Manager forwards to EntityManager for Discovery                                                       |
+| `subscribe`     | `ha.on()` — Manager registers pattern in `subscriptions` map                                                            |
+| `store_set`     | `ha.store.set()` — Manager persists via StoreManager, broadcasts to other workers (secrets filtered per script, see §7) |
+| `ask`           | `ha.ask()` — Manager sends HA mobile app notification, waits for action response                                        |
+| `get_stats`     | Heartbeat request; worker responds with RAM usage                                                                       |
+| `install_card`  | `ha.frontend.installCard()` — Manager forwards to CardManager                                                           |
+| `card_action`   | Manager → worker: dispatches an `ha.action()` call to the worker's local handler; see §8                                |
 
 Failed service calls (`call_service`) are caught in the WorkerManager and logged to the master process log rather than crashing silently — this ensures errors are always visible in the UI even if the script itself does not have error handling.
 
@@ -227,37 +227,37 @@ ha.fs = buildHaFs({ dataDir, capabilityEnforcement, permissions, quotas });
 
 The wrapper constructs a global `ha` object. The following table covers the complete set of methods injected, all of which internally call `parentPort.postMessage()`:
 
-| Method                                             | Message type           | Notes                                                                            |
-| -------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------- |
-| `ha.on(pattern, [filter], [threshold], cb)`        | `subscribe`            | Increments refCount, calls `parentPort.ref()` when first listener added          |
-| `ha.call(serviceId, data)`                         | `call_service`         | Dot-notation `'domain.service'`; preferred over deprecated `ha.callService()`    |
-| `ha.callService(domain, service, data)`            | `call_service`         | **Deprecated** — use `ha.call()`                                                 |
-| `ha.update(entityId, state, attrs?)`               | `update_state`         | Replaces deprecated `ha.updateState()`                                           |
-| `ha.update(entityId, attributesOnly)`              | `update_state`         | Attributes-only overload                                                         |
-| `ha.updateState(entityId, state, attrs?)`          | `update_state`         | **Deprecated** — use `ha.update()`                                               |
-| `ha.register(entityId, config)`                    | `create_entity`        | Triggers MQTT Discovery                                                          |
-| `ha.getState(entityId)`                            | —                      | Synchronous read from local state cache                                          |
-| `ha.getStateValue(entityId)`                       | —                      | Converts `'on'`/`'off'` to boolean, numeric strings to number                    |
-| `ha.getAttr(entityId, attr)`                       | —                      | Synchronous attribute read from local cache                                      |
-| `ha.getGroupMembers(entityId)`                     | —                      | Reads `attributes.entity_id` from the group entity's cached state                |
-| `ha.select(pattern)`                               | —                      | Builds an `EntitySelector` from the local state cache                            |
-| `ha.waitFor(pattern, [filter], [threshold], opts)` | `subscribe`            | Returns a Promise that resolves on the next matching state change                |
-| `ha.waitUntil(condition, opts)`                    | —                      | Polls `condition()` every `pollInterval` ms (default 500 ms), resolves when true |
-| `ha.log(msg)` / `.debug` / `.warn` / `.error`      | `log`                  | Sends log line to master process                                                 |
-| `ha.store.set(key, value)`                         | `store_set`            | Persists and broadcasts to all other workers                                     |
-| `ha.store.get(key)`                                | —                      | Synchronous read from local store snapshot                                       |
-| `ha.store.delete(key)`                             | `store_set`            | Sets value to `undefined`, triggers broadcast                                    |
-| `ha.store.on(key, cb)`                             | —                      | Local reactive listener for store key changes                                    |
-| `ha.persistent(key, default)`                      | —                      | Returns a deep proxy or `{ value }` ref; see §7                                  |
-| `ha.action(name, handler)`                         | — (local only)         | Registers named handler in-worker; dispatched later via `card_action`; see §8    |
-| `ha.notify(msg, opts)`                             | `call_service`         | Calls `notify.*` HA service                                                      |
-| `ha.ask(msg, opts)`                                | `ask`                  | Actionable notification, returns Promise                                         |
-| `ha.stop(reason)` / `.restart(reason)`             | `log` + `process.exit` | Graceful stop/restart                                                            |
-| `ha.onStop(cb)`                                    | —                      | Registers shutdown callback                                                      |
-| `ha.onError(cb)`                                   | —                      | Registers background error handler                                               |
-| `ha.localize(mapping, fallback)`                   | —                      | Returns string for `ha.language`                                                 |
-| `ha.frontend.installCard(opts)`                    | `install_card`         | Triggers CardManager; see §18                                                    |
-| `ha.entity(entityId)`                              | (fluent proxy)         | Returns `EntityServices` proxy for chained service calls                         |
+| Method                                             | Message type           | Notes                                                                                     |
+| -------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------- |
+| `ha.on(pattern, [filter], [threshold], cb)`        | `subscribe`            | Increments refCount, calls `parentPort.ref()` when first listener added                   |
+| `ha.call(serviceId, data)`                         | `call_service`         | Dot-notation `'domain.service'`; preferred over deprecated `ha.callService()`             |
+| `ha.callService(domain, service, data)`            | `call_service`         | **Deprecated** — use `ha.call()`                                                          |
+| `ha.update(entityId, state, attrs?)`               | `update_state`         | Replaces deprecated `ha.updateState()`                                                    |
+| `ha.update(entityId, attributesOnly)`              | `update_state`         | Attributes-only overload                                                                  |
+| `ha.updateState(entityId, state, attrs?)`          | `update_state`         | **Deprecated** — use `ha.update()`                                                        |
+| `ha.register(entityId, config)`                    | `create_entity`        | Triggers MQTT Discovery                                                                   |
+| `ha.getState(entityId)`                            | —                      | Synchronous read from local state cache                                                   |
+| `ha.getStateValue(entityId)`                       | —                      | Converts `'on'`/`'off'` to boolean, numeric strings to number                             |
+| `ha.getAttr(entityId, attr)`                       | —                      | Synchronous attribute read from local cache                                               |
+| `ha.getGroupMembers(entityId)`                     | —                      | Reads `attributes.entity_id` from the group entity's cached state                         |
+| `ha.select(pattern)`                               | —                      | Builds an `EntitySelector` from the local state cache                                     |
+| `ha.waitFor(pattern, [filter], [threshold], opts)` | `subscribe`            | Returns a Promise that resolves on the next matching state change                         |
+| `ha.waitUntil(condition, opts)`                    | —                      | Polls `condition()` every `pollInterval` ms (default 500 ms), resolves when true          |
+| `ha.log(msg)` / `.debug` / `.warn` / `.error`      | `log`                  | Sends log line to master process                                                          |
+| `ha.store.set(key, value, secret?)`                | `store_set`            | Persists and broadcasts to other workers; secrets only reach workers they are shared with |
+| `ha.store.get(key)`                                | —                      | Synchronous read from local store snapshot                                                |
+| `ha.store.delete(key)`                             | `store_delete`         | Removes the key, triggers broadcast                                                       |
+| `ha.store.on(key, cb)`                             | —                      | Local reactive listener for store key changes                                             |
+| `ha.persistent(key, default)`                      | —                      | Returns a deep proxy or `{ value }` ref; see §7                                           |
+| `ha.action(name, handler)`                         | — (local only)         | Registers named handler in-worker; dispatched later via `card_action`; see §8             |
+| `ha.notify(msg, opts)`                             | `call_service`         | Calls `notify.*` HA service                                                               |
+| `ha.ask(msg, opts)`                                | `ask`                  | Actionable notification, returns Promise                                                  |
+| `ha.stop(reason)` / `.restart(reason)`             | `log` + `process.exit` | Graceful stop/restart                                                                     |
+| `ha.onStop(cb)`                                    | —                      | Registers shutdown callback                                                               |
+| `ha.onError(cb)`                                   | —                      | Registers background error handler                                                        |
+| `ha.localize(mapping, fallback)`                   | —                      | Returns string for `ha.language`                                                          |
+| `ha.frontend.installCard(opts)`                    | `install_card`         | Triggers CardManager; see §18                                                             |
+| `ha.entity(entityId)`                              | (fluent proxy)         | Returns `EntityServices` proxy for chained service calls                                  |
 
 ---
 
@@ -317,15 +317,36 @@ Under the hood, `.turn_off()` (and all other domain service methods) call `ha.ca
 
 `ha.store` provides a key-value store that is shared across all running scripts and persisted to `.storage/store.json`.
 
-| API                                   | Behavior                                                                                                              |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ha.store.set(key, value, isSecret?)` | Sends `store_set` to WorkerManager → StoreManager persists, broadcasts new value to all other workers                 |
-| `ha.store.get(key)`                   | Synchronous read from the local store snapshot delivered at worker start                                              |
-| `ha.store.delete(key)`                | Equivalent to `ha.store.set(key, undefined)`                                                                          |
-| `ha.store.on(key, cb)`                | Registers a local change listener; called when the master broadcasts a store update                                   |
-| `ha.store.val`                        | Direct reference to the local snapshot object — reads are synchronous but do **not** trigger listeners or persistence |
+| API                                 | Behavior                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `ha.store.set(key, value, secret?)` | Sends `store_set` to WorkerManager → StoreManager persists, broadcasts new value to other workers (filtered for secrets) |
+| `ha.store.get(key)`                 | Synchronous read from the local store snapshot delivered at worker start                                                 |
+| `ha.store.delete(key)`              | Sends `store_delete`; StoreManager removes the key and the removal is broadcast                                          |
+| `ha.store.on(key, cb)`              | Registers a local change listener; called when the master broadcasts a store update                                      |
+| `ha.store.val`                      | Direct reference to the local snapshot object — reads are synchronous but do **not** trigger listeners or persistence    |
 
 The broadcast mechanism: when any worker calls `ha.store.set()`, WorkerManager notifies StoreManager which persists the value and then sends `{ type: 'store_update', key, value }` to every other running worker. Each worker's local `store` snapshot is updated in place, triggering any registered `.on()` listeners.
+
+### Secrets: encryption and sharing
+
+Entries stored with `isSecret` are encrypted at rest and access-controlled per script. Implemented in `StoreManager`; the rest of the addon keeps working with plaintext `data[key].value` in memory.
+
+**Encryption.** `save()` encrypts each secret with AES-256-GCM (random 12-byte IV per write, the store key is bound as AAD so ciphertexts cannot be swapped between entries) and writes `{ v, kid, iv, tag, data }` plus `encrypted: true`. `load()` decrypts. `store.json` is written atomically (temp file + rename, mode 0600).
+
+**Key.** `config.STORE_KEY_FILE`: `/data/store.key` as addon (private volume: not in `/config`, not in JSA backups, not in git), `.storage/store.key` in dev (listed in `backup-scope.ts`). `JSA_STORE_KEY` overrides both. 32 random bytes, hex encoded, created with `wx` and mode 0600 on first use; a store without secrets never creates one. `kid` is a fingerprint of the key.
+
+**Locked entries.** If a blob cannot be decrypted (key missing, different `kid`, tampered), the entry is loaded as `locked` (`value: null`, original blob kept in `raw`). It is written back untouched, no script can read it, and the UI offers to re-enter the value. A missing key is never silently regenerated on load.
+
+**Migration.** A secret without `encrypted: true` is a legacy plaintext entry: it is encrypted on the first save at startup and gets `sharedWith: '*'` so existing automations keep working.
+
+**Access control.** A secret carries `sharedWith: string[] | '*'` (script file names, i.e. the `workers` map keys). `canRead`/`canWrite` take the `scriptId` of the calling worker; callers without one (UI, REPL) are administrative. Rules:
+
+- New secret from a script: `sharedWith = [scriptId]`; from the UI/REPL: `[]`. Writers always keep access; `owner` is not transferred by overwrites.
+- `isSecret === undefined` keeps the existing flag (`ha.store.set(k, v)` must not downgrade a secret); `false` downgrades explicitly.
+- Initial store (`workerData.initialStore`) is `valuesFor(scriptId)`. Updates go through `WorkerManager.broadcastStoreUpdate(key)`, which sends each worker the value or `undefined` depending on `canRead`. A refused write is answered with a corrective `store_update` to the writing worker, undoing its optimistic local copy. Workers ignore `undefined` updates for keys they never had.
+- `pruneByOwner` skips secrets. `StoreManager.renameScript(old, new)` is called from `PUT /api/scripts/:filename/metadata` and rewrites the sharing lists; renames outside that route are not detected.
+
+**API surface.** `GET /api/store` returns `getAllPublic()` (`value: null` for secrets, plus `sharedWith`/`locked`); `changed` events carry the same public item. `GET /api/store/:key/reveal` returns the plaintext (`409` for locked entries). `POST /api/store` accepts `sharedWith`. This is protection against leaked backups and config folders, not a sandbox: all workers run in the same process.
 
 ### `ha.persistent()` — Auto-Saving Proxy
 

@@ -206,7 +206,7 @@ A graphical UI for `ha.store`:
 - **Visual table** with keys, values, owners, and timestamps.
 - **Live updates** as scripts write to the store.
 - **Edit & Delete** values directly.
-- **Secrets:** Mark values as secret to mask them in the UI (e.g., API keys, tokens).
+- **Secrets:** Mark values as secret (e.g., API keys, tokens) to encrypt them at rest and mask them in the UI. A secret is only readable by the script that created it, unless you share it with other scripts.
 
 ---
 

@@ -394,6 +394,24 @@ class StoreManager extends EventEmitter {
   }
 
   /**
+   * Re-points secret sharing lists from a renamed script file to its new name, so a rename does
+   * not silently cut the script off from its secrets. Returns the keys that were updated.
+   */
+  renameScript(oldId: string, newId: string): string[] {
+    const touched: string[] = [];
+    for (const [key, entry] of Object.entries(this.data)) {
+      if (!entry.isSecret || !Array.isArray(entry.sharedWith) || !entry.sharedWith.includes(oldId)) continue;
+      entry.sharedWith = [...new Set(entry.sharedWith.map((id) => (id === oldId ? newId : id)))];
+      touched.push(key);
+    }
+    if (touched.length > 0) {
+      this.save();
+      for (const key of touched) this.emit('changed', { key, item: this.publicEntry(this.data[key]) });
+    }
+    return touched;
+  }
+
+  /**
    * Deletes all variables created by a specific script. Secrets are exempt: they may be shared
    * with other scripts and must not vanish because their creator was removed.
    */

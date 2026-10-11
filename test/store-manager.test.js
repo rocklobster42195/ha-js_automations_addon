@@ -201,3 +201,21 @@ test('pruneByOwner leaves secrets alone', (t) => {
   assert.ok(store.data.cred);
   assert.equal(store.data.tmp, undefined);
 });
+
+test('renameScript carries sharing over to the new file name', (t) => {
+  const { dir, keyFile } = setup(t);
+  const store = new StoreManager(dir, keyFile);
+  store.set('cred', 'x', 'A', true, { scriptId: 'old.js', sharedWith: ['other.js'] });
+  store.set('all', 'y', 'A', true, { scriptId: 'old.js', sharedWith: '*' });
+  store.set('mine', 'z', 'B', true, { scriptId: 'unrelated.js' });
+  const events = [];
+  store.on('changed', (e) => events.push(e.key));
+
+  assert.deepEqual(store.renameScript('old.js', 'new.js'), ['cred']);
+  assert.deepEqual(store.data.cred.sharedWith.sort(), ['new.js', 'other.js']);
+  assert.equal(store.canRead('cred', 'new.js'), true);
+  assert.equal(store.canRead('cred', 'old.js'), false);
+  assert.equal(store.data.all.sharedWith, '*');
+  assert.deepEqual(events, ['cred']);
+  assert.deepEqual(new StoreManager(dir, keyFile).data.cred.sharedWith.sort(), ['new.js', 'other.js']);
+});
