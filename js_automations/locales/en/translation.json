@@ -518,7 +518,8 @@
       "sharing_title": "Scripts that may use this secret",
       "sharing_all": "All scripts",
       "sharing_none": "No script can read this secret yet.",
-      "sharing_hint": "Other scripts get undefined when reading it and cannot overwrite it."
+      "sharing_hint": "Other scripts get undefined when reading it and cannot overwrite it.",
+      "sharing_missing": "(script no longer exists)"
     },
     "btn_save": "Save",
     "btn_cancel": "Cancel",

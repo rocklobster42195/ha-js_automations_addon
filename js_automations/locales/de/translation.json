@@ -518,7 +518,8 @@
       "sharing_title": "Skripte, die dieses Secret verwenden dürfen",
       "sharing_all": "Alle Skripte",
       "sharing_none": "Noch kein Skript kann dieses Secret lesen.",
-      "sharing_hint": "Andere Skripte erhalten beim Lesen undefined und können es nicht überschreiben."
+      "sharing_hint": "Andere Skripte erhalten beim Lesen undefined und können es nicht überschreiben.",
+      "sharing_missing": "(Skript existiert nicht mehr)"
     },
     "btn_save": "Speichern",
     "btn_cancel": "Abbrechen",

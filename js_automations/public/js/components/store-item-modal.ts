@@ -191,6 +191,12 @@ export class StoreItemModal extends LitElement {
       width: auto;
     }
 
+    .sharing-missing {
+      font-size: 0.75rem;
+      opacity: 0.6;
+      font-style: italic;
+    }
+
     .sharing-hint {
       margin-top: 6px;
       font-size: 0.75rem;
@@ -423,6 +429,13 @@ export class StoreItemModal extends LitElement {
                           @change=${(e: Event) => this._toggleShared(n, (e.target as HTMLInputElement).checked)}
                         />
                         ${n}
+                        ${
+                          this._scripts.length > 0 && !this._scripts.includes(n)
+                            ? html`<span class="sharing-missing"
+                                >${this._t('store.modal.sharing_missing', '(script no longer exists)')}</span
+                              >`
+                            : nothing
+                        }
                       </label>
                     `
                   )}
