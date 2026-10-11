@@ -1574,7 +1574,12 @@ const ha: any = {
       storeValues[key] = value;
       pp.postMessage({ type: 'store_set', key, value, isSecret: opts.secret, sharedWith: (opts as any).sharedWith });
     },
-    get: (key: string) => storeValues[key], // Safe now as it's filtered above
+    get: (key: string) => {
+      // Without a listener the worker never processes store_update, so reads would be a stale
+      // snapshot from startup. The listener is unref'd and does not keep the worker alive.
+      ensureMessageListener();
+      return storeValues[key];
+    },
     delete: (key: string) => {
       delete storeValues[key];
       pp.postMessage({ type: 'store_delete', key });

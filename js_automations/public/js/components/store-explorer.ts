@@ -276,6 +276,10 @@ export class StoreExplorer extends LitElement {
       align-items: center;
       justify-content: space-between;
     }
+    /* 'anywhere' (see .store-value) lets the table squeeze the column to one character per line */
+    .store-value-row .store-value {
+      overflow-wrap: break-word;
+    }
     .store-json {
       margin: 0;
       font-family: monospace;
@@ -700,7 +704,9 @@ export class StoreExplorer extends LitElement {
     const isDirty = this._dirtyKeys.has(key);
 
     let type: string = typeof val;
-    if (val === null) type = 'null';
+    // A secret's value is withheld from the list, so its real type is unknown here.
+    if (meta.isSecret) type = 'secret';
+    else if (val === null) type = 'null';
     else if (Array.isArray(val)) type = 'array';
     const typeLabel = this._t(`store.types.${type}`, type.toUpperCase().substring(0, 3));
 

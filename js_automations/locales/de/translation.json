@@ -547,7 +547,8 @@
       "boolean": "BOOL",
       "object": "OBJ",
       "array": "LIST",
-      "null": "NULL"
+      "null": "NULL",
+      "secret": "GEHEIM"
     },
     "messages": {
       "key_required": "Schlüssel ist erforderlich",
