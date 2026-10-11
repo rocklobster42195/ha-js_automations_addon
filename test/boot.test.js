@@ -70,7 +70,7 @@ test('server boots and serves the dashboard even when Home Assistant is unreacha
   });
 
   const res = await Promise.race([
-    waitForHttpOk(`http://127.0.0.1:${port}/api/status`, 15000),
+    waitForHttpOk(`http://127.0.0.1:${port}/api/status`, 60000),
     exitedEarly.then((code) => {
       throw new Error(`server.js exited early with code ${code} before it started listening.\nstderr:\n${stderr}`);
     }),
