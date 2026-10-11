@@ -514,7 +514,11 @@
       "label_type": "Datentyp",
       "label_secret": "Geheimnis (In UI maskieren)",
       "placeholder_key": "z.B. api_schluessel",
-      "placeholder_value": "Wert"
+      "placeholder_value": "Wert",
+      "sharing_title": "Skripte, die dieses Secret verwenden dürfen",
+      "sharing_all": "Alle Skripte",
+      "sharing_none": "Noch kein Skript kann dieses Secret lesen.",
+      "sharing_hint": "Andere Skripte erhalten beim Lesen undefined und können es nicht überschreiben."
     },
     "btn_save": "Speichern",
     "btn_cancel": "Abbrechen",
@@ -552,7 +556,15 @@
       "generic_error": "Fehler: {{error}}",
       "error_number_empty": "Zahl darf nicht leer sein",
       "error_invalid_number": "Wert ist keine gültige Zahl",
-      "error_invalid_json_start": "Wert sieht nicht nach JSON aus (muss mit { oder [ beginnen)"
+      "error_invalid_json_start": "Wert sieht nicht nach JSON aus (muss mit { oder [ beginnen)",
+      "reveal_error": "Secret konnte nicht angezeigt werden: {{error}}"
+    },
+    "locked": "Gesperrt",
+    "locked_hint": "Dieses Secret wurde mit einem nicht verfügbaren Schlüssel verschlüsselt. Gib den Wert erneut ein, um es wiederherzustellen.",
+    "sharing": {
+      "all": "Für alle Skripte freigegeben",
+      "none": "Für kein Skript freigegeben",
+      "list": "Freigegeben für: {{scripts}}"
     }
   },
   "cap_network": "Netzwerkzugriff",

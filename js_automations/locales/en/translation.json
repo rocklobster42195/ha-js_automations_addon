@@ -514,7 +514,11 @@
       "label_type": "Data Type",
       "label_secret": "Is Secret (Masked in UI)",
       "placeholder_key": "e.g. my_api_key",
-      "placeholder_value": "Value"
+      "placeholder_value": "Value",
+      "sharing_title": "Scripts that may use this secret",
+      "sharing_all": "All scripts",
+      "sharing_none": "No script can read this secret yet.",
+      "sharing_hint": "Other scripts get undefined when reading it and cannot overwrite it."
     },
     "btn_save": "Save",
     "btn_cancel": "Cancel",
@@ -552,7 +556,15 @@
       "generic_error": "Error: {{error}}",
       "error_number_empty": "Number cannot be empty",
       "error_invalid_number": "Value is not a valid number",
-      "error_invalid_json_start": "Value does not look like JSON (must start with { or [)"
+      "error_invalid_json_start": "Value does not look like JSON (must start with { or [)",
+      "reveal_error": "Could not reveal the secret: {{error}}"
+    },
+    "locked": "Locked",
+    "locked_hint": "This secret was encrypted with a key that is not available. Enter the value again to restore it.",
+    "sharing": {
+      "all": "Shared with all scripts",
+      "none": "Not shared with any script",
+      "list": "Shared with: {{scripts}}"
     }
   },
   "cap_network": "Network access",

@@ -149,29 +149,25 @@ function startApp(): void {
   );
 
   // We create a proxy for the StoreManager to broadcast changes to workers from the UI.
+  // Workers are updated per script (secrets only reach scripts they are shared with).
   const storeManagerUiWrapper = new Proxy(storeManager, {
     get(target, prop) {
       if (prop === 'set') {
-        return (key: string, value: unknown, owner?: string, isSecret?: boolean) => {
-          const current = target.data[key]?.value;
-          const res = target.set(key, value, owner, isSecret);
-          if (current !== value) {
-            workerManager.broadcastToWorkers({ type: 'store_update', key, value });
-          }
+        return (...args: Parameters<StoreManager['set']>) => {
+          const res = target.set(...args);
+          if (res) workerManager.broadcastStoreUpdate(args[0]);
           return res;
         };
       }
       if (prop === 'delete') {
         return (key: string) => {
-          const exists = target.data[key] !== undefined;
           const res = target.delete(key);
-          if (exists) {
-            workerManager.broadcastToWorkers({ type: 'store_update', key, value: undefined });
-          }
+          if (res) workerManager.broadcastStoreUpdate(key);
           return res;
         };
       }
-      return (target as unknown as Record<string | symbol, unknown>)[prop];
+      const member = (target as unknown as Record<string | symbol, unknown>)[prop];
+      return typeof member === 'function' ? member.bind(target) : member;
     },
   }) as StoreManager;
 

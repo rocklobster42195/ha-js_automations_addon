@@ -7,6 +7,7 @@ interface JsaConfig {
   IS_ADDON: boolean;
   SCRIPTS_DIR: string;
   STORAGE_DIR: string;
+  STORE_KEY_FILE: string;
   DIST_DIR: string;
   LIBRARIES_DIR: string;
   DATA_DIR: string;
@@ -33,6 +34,10 @@ const ADDON_DIR = path.join(__dirname, '..');
 const SCRIPTS_DIR =
   process.env.JSA_SCRIPTS_DIR || (IS_ADDON ? '/config/js-automations' : path.resolve(__dirname, '../../scripts'));
 const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
+// Encryption key for ha.store secrets. As an addon it lives in the private /data volume, which is
+// neither part of the JS Automations backups nor reachable via the /config share; the key must
+// not sit next to the data it protects.
+const STORE_KEY_FILE = IS_ADDON ? '/data/store.key' : path.join(STORAGE_DIR, 'store.key');
 const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const DATA_DIR = path.join(SCRIPTS_DIR, 'data');
@@ -100,6 +105,7 @@ const config: JsaConfig = {
   IS_ADDON,
   SCRIPTS_DIR,
   STORAGE_DIR,
+  STORE_KEY_FILE,
   DIST_DIR,
   LIBRARIES_DIR,
   DATA_DIR,

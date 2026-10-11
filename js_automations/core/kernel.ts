@@ -166,7 +166,7 @@ class Kernel extends EventEmitter {
    */
   boot(io: SocketIOServer): void {
     this.io = io;
-    const { SCRIPTS_DIR, STORAGE_DIR, DIST_DIR } = config;
+    const { SCRIPTS_DIR, STORAGE_DIR, STORE_KEY_FILE, DIST_DIR } = config;
 
     // Instantiate managers
     try {
@@ -175,7 +175,7 @@ class Kernel extends EventEmitter {
       this.haConnector = new HAConnector(process.env.HA_URL || '', process.env.HA_TOKEN, STORAGE_DIR);
       this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
       this.stateManager = new StateManager(STORAGE_DIR);
-      this.storeManager = new StoreManager(STORAGE_DIR);
+      this.storeManager = new StoreManager(STORAGE_DIR, STORE_KEY_FILE);
       this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);

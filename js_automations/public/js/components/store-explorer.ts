@@ -10,6 +10,10 @@ interface StoreItem {
   updated?: string | number;
   accessed?: string | number;
   isSecret?: boolean;
+  /** Secrets only: script file names with access, or '*' for all scripts. */
+  sharedWith?: string[] | '*';
+  /** The secret was encrypted with a key that is not available; it has to be re-entered. */
+  locked?: boolean;
 }
 
 type StoreCache = Record<string, StoreItem | unknown>;
@@ -30,6 +34,8 @@ function itemMeta(item: unknown): {
   updated?: string | number;
   accessed?: string | number;
   isSecret: boolean;
+  sharedWith?: string[] | '*';
+  locked: boolean;
 } {
   if (isStoreItem(item)) {
     return {
@@ -37,9 +43,15 @@ function itemMeta(item: unknown): {
       updated: item.updated,
       accessed: item.accessed,
       isSecret: item.isSecret || false,
+      sharedWith: item.sharedWith,
+      locked: item.locked === true,
     };
   }
-  return { owner: window.i18next?.t('store.system_owner', { defaultValue: 'System' }) || 'System', isSecret: false };
+  return {
+    owner: window.i18next?.t('store.system_owner', { defaultValue: 'System' }) || 'System',
+    isSecret: false,
+    locked: false,
+  };
 }
 
 function valueToString(val: unknown): string {
@@ -252,6 +264,13 @@ export class StoreExplorer extends LitElement {
       letter-spacing: 2px;
       font-size: 1.1em;
     }
+    .store-sharing {
+      margin-left: auto;
+      padding: 0 8px;
+      font-size: 0.8em;
+      opacity: 0.7;
+      white-space: nowrap;
+    }
     .store-value-row {
       display: flex;
       align-items: center;
@@ -338,7 +357,9 @@ export class StoreExplorer extends LitElement {
   @state() private _sortColumn: SortColumn = 'key';
   @state() private _sortDirection: 'asc' | 'desc' = 'asc';
   @state() private _expandedKeys: Set<string> = new Set();
-  @state() private _revealedSecrets: Set<string> = new Set();
+  /** Plaintext of secrets the user explicitly revealed. The server never sends secret values
+   * with the list, so they are fetched per key on demand and dropped again when hidden/changed. */
+  @state() private _revealedSecrets: Map<string, unknown> = new Map();
   @state() private _flashKeys: Set<string> = new Set();
   @state() private _copyFeedback: { key: string; kind: 'key' | 'value' } | null = null;
   @state() private _loading = false;
@@ -421,12 +442,36 @@ export class StoreExplorer extends LitElement {
     }
   };
 
+  /** Fetches the plaintext of a secret. Returns undefined (and shows a toast) on failure. */
+  revealSecret = async (key: string): Promise<{ value: unknown } | undefined> => {
+    try {
+      const res = await window.apiFetch!(`api/store/${encodeURIComponent(key)}/reveal`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      return { value: (await res.json()).value };
+    } catch (e) {
+      window.alertToast?.show(
+        this._t('store.messages.reveal_error', undefined, { error: e instanceof Error ? e.message : String(e) })
+      );
+      return undefined;
+    }
+  };
+
   private _onStoreChanged = (data: { cleared?: boolean; deleted?: boolean; key?: string; item?: unknown }): void => {
     if (!data) return;
 
     if (data.cleared) {
       this._storeCache = {};
+      this._revealedSecrets = new Map();
       return;
+    }
+    if (data.key && this._revealedSecrets.has(data.key)) {
+      // The cached plaintext may be stale now; the user can reveal it again.
+      const revealed = new Map(this._revealedSecrets);
+      revealed.delete(data.key);
+      this._revealedSecrets = revealed;
     }
     if (data.deleted && data.key) {
       const next = { ...this._storeCache };
@@ -532,7 +577,13 @@ export class StoreExplorer extends LitElement {
   }
 
   private async _copyValue(key: string): Promise<void> {
-    const valStr = valueToString(itemValue(this._storeCache[key]));
+    let val = itemValue(this._storeCache[key]);
+    if (itemMeta(this._storeCache[key]).isSecret) {
+      const revealed = await this.revealSecret(key);
+      if (!revealed) return;
+      val = revealed.value;
+    }
+    const valStr = valueToString(val);
     try {
       await navigator.clipboard.writeText(valStr);
       this._copyFeedback = { key, kind: 'value' };
@@ -556,11 +607,22 @@ export class StoreExplorer extends LitElement {
     }
   }
 
-  private _toggleSecret(key: string): void {
-    const next = new Set(this._revealedSecrets);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+  private async _toggleSecret(key: string): Promise<void> {
+    const next = new Map(this._revealedSecrets);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      const revealed = await this.revealSecret(key);
+      if (!revealed) return;
+      next.set(key, revealed.value);
+    }
     this._revealedSecrets = next;
+  }
+
+  private _sharingLabel(sharedWith: string[] | '*' | undefined): string {
+    if (sharedWith === '*') return this._t('store.sharing.all', 'Shared with all scripts');
+    if (!sharedWith || sharedWith.length === 0) return this._t('store.sharing.none', 'Not shared with any script');
+    return this._t('store.sharing.list', 'Shared with: {{scripts}}', { scripts: sharedWith.join(', ') });
   }
 
   private _toggleExpanded(key: string): void {
@@ -586,16 +648,26 @@ export class StoreExplorer extends LitElement {
     const valStr = valueToString(val);
 
     if (meta.isSecret) {
+      if (meta.locked) {
+        return html`<span class="store-value-masked" title=${this._t('store.locked_hint')}
+          ><i class="mdi mdi-lock-alert"></i> ${this._t('store.locked', 'Locked')}</span
+        >`;
+      }
       const revealed = this._revealedSecrets.has(key);
+      const secretStr = valueToString(this._revealedSecrets.get(key));
       return html`
         <div class="store-value-row">
           ${
             revealed
-              ? typeof val === 'object'
-                ? html`<pre class="store-json" style="margin:0;">${valStr}</pre>`
-                : html`<span class="store-value">${valStr}</span>`
+              ? typeof this._revealedSecrets.get(key) === 'object'
+                ? html`<pre class="store-json" style="margin:0;">${secretStr}</pre>`
+                : html`<span class="store-value">${secretStr}</span>`
               : html`<span class="store-value-masked">••••••••</span>`
           }
+          <span class="store-sharing" title=${this._sharingLabel(meta.sharedWith)}>
+            <i class="mdi ${meta.sharedWith === '*' ? 'mdi-account-multiple' : 'mdi-share-variant'}"></i>
+            ${meta.sharedWith === '*' ? '' : (meta.sharedWith ?? []).length}
+          </span>
           <button class="btn-row" @click=${() => this._toggleSecret(key)} title=${this._t('store.actions.show_hide')}>
             <i class="mdi mdi-eye${revealed ? '-off' : ''}"></i>
           </button>

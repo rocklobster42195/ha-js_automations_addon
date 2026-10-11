@@ -12,6 +12,7 @@ const DERIVED_FILES = new Set([
   '.storage/ha-api.d.ts', // synced fresh from the addon's own bundled types on every boot
   '.storage/card-registry.json', // CardManager's card-reconcile cache, falls back to {} if missing
   '.storage/asset-cache-registry.json', // CardManager's downloaded-asset cache index
+  '.storage/store.key', // ha.store encryption key (dev setups; the addon keeps it in /data). Must never leave the machine in a backup
   '.storage/.boot_crash_counter', // bootloop-detection counter; restoring a stale one could misfire safe mode
 ]);
 
