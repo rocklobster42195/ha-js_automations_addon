@@ -8,6 +8,7 @@ interface JsaConfig {
   SCRIPTS_DIR: string;
   STORAGE_DIR: string;
   STORE_KEY_FILE: string;
+  STORE_ENCRYPTION: boolean;
   DIST_DIR: string;
   LIBRARIES_DIR: string;
   DATA_DIR: string;
@@ -38,6 +39,19 @@ const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
 // neither part of the JS Automations backups nor reachable via the /config share; the key must
 // not sit next to the data it protects.
 const STORE_KEY_FILE = IS_ADDON ? '/data/store.key' : path.join(STORAGE_DIR, 'store.key');
+// Rollback switch: `store_encryption: false` in the add-on options (or JSA_STORE_ENCRYPTION=false)
+// decrypts all secrets back to plaintext so an older version can read store.json again.
+function readStoreEncryption(): boolean {
+  if (process.env.JSA_STORE_ENCRYPTION !== undefined) return process.env.JSA_STORE_ENCRYPTION !== 'false';
+  if (!IS_ADDON) return true;
+  try {
+    const options = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
+    return options.store_encryption !== false;
+  } catch {
+    return true;
+  }
+}
+const STORE_ENCRYPTION = readStoreEncryption();
 const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const DATA_DIR = path.join(SCRIPTS_DIR, 'data');
@@ -106,6 +120,7 @@ const config: JsaConfig = {
   SCRIPTS_DIR,
   STORAGE_DIR,
   STORE_KEY_FILE,
+  STORE_ENCRYPTION,
   DIST_DIR,
   LIBRARIES_DIR,
   DATA_DIR,

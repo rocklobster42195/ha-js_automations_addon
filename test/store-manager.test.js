@@ -219,3 +219,91 @@ test('renameScript carries sharing over to the new file name', (t) => {
   assert.deepEqual(events, ['cred']);
   assert.deepEqual(new StoreManager(dir, keyFile).data.cred.sharedWith.sort(), ['new.js', 'other.js']);
 });
+
+test('first encryption keeps a plaintext safety copy that is never overwritten', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  const legacy = { tok: { value: 'legacy-secret', owner: 'a', isSecret: true, updated: 'x', accessed: 'x' } };
+  writeFileSync(file, JSON.stringify(legacy));
+
+  new StoreManager(dir, keyFile);
+  const bak = file + '.pre-encryption';
+  assert.ok(existsSync(bak));
+  assert.deepEqual(JSON.parse(readFileSync(bak, 'utf8')), legacy);
+  assert.ok(!readFileSync(file, 'utf8').includes('legacy-secret'));
+
+  // A later boot must not replace the safety copy with the already-encrypted file.
+  new StoreManager(dir, keyFile);
+  assert.deepEqual(JSON.parse(readFileSync(bak, 'utf8')), legacy);
+});
+
+test('safety copy expires after 14 days, but not while a secret is locked', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  writeFileSync(file, JSON.stringify({ tok: { value: 'v', owner: 'a', isSecret: true, updated: 'x', accessed: 'x' } }));
+  new StoreManager(dir, keyFile);
+  const bak = file + '.pre-encryption';
+  const old = new Date(Date.now() - 15 * 24 * 3600 * 1000);
+  require('node:fs').utimesSync(bak, old, old);
+
+  // Wrong key: the secret is locked, the plaintext copy is the only way back and must stay.
+  rmSync(keyFile);
+  writeFileSync(keyFile, 'a'.repeat(64));
+  new StoreManager(dir, keyFile);
+  assert.ok(existsSync(bak), 'kept while locked');
+
+  rmSync(file);
+  writeFileSync(file, JSON.stringify({}));
+  new StoreManager(dir, keyFile);
+  assert.ok(!existsSync(bak), 'removed once old and nothing is locked');
+});
+
+test('encryption disabled: secrets are written back as plaintext in the pre-encryption format', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  const store = new StoreManager(dir, keyFile);
+  store.set('tok', 'hunter2', 'A', true, { scriptId: 'a.js', sharedWith: ['b.js'] });
+  assert.equal(readDisk(file).tok.encrypted, true);
+
+  const rolled = new StoreManager(dir, keyFile, { encryption: false });
+  assert.equal(rolled.data.tok.value, 'hunter2');
+  const disk = readDisk(file);
+  assert.equal(disk.tok.value, 'hunter2');
+  assert.equal(disk.tok.isSecret, true);
+  assert.equal(disk.tok.encrypted, undefined, 'older versions see a plain value');
+  assert.deepEqual(disk.tok.sharedWith.sort(), ['a.js', 'b.js']);
+
+  // Writes in rollback mode stay plaintext too.
+  rolled.set('tok2', 'second', 'A', true, { scriptId: 'a.js' });
+  assert.equal(readDisk(file).tok2.value, 'second');
+});
+
+test('re-enabling encryption re-encrypts a rolled-back store and keeps the sharing lists', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  const store = new StoreManager(dir, keyFile);
+  store.set('tok', 'hunter2', 'A', true, { scriptId: 'a.js', sharedWith: ['b.js'] });
+  new StoreManager(dir, keyFile, { encryption: false });
+
+  const again = new StoreManager(dir, keyFile);
+  assert.deepEqual(again.data.tok.sharedWith.sort(), ['a.js', 'b.js']);
+  assert.equal(readDisk(file).tok.encrypted, true);
+  assert.ok(!readFileSync(file, 'utf8').includes('hunter2'));
+});
+
+test('rollback removes the safety copy and leaves locked secrets untouched', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  writeFileSync(file, JSON.stringify({ tok: { value: 'v', owner: 'a', isSecret: true, updated: 'x', accessed: 'x' } }));
+  new StoreManager(dir, keyFile);
+  assert.ok(existsSync(file + '.pre-encryption'));
+
+  const rolled = new StoreManager(dir, keyFile, { encryption: false });
+  assert.equal(readDisk(file).tok.value, 'v');
+  assert.ok(!existsSync(file + '.pre-encryption'));
+  assert.equal(rolled.data.tok.locked, undefined);
+
+  // With a lost key the blob cannot be decrypted: it stays encrypted on disk, not destroyed.
+  const other = setup(t);
+  const s = new StoreManager(other.dir, other.keyFile);
+  s.set('tok', 'v', 'A', true, { scriptId: 'a.js' });
+  rmSync(other.keyFile);
+  const lockedRollback = new StoreManager(other.dir, other.keyFile, { encryption: false });
+  assert.equal(lockedRollback.data.tok.locked, true);
+  assert.equal(readDisk(other.file).tok.encrypted, true);
+});

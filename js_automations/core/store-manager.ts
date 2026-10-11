@@ -17,6 +17,10 @@ import { EventEmitter } from 'events';
 
 const ALGORITHM = 'aes-256-gcm';
 const BLOB_VERSION = 1;
+/** Suffix of the one-time plaintext copy made before the first encryption (rollback safety net). */
+const PRE_ENCRYPTION_SUFFIX = '.pre-encryption';
+/** The safety copy is removed on boot once it is older than this and every secret decrypts. */
+const PRE_ENCRYPTION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** Which scripts may access a secret: a list of script file names, or '*' for every script. */
 type Sharing = string[] | '*';
@@ -91,6 +95,11 @@ function normaliseSharing(input: unknown): Sharing | undefined {
 class StoreManager extends EventEmitter {
   storeFile: string;
   keyFile: string;
+  /**
+   * False = rollback mode: secrets are written to store.json as plaintext in the pre-encryption
+   * format so an older add-on version can read the file again.
+   */
+  encryption: boolean;
   data: Record<string, StoreEntry>;
   private key: Buffer | null = null;
   private keyId = '';
@@ -100,11 +109,14 @@ class StoreManager extends EventEmitter {
    * @param keyFile Location of the encryption key. Should live outside the scripts directory
    *   (the addon uses its private /data) so it never ends up in backups or git. Defaults to
    *   `store.key` next to store.json. The JSA_STORE_KEY environment variable overrides it.
+   * @param opts.encryption Set to false to decrypt every secret back to plaintext on load and keep
+   *   it that way (downgrade path before switching back to a version without encryption).
    */
-  constructor(rootDir: string, keyFile?: string) {
+  constructor(rootDir: string, keyFile?: string, opts: { encryption?: boolean } = {}) {
     super();
     this.storeFile = path.join(rootDir, 'store.json');
     this.keyFile = keyFile || path.join(rootDir, 'store.key');
+    this.encryption = opts.encryption !== false;
     this.data = {};
     this.load();
   }
@@ -202,6 +214,8 @@ class StoreManager extends EventEmitter {
 
     const data: Record<string, StoreEntry> = {};
     let migrated = false;
+    let decryptedForRollback = false;
+    let anyLocked = false;
 
     for (const [k, raw] of Object.entries(parsed)) {
       const entry = { ...raw } as unknown as StoreEntry & { encrypted?: boolean };
@@ -212,18 +226,23 @@ class StoreManager extends EventEmitter {
           const blob = raw.value;
           try {
             entry.value = this.decrypt(k, blob);
+            if (!this.encryption) decryptedForRollback = true;
           } catch (e) {
             console.error(`🔒 Store entry '${k}' could not be decrypted (${(e as Error).message}) - left locked.`);
             entry.value = null;
             entry.locked = true;
             entry.raw = blob;
+            anyLocked = true;
           }
           if (entry.sharedWith === undefined) entry.sharedWith = [];
         } else {
-          // Legacy plaintext secret: encrypt on the next save. It stays visible to every script
-          // so existing automations keep working; the user can restrict it afterwards.
-          migrated = true;
-          entry.sharedWith = '*';
+          // Plaintext secret: either a legacy one or one written in rollback mode (which keeps
+          // its sharing list). Legacy ones stay visible to every script so existing automations
+          // keep working; the user can restrict them afterwards.
+          if (this.encryption) migrated = true;
+          const keep = raw.sharedWith;
+          entry.sharedWith =
+            keep === '*' || (Array.isArray(keep) && keep.every((s) => typeof s === 'string')) ? (keep as Sharing) : '*';
         }
       }
       data[k] = entry;
@@ -232,11 +251,59 @@ class StoreManager extends EventEmitter {
     this.data = data;
     if (migrated) {
       try {
+        this.backupBeforeEncryption();
         this.save();
         console.log('🔐 Migrated plaintext store secrets to encrypted storage.');
       } catch (e) {
         console.error(`❌ Failed to encrypt existing store secrets: ${(e as Error).message}`);
       }
+    } else if (decryptedForRollback) {
+      try {
+        this.save();
+        console.log('🔓 Encryption is disabled: store secrets were written back as plaintext.');
+      } catch (e) {
+        console.error(`❌ Failed to decrypt store secrets: ${(e as Error).message}`);
+      }
+    }
+    if (!anyLocked) this.expirePreEncryptionBackup(decryptedForRollback);
+  }
+
+  private get preEncryptionFile(): string {
+    return this.storeFile + PRE_ENCRYPTION_SUFFIX;
+  }
+
+  /**
+   * Keeps a plaintext copy of store.json from before the first encryption so a failed rollout can
+   * be undone by hand. Never overwritten: a later run would copy an already-encrypted file.
+   */
+  private backupBeforeEncryption(): void {
+    if (fs.existsSync(this.preEncryptionFile)) return;
+    fs.copyFileSync(this.storeFile, this.preEncryptionFile);
+    try {
+      fs.chmodSync(this.preEncryptionFile, 0o600);
+    } catch {
+      /* best effort (not supported on every platform) */
+    }
+    console.log(
+      `💾 Saved a plaintext copy of the store to ${path.basename(this.preEncryptionFile)} (removed automatically after 14 days).`
+    );
+  }
+
+  /**
+   * The safety copy holds secrets in plaintext, so it must not linger. It is dropped right after
+   * a successful rollback (secrets are plaintext again anyway) or once it is old enough.
+   */
+  private expirePreEncryptionBackup(rolledBack: boolean): void {
+    const file = this.preEncryptionFile;
+    try {
+      if (!fs.existsSync(file)) return;
+      const expired = Date.now() - fs.statSync(file).mtimeMs > PRE_ENCRYPTION_MAX_AGE_MS;
+      if (rolledBack || (this.encryption && expired)) {
+        fs.unlinkSync(file);
+        console.log(`🧹 Removed ${path.basename(file)}.`);
+      }
+    } catch (e) {
+      console.error(`❌ Could not clean up ${path.basename(file)}: ${(e as Error).message}`);
     }
   }
 
@@ -248,6 +315,9 @@ class StoreManager extends EventEmitter {
         out[k] = { ...base, value: e.value };
       } else if (e.locked && e.raw) {
         out[k] = { ...base, sharedWith: e.sharedWith, value: e.raw, encrypted: true };
+      } else if (!this.encryption) {
+        // Rollback mode: the pre-encryption format (older versions read `value` as-is).
+        out[k] = { ...base, sharedWith: e.sharedWith, value: e.value };
       } else {
         out[k] = { ...base, sharedWith: e.sharedWith, value: this.encrypt(k, e.value), encrypted: true };
       }

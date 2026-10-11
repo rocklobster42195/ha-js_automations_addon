@@ -13,6 +13,7 @@ const DERIVED_FILES = new Set([
   '.storage/card-registry.json', // CardManager's card-reconcile cache, falls back to {} if missing
   '.storage/asset-cache-registry.json', // CardManager's downloaded-asset cache index
   '.storage/store.key', // ha.store encryption key (dev setups; the addon keeps it in /data). Must never leave the machine in a backup
+  '.storage/store.json.pre-encryption', // plaintext safety copy from before encryption; must never leave the machine
   '.storage/.boot_crash_counter', // bootloop-detection counter; restoring a stale one could misfire safe mode
 ]);
 

@@ -337,7 +337,9 @@ Entries stored with `isSecret` are encrypted at rest and access-controlled per s
 
 **Locked entries.** If a blob cannot be decrypted (key missing, different `kid`, tampered), the entry is loaded as `locked` (`value: null`, original blob kept in `raw`). It is written back untouched, no script can read it, and the UI offers to re-enter the value. A missing key is never silently regenerated on load.
 
-**Migration.** A secret without `encrypted: true` is a legacy plaintext entry: it is encrypted on the first save at startup and gets `sharedWith: '*'` so existing automations keep working.
+**Migration.** A secret without `encrypted: true` is a legacy plaintext entry: it is encrypted on the first save at startup and gets `sharedWith: '*'` so existing automations keep working. Before that first save, `store.json` is copied to `.storage/store.json.pre-encryption` (plaintext, mode 0600, listed in `backup-scope.ts`, never overwritten). `load()` deletes it once it is older than 14 days and no secret is locked.
+
+**Rollback switch.** `config.STORE_ENCRYPTION` (addon option `store_encryption`, dev: `JSA_STORE_ENCRYPTION=false`) is passed to `StoreManager` as `{ encryption: false }`. `load()` then decrypts every secret, `save()` writes `{ owner, isSecret, value, sharedWith, ... }` without `encrypted` (the pre-encryption layout older versions read), and the safety copy is removed. Locked entries keep their blob. Switching it back on re-encrypts and keeps the `sharedWith` lists. Reason: beta and stable share `/config` but not the key in `/data`, so a downgrade needs plaintext on disk.
 
 **Access control.** A secret carries `sharedWith: string[] | '*'` (script file names, i.e. the `workers` map keys). `canRead`/`canWrite` take the `scriptId` of the calling worker; callers without one (UI, REPL) are administrative. Rules:
 
