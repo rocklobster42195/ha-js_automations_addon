@@ -1,9 +1,30 @@
+## [3.0.3-beta.3] - 2026-10-11
+
+> ## ⚠️ New: secret encryption (opt-in, off by default)
+>
+> **Turn it on:** open the app → **Settings → Danger Zone → "Encrypt ha.store Secrets (Beta)"**. It applies immediately, no restart.
+>
+> **Going back to the stable add-on:** switch the same setting **off first**. Otherwise the encrypted secrets stay unreadable there. A plaintext safety copy of the store is kept for 14 days as `.storage/store.json.pre-encryption`.
+>
+> If the app is not reachable: Settings → Add-ons → *JS Automations (Beta)* → Configuration → set `store_encryption` to off, save and restart once. That option overrides the in-app switch.
+
+- NOTE: secret encryption is opt-in - switch it on in Settings > Danger Zone (Encrypt ha.store Secrets); switch it OFF there BEFORE going back to the stable add-on, otherwise secrets stay unreadable
+- feat(store): in-app switch for secret encryption (Settings > Danger Zone, applies without restart); add-on option store_encryption is now an optional override
+- test: raise boot test startup timeout to 60s (cold start flaked at 15s)
+- Includes everything from 3.0.3-beta.2, which was never offered by Home Assistant:
+  - feat(store): opt-in secret encryption with rollback switch and pre-encryption safety copy
+  - fix(store): live ha.store.get() without listeners, SECRET badge, no per-char wrapping of revealed secrets
+  - Merge cloud work: encrypted ha.store secrets with per-script sharing
+  - feat(store): mark deleted scripts in a secret's sharing list
+  - feat(store): keep secret sharing intact on script rename, document secrets
+  - feat(store): encrypt ha.store secrets at rest and add per-script sharing
+
+---
+
 ## [3.0.3-beta.2] - 2026-10-11
 
-> **⚠️ Secret encryption is opt-in.** Set the add-on option `store_encryption` to `true` and restart to encrypt `ha.store` secrets.
-> **Before going back to the stable add-on, set it to `false` and restart once** — otherwise the secrets stay unreadable there.
+> **⚠️ Secret encryption is opt-in.** See 3.0.3-beta.3 above for where to switch it (Settings → Danger Zone).
 
-- NOTE: secret encryption is opt-in (add-on option store_encryption) - set it to false and restart BEFORE going back to the stable add-on, otherwise secrets stay unreadable there
 - feat(store): opt-in secret encryption with rollback switch and pre-encryption safety copy
 - fix(store): live ha.store.get() without listeners, SECRET badge, no per-char wrapping of revealed secrets
 - Merge cloud work: encrypted ha.store secrets with per-script sharing
