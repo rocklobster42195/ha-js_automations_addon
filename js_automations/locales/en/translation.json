@@ -482,7 +482,9 @@
       "quota_media": "Quota: media://",
       "quota_desc": "Maximum total size for this virtual root. 0 = unlimited.",
       "capability_enforcement": "Enforce @permission Declarations",
-      "capability_enforcement_desc": "When enabled, scripts that use network (http/https/fetch) or shell execution (child_process) without declaring @permission in their header will throw a PermissionDeniedError at runtime."
+      "capability_enforcement_desc": "When enabled, scripts that use network (http/https/fetch) or shell execution (child_process) without declaring @permission in their header will throw a PermissionDeniedError at runtime.",
+      "store_encryption": "Encrypt ha.store Secrets (Beta)",
+      "store_encryption_desc": "Encrypts secrets stored with ha.store.set(key, value, true) at rest. BEFORE going back to the stable add-on, turn this off again, otherwise the secrets are unreadable there. A plaintext safety copy (.storage/store.json.pre-encryption) is kept for 14 days. The add-on option store_encryption, if set, overrides this switch."
     }
   },
   "banner_close_tooltip": "Close",

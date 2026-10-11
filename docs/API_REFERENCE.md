@@ -488,7 +488,7 @@ ha.store.set('shared_token', token, { secret: true, sharedWith: '*' });
 - **Sharing in the UI:** the Store Explorer lets you edit the list of scripts per secret. Values are only shown after you click the eye icon.
 - **Renaming a script** updates its entries in all sharing lists automatically. Renaming the file outside of JS Automations (e.g. via the file editor) does not; re-share the secret in the Store Explorer afterwards.
 - **Deleting a script** does not delete its secrets, since other scripts may use them. Remove them in the Store Explorer when no longer needed. Names of deleted scripts stay in the sharing list (marked as missing in the edit dialog); uncheck them there to clean up while keeping the secret.
-- **Going back to an older version:** set the add-on option `store_encryption` to `false` and restart once before switching. Secrets are written back as plain values; switch it on again later to re-encrypt them (sharing lists are kept).
+- **Going back to an older version:** switch off **Settings → Danger Zone → Encrypt ha.store Secrets** first. Secrets are written back as plain values immediately; switch it on again later to re-encrypt them (sharing lists are kept). The add-on option `store_encryption` overrides the switch if the app is not reachable.
 - This protects secrets against leaked backups and config folders. It is not a sandbox: scripts that are allowed to read a secret can of course use or log it.
 
 ### 13. Automatic Persistent State (`ha.persistent`)

@@ -1,0 +1,5 @@
+configuration:
+  store_encryption:
+    name: Encrypt ha.store secrets (override)
+    description: >-
+      Encrypts secrets stored with ha.store.set(key, value, true) at rest. Normally you switch this in the app (Settings > Danger Zone). Setting it here OVERRIDES the app setting - use it to turn encryption off if the app is not reachable, BEFORE going back to the stable add-on. Leave unset otherwise.

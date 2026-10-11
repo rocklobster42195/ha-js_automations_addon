@@ -268,6 +268,29 @@ class StoreManager extends EventEmitter {
     if (!anyLocked) this.expirePreEncryptionBackup(decryptedForRollback);
   }
 
+  /**
+   * Switches encryption at runtime (in-app setting). Turning it on encrypts every secret on the
+   * next write (done immediately) after saving the plaintext safety copy; turning it off writes
+   * all secrets back as plaintext and drops the safety copy. Locked entries are left untouched.
+   */
+  setEncryption(enabled: boolean): void {
+    if (this.encryption === enabled) return;
+    this.encryption = enabled;
+    try {
+      if (enabled) {
+        if (Object.values(this.data).some((e) => e.isSecret && !e.locked)) this.backupBeforeEncryption();
+        this.save();
+        console.log('🔐 Secret encryption enabled.');
+      } else {
+        this.save();
+        if (!Object.values(this.data).some((e) => e.locked)) this.expirePreEncryptionBackup(true);
+        console.log('🔓 Secret encryption disabled: store secrets were written back as plaintext.');
+      }
+    } catch (e) {
+      console.error(`❌ Failed to switch secret encryption: ${(e as Error).message}`);
+    }
+  }
+
   private get preEncryptionFile(): string {
     return this.storeFile + PRE_ENCRYPTION_SUFFIX;
   }

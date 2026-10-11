@@ -8,7 +8,8 @@ interface JsaConfig {
   SCRIPTS_DIR: string;
   STORAGE_DIR: string;
   STORE_KEY_FILE: string;
-  STORE_ENCRYPTION: boolean;
+  /** Forced value for secret encryption (add-on option / env). Undefined = follow the app setting. */
+  STORE_ENCRYPTION_OVERRIDE: boolean | undefined;
   DIST_DIR: string;
   LIBRARIES_DIR: string;
   DATA_DIR: string;
@@ -39,19 +40,20 @@ const STORAGE_DIR = path.join(SCRIPTS_DIR, '.storage');
 // neither part of the JS Automations backups nor reachable via the /config share; the key must
 // not sit next to the data it protects.
 const STORE_KEY_FILE = IS_ADDON ? '/data/store.key' : path.join(STORAGE_DIR, 'store.key');
-// Rollback switch: `store_encryption: false` in the add-on options (or JSA_STORE_ENCRYPTION=false)
-// decrypts all secrets back to plaintext so an older version can read store.json again.
-function readStoreEncryption(): boolean {
+// Emergency override for secret encryption: the add-on option `store_encryption` (or
+// JSA_STORE_ENCRYPTION) wins over the in-app setting, so a rollback works even when the UI is not
+// reachable. Undefined when neither is set.
+function readStoreEncryptionOverride(): boolean | undefined {
   if (process.env.JSA_STORE_ENCRYPTION !== undefined) return process.env.JSA_STORE_ENCRYPTION !== 'false';
-  if (!IS_ADDON) return true;
+  if (!IS_ADDON) return undefined;
   try {
     const options = JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
-    return options.store_encryption !== false;
+    return typeof options.store_encryption === 'boolean' ? options.store_encryption : undefined;
   } catch {
-    return true;
+    return undefined;
   }
 }
-const STORE_ENCRYPTION = readStoreEncryption();
+const STORE_ENCRYPTION_OVERRIDE = readStoreEncryptionOverride();
 const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const DATA_DIR = path.join(SCRIPTS_DIR, 'data');
@@ -120,7 +122,7 @@ const config: JsaConfig = {
   SCRIPTS_DIR,
   STORAGE_DIR,
   STORE_KEY_FILE,
-  STORE_ENCRYPTION,
+  STORE_ENCRYPTION_OVERRIDE,
   DIST_DIR,
   LIBRARIES_DIR,
   DATA_DIR,

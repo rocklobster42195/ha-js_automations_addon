@@ -622,6 +622,13 @@ const settingsSchema: SettingSection[] = [
         type: 'toggle',
         default: true,
       },
+      {
+        key: 'store_encryption',
+        label: 'settings.danger.store_encryption',
+        description: 'settings.danger.store_encryption_desc',
+        type: 'toggle',
+        default: false,
+      },
     ],
   },
 ];

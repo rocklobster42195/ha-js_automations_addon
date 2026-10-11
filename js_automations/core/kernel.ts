@@ -55,6 +55,7 @@ interface KernelSettings {
     node_memory?: number;
     filesystem_enabled?: boolean;
     capability_enforcement?: boolean;
+    store_encryption?: boolean;
     quota_internal?: number;
     quota_shared?: number;
     quota_media?: number;
@@ -166,7 +167,7 @@ class Kernel extends EventEmitter {
    */
   boot(io: SocketIOServer): void {
     this.io = io;
-    const { SCRIPTS_DIR, STORAGE_DIR, STORE_KEY_FILE, STORE_ENCRYPTION, DIST_DIR } = config;
+    const { SCRIPTS_DIR, STORAGE_DIR, STORE_KEY_FILE, STORE_ENCRYPTION_OVERRIDE, DIST_DIR } = config;
 
     // Instantiate managers
     try {
@@ -175,7 +176,9 @@ class Kernel extends EventEmitter {
       this.haConnector = new HAConnector(process.env.HA_URL || '', process.env.HA_TOKEN, STORAGE_DIR);
       this.depManager = new DependencyManager(SCRIPTS_DIR, STORAGE_DIR);
       this.stateManager = new StateManager(STORAGE_DIR);
-      this.storeManager = new StoreManager(STORAGE_DIR, STORE_KEY_FILE, { encryption: STORE_ENCRYPTION });
+      this.storeManager = new StoreManager(STORAGE_DIR, STORE_KEY_FILE, {
+        encryption: this._wantsStoreEncryption(this.settingsManager.getSettings() as KernelSettings),
+      });
       this.compilerManager = new CompilerManager(SCRIPTS_DIR, DIST_DIR, STORAGE_DIR);
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
@@ -282,6 +285,14 @@ class Kernel extends EventEmitter {
   }
 
   /**
+   * Whether ha.store secrets should be encrypted: the add-on option / env override wins over the
+   * in-app setting (Settings > Danger Zone), which defaults to off.
+   */
+  _wantsStoreEncryption(settings: KernelSettings): boolean {
+    return config.STORE_ENCRYPTION_OVERRIDE ?? settings.danger?.store_encryption === true;
+  }
+
+  /**
    * Registers event listeners that persist through the application's lifecycle.
    * @private
    */
@@ -291,6 +302,7 @@ class Kernel extends EventEmitter {
       if (newSettings.system && newSettings.system.log_level) {
         this.logManager.setLevel(newSettings.system.log_level);
       }
+      this.storeManager?.setEncryption(this._wantsStoreEncryption(newSettings));
       this._updateWorkerManagerSettings(newSettings);
     });
 

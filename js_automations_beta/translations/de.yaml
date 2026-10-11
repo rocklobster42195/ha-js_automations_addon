@@ -1,0 +1,5 @@
+configuration:
+  store_encryption:
+    name: ha.store-Secrets verschlüsseln (Überschreibung)
+    description: >-
+      Verschlüsselt Secrets, die mit ha.store.set(key, value, true) gespeichert werden. Normalerweise wird das in der App geschaltet (Einstellungen > Danger Zone). Eine Einstellung hier ÜBERSCHREIBT die App-Einstellung - nutze sie, um die Verschlüsselung auszuschalten, falls die App nicht erreichbar ist, BEVOR du auf das Stable-Add-on zurückwechselst. Sonst leer lassen.

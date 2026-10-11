@@ -307,3 +307,36 @@ test('rollback removes the safety copy and leaves locked secrets untouched', (t)
   assert.equal(lockedRollback.data.tok.locked, true);
   assert.equal(readDisk(other.file).tok.encrypted, true);
 });
+
+test('setEncryption switches at runtime: encrypts with a safety copy, and writes plaintext back', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  const store = new StoreManager(dir, keyFile, { encryption: false });
+  store.set('tok', 'hunter2', 'A', true, { scriptId: 'a.js', sharedWith: ['b.js'] });
+  assert.equal(readDisk(file).tok.value, 'hunter2');
+
+  store.setEncryption(true);
+  assert.equal(readDisk(file).tok.encrypted, true);
+  assert.ok(!readFileSync(file, 'utf8').includes('hunter2'));
+  assert.deepEqual(JSON.parse(readFileSync(file + '.pre-encryption', 'utf8')).tok.value, 'hunter2');
+
+  store.setEncryption(false);
+  const disk = readDisk(file);
+  assert.equal(disk.tok.value, 'hunter2');
+  assert.equal(disk.tok.encrypted, undefined);
+  assert.deepEqual(disk.tok.sharedWith.sort(), ['a.js', 'b.js']);
+  assert.ok(!existsSync(file + '.pre-encryption'));
+
+  // Calls that change nothing do not touch the disk.
+  const before = readFileSync(file, 'utf8');
+  store.setEncryption(false);
+  assert.equal(readFileSync(file, 'utf8'), before);
+});
+
+test('setEncryption(true) with no secrets creates neither key nor safety copy', (t) => {
+  const { dir, keyFile, file } = setup(t);
+  const store = new StoreManager(dir, keyFile, { encryption: false });
+  store.set('plain', 'x', 'A', false, { scriptId: 'a.js' });
+  store.setEncryption(true);
+  assert.ok(!existsSync(keyFile));
+  assert.ok(!existsSync(file + '.pre-encryption'));
+});
