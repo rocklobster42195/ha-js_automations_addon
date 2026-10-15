@@ -59,7 +59,7 @@ interface GitResult {
 // flood history with noise instead of real code changes (that's the zip backup's job instead).
 const GITIGNORE_CONTENT = ['.storage/', 'data/', 'node_modules/', ''].join('\n');
 const PUSHED_REF = 'refs/jsa/last-pushed';
-const TRACKED_EXTENSIONS =['.ts', '.js', '.blocks'];
+const TRACKED_EXTENSIONS = ['.ts', '.js', '.blocks'];
 
 class GitManager extends EventEmitter {
   private settingsManager: SettingsManagerLike;
