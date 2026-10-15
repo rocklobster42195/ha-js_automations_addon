@@ -58,7 +58,8 @@ interface GitResult {
 // runtime store (data/) are deliberately excluded — they change on every automation tick and would
 // flood history with noise instead of real code changes (that's the zip backup's job instead).
 const GITIGNORE_CONTENT = ['.storage/', 'data/', 'node_modules/', ''].join('\n');
-const TRACKED_EXTENSIONS = ['.ts', '.js', '.blocks'];
+const PUSHED_REF = 'refs/jsa/last-pushed';
+const TRACKED_EXTENSIONS =['.ts', '.js', '.blocks'];
 
 class GitManager extends EventEmitter {
   private settingsManager: SettingsManagerLike;
@@ -246,14 +247,30 @@ class GitManager extends EventEmitter {
     return {
       hasRepo: true,
       hasRemote: !!settings.git_enabled && !!settings.git_repo_url,
-      ahead: status.ahead,
+      ahead: await this.countUnpushedCommits(),
       dirty: !status.isClean(),
       lastPushError: this.lastPushError,
       changedFiles: [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)],
     };
   }
 
-  /** https://github.com/user/repo.git -> https://TOKEN@github.com/user/repo.git (works the same
+  /** Commits not yet pushed. push() uses a one-off authenticated URL instead of a configured
+   * remote, so git has no upstream and status.ahead is always 0 — we track the last pushed HEAD in
+   * our own ref instead. A missing ref means nothing was pushed yet, so every commit counts. */
+  private async countUnpushedCommits(): Promise<number> {
+    try {
+      // simple-git only rejects on non-empty stderr, so a missing ref (exit 1, silent under
+      // --quiet) must be detected by the empty output, not by a thrown error.
+      const pushedHash = await this.git.raw(['rev-parse', '--verify', '--quiet', PUSHED_REF]).catch(() => '');
+      const range = pushedHash.trim() ? `${PUSHED_REF}..HEAD` : 'HEAD';
+      const out = await this.git.raw(['rev-list', '--count', range]);
+      return parseInt(out.trim(), 10) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** https://github.com/user/repo.git ->https://TOKEN@github.com/user/repo.git (works the same
    * for any HTTPS git host, e.g. GitLab/Gitea/Bitbucket — nothing here is GitHub-specific). Built
    * fresh per call and never persisted — the caller must never `git remote set-url` with this. */
   static buildAuthenticatedUrl(repoUrl: string, token: string): string {
@@ -284,6 +301,7 @@ class GitManager extends EventEmitter {
         ? GitManager.buildAuthenticatedUrl(settings.git_repo_url, settings.git_token)
         : settings.git_repo_url;
       await this.git.push([url, `HEAD:refs/heads/${branch}`]);
+      await this.git.raw(['update-ref', PUSHED_REF, 'HEAD']);
       this.lastPushError = null;
       this.logManager.add('debug', 'Git', `[Git] Pushed to ${settings.git_repo_url}.`);
       this.emit('git_status_changed');
