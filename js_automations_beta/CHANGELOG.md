@@ -1,3 +1,9 @@
+## [3.0.3-beta.4] - 2026-10-15
+
+- fix(git): track last pushed HEAD so status bar shows unpushed commits after commit
+
+---
+
 ## [3.0.3-beta.3] - 2026-10-11
 
 > ## ⚠️ New: secret encryption (opt-in, off by default)
