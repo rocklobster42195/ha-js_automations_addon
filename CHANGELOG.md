@@ -1,5 +1,8 @@
 <!-- NEXT -->
 
+- security: update npm dependencies (`npm audit fix`) and upgrade simple-git to 4.x — resolves all known `npm audit` findings (multer, proxy-addr, qs, body-parser, engine.io and others)
+- chore: add Dependabot config (weekly npm, GitHub Actions and Docker updates)
+
 - security: mask secret settings fields (`git_token`, MQTT/WebDAV passwords) server-side — the raw value never leaves the server via `GET /api/settings`, is shown only via an explicit reveal action, and a blank field on save keeps the stored value
 
 ---
