@@ -484,8 +484,8 @@
       "quota_desc": "Maximale Gesamtgröße für diesen virtuellen Pfad. 0 = unbegrenzt.",
       "capability_enforcement": "@permission-Deklarationen erzwingen",
       "capability_enforcement_desc": "Wenn aktiviert, werfen Skripte, die Netzwerk (http/https/fetch) oder Shell-Befehle (child_process) ohne @permission im Header nutzen, zur Laufzeit einen PermissionDeniedError.",
-      "store_encryption": "ha.store-Secrets verschlüsseln (Beta)",
-      "store_encryption_desc": "Verschlüsselt Secrets, die mit ha.store.set(key, value, true) gespeichert werden. VOR dem Zurückwechseln auf das Stable-Add-on wieder ausschalten, sonst sind die Secrets dort nicht lesbar. Eine Klartext-Sicherungskopie (.storage/store.json.pre-encryption) bleibt 14 Tage erhalten. Die Add-on-Option store_encryption überschreibt diesen Schalter, falls gesetzt."
+      "store_encryption": "ha.store-Secrets verschlüsseln",
+      "store_encryption_desc": "Verschlüsselt Secrets, die mit ha.store.set(key, value, true) gespeichert werden. Der Schlüssel liegt in den privaten Daten dieses Add-ons. VOR dem Wechsel auf ein anderes Add-on (z. B. Beta zu Stable) oder eine ältere Version wieder ausschalten, sonst sind die Secrets dort nicht lesbar. Eine Klartext-Sicherungskopie (.storage/store.json.pre-encryption) bleibt 14 Tage erhalten. Die Add-on-Option store_encryption überschreibt diesen Schalter, falls gesetzt."
     }
   },
   "statusbar": {

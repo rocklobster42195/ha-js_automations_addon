@@ -208,7 +208,7 @@ A graphical UI for `ha.store`:
 - **Visual table** with keys, values, owners, and timestamps.
 - **Live updates** as scripts write to the store.
 - **Edit & Delete** values directly.
-- **Secrets:** Mark values as secret (e.g., API keys, tokens) to mask them in the UI. A secret is only readable by the script that created it, unless you share it with other scripts. Optionally encrypt secrets at rest under **Settings → Danger Zone → Encrypt ha.store Secrets** — switch it off again before downgrading to an older version.
+- **Secrets:** Mark values as secret (e.g., API keys, tokens) to mask them in the UI. A secret is only readable by the script that created it, unless you share it with other scripts. Optionally encrypt secrets at rest under **Settings → Danger Zone → Encrypt ha.store Secrets** — switch it off again before downgrading to an older version **or switching between the stable and beta add-on**. The encryption key lives in each add-on's private data (`/data/store.key`) and is not shared between add-ons, so encrypted secrets stay unreadable in the other one. The key is lost when the add-on is uninstalled.
 
 ---
 
