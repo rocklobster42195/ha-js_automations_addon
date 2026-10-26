@@ -47,7 +47,7 @@
     "node-cron": "^4.2.1",
     "simple-git": "^4.0.2",
     "socket.io": "^4.8.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "webdav": "^5.10.0",
     "ws": "^8.19.0",
     "yauzl": "^3.4.0"
