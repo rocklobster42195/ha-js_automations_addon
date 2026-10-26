@@ -1,109 +1,48 @@
-## [3.0.3-beta.6] - 2026-10-26
-
-- docs(changelog): dependency security updates
-- chore(deps): npm audit fix, simple-git 4, add dependabot
-
----
-
-## [3.0.3-beta.5] - 2026-10-15
-
-- style: prettier format git-manager
-
----
-
-## [3.0.3-beta.4] - 2026-10-15
-
-- fix(git): track last pushed HEAD so status bar shows unpushed commits after commit
-
----
-
-## [3.0.3-beta.3] - 2026-10-11
-
-> ## ⚠️ New: secret encryption (opt-in, off by default)
->
-> **Turn it on:** open the app → **Settings → Danger Zone → "Encrypt ha.store Secrets (Beta)"**. It applies immediately, no restart.
->
-> **Going back to the stable add-on:** switch the same setting **off first**. Otherwise the encrypted secrets stay unreadable there. A plaintext safety copy of the store is kept for 14 days as `.storage/store.json.pre-encryption`.
->
-> If the app is not reachable: Settings → Add-ons → *JS Automations (Beta)* → Configuration → set `store_encryption` to off, save and restart once. That option overrides the in-app switch.
-
-- NOTE: secret encryption is opt-in - switch it on in Settings > Danger Zone (Encrypt ha.store Secrets); switch it OFF there BEFORE going back to the stable add-on, otherwise secrets stay unreadable
-- feat(store): in-app switch for secret encryption (Settings > Danger Zone, applies without restart); add-on option store_encryption is now an optional override
-- test: raise boot test startup timeout to 60s (cold start flaked at 15s)
-- Includes everything from 3.0.3-beta.2, which was never offered by Home Assistant:
-  - feat(store): opt-in secret encryption with rollback switch and pre-encryption safety copy
-  - fix(store): live ha.store.get() without listeners, SECRET badge, no per-char wrapping of revealed secrets
-  - Merge cloud work: encrypted ha.store secrets with per-script sharing
-  - feat(store): mark deleted scripts in a secret's sharing list
-  - feat(store): keep secret sharing intact on script rename, document secrets
-  - feat(store): encrypt ha.store secrets at rest and add per-script sharing
-
----
-
-## [3.0.3-beta.2] - 2026-10-11
-
-> **⚠️ Secret encryption is opt-in.** See 3.0.3-beta.3 above for where to switch it (Settings → Danger Zone).
-
-- feat(store): opt-in secret encryption with rollback switch and pre-encryption safety copy
-- fix(store): live ha.store.get() without listeners, SECRET badge, no per-char wrapping of revealed secrets
-- Merge cloud work: encrypted ha.store secrets with per-script sharing
-- feat(store): mark deleted scripts in a secret's sharing list
-- feat(store): keep secret sharing intact on script rename, document secrets
-- feat(store): encrypt ha.store secrets at rest and add per-script sharing
-
----
-
-## [3.0.3-beta.1] - 2026-10-08
-
-- style: format settings-view.ts
-
----
-
-## [3.0.3-beta.0] - 2026-10-08
-
-- fix: emit valid index signature instead of "..." for large objects in generated types
-- chore: add .env.proxmox to .gitignore
-- fix: add HA websocket watchdog and drop stale socket on reconnect
-- chore: add .env.unifi to .gitignore
-- chore: gitignore local docs/internal bug write-ups
-- feat: mask secret settings fields server-side (git_token, mqtt/webdav passwords)
-- fix: clear cached revealed webhook token on registry resync
-- fix: don't silently drop ha.update() when ha.register() hasn't landed yet
-- fix: merge webhook registry writes onto disk instead of overwriting
-- feat: disable Commit button when the active tab has nothing to commit
-- fix: back up .storage/ properly, exclude derived artifacts, add restore select-all
-- fix: repair diff-view highlighting, generalize git remote beyond GitHub, harden backup/push
-- feat: open git-diff as a full-width editor tab
-- fix: broaden diff icon suppression to a catch-all codicon rule
-- fix: disable code-folding controls in diff view
-- fix: hide inert moved-code-lines SVG overlay in diff view
-- fix: hide redundant original-pane gutter sliver in diff view
-- fix: hide diff editor's hover-triggered lightbulb action button
-- fix: diff-editor chrome was still leaking gutter icons and lightbulb glyph
-- feat: add missing git-on-delete checkbox, fix Monaco diff chrome, closeTab binding
-- fix: commit swept up every pending file, diff editor garbled on first paint
-- fix: git-manager mistook the addon's own repo for the scripts repo
-- fix: wizard 'Aus Repo' tab could get stuck on a failed response
-- fix: git status-bar tooltip i18n keys were in the wrong namespace
-- fix: add missing GitHub Push button, run prettier
-- feat: zip-restore engine — upload, selective diff, worker orchestration
-- feat: local git versioning for scripts, optional GitHub push
-- feat: automated backup — cron schedule, WebDAV target, retention
-- chore: gitignore local infra credential files
-- docs: redesign backup and script-versioning concepts
-- build: add i18n key-parity check between de/en translation.json
-- style: prettier formatting pass on new docs
-- fix: translate hardcoded LABEL/AREA placeholders in New Script wizard
-- docs: remove old root API_REFERENCE.md/TECH-README.md (moved to docs/ in previous commit)
-- docs: restructure into docs/guide + docs/internal, slim README
-- fix: honor ha.frontend.installCard's config option via getStubConfig
-- fix: resolve HA theme-color slugs for label group headers
-- fix: collapse editor-view host when a virtual system tab is active
-- docs: update README hero screenshot for 3.0.0
-
----
-
 <!-- NEXT -->
+
+---
+
+## [3.1.0] - 2026-10-26
+
+> **⚠️ Before you update or downgrade:** Secret encryption for `ha.store` is **opt-in** (Settings → Danger Zone → *Encrypt ha.store Secrets*). If you switch it on, switch it **off again before going back to an older add-on version** — older versions cannot read encrypted secrets, and they stay unreadable until you update again. Nothing changes for you unless you enable it.
+
+### Save and Sound
+
+Your scripts and your data are now safe: every change can be versioned, the whole add-on can be backed up on a schedule, and secrets can be encrypted at rest.
+
+**Script versioning with Git**
+
+- Local Git history for your scripts — explicit **Commit** button, History panel and full-width diff tabs; the Commit button is disabled when the active tab has nothing to commit
+- Optional push to a remote repository — works with any HTTPS Git host (GitHub, GitLab, Gitea, …) via an access token; the status bar shows unpushed commits
+- Restore a file to any commit, revert a commit, or bring back a deleted script
+- Optional commit-on-delete
+
+**Backup & restore**
+
+- Scheduled backups (cron) as zip snapshots with retention, optionally uploaded to a WebDAV target
+- Disaster-recovery restore from a zip: selective diff before applying, plus an automatic pre-restore snapshot to roll back
+
+**Secrets**
+
+- `ha.store` secrets can be encrypted at rest (opt-in, switchable at runtime without a restart, with a safety copy and rollback)
+- Per-script sharing lists decide which scripts may read a secret; sharing survives renames and marks deleted scripts
+- Secret values carry a SECRET badge and are only shown on explicit reveal
+- Password and token fields in Settings (`git_token`, MQTT and WebDAV passwords) are masked server-side — the raw value never leaves the server unless you reveal it; leaving a field blank on save keeps the stored value
+
+**Security**
+
+- Updated npm dependencies and upgraded simple-git to 4.x — resolves all known `npm audit` findings
+- The add-on image now ships a Node.js version that includes the Brotli fix for CVE-2026-111497 ("HTTP2Shell")
+- Added Dependabot for weekly dependency updates
+
+**Fixes**
+
+- Home Assistant WebSocket watchdog — drops a stale socket on reconnect instead of hanging
+- Generated type definitions emit a valid index signature for large objects
+- `ha.store.get()` returns live values even without listeners
+- Git no longer mistakes the add-on's own repository for the scripts repository
+- Commits no longer sweep up files you did not select; the diff editor no longer garbles on first paint
+- Several diff-view and i18n polish fixes
 
 ---
 

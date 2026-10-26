@@ -1,5 +1,9 @@
 <!-- NEXT -->
 
+---
+
+## [3.1.0] - 2026-10-26
+
 > **⚠️ Before you update or downgrade:** Secret encryption for `ha.store` is **opt-in** (Settings → Danger Zone → *Encrypt ha.store Secrets*). If you switch it on, switch it **off again before going back to an older add-on version** — older versions cannot read encrypted secrets, and they stay unreadable until you update again. Nothing changes for you unless you enable it.
 
 ### Save and Sound
