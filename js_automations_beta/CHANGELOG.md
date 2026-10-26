@@ -1,3 +1,10 @@
+## [3.0.3-beta.6] - 2026-10-26
+
+- docs(changelog): dependency security updates
+- chore(deps): npm audit fix, simple-git 4, add dependabot
+
+---
+
 ## [3.0.3-beta.5] - 2026-10-15
 
 - style: prettier format git-manager

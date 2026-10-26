@@ -1,6 +1,44 @@
 <!-- NEXT -->
 
-- security: mask secret settings fields (`git_token`, MQTT/WebDAV passwords) server-side — the raw value never leaves the server via `GET /api/settings`, is shown only via an explicit reveal action, and a blank field on save keeps the stored value
+> **⚠️ Before you update or downgrade:** Secret encryption for `ha.store` is **opt-in** (Settings → Danger Zone → *Encrypt ha.store Secrets*). If you switch it on, switch it **off again before going back to an older add-on version** — older versions cannot read encrypted secrets, and they stay unreadable until you update again. Nothing changes for you unless you enable it.
+
+### Save and Sound
+
+Your scripts and your data are now safe: every change can be versioned, the whole add-on can be backed up on a schedule, and secrets can be encrypted at rest.
+
+**Script versioning with Git**
+
+- Local Git history for your scripts — explicit **Commit** button, History panel and full-width diff tabs; the Commit button is disabled when the active tab has nothing to commit
+- Optional push to a remote repository — works with any HTTPS Git host (GitHub, GitLab, Gitea, …) via an access token; the status bar shows unpushed commits
+- Restore a file to any commit, revert a commit, or bring back a deleted script
+- Optional commit-on-delete
+
+**Backup & restore**
+
+- Scheduled backups (cron) as zip snapshots with retention, optionally uploaded to a WebDAV target
+- Disaster-recovery restore from a zip: selective diff before applying, plus an automatic pre-restore snapshot to roll back
+
+**Secrets**
+
+- `ha.store` secrets can be encrypted at rest (opt-in, switchable at runtime without a restart, with a safety copy and rollback)
+- Per-script sharing lists decide which scripts may read a secret; sharing survives renames and marks deleted scripts
+- Secret values carry a SECRET badge and are only shown on explicit reveal
+- Password and token fields in Settings (`git_token`, MQTT and WebDAV passwords) are masked server-side — the raw value never leaves the server unless you reveal it; leaving a field blank on save keeps the stored value
+
+**Security**
+
+- Updated npm dependencies and upgraded simple-git to 4.x — resolves all known `npm audit` findings
+- The add-on image now ships a Node.js version that includes the Brotli fix for CVE-2026-111497 ("HTTP2Shell")
+- Added Dependabot for weekly dependency updates
+
+**Fixes**
+
+- Home Assistant WebSocket watchdog — drops a stale socket on reconnect instead of hanging
+- Generated type definitions emit a valid index signature for large objects
+- `ha.store.get()` returns live values even without listeners
+- Git no longer mistakes the add-on's own repository for the scripts repository
+- Commits no longer sweep up files you did not select; the diff editor no longer garbles on first paint
+- Several diff-view and i18n polish fixes
 
 ---
 

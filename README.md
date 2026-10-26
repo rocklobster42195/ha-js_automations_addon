@@ -26,24 +26,24 @@
 
 ## Key Features
 
-- **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys. Updated automatically as your home changes.
-- **NEW: Visual Scripting (Blockly)** — Build automations by dragging blocks instead of writing code: triggers, conditions, entity/service calls, MQTT, webhooks, Calendar/Todo, and more. A "Show Code" panel reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file the moment you outgrow the blocks. See the [Blockly guide](./docs/guide/blockly.md).
+- **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys, updated automatically as your home changes.
+- **Visual Scripting (Blockly)** — Build automations by dragging blocks instead of writing code. A "Show Code" panel reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file. See the [Blockly guide](./docs/guide/blockly.md).
+- **NEW: Script Versioning (Git)** — Commit, browse history, compare versions and restore any file from a local Git repository — no account needed. Optionally push to GitHub, GitLab, Gitea or any HTTPS Git host. See the [Versioning guide](./docs/guide/script-versioning.md).
+- **NEW: Backup & Restore** — Scheduled zip backups with retention, optional WebDAV upload, and a disaster-recovery restore with selective diff and an automatic safety snapshot. See the [Backup guide](./docs/guide/backup-restore.md).
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
-- **Native HA Entities** — Register Home Assistant entities via MQTT Discovery using `ha.register()`. State is retained across reboots. Entities become unavailable while their script is stopped, unless opted out via `stale_ok`. Remove one at runtime with `ha.unregister()`. Optionally group multiple entities under a named HA device. Unknown fields in the config are passed through directly into the Discovery payload, enabling complex domains like `light`, `climate`, or `cover`.
-- **Service Response Data** — `await ha.call('weather.get_forecasts', { entity_id, type: 'daily' }, { returnResponse: true })` awaits the response payload for "response-only"/"response-optional" services instead of firing-and-forgetting.
-- **Smart Triggers** — `ha.on()` supports wildcards, arrays, and RegExp. `ha.waitFor()` pauses until a state is reached. `ha.waitUntil()` waits for complex multi-entity conditions.
-- **Fluent & Awaitable API** — Interact with entities naturally: `await ha.entity('light.kitchen').turn_on({ brightness: 200 })`. Chain commands, wait for confirmations, build readable sequential logic.
-- **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system. Press `Shift+Enter` after `ha.notify` and get a fully filled-out template.
-- **Persistent Store & Magic Variables** — Share data between scripts or survive reboots with `ha.store`. Use `ha.persistent()` to work with persistent objects as if they were plain JavaScript — nested property changes are saved automatically.
-- **Developer Tools (Expert Mode)** — Enable **Settings → General → Expert Mode** to reveal a split developer panel next to the log console with three tools: **Event Inspector** (live HA event stream with entity filter), **Live REPL** (run ad-hoc JavaScript with full `ha` API access against your live instance), and **Breakpoints** (`ha.breakpoint('label', { vars })` pauses execution and displays variables in a built-in variable inspector — click Continue to resume).
-- **Direct MQTT Access (`ha.mqtt`)** — Subscribe to any broker topic and publish messages directly — no HA entity required. Supports `+` and `#` wildcards. Payloads are auto-parsed as JSON. Ideal for raw Tasmota/Shelly/Zigbee2MQTT events, inter-script messaging, and building custom HA devices with complex domains.
-- **Webhook Receiver (`ha.onWebhook`)** — Let external services push data into your scripts and get a real response back. Unlike HA's built-in webhook automations (fire-and-forget, always an empty `200 OK`), JSA webhooks are fully bidirectional: your handler receives the complete request and returns any HTTP status code and body. Tokens are auto-generated and managed by JSA, never in script code. A dedicated Webhook Panel (Developer Tools) shows all active endpoints with copy-ready URLs and token management (reveal / rotate). Requires a dedicated port; does not work through the Nabu Casa tunnel.
-- **Deep HA API Access** — `ha.renderTemplate()` evaluates Jinja2 templates, `ha.getCalendarEvents()` and `ha.getTodoItems()` access HA calendar and todo entities, `ha.getEntitiesWithLabel()` and `ha.getAreasInFloor()` query the label and floor registries, `ha.onEvent()` subscribes to any HA event bus event (NFC tags, automation triggers, custom events), and `ha.fireEvent()` fires custom events for inter-script communication.
-- **Filesystem API (`ha.fs`)** — Read, write, append, list, watch, and rotate files across three sandboxed virtual roots: `internal://` (script-private data), `shared://` (/share, NAS mounts), `media://` (/media). Opt-in via Settings → Danger Zone.
-- **History & Computed Helpers (`ha.history`)** — Fetch raw state history and pre-aggregated long-term statistics. Six built-in computation functions — `trend()`, `derivative()` (linear or polynomial fit), `integral()`, `stats()`, `timeSince()`, `timeInState()` — work on HA entities or any external data array, no helper entities required.
-- **Global Libraries & Auto-NPM** — Write shared code once, `@include` it anywhere. npm packages listed in the script header are installed automatically.
+- **Native HA Entities** — Register entities via MQTT Discovery with `ha.register()`; state is retained across reboots, and entities can be grouped under a named HA device. See the [Native Entities guide](./docs/guide/native-entities.md).
+- **Smart Triggers & Fluent API** — `ha.on()` supports wildcards, arrays, and RegExp; `ha.waitFor()` and `ha.waitUntil()` pause until a state or a multi-entity condition is reached; `await ha.entity('light.kitchen').turn_on({ brightness: 200 })` keeps sequential logic readable.
+- **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system.
+- **Persistent Store & Secrets** — Share data between scripts or survive reboots with `ha.store` and `ha.persistent()`. Values can be marked as secrets, shared per script, and optionally encrypted at rest.
+- **Developer Tools (Expert Mode)** — Event Inspector, a live REPL with full `ha` API access, and Breakpoints (`ha.breakpoint()`) with a built-in variable inspector. Enable under **Settings → General → Expert Mode**.
+- **Direct MQTT Access (`ha.mqtt`)** — Subscribe to any broker topic and publish messages directly, with `+`/`#` wildcards and automatic JSON parsing.
+- **Webhook Receiver (`ha.onWebhook`)** — Let external services push data into your scripts and get a real response back: your handler returns any HTTP status and body. Tokens are generated and managed by JSA. Requires a dedicated port; does not work through the Nabu Casa tunnel.
+- **Deep HA API Access** — Jinja2 templates (`ha.renderTemplate()`), calendar and todo entities, label and floor registries, service response data (`returnResponse: true`), and the full HA event bus (`ha.onEvent()`, `ha.fireEvent()`).
+- **Filesystem API (`ha.fs`)** — Read, write, append, list, watch, and rotate files across three sandboxed roots: `internal://`, `shared://` (/share, NAS mounts), and `media://` (/media). Opt-in via Settings → Danger Zone.
+- **History & Computed Helpers (`ha.history`)** — Raw state history and long-term statistics, plus `trend()`, `derivative()`, `integral()`, `stats()`, `timeSince()` and `timeInState()` on HA entities or any data array.
+- **Global Libraries & Auto-NPM** — Write shared code once and `@include` it anywhere. npm packages listed in the script header are installed automatically.
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
-- **Script Packs** — Embed a Lovelace card directly inside a script. One file contains backend logic _and_ a custom dashboard card. The add-on installs the card automatically as a Lovelace resource. The card communicates back to the script via `__jsa__.callAction()` — no MQTT, no webhooks needed. `ha.frontend.cacheAsset(url)` downloads and caches external images/assets (team logos, album art, ...) under `config/www/` once, returning a stable local URL — no more hotlinked images breaking on flaky dashboard devices when the source is slow or unreachable. See the [Script Packs guide](./docs/guide/card-packs.md).
+- **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()`. See the [Script Packs guide](./docs/guide/card-packs.md).
 
 ---
 
@@ -154,6 +154,8 @@ The topics below have grown too deep for a README section — each has its own g
 - **[Creation Wizard](./docs/guide/creation-wizard.md)** — the **+** button's New / Upload / Import modes.
 - **[Script Packs (JSA Card Packs)](./docs/guide/card-packs.md)** — bundling a Lovelace card and its backend logic in one file, the `__jsa__` bridge, and the [Script Library](https://rocklobster42195.github.io/ha-jsa-library/).
 - **[Visual Scripting (Blockly)](./docs/guide/blockly.md)** — the block palette, Show Code, and how block errors trace back to the exact block.
+- **[Script Versioning (Git)](./docs/guide/script-versioning.md)** — commits, history, diffs, restore and optional remote push.
+- **[Backup & Restore](./docs/guide/backup-restore.md)** — scheduled zip backups, WebDAV upload, disaster-recovery restore.
 
 Global Libraries (write once with `@include`, share across scripts — passive, no Start/Stop) are covered above under Key Features.
 
@@ -206,7 +208,7 @@ A graphical UI for `ha.store`:
 - **Visual table** with keys, values, owners, and timestamps.
 - **Live updates** as scripts write to the store.
 - **Edit & Delete** values directly.
-- **Secrets:** Mark values as secret (e.g., API keys, tokens) to encrypt them at rest and mask them in the UI. A secret is only readable by the script that created it, unless you share it with other scripts.
+- **Secrets:** Mark values as secret (e.g., API keys, tokens) to mask them in the UI. A secret is only readable by the script that created it, unless you share it with other scripts. Optionally encrypt secrets at rest under **Settings → Danger Zone → Encrypt ha.store Secrets** — switch it off again before downgrading to an older version.
 
 ---
 
