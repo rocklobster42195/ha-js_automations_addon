@@ -346,6 +346,7 @@ declare global {
     /** blockly-editor.js — highlights the block on the active .blocks canvas that threw. */
     highlightBlocklyError?: (scriptId: string, blockId: string, message: string) => void;
     currentSettings?: JsaSettings | null;
+    applyDevTabVisibility?: (settings: JsaSettings | null | undefined) => void;
     getHAStates?: () => Promise<JsaHaState[]>;
     cachedEntities?: JsaHaState[];
     /** In-flight dedup for fetchAllStatesDeduped() (see ha-entity-cache.ts). */

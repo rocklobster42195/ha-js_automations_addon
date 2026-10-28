@@ -328,7 +328,14 @@
       "hide_mobile_toggle_in_desktop": "Hide mobile toggle in desktop mode",
       "hide_mobile_toggle_in_desktop_desc": "Hides the mobile/desktop view switch button while in desktop mode. It always stays visible in mobile mode.",
       "language_option_de": "Deutsch",
-      "language_option_en": "English"
+      "language_option_en": "English",
+      "devtabs_hint": "Dev-tools tabs to show. Switch off the ones you do not use to save space in the tab bar.",
+      "devtab_watch": "Tab WATCH",
+      "devtab_repl": "Tab REPL",
+      "devtab_mqtt": "Tab MQTT",
+      "devtab_events": "Tab EVENTS",
+      "devtab_webhooks": "Tab WEBHOOKS",
+      "devtab_mcp": "Tab MCP"
     },
     "editor": {
       "show_toolbar": "Show Toolbar",

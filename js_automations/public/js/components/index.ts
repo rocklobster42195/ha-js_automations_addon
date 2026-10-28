@@ -10,6 +10,7 @@ import './status-bar-header-actions';
 import './webhook-panel';
 import './mcp-panel';
 import './mcp-activity-panel';
+import './dev-tabs';
 import './mqtt-monitor';
 import './watch-panel';
 import './store-explorer';

@@ -66,6 +66,27 @@ const mcpToolItems: SettingItem[] = MCP_TOOL_GROUPS.flatMap((group) => [
   })),
 ]);
 
+// Dev-tools tabs the user can switch off to save space (expert mode only). Keep in sync with
+// DEV_TABS in public/js/components/dev-tabs.ts.
+const DEV_TAB_NAMES = ['watch', 'repl', 'mqtt', 'events', 'webhooks', 'mcp'];
+const devTabItems: SettingItem[] = [
+  {
+    key: 'devtabs_info',
+    label: null,
+    type: 'info',
+    text: 'settings.general.devtabs_hint',
+    condition: { key: 'expert_mode', value: true },
+  },
+  ...DEV_TAB_NAMES.map((name) => ({
+    key: `devtab_${name}`,
+    label: `settings.general.devtab_${name}`,
+    type: 'boolean',
+    default: true,
+    indent: true,
+    condition: { key: 'expert_mode', value: true },
+  })),
+];
+
 const settingsSchema: SettingSection[] = [
   {
     id: 'general',
@@ -91,6 +112,7 @@ const settingsSchema: SettingSection[] = [
         type: 'boolean',
         default: false,
       },
+      ...devTabItems,
       {
         key: 'confirm_delete',
         label: 'settings.general.confirm_delete',

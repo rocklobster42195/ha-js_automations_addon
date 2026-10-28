@@ -329,7 +329,14 @@
       "hide_mobile_toggle_in_desktop": "Mobil-Umschalter im Desktopmodus verbergen",
       "hide_mobile_toggle_in_desktop_desc": "Blendet den Umschalter zwischen Mobil- und Desktopansicht im Desktopmodus aus. Im Mobilmodus bleibt er immer sichtbar.",
       "language_option_de": "Deutsch",
-      "language_option_en": "English"
+      "language_option_en": "English",
+      "devtabs_hint": "Welche Dev-Tools-Tabs angezeigt werden. Nicht benötigte Tabs ausschalten spart Platz in der Tab-Leiste.",
+      "devtab_watch": "Tab WATCH",
+      "devtab_repl": "Tab REPL",
+      "devtab_mqtt": "Tab MQTT",
+      "devtab_events": "Tab EVENTS",
+      "devtab_webhooks": "Tab WEBHOOKS",
+      "devtab_mcp": "Tab MCP"
     },
     "editor": {
       "show_toolbar": "Toolbar anzeigen",
