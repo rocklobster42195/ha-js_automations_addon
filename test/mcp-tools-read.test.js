@@ -78,6 +78,32 @@ function setup(t) {
       { entity_id: 'sensor.temp', state: '21.5', attributes: { friendly_name: 'Outside Temp' } },
     ],
   };
+  const storeManager = {
+    getAllPublic: () => ({
+      guest_mode: { value: true, owner: 'hello.js', isSecret: false, updated: '2026-01-01T00:00:00Z', accessed: '' },
+      wifi_password: {
+        value: 'hunter2hunter2',
+        owner: 'hello.js',
+        isSecret: false,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
+      api_credentials: {
+        value: null,
+        owner: 'hello.js',
+        isSecret: true,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
+      config: {
+        value: { url: 'x', note: 'password = "abcdefgh12"' },
+        owner: 'a.js',
+        isSecret: false,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
+    }),
+  };
   const eventBuffer = new McpEventBuffer();
   eventBuffer.push({
     event_type: 'state_changed',
@@ -94,6 +120,7 @@ function setup(t) {
   registerReadTools(protocol, {
     workerManager,
     logManager,
+    storeManager,
     haConnector,
     cardManager,
     eventBuffer,
@@ -121,7 +148,7 @@ async function connect(manager) {
 }
 
 test('read tools expose scripts, logs, events, entities and docs', async (t) => {
-  const { manager } = setup(t);
+  const { manager, settings } = setup(t);
   await new Promise((r) => (manager.server.listening ? r() : manager.server.once('listening', r)));
   const client = await connect(manager);
   t.after(() => client.close());
@@ -219,6 +246,20 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match((await call('list_entities', { search: 'outside' })).text, /sensor\.temp/);
     assert.match((await call('get_entity', { entity_id: 'light.kitchen' })).text, /"brightness": 200/);
     assert.equal((await call('get_entity', { entity_id: 'light.nope' })).isError, true);
+  });
+
+  await t.test('get_store: off by default, never returns secrets, masks sensitive keys', async () => {
+    assert.ok(!(await client.listTools()).tools.some((x) => x.name === 'get_store'));
+    settings.mcp.tool_get_store = true;
+    const all = (await call('get_store')).text;
+    assert.match(all, /guest_mode \| true \| owner: hello\.js/);
+    assert.match(all, /api_credentials \| \(secret, value withheld\)/);
+    assert.match(all, /wifi_password \| \*\*\* \(masked: sensitive key name\)/);
+    assert.ok(!all.includes('hunter2hunter2'));
+    assert.ok(!all.includes('abcdefgh12'), 'sensitive text inside a plain value is masked as well');
+    assert.match((await call('get_store', { key: 'guest_mode' })).text, /^guest_mode/);
+    assert.equal((await call('get_store', { search: 'zzz' })).text, 'No matching store entries.');
+    delete settings.mcp.tool_get_store;
   });
 
   await t.test('get_api_reference: topic list, a topic, missing file', async () => {

@@ -5,9 +5,15 @@
 
 export const MASK = '***';
 
-// Names that mark the value next to them as sensitive.
-const SENSITIVE_NAME =
-  '(?:[\\w.-]*?(?:token|password|passwd|passphrase|secret|api[_-]?key|apikey|auth(?:orization)?|credential|private[_-]?key)[\\w.-]*)';
+// Words that mark the name of a value as sensitive.
+const SENSITIVE_WORDS =
+  'token|password|passwd|passphrase|secret|api[_-]?key|apikey|auth(?:orization)?|credential|private[_-]?key';
+const SENSITIVE_NAME = `(?:[\\w.-]*?(?:${SENSITIVE_WORDS})[\\w.-]*)`;
+
+/** True if a key/variable name suggests its value is a credential (e.g. "api_token", "wifiPassword"). */
+export function isSensitiveName(name: string): boolean {
+  return new RegExp(SENSITIVE_WORDS, 'i').test(name);
+}
 
 // key: 'value' / key = "value" / "key": "value" — only string literals, keeps the quote style.
 const NAMED_STRING = new RegExp(`(\\b${SENSITIVE_NAME}["']?\\s*[:=]\\s*)(["'\`])([^"'\`\\n]{4,})\\2`, 'gi');
@@ -58,6 +64,22 @@ export function maskSecrets(input: string): MaskResult {
     return `${quote}${MASK}${quote}`;
   });
   return { text, masked };
+}
+
+/**
+ * Masks a structured value before it is serialized: string leaves go through the filter, and strings
+ * under sensitive key names are replaced entirely. Needed because JSON.stringify escapes inner quotes,
+ * which would hide `password = "x"` inside a string from the text patterns.
+ */
+export function maskDeep(value: unknown): unknown {
+  if (typeof value === 'string') return maskSecrets(value).text;
+  if (Array.isArray(value)) return value.map(maskDeep);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, typeof v === 'string' && isSensitiveName(k) ? MASK : maskDeep(v)])
+    );
+  }
+  return value;
 }
 
 /** Masks and appends a one-line notice when something was replaced. */

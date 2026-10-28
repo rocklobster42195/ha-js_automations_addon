@@ -421,7 +421,7 @@
         "get_api_reference": "API-Referenz lesen",
         "get_api_reference_desc": "Authoring-Guide, ha-api.d.ts und API-Referenz als Schreibhilfe für die KI.",
         "get_store": "Store lesen",
-        "get_store_desc": "Inhalt von ha.store; sensible Schlüssel (token, password, key, secret) werden maskiert. Standardmäßig aus.",
+        "get_store_desc": "Inhalt von ha.store. Als Secret gespeicherte Werte werden nie ausgegeben, Werte unter Schlüsselnamen wie token oder password werden maskiert. Standardmäßig aus.",
         "start_script": "Skript starten",
         "start_script_desc": "Startet ein gestopptes Skript.",
         "stop_script": "Skript stoppen",

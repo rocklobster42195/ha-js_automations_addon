@@ -5,17 +5,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
-import { maskWithNotice } from './mcp-secret-filter';
+import { isSensitiveName, maskDeep, maskWithNotice } from './mcp-secret-filter';
+import { resolveScript } from './mcp-script-files';
 import { buildScriptList, type WorkerManagerInstance } from './script-list';
 import ScriptHeaderParser from './script-header-parser';
 import type CardManager from './card-manager';
 import type LogManager from './log-manager';
+import type StoreManager from './store-manager';
 import type HAConnector from './ha-connection';
 import type { McpEventBuffer } from './mcp-event-buffer';
 
 export interface McpReadToolDeps {
   workerManager: WorkerManagerInstance;
   logManager: LogManager;
+  storeManager: StoreManager;
   haConnector: HAConnector;
   cardManager: CardManager;
   eventBuffer: McpEventBuffer;
@@ -57,22 +60,8 @@ const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; about: s
   notifications: { dir: 'docs', file: 'guide/notifications.md', about: 'ha.notify and ha.ask.' },
 };
 
-/**
- * Resolves a script/library file name to its path. Only plain .js/.ts files directly in
- * the scripts or libraries folder are allowed (Blockly files are not exposed over MCP).
- */
-function resolveScript(deps: McpReadToolDeps, filename: string): { fullPath: string; isLibrary: boolean } | null {
-  const clean = filename.replace(/^libraries[/\\]/, '');
-  if (path.basename(clean) !== clean || !/\.(js|ts)$/.test(clean) || clean.endsWith('.d.ts')) return null;
-  const inScripts = path.join(deps.scriptsDir, clean);
-  if (!filename.startsWith('libraries') && fs.existsSync(inScripts)) return { fullPath: inScripts, isLibrary: false };
-  const inLibs = path.join(deps.librariesDir, clean);
-  if (fs.existsSync(inLibs)) return { fullPath: inLibs, isLibrary: true };
-  return null;
-}
-
 export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps): void {
-  const { workerManager, logManager, haConnector, cardManager, eventBuffer } = deps;
+  const { workerManager, logManager, storeManager, haConnector, cardManager, eventBuffer } = deps;
 
   protocol.registerTool({
     name: 'list_scripts',
@@ -289,6 +278,38 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       let json = JSON.stringify(state, null, 2);
       if (json.length > MAX_ENTITY_ATTRIBUTE_CHARS) json = json.slice(0, MAX_ENTITY_ATTRIBUTE_CHARS) + '\n… truncated';
       return text(json);
+    },
+  });
+
+  protocol.registerTool({
+    name: 'get_store',
+    title: 'Get store',
+    description:
+      'Lists the values in the shared ha.store (used by scripts for config and state). Values stored as secrets are never ' +
+      'returned, and values under key names that look like credentials (token, password, secret, api key…) are masked.',
+    inputSchema: {
+      key: z.string().optional().describe('Exact key to read'),
+      search: z.string().optional().describe('Case-insensitive text the key must contain'),
+    },
+    readOnly: true,
+    handler: (args) => {
+      const needle = typeof args.search === 'string' ? args.search.toLowerCase() : '';
+      const entries = Object.entries(storeManager.getAllPublic()).filter(
+        ([key]) => (!args.key || key === args.key) && (!needle || key.toLowerCase().includes(needle))
+      );
+      if (!entries.length) return text('No matching store entries.');
+      const lines = entries.slice(0, 200).map(([key, e]) => {
+        let value: string;
+        if (e.isSecret) value = '(secret, value withheld)';
+        else if (isSensitiveName(key)) value = '*** (masked: sensitive key name)';
+        else {
+          value = JSON.stringify(maskDeep(e.value)) ?? 'undefined';
+          if (value.length > 500) value = value.slice(0, 500) + '…';
+        }
+        return `${key} | ${value} | owner: ${e.owner ?? 'n/a'} | updated: ${e.updated}`;
+      });
+      const more = entries.length > 200 ? `\n… ${entries.length - 200} more, use search or key.` : '';
+      return text(maskWithNotice(lines.join('\n') + more));
     },
   });
 

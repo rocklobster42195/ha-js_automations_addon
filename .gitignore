@@ -93,6 +93,8 @@ js_automations/core/mcp-tool-catalog.js
 js_automations/core/mcp-secret-filter.js
 js_automations/core/mcp-event-buffer.js
 js_automations/core/mcp-tools-read.js
+js_automations/core/mcp-tools-control.js
+js_automations/core/mcp-script-files.js
 js_automations/core/script-list.js
 js_automations/core/mqtt-manager.js
 js_automations/core/ha-connection.js

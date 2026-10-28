@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { maskSecrets, maskWithNotice, MASK } = require('../js_automations/core/mcp-secret-filter.js');
+const { maskSecrets, maskWithNotice, maskDeep, MASK } = require('../js_automations/core/mcp-secret-filter.js');
 const { McpEventBuffer } = require('../js_automations/core/mcp-event-buffer.js');
 
 test('named assignments of sensitive keys are masked, quote style kept', () => {
@@ -56,6 +56,22 @@ test('references and plain URLs are not mistaken for credentials', () => {
   assert.ok(text.includes('TOKEN_URL = "https://account.example.com/auth/token"'));
   assert.ok(text.includes('Bearer ${token}'));
   assert.ok(!text.includes('user:pw'), 'URLs with embedded credentials are still masked');
+});
+
+test('maskDeep masks string leaves and strings under sensitive keys, leaves other values alone', () => {
+  const out = maskDeep({
+    note: 'password = "abcdefgh12"',
+    apiToken: 'plain-token-value',
+    nested: [{ secret: 'x1y2z3', count: 5, ok: true }],
+    url: 'https://example.com/a',
+  });
+  assert.deepEqual(out, {
+    note: `password = "${MASK}"`,
+    apiToken: MASK,
+    nested: [{ secret: MASK, count: 5, ok: true }],
+    url: 'https://example.com/a',
+  });
+  assert.equal(maskDeep(null), null);
 });
 
 test('maskWithNotice appends a count', () => {

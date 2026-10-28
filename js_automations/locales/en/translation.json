@@ -420,7 +420,7 @@
         "get_api_reference": "Read API reference",
         "get_api_reference_desc": "Authoring guide, ha-api.d.ts and API reference as writing aid for the AI.",
         "get_store": "Read store",
-        "get_store_desc": "Contents of ha.store; sensitive keys (token, password, key, secret) are masked. Off by default.",
+        "get_store_desc": "Contents of ha.store. Values stored as secrets are never returned, values under key names such as token or password are masked. Off by default.",
         "start_script": "Start script",
         "start_script_desc": "Starts a stopped script.",
         "stop_script": "Stop script",

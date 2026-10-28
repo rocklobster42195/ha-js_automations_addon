@@ -35,6 +35,7 @@ import { McpActivityLog } from './mcp-activity-log';
 import { McpProtocol } from './mcp-protocol';
 import { McpEventBuffer } from './mcp-event-buffer';
 import { registerReadTools } from './mcp-tools-read';
+import { registerControlTools } from './mcp-tools-control';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -216,6 +217,7 @@ class Kernel extends EventEmitter {
       registerReadTools(this.mcpProtocol, {
         workerManager: this.workerManager,
         logManager: this.logManager,
+        storeManager: this.storeManager,
         haConnector: this.haConnector,
         cardManager: this.cardManager,
         eventBuffer: this.mcpEvents,
@@ -223,6 +225,15 @@ class Kernel extends EventEmitter {
         librariesDir: config.LIBRARIES_DIR,
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
+      });
+      registerControlTools(this.mcpProtocol, {
+        workerManager: this.workerManager,
+        depManager: this.depManager,
+        stateManager: this.stateManager,
+        haConnector: this.haConnector,
+        scriptsDir: SCRIPTS_DIR,
+        librariesDir: config.LIBRARIES_DIR,
+        notifyStatusUpdate: () => this.io?.emit('status_update'),
       });
 
       // Create SystemService before EntityManager so we can pass it
