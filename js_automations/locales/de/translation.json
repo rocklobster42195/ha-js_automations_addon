@@ -720,7 +720,9 @@
     "mcp_feedback_kind_feature": "Feature",
     "mcp_feedback_kind_docs": "Doku",
     "mcp_feedback_kind_other": "Sonstiges",
-    "mcp_calls_title": "Tool-Aufrufe"
+    "mcp_calls_title": "Tool-Aufrufe",
+    "mcp_copy": "Kopieren",
+    "mcp_details": "Details ein-/ausblenden"
   },
   "preview": {
     "card_config": "Karten-Konfiguration",

@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { mdiStylesheetLink } from './mdi';
 
 interface McpActivityEntry {
   id: number;
@@ -13,6 +14,7 @@ interface McpActivityEntry {
 }
 
 const MAX_VISIBLE = 200;
+const COPIED_FLASH_MS = 1500;
 
 // English fallbacks for the kind badge until the translations are loaded.
 const KIND_FALLBACK: Record<string, string> = {
@@ -30,13 +32,24 @@ interface FeedbackNote {
   title: string;
   detail: string;
   count: number;
+  firstSeen?: number;
+  lastSeen?: number;
 }
 
+/** "2026-10-28 21:27" — locale independent, so a copied note reads the same everywhere. */
+const stamp = (ts: number, seconds = false): string =>
+  new Date(ts)
+    .toISOString()
+    .slice(0, seconds ? 19 : 16)
+    .replace('T', ' ');
+
 /**
- * MCP dev-tools tab: live log of the tool calls AI clients make over MCP. Panel content only — the
- * MCP tab button and the .dev-tab-panel/.hidden toggling stay owned by layout.js's generic tab
- * switcher (this element IS the panel, id="dev-tab-mcp"). Setup (token, endpoint) lives in
- * Settings → MCP Server.
+ * MCP dev-tools tab: the assistant's notes about JSA and a live log of the tool calls AI clients make
+ * over MCP. Long texts (a note's detail, a failed call's error) are shown as a one-line preview and
+ * expand on click; both can be copied, formatted so they can be pasted into a GitHub issue or a chat.
+ * Panel content only — the MCP tab button and the .dev-tab-panel/.hidden toggling stay owned by
+ * layout.js's generic tab switcher (this element IS the panel, id="dev-tab-mcp"). Setup (token,
+ * endpoint) lives in Settings → MCP Server.
  */
 @customElement('mcp-activity-panel')
 export class McpActivityPanel extends LitElement {
@@ -60,6 +73,22 @@ export class McpActivityPanel extends LitElement {
       font-family: inherit;
       font-size: 0.8rem;
     }
+    .icon-btn {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      padding: 0 3px;
+      font-size: 0.95rem;
+      line-height: 1;
+    }
+    .icon-btn:hover {
+      color: #ddd;
+    }
+    .icon-btn.danger:hover {
+      color: #e57373;
+    }
     /* Wraps instead of overflowing: in a narrow pane target and meta drop to a second line. */
     .row {
       display: flex;
@@ -68,6 +97,10 @@ export class McpActivityPanel extends LitElement {
       gap: 0 8px;
       padding: 2px 0;
       border-bottom: 1px solid #1c1c1c;
+    }
+    .state {
+      display: inline-block;
+      min-width: 2.4em;
     }
     .time {
       color: #777;
@@ -94,6 +127,13 @@ export class McpActivityPanel extends LitElement {
     .fail {
       color: #e57373;
     }
+    button.state {
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      font: inherit;
+    }
     .section-title {
       margin: 8px 0 4px;
       color: #aaa;
@@ -116,6 +156,14 @@ export class McpActivityPanel extends LitElement {
       display: flex;
       align-items: baseline;
       gap: 8px;
+    }
+    /* Keeps notes without a detail aligned with those that have a chevron. */
+    .chev-space {
+      flex-shrink: 0;
+      width: calc(0.95rem + 6px);
+    }
+    .fb-head.expandable {
+      cursor: pointer;
     }
     .fb-title {
       flex: 1;
@@ -140,37 +188,46 @@ export class McpActivityPanel extends LitElement {
       flex-shrink: 0;
       color: #888;
     }
-    .fb-del {
-      flex-shrink: 0;
-      background: none;
-      border: none;
-      color: #666;
-      cursor: pointer;
-      padding: 0 2px;
-      font-size: 0.9rem;
-    }
-    .fb-del:hover {
-      color: #e57373;
-    }
+    /* One-line preview until expanded. */
     .fb-detail {
       color: #777;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       padding-left: 2px;
       margin-top: 2px;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 1;
+      overflow: hidden;
+    }
+    .fb-detail.open {
+      display: block;
+      overflow: visible;
     }
     .error {
       flex-basis: 100%;
       color: #c0827f;
-      padding-left: 1.4em;
+      padding-left: 2.4em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .error.open {
       white-space: pre-wrap;
-      word-break: break-word;
+      overflow: visible;
+      overflow-wrap: anywhere;
     }
   `;
 
   @state() private _enabled: boolean | null = null;
   @state() private _activity: McpActivityEntry[] = [];
   @state() private _notes: FeedbackNote[] = [];
+  /** Keys ("fb:<id>" / "act:<id>") of the expanded items. */
+  @state() private _open: Set<string> = new Set();
+  /** Key of the item whose copy button was just used (shows a check mark for a moment). */
+  @state() private _copied = '';
+
+  private _copiedTimer?: ReturnType<typeof setTimeout>;
 
   private _t(key: string, fallback: string): string {
     return window.i18next?.t(key, { defaultValue: fallback }) ?? fallback;
@@ -226,37 +283,126 @@ export class McpActivityPanel extends LitElement {
     this._notes = this._notes.filter((n) => n.id !== id);
   };
 
+  private _toggle(key: string): void {
+    const next = new Set(this._open);
+    if (!next.delete(key)) next.add(key);
+    this._open = next;
+  }
+
+  private async _copy(key: string, text: string): Promise<void> {
+    await navigator.clipboard?.writeText(text);
+    this._copied = key;
+    clearTimeout(this._copiedTimer);
+    this._copiedTimer = setTimeout(() => (this._copied = ''), COPIED_FLASH_MS);
+  }
+
+  /** Issue-ready text of a note (English on purpose: GitHub issues are written in English). */
+  private _noteText(n: FeedbackNote): string {
+    const kind = KIND_FALLBACK[n.kind] ?? n.kind;
+    const lines = [`[${kind}] ${n.title}`];
+    const meta = [`Seen ${n.count}×`];
+    if (n.firstSeen) meta.push(`first ${stamp(n.firstSeen)}`);
+    if (n.lastSeen) meta.push(`last ${stamp(n.lastSeen)}`);
+    if (n.severity === 'hard_error') meta.push('hard error');
+    lines.push(meta.join(' · '));
+    if (n.detail) lines.push('', n.detail);
+    return lines.join('\n');
+  }
+
+  private _entryText(e: McpActivityEntry): string {
+    const lines = [
+      `${e.tool}${e.target ? ` — ${e.target}` : ''} ${e.ok ? 'succeeded' : 'failed'}`,
+      `${stamp(e.ts, true)} UTC · ${e.ip} · ${e.durationMs} ms`,
+    ];
+    if (e.error) lines.push('', e.error);
+    return lines.join('\n');
+  }
+
+  private _iconBtn(key: string, title: string, onClick: () => void, icon: string, extra = '') {
+    return html`<button
+      class="icon-btn ${extra}"
+      title=${title}
+      @click=${(ev: Event) => {
+        ev.stopPropagation();
+        onClick();
+      }}
+    >
+      <i class="mdi ${this._copied === key ? 'mdi-check' : icon}"></i>
+    </button>`;
+  }
+
   private _renderNote(n: FeedbackNote) {
     const hard = n.severity === 'hard_error';
     const kind = this._t(`devtools.mcp_feedback_kind_${n.kind}`, KIND_FALLBACK[n.kind] ?? n.kind);
+    const key = `fb:${n.id}`;
+    const open = this._open.has(key);
     return html`<div class="fb">
-      <div class="fb-head">
+      <div class="fb-head ${n.detail ? 'expandable' : ''}" @click=${() => n.detail && this._toggle(key)}>
+        ${
+          n.detail
+            ? html`<button
+                class="icon-btn"
+                title=${this._t('devtools.mcp_details', 'Show or hide details')}
+                aria-expanded=${open ? 'true' : 'false'}
+                @click=${(ev: Event) => {
+                  ev.stopPropagation();
+                  this._toggle(key);
+                }}
+              >
+                <i class="mdi ${open ? 'mdi-chevron-down' : 'mdi-chevron-right'}"></i>
+              </button>`
+            : html`<span class="chev-space"></span>`
+        }
         <span class="fb-badge ${hard ? 'hard' : ''}"
           >${hard ? this._t('devtools.mcp_feedback_hard_error', 'hard error') : kind}</span
         >
         <span class="fb-title">${n.title}</span>
         <span class="fb-count">${n.count}×</span>
+        ${this._iconBtn(
+          `${key}:copy`,
+          this._t('devtools.mcp_copy', 'Copy'),
+          () => void this._copy(`${key}:copy`, this._noteText(n)),
+          'mdi-content-copy',
+          'fb-copy'
+        )}
         <button
-          class="fb-del"
+          class="icon-btn danger fb-del"
           title=${this._t('devtools.mcp_feedback_delete', 'Delete note')}
-          @click=${() => this._deleteNote(n.id)}
+          @click=${(ev: Event) => {
+            ev.stopPropagation();
+            void this._deleteNote(n.id);
+          }}
         >
-          ✕
+          <i class="mdi mdi-close"></i>
         </button>
       </div>
-      ${n.detail ? html`<div class="fb-detail">${n.detail}</div>` : ''}
+      ${n.detail ? html`<div class="fb-detail ${open ? 'open' : ''}">${n.detail}</div>` : ''}
     </div>`;
   }
 
   private _renderEntry(e: McpActivityEntry) {
     const time = new Date(e.ts).toLocaleTimeString([], { hour12: false });
+    const key = `act:${e.id}`;
+    const open = this._open.has(key);
     return html`<div class="row">
-      <span class=${e.ok ? 'ok' : 'fail'}>${e.ok ? '✓' : '✗'}</span>
+      ${
+        e.error
+          ? html`<button
+              class="state fail"
+              title=${this._t('devtools.mcp_details', 'Show or hide details')}
+              aria-expanded=${open ? 'true' : 'false'}
+              @click=${() => this._toggle(key)}
+            >
+              <i class="mdi ${open ? 'mdi-chevron-down' : 'mdi-chevron-right'}"></i>✗
+            </button>`
+          : html`<span class="state ${e.ok ? 'ok' : 'fail'}">${e.ok ? '✓' : '✗'}</span>`
+      }
       <span class="time">${time}</span>
       <span class="tool">${e.tool}</span>
       <span class="target">${e.target ?? ''}</span>
       <span class="meta">${e.ip} · ${e.durationMs} ms</span>
-      ${e.error ? html`<span class="error">${e.error}</span>` : ''}
+      ${e.error ? this._iconBtn(`${key}:copy`, this._t('devtools.mcp_copy', 'Copy'), () => void this._copy(`${key}:copy`, this._entryText(e)), 'mdi-content-copy') : ''}
+      ${e.error ? html`<span class="error ${open ? 'open' : ''}">${e.error}</span>` : ''}
     </div>`;
   }
 
@@ -266,26 +412,27 @@ export class McpActivityPanel extends LitElement {
         ${this._t('devtools.mcp_disabled', 'The MCP server is switched off. Enable it in Settings → MCP Server.')}
       </div>`;
     }
-    return html`<div class="list">
-      ${
-        this._notes.length
-          ? html`<div class="section-title">
-                ${this._t('devtools.mcp_feedback_title', 'JSA feedback from the assistant')} (${this._notes.length})
-              </div>
-              ${this._notes.map((n) => this._renderNote(n))}
-              <div class="section-title divider">
-                ${this._t('devtools.mcp_calls_title', 'Tool calls')} (${this._activity.length})
+    return html`${mdiStylesheetLink}
+      <div class="list">
+        ${
+          this._notes.length
+            ? html`<div class="section-title">
+                  ${this._t('devtools.mcp_feedback_title', 'JSA feedback from the assistant')} (${this._notes.length})
+                </div>
+                ${this._notes.map((n) => this._renderNote(n))}
+                <div class="section-title divider">
+                  ${this._t('devtools.mcp_calls_title', 'Tool calls')} (${this._activity.length})
+                </div>`
+            : ''
+        }
+        ${
+          this._activity.length
+            ? this._activity.map((e) => this._renderEntry(e))
+            : html`<div class="hint">
+                ${this._t('devtools.mcp_empty', 'No tool calls yet. They appear here as soon as an AI client uses the server.')}
               </div>`
-          : ''
-      }
-      ${
-        this._activity.length
-          ? this._activity.map((e) => this._renderEntry(e))
-          : html`<div class="hint">
-              ${this._t('devtools.mcp_empty', 'No tool calls yet. They appear here as soon as an AI client uses the server.')}
-            </div>`
-      }
-    </div>`;
+        }
+      </div>`;
   }
 }
 

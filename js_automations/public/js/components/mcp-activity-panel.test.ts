@@ -187,4 +187,109 @@ describe('mcp-activity-panel', () => {
       expect(text(el)).to.contain('fresh note');
     });
   });
+
+  describe('expanding and copying', () => {
+    let clipboard: sinon.SinonStub;
+    beforeEach(() => {
+      clipboard = sinon.stub(navigator.clipboard, 'writeText').resolves();
+    });
+    afterEach(() => clipboard.restore());
+
+    const note = (over: Record<string, unknown> = {}) => ({
+      id: 'fb_1',
+      kind: 'api',
+      severity: 'normal',
+      title: 'ha.register options are hard to discover',
+      detail: 'First line of the detail\nSecond line with more context',
+      count: 3,
+      firstSeen: Date.UTC(2026, 9, 28, 21, 5),
+      lastSeen: Date.UTC(2026, 9, 28, 21, 27),
+      ...over,
+    });
+    const click = async (el: McpActivityPanel, selector: string, index = 0) => {
+      (el.shadowRoot!.querySelectorAll(selector)[index] as HTMLElement).click();
+      await aTimeout(0);
+      await el.updateComplete;
+    };
+
+    it('shows a note detail as a preview and expands it on click of the chevron or the title', async () => {
+      const el = await mount(true, [], [note()]);
+      const detail = () => el.shadowRoot!.querySelector('.fb-detail')!;
+      expect(detail().classList.contains('open')).to.equal(false);
+
+      await click(el, '.fb-head .icon-btn');
+      expect(detail().classList.contains('open')).to.equal(true);
+      expect(el.shadowRoot!.querySelector('.fb-head .icon-btn')!.getAttribute('aria-expanded')).to.equal('true');
+
+      await click(el, '.fb-title');
+      expect(detail().classList.contains('open')).to.equal(false);
+    });
+
+    it('has nothing to expand for a note without detail', async () => {
+      const el = await mount(true, [], [note({ detail: '' })]);
+      expect(el.shadowRoot!.querySelector('.fb-detail')).to.be.null;
+      expect(el.shadowRoot!.querySelector('.fb-head.expandable')).to.be.null;
+    });
+
+    it('copies a note in an issue-ready format and shows a check mark', async () => {
+      const el = await mount(true, [], [note({ severity: 'hard_error', kind: 'bug' })]);
+      await click(el, '.fb-copy');
+
+      expect(clipboard.calledOnce).to.equal(true);
+      expect(clipboard.firstCall.args[0]).to.equal(
+        [
+          '[bug] ha.register options are hard to discover',
+          'Seen 3× · first 2026-10-28 21:05 · last 2026-10-28 21:27 · hard error',
+          '',
+          'First line of the detail',
+          'Second line with more context',
+        ].join('\n')
+      );
+      expect(el.shadowRoot!.querySelector('.fb-copy i')!.classList.contains('mdi-check')).to.equal(true);
+      expect(el.shadowRoot!.querySelector('.fb-detail')!.classList.contains('open')).to.equal(false);
+    });
+
+    it('does not delete or toggle when the copy button is used', async () => {
+      const el = await mount(true, [], [note()]);
+      await click(el, '.fb-copy');
+      expect(el.shadowRoot!.querySelectorAll('.fb').length).to.equal(1);
+      expect(api.getCalls().some((c) => c.args[1]?.method === 'DELETE')).to.equal(false);
+    });
+
+    it('expands the error of a failed call and copies it', async () => {
+      const failed = entry({
+        id: 5,
+        tool: 'write_script',
+        target: 'demo.ts',
+        ok: false,
+        error: 'Not written — syntax errors:\n  line 4:12 TS1005',
+        ts: Date.UTC(2026, 9, 28, 21, 27, 30),
+        durationMs: 48,
+      });
+      const el = await mount(true, [failed, entry({ id: 6 })]);
+      const error = () => el.shadowRoot!.querySelector('.error')!;
+      expect(error().classList.contains('open')).to.equal(false);
+
+      await click(el, 'button.state');
+      expect(error().classList.contains('open')).to.equal(true);
+
+      await click(el, '.row .icon-btn');
+      expect(clipboard.firstCall.args[0]).to.equal(
+        [
+          'write_script — demo.ts failed',
+          '2026-10-28 21:27:30 UTC · 192.168.1.5 · 48 ms',
+          '',
+          'Not written — syntax errors:',
+          '  line 4:12 TS1005',
+        ].join('\n')
+      );
+    });
+
+    it('offers expand and copy only for failed calls', async () => {
+      const el = await mount(true, [entry({ id: 1 }), entry({ id: 2, ok: false, error: 'boom' })]);
+      const rows = Array.from(el.shadowRoot!.querySelectorAll('.row'));
+      expect(rows[0].querySelector('button')).to.be.null;
+      expect(rows[1].querySelectorAll('button').length).to.equal(2);
+    });
+  });
 });

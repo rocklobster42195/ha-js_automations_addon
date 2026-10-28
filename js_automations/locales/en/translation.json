@@ -720,7 +720,9 @@
     "mcp_feedback_kind_feature": "feature",
     "mcp_feedback_kind_docs": "docs",
     "mcp_feedback_kind_other": "other",
-    "mcp_calls_title": "Tool calls"
+    "mcp_calls_title": "Tool calls",
+    "mcp_copy": "Copy",
+    "mcp_details": "Show or hide details"
   },
   "preview": {
     "card_config": "Card Config",
