@@ -553,9 +553,11 @@
       "rotate": "Neues Token erzeugen",
       "rotate_confirm": "Neues Zugriffstoken erzeugen? Jeder KI-Client mit dem alten Token funktioniert nicht mehr, bis du ihn aktualisierst.",
       "copy_config": "Claude-Desktop-Konfiguration kopieren",
-      "config_hint": "In claude_desktop_config.json einfügen (Einstellungen → Entwickler → Konfiguration bearbeiten). Benötigt Node.js auf dem Rechner, auf dem Claude Desktop läuft.",
+      "config_hint": "Alternativ in claude_desktop_config.json einfügen (Einstellungen → Entwickler → Konfiguration bearbeiten). Benötigt Node.js auf dem Rechner, auf dem Claude Desktop läuft.",
       "privacy": "Alles, was ein KI-Client über diese Tools liest (Skripte, Logs, Entity-Zustände), geht an dessen Anbieter. Secrets werden nur nach bestem Wissen gefiltert — verlass dich bei Zugangsdaten nicht darauf.",
-      "activity_hint": "Welche Tools ein KI-Client aufruft, siehst du im Dev-Tools-Tab „MCP“ (Expert-Modus)."
+      "activity_hint": "Welche Tools ein KI-Client aufruft, siehst du im Dev-Tools-Tab „MCP“ (Expert-Modus).",
+      "install": "Für Claude Desktop installieren",
+      "install_hint": "Lädt eine .mcpb-Datei herunter — ein Doppelklick darauf richtet Claude Desktop ein. Die Datei enthält dein Zugriffstoken, gib sie nicht weiter. Claude Desktop muss auf einem Rechner laufen, der den Endpunkt erreicht."
     }
   },
   "statusbar": {

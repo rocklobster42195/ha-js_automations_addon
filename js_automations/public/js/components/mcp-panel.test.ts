@@ -86,6 +86,22 @@ describe('mcp-panel', () => {
     expect(text(el)).to.contain('https://mcp.example.com/mcp');
   });
 
+  it('offers a one-click .mcpb download for the endpoint that is shown', async () => {
+    const el = await mount();
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.install-btn')!;
+    expect(link.hasAttribute('download')).to.equal(true);
+    const url = new URL(link.getAttribute('href')!, window.location.href);
+    expect(url.pathname.endsWith('/api/mcp/mcpb')).to.equal(true);
+    expect(url.searchParams.get('url')).to.equal(`http://${window.location.hostname}:3002/mcp`);
+
+    const external = await mount({ externalUrl: 'https://mcp.example.com' });
+    const extUrl = new URL(
+      external.shadowRoot!.querySelector('a.install-btn')!.getAttribute('href')!,
+      window.location.href
+    );
+    expect(extUrl.searchParams.get('url')).to.equal('https://mcp.example.com/mcp');
+  });
+
   it('points to the dev-tools tab for the tool-call log', async () => {
     const el = await mount();
     expect(text(el)).to.contain('dev-tools tab "MCP"');

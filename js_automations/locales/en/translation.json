@@ -552,9 +552,11 @@
       "rotate": "Create new token",
       "rotate_confirm": "Create a new access token? Every AI client using the old one stops working until you update it.",
       "copy_config": "Copy Claude Desktop config",
-      "config_hint": "Paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.",
+      "config_hint": "Alternatively paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.",
       "privacy": "Everything an AI client reads through these tools (scripts, logs, entity states) is sent to its provider. Secrets are filtered on a best-effort basis — do not rely on it for credentials.",
-      "activity_hint": "The tool calls AI clients make are listed in the dev-tools tab \"MCP\" (expert mode)."
+      "activity_hint": "The tool calls AI clients make are listed in the dev-tools tab \"MCP\" (expert mode).",
+      "install": "Install for Claude Desktop",
+      "install_hint": "Downloads a .mcpb file — double-click it to set up Claude Desktop. The file contains your access token, do not share it. Claude Desktop must run on a computer that can reach the endpoint."
     }
   },
   "banner_close_tooltip": "Close",

@@ -87,6 +87,22 @@ export class McpPanel extends LitElement {
       color: #ddd;
       background: #222;
     }
+    .install-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      background: var(--accent, #4fc3f7);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-decoration: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+    }
+    .install-btn:hover {
+      filter: brightness(1.1);
+    }
     .snippet-btn {
       margin-top: 6px;
       background: none;
@@ -154,6 +170,11 @@ export class McpPanel extends LitElement {
     return s.externalUrl
       ? `${s.externalUrl.replace(/\/+$/, '')}${s.path}`
       : `http://${window.location.hostname}:${s.port}${s.path}`;
+  }
+
+  /** One-click install package for Claude Desktop, prefilled with the endpoint shown above. */
+  private get _installHref(): string {
+    return `${window.BASE_PATH ?? '/'}api/mcp/mcpb?url=${encodeURIComponent(this._endpoint)}`;
   }
 
   private async _fetchToken(): Promise<string | null> {
@@ -264,6 +285,16 @@ export class McpPanel extends LitElement {
             <i class="mdi mdi-refresh"></i>
           </button>
         </div>
+        <a class="install-btn" href=${this._installHref} download>
+          <i class="mdi mdi-download"></i>
+          ${this._t('settings.mcp_panel.install', 'Install for Claude Desktop')}
+        </a>
+        <div class="hint">
+          ${this._t(
+            'settings.mcp_panel.install_hint',
+            'Downloads a .mcpb file — double-click it to set up Claude Desktop. The file contains your access token, do not share it. Claude Desktop must run on a computer that can reach the endpoint.'
+          )}
+        </div>
         <button class="snippet-btn" @click=${this._copySnippet}>
           <i class="mdi ${this._copied === 'snippet' ? 'mdi-check' : 'mdi-content-copy'}"></i>
           ${this._t('settings.mcp_panel.copy_config', 'Copy Claude Desktop config')}
@@ -271,7 +302,7 @@ export class McpPanel extends LitElement {
         <div class="hint">
           ${this._t(
             'settings.mcp_panel.config_hint',
-            'Paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.'
+            'Alternatively paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.'
           )}
         </div>
         <div class="hint">

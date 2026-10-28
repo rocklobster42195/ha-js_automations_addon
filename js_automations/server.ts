@@ -186,7 +186,11 @@ function startApp(): void {
   );
   const haRouter = haRoutesFactory(haConnector);
   const webhookRouter = webhookRouteFactory(kernel.webhookManager);
-  const mcpRouter = mcpRouteFactory(kernel.mcpManager, kernel.mcpActivity);
+  const mcpRouter = mcpRouteFactory(kernel.mcpManager, kernel.mcpActivity, {
+    version: config.VERSION,
+    bridgePath: path.join(__dirname, 'mcpb', 'bridge.js'),
+    iconPath: path.resolve(__dirname, '..', 'icon.png'),
+  });
   const backupRouter = backupRouteFactory(kernel.backupManager);
   const gitRouter = gitRouteFactory(kernel.gitManager);
   const restoreRouter = restoreRouteFactory(kernel.restoreManager, kernel.backupManager);
