@@ -39,7 +39,7 @@ const fail = (message: string): McpToolResult => ({ content: message, isError: t
 const iso = (ts: number): string => new Date(ts).toISOString();
 
 /** Doc topics `get_api_reference` can serve (file relative to docsDir / typesDir). */
-const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; about: string }> = {
+export const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; about: string }> = {
   authoring: {
     dir: 'docs',
     file: 'guide/authoring.md',

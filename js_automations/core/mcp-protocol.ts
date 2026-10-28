@@ -23,6 +23,35 @@ export interface McpToolDefinition {
   handler: (args: Record<string, unknown>) => Promise<McpToolResult> | McpToolResult;
 }
 
+export interface McpPromptDefinition {
+  name: string;
+  title: string;
+  description: string;
+  /** Arguments the user fills in when picking the prompt (zod shape of strings). */
+  args?: ZodRawShape;
+  /** Builds the instruction text sent to the model. */
+  build: (args: Record<string, unknown>) => string;
+}
+
+export interface McpResourceDefinition {
+  name: string;
+  uri: string;
+  title: string;
+  description: string;
+  mimeType: string;
+  /** Read at request time, so the content always matches the installed version. */
+  read: () => string;
+}
+
+// Sent to every client on initialize: the few things a model must know before touching JSA.
+const SERVER_INSTRUCTIONS = [
+  'JS Automations (JSA) runs JavaScript/TypeScript automation scripts for Home Assistant.',
+  'Before writing or changing a script, call get_api_reference with topic "authoring" and follow it: scripts have a JSDoc header,',
+  'a typed config block and native entities via ha.register(). Use list_scripts and read_script to see existing conventions,',
+  'write_script to save (it is syntax-checked and committed to Git), then restart_script and get_script_errors / get_logs to verify.',
+  'Never put credentials into script source; they belong in ha.store as secrets.',
+].join(' ');
+
 interface SettingsManagerLike {
   getSettings(): { mcp?: Record<string, unknown> } | undefined;
 }
@@ -40,6 +69,8 @@ interface LogManagerLike {
  */
 export class McpProtocol {
   private _tools = new Map<string, McpToolDefinition>();
+  private _prompts = new Map<string, McpPromptDefinition>();
+  private _resources = new Map<string, McpResourceDefinition>();
 
   constructor(
     private readonly _settingsManager: SettingsManagerLike,
@@ -56,6 +87,15 @@ export class McpProtocol {
     this._tools.set(def.name, def);
   }
 
+  /** Prompts appear as selectable templates in the client; they never run anything by themselves. */
+  registerPrompt(def: McpPromptDefinition): void {
+    this._prompts.set(def.name, def);
+  }
+
+  registerResource(def: McpResourceDefinition): void {
+    this._resources.set(def.name, def);
+  }
+
   /** Names of the tools a client currently sees (implemented AND switched on). */
   listEnabledTools(): string[] {
     const settings = this._settingsManager.getSettings()?.mcp;
@@ -66,7 +106,10 @@ export class McpProtocol {
 
   async handle(req: Request, res: Response): Promise<void> {
     const ip = (req.ip as string) || 'unknown';
-    const server = new McpServer({ name: 'js-automations', version: this._version });
+    const server = new McpServer(
+      { name: 'js-automations', version: this._version },
+      { instructions: SERVER_INSTRUCTIONS }
+    );
 
     for (const name of this.listEnabledTools()) {
       const def = this._tools.get(name) as McpToolDefinition;
@@ -79,6 +122,24 @@ export class McpProtocol {
           annotations: { readOnlyHint: !!def.readOnly },
         },
         (async (args: Record<string, unknown> = {}) => this._runTool(def, args, ip)) as never
+      );
+    }
+
+    for (const def of this._prompts.values()) {
+      server.registerPrompt(
+        def.name,
+        { title: def.title, description: def.description, ...(def.args ? { argsSchema: def.args } : {}) },
+        ((args: Record<string, unknown> = {}) => ({
+          messages: [{ role: 'user' as const, content: { type: 'text' as const, text: def.build(args) } }],
+        })) as never
+      );
+    }
+    for (const def of this._resources.values()) {
+      server.registerResource(
+        def.name,
+        def.uri,
+        { title: def.title, description: def.description, mimeType: def.mimeType },
+        (uri: URL) => ({ contents: [{ uri: uri.href, mimeType: def.mimeType, text: def.read() }] })
       );
     }
 

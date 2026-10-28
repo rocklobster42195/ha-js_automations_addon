@@ -37,6 +37,7 @@ import { McpEventBuffer } from './mcp-event-buffer';
 import { registerReadTools } from './mcp-tools-read';
 import { registerControlTools } from './mcp-tools-control';
 import { registerWriteTools } from './mcp-tools-write';
+import { registerPrompts } from './mcp-prompts';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -235,6 +236,10 @@ class Kernel extends EventEmitter {
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
         notifyStatusUpdate: () => this.io?.emit('status_update'),
+      });
+      registerPrompts(this.mcpProtocol, {
+        docsDir: path.resolve(__dirname, '../../docs'),
+        typesDir: path.join(__dirname, 'types'),
       });
       registerWriteTools(this.mcpProtocol, {
         workerManager: this.workerManager,

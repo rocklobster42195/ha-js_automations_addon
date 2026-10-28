@@ -95,6 +95,7 @@ js_automations/core/mcp-event-buffer.js
 js_automations/core/mcp-tools-read.js
 js_automations/core/mcp-tools-control.js
 js_automations/core/mcp-tools-write.js
+js_automations/core/mcp-prompts.js
 js_automations/core/mcp-script-check.js
 js_automations/core/mcp-script-files.js
 js_automations/core/script-list.js
