@@ -2,6 +2,7 @@ import * as express from 'express';
 import type McpManager from '../core/mcp-manager';
 import type { McpActivityLog } from '../core/mcp-activity-log';
 import { buildMcpb, isBetaVersion } from '../core/mcpb-builder';
+import type { McpFeedbackStore } from '../core/mcp-feedback-store';
 
 interface McpRouteBuildInfo {
   /** Add-on version, becomes the extension version. */
@@ -24,7 +25,12 @@ function validEndpoint(raw: unknown): string | null {
   }
 }
 
-export = (mcpManager: McpManager, activity: McpActivityLog, build: McpRouteBuildInfo) => {
+interface McpFeedbackAccess {
+  store: McpFeedbackStore;
+  isMaintainerMode: () => boolean;
+}
+
+export = (mcpManager: McpManager, activity: McpActivityLog, build: McpRouteBuildInfo, feedback: McpFeedbackAccess) => {
   const router = express.Router();
 
   router.get('/', (req, res) => {
@@ -33,6 +39,15 @@ export = (mcpManager: McpManager, activity: McpActivityLog, build: McpRouteBuild
 
   router.get('/activity', (req, res) => {
     res.json(activity.list());
+  });
+
+  router.get('/feedback', (req, res) => {
+    res.json({ maintainerMode: feedback.isMaintainerMode(), notes: feedback.store.list() });
+  });
+
+  router.delete('/feedback/:id', (req, res) => {
+    if (!feedback.store.remove(req.params.id)) return res.status(404).json({ error: 'Unknown note' });
+    res.json({ ok: true });
   });
 
   router.get('/token', (req, res) => {

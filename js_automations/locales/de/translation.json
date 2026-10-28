@@ -336,7 +336,9 @@
       "devtab_mqtt": "Tab MQTT",
       "devtab_events": "Tab EVENTS",
       "devtab_webhooks": "Tab WEBHOOKS",
-      "devtab_mcp": "Tab MCP"
+      "devtab_mcp": "Tab MCP",
+      "maintainer_mode": "Maintainer-Modus (MCP)",
+      "maintainer_mode_desc": "Für JSA-Entwickler: sagt einem verbundenen KI-Assistenten, dass er mit den Entwicklern von JS Automations arbeitet. Er hält dann still API-, Feature- und Doku-Ideen fest (und meldet harte Fehler sofort). Die Notizen bleiben auf diesem Gerät und erscheinen im Dev-Tools-Tab MCP."
     },
     "editor": {
       "show_toolbar": "Toolbar anzeigen",
@@ -709,7 +711,15 @@
     "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "webhook_ip_filtered": "IP-gefiltert",
     "mcp_disabled": "Der MCP-Server ist ausgeschaltet. Aktiviere ihn unter Einstellungen → MCP-Server.",
-    "mcp_empty": "Noch keine Tool-Aufrufe. Sie erscheinen hier, sobald ein KI-Client den Server nutzt."
+    "mcp_empty": "Noch keine Tool-Aufrufe. Sie erscheinen hier, sobald ein KI-Client den Server nutzt.",
+    "mcp_feedback_title": "JSA-Feedback vom Assistenten",
+    "mcp_feedback_delete": "Notiz löschen",
+    "mcp_feedback_hard_error": "harter Fehler",
+    "mcp_feedback_kind_bug": "Bug",
+    "mcp_feedback_kind_api": "API",
+    "mcp_feedback_kind_feature": "Feature",
+    "mcp_feedback_kind_docs": "Doku",
+    "mcp_feedback_kind_other": "Sonstiges"
   },
   "preview": {
     "card_config": "Karten-Konfiguration",

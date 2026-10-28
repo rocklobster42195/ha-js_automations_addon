@@ -56,7 +56,7 @@ const mcpToolItems: SettingItem[] = MCP_TOOL_GROUPS.flatMap((group) => [
     text: `settings.mcp.group_${group}`,
     condition: { key: 'enabled', value: true },
   },
-  ...MCP_TOOL_CATALOG.filter((tool) => tool.group === group).map((tool) => ({
+  ...MCP_TOOL_CATALOG.filter((tool) => tool.group === group && !tool.maintainerOnly).map((tool) => ({
     key: toolSettingsKey(tool.name),
     label: `settings.mcp.tools.${tool.name}`,
     description: `settings.mcp.tools.${tool.name}_desc`,
@@ -111,6 +111,15 @@ const settingsSchema: SettingSection[] = [
         description: 'settings.general.expert_mode_desc',
         type: 'boolean',
         default: false,
+      },
+      {
+        key: 'maintainer_mode',
+        label: 'settings.general.maintainer_mode',
+        description: 'settings.general.maintainer_mode_desc',
+        type: 'boolean',
+        default: false,
+        indent: true,
+        condition: { key: 'expert_mode', value: true },
       },
       ...devTabItems,
       {

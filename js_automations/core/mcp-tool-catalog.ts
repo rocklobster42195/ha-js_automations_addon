@@ -10,6 +10,8 @@ export interface McpToolMeta {
   name: string;
   group: McpToolGroup;
   defaultEnabled: boolean;
+  /** Offered only in maintainer mode (Settings → General, expert mode) and without its own settings switch. */
+  maintainerOnly?: boolean;
 }
 
 export const MCP_TOOL_GROUPS: McpToolGroup[] = ['read', 'control', 'write'];
@@ -24,6 +26,7 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'get_entity', group: 'read', defaultEnabled: true },
   { name: 'get_api_reference', group: 'read', defaultEnabled: true },
   { name: 'get_store', group: 'read', defaultEnabled: false },
+  { name: 'jsa_feedback', group: 'read', defaultEnabled: true, maintainerOnly: true },
   { name: 'start_script', group: 'control', defaultEnabled: true },
   { name: 'stop_script', group: 'control', defaultEnabled: true },
   { name: 'restart_script', group: 'control', defaultEnabled: true },
@@ -36,7 +39,12 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
 /** Settings key (inside the `mcp` section) of a tool's on/off switch. */
 export const toolSettingsKey = (name: string): string => `tool_${name}`;
 
-export function isToolEnabled(settings: Record<string, unknown> | undefined, meta: McpToolMeta): boolean {
+export function isToolEnabled(
+  settings: Record<string, unknown> | undefined,
+  meta: McpToolMeta,
+  maintainerMode = false
+): boolean {
+  if (meta.maintainerOnly) return maintainerMode;
   const value = settings?.[toolSettingsKey(meta.name)];
   return typeof value === 'boolean' ? value : meta.defaultEnabled;
 }

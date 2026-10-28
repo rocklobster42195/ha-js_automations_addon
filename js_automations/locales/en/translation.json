@@ -335,7 +335,9 @@
       "devtab_mqtt": "Tab MQTT",
       "devtab_events": "Tab EVENTS",
       "devtab_webhooks": "Tab WEBHOOKS",
-      "devtab_mcp": "Tab MCP"
+      "devtab_mcp": "Tab MCP",
+      "maintainer_mode": "Maintainer mode (MCP)",
+      "maintainer_mode_desc": "For JSA developers: tells a connected AI assistant that it works with the people building JS Automations. It then silently notes API, feature and documentation ideas (and reports hard errors at once). Notes stay on this device and show up in the MCP dev-tools tab."
     },
     "editor": {
       "show_toolbar": "Show Toolbar",
@@ -709,7 +711,15 @@
     "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone.",
     "webhook_ip_filtered": "IP-filtered",
     "mcp_disabled": "The MCP server is switched off. Enable it in Settings → MCP Server.",
-    "mcp_empty": "No tool calls yet. They appear here as soon as an AI client uses the server."
+    "mcp_empty": "No tool calls yet. They appear here as soon as an AI client uses the server.",
+    "mcp_feedback_title": "JSA feedback from the assistant",
+    "mcp_feedback_delete": "Delete note",
+    "mcp_feedback_hard_error": "hard error",
+    "mcp_feedback_kind_bug": "bug",
+    "mcp_feedback_kind_api": "API",
+    "mcp_feedback_kind_feature": "feature",
+    "mcp_feedback_kind_docs": "docs",
+    "mcp_feedback_kind_other": "other"
   },
   "preview": {
     "card_config": "Card Config",

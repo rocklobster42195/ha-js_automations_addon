@@ -38,6 +38,8 @@ import { registerReadTools } from './mcp-tools-read';
 import { registerControlTools } from './mcp-tools-control';
 import { registerWriteTools } from './mcp-tools-write';
 import { registerPrompts } from './mcp-prompts';
+import { McpFeedbackStore } from './mcp-feedback-store';
+import { registerFeedbackTool } from './mcp-tools-feedback';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -123,6 +125,7 @@ class Kernel extends EventEmitter {
   mcpActivity!: McpActivityLog;
   mcpProtocol!: McpProtocol;
   mcpEvents!: McpEventBuffer;
+  mcpFeedback!: McpFeedbackStore;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -237,6 +240,8 @@ class Kernel extends EventEmitter {
         librariesDir: config.LIBRARIES_DIR,
         notifyStatusUpdate: () => this.io?.emit('status_update'),
       });
+      this.mcpFeedback = new McpFeedbackStore(STORAGE_DIR);
+      registerFeedbackTool(this.mcpProtocol, { store: this.mcpFeedback });
       registerPrompts(this.mcpProtocol, {
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
@@ -426,6 +431,9 @@ class Kernel extends EventEmitter {
       if (this.io) this.io.emit('mcp_status_changed', status);
     });
 
+    this.mcpFeedback.on('changed', () => {
+      if (this.io) this.io.emit('mcp_feedback_changed');
+    });
     this.mcpActivity.on('entry', (entry: unknown) => {
       if (this.io) this.io.emit('mcp_activity', entry);
     });

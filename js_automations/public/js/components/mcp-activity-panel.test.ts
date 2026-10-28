@@ -34,11 +34,14 @@ describe('mcp-activity-panel', () => {
   let socket: ReturnType<typeof fakeSocket>;
   let api: sinon.SinonStub;
 
-  const mount = async (enabled = true, activity: unknown[] = []) => {
-    api = sinon.stub().callsFake(async (url: string) => ({
-      ok: true,
-      json: async () => (url === 'api/mcp' ? { enabled } : activity),
-    }));
+  let notes: unknown[] = [];
+
+  const mount = async (enabled = true, activity: unknown[] = [], initialNotes: unknown[] = []) => {
+    notes = initialNotes;
+    api = sinon.stub().callsFake(async (url: string) => {
+      const body: unknown = url === 'api/mcp' ? { enabled } : url === 'api/mcp/feedback' ? { notes } : activity;
+      return { ok: true, json: async () => body };
+    });
     window.apiFetch = api as never;
     const el = await fixture<McpActivityPanel>(html`<mcp-activity-panel></mcp-activity-panel>`);
     await aTimeout(0);
@@ -112,7 +115,64 @@ describe('mcp-activity-panel', () => {
     api.resetHistory();
     await socket.handlers['connect']();
     await aTimeout(0);
-    expect(api.getCalls().map((c) => c.args[0])).to.have.members(['api/mcp', 'api/mcp/activity']);
+    expect(api.getCalls().map((c) => c.args[0])).to.have.members(['api/mcp', 'api/mcp/activity', 'api/mcp/feedback']);
     expect(el).to.exist;
+  });
+
+  describe('feedback notes from the assistant', () => {
+    const note = (over: Record<string, unknown> = {}) => ({
+      id: 'fb_1',
+      kind: 'api',
+      severity: 'normal',
+      title: 'ha.register options are hard to discover',
+      detail: 'Suggest grouping the options in the d.ts',
+      count: 2,
+      ...over,
+    });
+    const notesEls = (el: McpActivityPanel) => Array.from(el.shadowRoot!.querySelectorAll('.fb'));
+
+    it('shows nothing extra without notes', async () => {
+      const el = await mount();
+      expect(notesEls(el).length).to.equal(0);
+      expect(text(el)).to.not.contain('JSA feedback');
+    });
+
+    it('lists notes with kind, title, repeat count and detail', async () => {
+      const el = await mount(true, [], [note()]);
+      expect(text(el)).to.contain('JSA feedback from the assistant (1)');
+      expect(notesEls(el).length).to.equal(1);
+      expect(notesEls(el)[0].querySelector('.fb-badge')!.textContent).to.equal('API');
+      expect(text(el)).to.contain('ha.register options are hard to discover');
+      expect(text(el)).to.contain('2×');
+      expect(text(el)).to.contain('Suggest grouping the options');
+    });
+
+    it('marks hard errors', async () => {
+      const el = await mount(true, [], [note({ severity: 'hard_error', kind: 'bug' })]);
+      const badge = notesEls(el)[0].querySelector('.fb-badge')!;
+      expect(badge.classList.contains('hard')).to.equal(true);
+      expect(badge.textContent).to.equal('hard error');
+    });
+
+    it('deletes a note on the server and in the list', async () => {
+      const el = await mount(true, [], [note(), note({ id: 'fb_2', title: 'another one' })]);
+      (notesEls(el)[0].querySelector('.fb-del') as HTMLElement).click();
+      await aTimeout(0);
+      await el.updateComplete;
+
+      const del = api.getCalls().find((c) => c.args[1]?.method === 'DELETE');
+      expect(del!.args[0]).to.equal('api/mcp/feedback/fb_1');
+      expect(notesEls(el).length).to.equal(1);
+      expect(text(el)).to.contain('another one');
+    });
+
+    it('reloads when the server reports changed notes', async () => {
+      const el = await mount();
+      notes = [note({ id: 'fb_9', title: 'fresh note' })];
+      await socket.handlers['mcp_feedback_changed']();
+      await aTimeout(0);
+      await el.updateComplete;
+      expect(text(el)).to.contain('fresh note');
+    });
   });
 });

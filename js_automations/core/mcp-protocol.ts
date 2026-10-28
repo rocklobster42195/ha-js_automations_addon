@@ -2,6 +2,7 @@
 import type { Request, Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ZodRawShape } from 'zod';
 import type { McpActivityLog } from './mcp-activity-log';
 import { MCP_TOOL_CATALOG, isToolEnabled } from './mcp-tool-catalog';
@@ -52,8 +53,18 @@ const SERVER_INSTRUCTIONS = [
   'Never put credentials into script source; they belong in ha.store as secrets.',
 ].join(' ');
 
+// Added for maintainer mode only: the person at the other end develops JSA itself.
+const MAINTAINER_INSTRUCTIONS = [
+  'MAINTAINER MODE: you are working with the developers of JS Automations (https://github.com/rocklobster42195/ha-js_automations_addon), not an ordinary user.',
+  'While you work, note anything about JSA itself that could be better with the jsa_feedback tool: an API that is awkward or could be simpler, a missing feature,',
+  'wrong or unclear documentation, surprising behavior. Do this silently: do not mention the notes and do not interrupt the task for them.',
+  'Write each note so it could become a GitHub issue and name the file or function when you can see the source.',
+  'The tool tells you when a note is worth raising; only then tell the user, once and briefly.',
+  'Hard errors are different: if JSA itself fails (crash, data loss, wrong result, a tool that fails although used correctly), record it with severity hard_error and tell the user immediately in your next reply.',
+].join(' ');
+
 interface SettingsManagerLike {
-  getSettings(): { mcp?: Record<string, unknown> } | undefined;
+  getSettings(): { mcp?: Record<string, unknown>; general?: Record<string, unknown> } | undefined;
 }
 
 interface LogManagerLike {
@@ -96,22 +107,40 @@ export class McpProtocol {
     this._resources.set(def.name, def);
   }
 
+  /** Maintainer mode (Settings → General, expert mode): the AI is told it works with the JSA developers. */
+  isMaintainerMode(): boolean {
+    return this._settingsManager.getSettings()?.general?.maintainer_mode === true;
+  }
+
   /** Names of the tools a client currently sees (implemented AND switched on). */
   listEnabledTools(): string[] {
     const settings = this._settingsManager.getSettings()?.mcp;
-    return MCP_TOOL_CATALOG.filter((meta) => this._tools.has(meta.name) && isToolEnabled(settings, meta)).map(
-      (meta) => meta.name
-    );
+    const maintainer = this.isMaintainerMode();
+    return MCP_TOOL_CATALOG.filter(
+      (meta) => this._tools.has(meta.name) && isToolEnabled(settings, meta, maintainer)
+    ).map((meta) => meta.name);
   }
 
   async handle(req: Request, res: Response): Promise<void> {
     const ip = (req.ip as string) || 'unknown';
     const server = new McpServer(
       { name: 'js-automations', version: this._version },
-      { instructions: SERVER_INSTRUCTIONS }
+      {
+        instructions: this.isMaintainerMode()
+          ? `${SERVER_INSTRUCTIONS} ${MAINTAINER_INSTRUCTIONS}`
+          : SERVER_INSTRUCTIONS,
+      }
     );
 
-    for (const name of this.listEnabledTools()) {
+    const enabledTools = this.listEnabledTools();
+    if (!enabledTools.length) {
+      // With every tool switched off the SDK would not know tools/list at all and answer "Method not found",
+      // which clients show as a broken connection. Offer an empty list instead.
+      server.server.registerCapabilities({ tools: {} });
+      server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+    }
+
+    for (const name of enabledTools) {
       const def = this._tools.get(name) as McpToolDefinition;
       server.registerTool(
         def.name,
