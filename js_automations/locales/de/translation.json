@@ -548,8 +548,7 @@
       "copy_config": "Claude-Desktop-Konfiguration kopieren",
       "config_hint": "In claude_desktop_config.json einfügen (Einstellungen → Entwickler → Konfiguration bearbeiten). Benötigt Node.js auf dem Rechner, auf dem Claude Desktop läuft.",
       "privacy": "Alles, was ein KI-Client über diese Tools liest (Skripte, Logs, Entity-Zustände), geht an dessen Anbieter. Secrets werden nur nach bestem Wissen gefiltert — verlass dich bei Zugangsdaten nicht darauf.",
-      "activity": "Letzte Tool-Aufrufe",
-      "activity_empty": "Noch keine Aufrufe."
+      "activity_hint": "Welche Tools ein KI-Client aufruft, siehst du im Dev-Tools-Tab „MCP“ (Expert-Modus)."
     }
   },
   "statusbar": {
@@ -699,7 +698,9 @@
     "webhook_rotate_confirm": "Token für \"{{id}}\" erneuern? Externe Dienste, die den alten Token verwenden, müssen aktualisiert werden.",
     "webhook_delete": "Löschen",
     "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
-    "webhook_ip_filtered": "IP-gefiltert"
+    "webhook_ip_filtered": "IP-gefiltert",
+    "mcp_disabled": "Der MCP-Server ist ausgeschaltet. Aktiviere ihn unter Einstellungen → MCP-Server.",
+    "mcp_empty": "Noch keine Tool-Aufrufe. Sie erscheinen hier, sobald ein KI-Client den Server nutzt."
   },
   "preview": {
     "card_config": "Karten-Konfiguration",

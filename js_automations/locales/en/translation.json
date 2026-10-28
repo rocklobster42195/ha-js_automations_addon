@@ -547,8 +547,7 @@
       "copy_config": "Copy Claude Desktop config",
       "config_hint": "Paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.",
       "privacy": "Everything an AI client reads through these tools (scripts, logs, entity states) is sent to its provider. Secrets are filtered on a best-effort basis — do not rely on it for credentials.",
-      "activity": "Recent tool calls",
-      "activity_empty": "No calls yet."
+      "activity_hint": "The tool calls AI clients make are listed in the dev-tools tab \"MCP\" (expert mode)."
     }
   },
   "banner_close_tooltip": "Close",
@@ -699,7 +698,9 @@
     "webhook_rotate_confirm": "Rotate the token for \"{{id}}\"? External services using the old token must be updated.",
     "webhook_delete": "Delete",
     "webhook_delete_confirm": "Permanently delete the webhook \"{{id}}\"? This cannot be undone.",
-    "webhook_ip_filtered": "IP-filtered"
+    "webhook_ip_filtered": "IP-filtered",
+    "mcp_disabled": "The MCP server is switched off. Enable it in Settings → MCP Server.",
+    "mcp_empty": "No tool calls yet. They appear here as soon as an AI client uses the server."
   },
   "preview": {
     "card_config": "Card Config",

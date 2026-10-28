@@ -13,24 +13,12 @@ interface McpStatus {
   rotated: string | null;
 }
 
-interface McpActivityEntry {
-  id: number;
-  ts: number;
-  tool: string;
-  target: string | null;
-  ip: string;
-  ok: boolean;
-  error: string | null;
-  durationMs: number;
-}
-
-const MAX_VISIBLE_ACTIVITY = 50;
 const TOKEN_PLACEHOLDER = '••••••••••••••••••••';
 
 /**
- * MCP setup + activity panel, embedded in Settings → MCP Server (custom item type
- * 'mcp-panel'). Shows whether the server is running, the endpoint and access token, a ready
- * Claude Desktop config snippet and a live log of the tool calls AI clients make.
+ * MCP setup panel, embedded in Settings → MCP Server (custom item type 'mcp-panel'). Shows whether
+ * the server is running, the endpoint and access token and a ready Claude Desktop config snippet.
+ * The log of tool calls lives in the dev-tools tab (mcp-activity-panel.ts).
  */
 @customElement('mcp-panel')
 export class McpPanel extends LitElement {
@@ -118,56 +106,10 @@ export class McpPanel extends LitElement {
       margin-top: 6px;
       line-height: 1.4;
     }
-    h4 {
-      margin: 12px 0 4px;
-      font-size: 0.85rem;
-      color: #aaa;
-    }
-    .log {
-      max-height: 220px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 0.76rem;
-    }
-    /* Wraps instead of overflowing: on narrow screens target and meta drop to a second line. */
-    .log-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0 8px;
-      padding: 2px 0;
-      border-bottom: 1px solid #1c1c1c;
-    }
-    .log-time {
-      color: #777;
-    }
-    .log-tool {
-      color: #4fc3f7;
-    }
-    .log-target {
-      color: #aaa;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1 1 120px;
-      min-width: 0;
-    }
-    .log-meta {
-      margin-left: auto;
-      white-space: nowrap;
-      color: #666;
-    }
-    .log-ok {
-      color: #66bb6a;
-    }
-    .log-fail {
-      color: #e57373;
-    }
   `;
 
   @state() private _status: McpStatus | null = null;
   @state() private _token: string | null = null;
-  @state() private _activity: McpActivityEntry[] = [];
   @state() private _copied = '';
 
   private _copiedTimer?: ReturnType<typeof setTimeout>;
@@ -193,21 +135,13 @@ export class McpPanel extends LitElement {
     window.socket.on('mcp_status_changed', (status: McpStatus) => {
       this._status = status;
     });
-    window.socket.on('mcp_activity', (entry: McpActivityEntry) => {
-      this._activity = [entry, ...this._activity].slice(0, MAX_VISIBLE_ACTIVITY);
-    });
     // Missed events while the socket was down: re-sync on every (re)connect.
     window.socket.on('connect', () => void this._load());
   };
 
   private async _load(): Promise<void> {
     try {
-      const [status, activity] = await Promise.all([
-        window.apiFetch!('api/mcp').then((r) => r.json()),
-        window.apiFetch!('api/mcp/activity').then((r) => r.json()),
-      ]);
-      this._status = status;
-      this._activity = (activity as McpActivityEntry[]).slice(0, MAX_VISIBLE_ACTIVITY);
+      this._status = await window.apiFetch!('api/mcp').then((r) => r.json());
       this._token = null; // never keep a revealed token across a resync
     } catch (e) {
       console.error('Failed to load MCP status:', e);
@@ -282,17 +216,6 @@ export class McpPanel extends LitElement {
     }
   };
 
-  private _renderActivity(e: McpActivityEntry) {
-    const time = new Date(e.ts).toLocaleTimeString([], { hour12: false });
-    return html`<div class="log-row" title=${e.error ?? ''}>
-      <span class=${e.ok ? 'log-ok' : 'log-fail'}>${e.ok ? '✓' : '✗'}</span>
-      <span class="log-time">${time}</span>
-      <span class="log-tool">${e.tool}</span>
-      <span class="log-target">${e.target ?? ''}</span>
-      <span class="log-meta">${e.ip} · ${e.durationMs} ms</span>
-    </div>`;
-  }
-
   private _copyBtn(what: string, title: string, onClick: () => void) {
     return html`<button class="icon-btn" title=${title} @click=${onClick}>
       <i class="mdi ${this._copied === what ? 'mdi-check' : 'mdi-content-copy'}"></i>
@@ -358,14 +281,12 @@ export class McpPanel extends LitElement {
             'Everything an AI client reads through these tools (scripts, logs, entity states) is sent to its provider. Secrets are filtered on a best-effort basis — do not rely on it for credentials.'
           )}
         </div>
-
-        <h4>${this._t('settings.mcp_panel.activity', 'Recent tool calls')}</h4>
-        <div class="log">
-          ${
-            this._activity.length
-              ? this._activity.map((e) => this._renderActivity(e))
-              : html`<div class="hint">${this._t('settings.mcp_panel.activity_empty', 'No calls yet.')}</div>`
-          }
+        <div class="hint">
+          <i class="mdi mdi-text-box-search-outline"></i>
+          ${this._t(
+            'settings.mcp_panel.activity_hint',
+            'The tool calls AI clients make are listed in the dev-tools tab "MCP" (expert mode).'
+          )}
         </div>
       </div>
     `;
