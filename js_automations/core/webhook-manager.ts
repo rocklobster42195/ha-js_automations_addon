@@ -2,26 +2,18 @@
 import express, { Request, Response } from 'express';
 import * as http from 'http';
 import * as crypto from 'crypto';
-import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { RequestGuard, ipAllowed, tokensMatch } from './request-guard';
 
 // Fixed, not user-configurable: the container only publishes this port to the
 // host (see config.yaml `ports:`), so letting the internal listener move to a
 // different port would silently break external reachability.
 const WEBHOOK_PORT = 3001;
 
-const RATE_LIMIT_WINDOW_MS = 60000;
-const RATE_LIMIT_MAX = 60; // requests per IP per webhook id per window
 const REQUEST_TIMEOUT_MS = 10000;
 const BODY_LIMIT = '100kb';
-
-const AUTH_BACKOFF_THRESHOLD = 5; // failed token attempts before lockout
-const AUTH_BACKOFF_WINDOW_MS = 10 * 60 * 1000; // window in which failures accumulate
-const AUTH_BACKOFF_LOCKOUT_MS = 10 * 60 * 1000; // lockout duration once tripped
-
-const MAP_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // periodic cleanup of expired rate-limit/backoff entries
 
 interface LastCall {
   ts: number;
@@ -45,17 +37,6 @@ interface RegisterOptions {
   noAuth?: boolean;
   allowlist?: string[];
   scriptFilename: string;
-}
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-interface AuthFailureEntry {
-  count: number;
-  windowResetAt: number;
-  lockedUntil: number;
 }
 
 interface PendingRequest {
@@ -97,27 +78,6 @@ interface LogManagerLike {
 }
 
 /**
- * Checks whether `ip` matches an allowlist entry — either an exact address or an
- * IPv4 CIDR range (e.g. '192.30.252.0/22'). IPv6 CIDR ranges are not supported
- * (correct IPv6 prefix math needs full address expansion); only exact IPv6
- * addresses match. IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are normalized
- * to plain IPv4 before comparison.
- */
-function ipMatchesAllowlistEntry(ip: string, entry: string): boolean {
-  const normalized = typeof ip === 'string' && ip.startsWith('::ffff:') && net.isIPv4(ip.slice(7)) ? ip.slice(7) : ip;
-
-  if (entry.includes('/')) {
-    const [range, bitsStr] = entry.split('/');
-    if (!net.isIPv4(range) || !net.isIPv4(normalized)) return false;
-    const bits = parseInt(bitsStr, 10);
-    const toInt = (addr: string): number => addr.split('.').reduce((acc, octet) => (acc << 8) + Number(octet), 0) >>> 0;
-    const mask = bits <= 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-    return (toInt(normalized) & mask) === (toInt(range) & mask);
-  }
-  return normalized === entry || ip === entry;
-}
-
-/**
  * WebhookManager runs a dedicated Express server that lets user scripts receive
  * HTTP webhooks from external services (ha.onWebhook()) with a real bidirectional
  * response. See docs/concept_webhook_api.md for the full design.
@@ -128,13 +88,11 @@ class WebhookManager extends EventEmitter {
   storageFile: string;
   registry: Map<string, WebhookEntry>;
   pendingRequests: Map<string, PendingRequest>;
-  private _rateLimits: Map<string, RateLimitEntry>;
-  private _authFailures: Map<string, AuthFailureEntry>;
+  private _guard: RequestGuard;
   private _correlationCounter: number;
   app: express.Express | null;
   server: http.Server | null;
   port: number | null;
-  private _sweepTimer: ReturnType<typeof setInterval>;
 
   constructor(settingsManager: SettingsManagerLike, logManager: LogManagerLike, storageDir: string) {
     super();
@@ -153,12 +111,22 @@ class WebhookManager extends EventEmitter {
     // correlationId -> { res, timer, id }
     this.pendingRequests = new Map();
 
-    // `${ip}:${id}` -> { count, resetAt }
-    this._rateLimits = new Map();
-
-    // `${ip}:${id}` -> { count, windowResetAt, lockedUntil } — tracks failed token
-    // verification attempts, independent of the general rate limiter above.
-    this._authFailures = new Map();
+    // Rate limiting (per IP per webhook id) and failed-token backoff are independent
+    // of each other; both are keyed by `${ip}:${id}`.
+    this._guard = new RequestGuard({
+      rateLimitMax: 60,
+      rateLimitWindowMs: 60000,
+      authBackoffThreshold: 5,
+      authBackoffWindowMs: 10 * 60 * 1000,
+      authBackoffLockoutMs: 10 * 60 * 1000,
+      sweepIntervalMs: 5 * 60 * 1000,
+      onLockout: ({ ip, scope, failures, lockoutMs }) =>
+        this.logManager.add(
+          'warn',
+          'System',
+          `[Webhook] "${scope}": ${failures} failed token attempts from ${ip} — locked out for ${lockoutMs / 60000} min`
+        ),
+    });
 
     this._correlationCounter = 0;
 
@@ -171,21 +139,6 @@ class WebhookManager extends EventEmitter {
     this.settingsManager.on('settings_updated', (settings) => {
       if (settings.webhook) this._handleSettingsUpdate(settings.webhook);
     });
-
-    // Periodically drop expired entries from the per-IP maps so they don't grow
-    // unbounded for as long as the addon runs.
-    this._sweepTimer = setInterval(() => this._sweepExpiredEntries(), MAP_SWEEP_INTERVAL_MS);
-    this._sweepTimer.unref?.();
-  }
-
-  private _sweepExpiredEntries(): void {
-    const now = Date.now();
-    for (const [key, rl] of this._rateLimits.entries()) {
-      if (rl.resetAt <= now) this._rateLimits.delete(key);
-    }
-    for (const [key, af] of this._authFailures.entries()) {
-      if (af.windowResetAt <= now && af.lockedUntil <= now) this._authFailures.delete(key);
-    }
   }
 
   private _loadRegistry(): void {
@@ -405,69 +358,6 @@ class WebhookManager extends EventEmitter {
     this.emit('config_changed', { port: WEBHOOK_PORT, externalUrl: webhookSettings.external_url || '' });
   }
 
-  /**
-   * Constant-time token comparison to avoid leaking the token via timing differences.
-   */
-  private _tokensMatch(provided: string | undefined, expected: string | null): boolean {
-    if (!expected) return false;
-    const a = Buffer.from(String(provided || ''));
-    const b = Buffer.from(String(expected));
-    if (a.length !== b.length) {
-      crypto.timingSafeEqual(b, b); // keep timing roughly consistent
-      return false;
-    }
-    return crypto.timingSafeEqual(a, b);
-  }
-
-  private _checkRateLimit(ip: string, id: string): boolean {
-    const key = `${ip}:${id}`;
-    const now = Date.now();
-    let rl = this._rateLimits.get(key);
-    if (!rl || rl.resetAt <= now) {
-      rl = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-      this._rateLimits.set(key, rl);
-    }
-    rl.count++;
-    return rl.count <= RATE_LIMIT_MAX;
-  }
-
-  /**
-   * Returns true if `ip` is currently locked out from authenticating against `id`
-   * after too many failed token attempts.
-   */
-  private _isAuthLocked(ip: string, id: string): boolean {
-    const entry = this._authFailures.get(`${ip}:${id}`);
-    return !!(entry && entry.lockedUntil > Date.now());
-  }
-
-  /**
-   * Records a failed token verification attempt. Trips a lockout once the
-   * threshold is reached within the accumulation window.
-   */
-  private _recordAuthFailure(ip: string, id: string): void {
-    const key = `${ip}:${id}`;
-    const now = Date.now();
-    let entry = this._authFailures.get(key);
-    if (!entry || entry.windowResetAt <= now) {
-      entry = { count: 0, windowResetAt: now + AUTH_BACKOFF_WINDOW_MS, lockedUntil: 0 };
-    }
-    entry.count++;
-    if (entry.count >= AUTH_BACKOFF_THRESHOLD) {
-      entry.lockedUntil = now + AUTH_BACKOFF_LOCKOUT_MS;
-      this.logManager.add(
-        'warn',
-        'System',
-        `[Webhook] "${id}": ${entry.count} failed token attempts from ${ip} — locked out for ${AUTH_BACKOFF_LOCKOUT_MS / 60000} min`
-      );
-    }
-    this._authFailures.set(key, entry);
-  }
-
-  /** Resets the failure counter after a successful, legitimate call. */
-  private _clearAuthFailures(ip: string, id: string): void {
-    this._authFailures.delete(`${ip}:${id}`);
-  }
-
   private _handleRequest(req: Request, res: Response): void {
     // Express types params as string | string[] to account for repeated-segment
     // routes; our fixed /webhook/:id pattern only ever produces a single string.
@@ -486,25 +376,25 @@ class WebhookManager extends EventEmitter {
       res.status(405).json({ error: `Method not allowed, expected ${entry.method}` });
       return;
     }
-    if (!this._checkRateLimit(req.ip as string, id)) {
+    if (!this._guard.checkRateLimit(req.ip as string, id)) {
       res.status(429).json({ error: 'Too many requests' });
       return;
     }
 
-    if (entry.allowlist && !entry.allowlist.some((e) => ipMatchesAllowlistEntry(req.ip as string, e))) {
+    if (entry.allowlist && !ipAllowed(req.ip as string, entry.allowlist)) {
       this.logManager.add('warn', 'System', `[Webhook] "${id}": rejected request from ${req.ip} — not in allowlist`);
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
 
     if (!entry.noAuth) {
-      if (this._isAuthLocked(req.ip as string, id)) {
+      if (this._guard.isAuthLocked(req.ip as string, id)) {
         res.status(429).json({ error: 'Too many failed attempts — temporarily blocked' });
         return;
       }
       const provided = req.get('X-Webhook-Secret');
-      if (!this._tokensMatch(provided, entry.token)) {
-        this._recordAuthFailure(req.ip as string, id);
+      if (!tokensMatch(provided, entry.token)) {
+        this._guard.recordAuthFailure(req.ip as string, id);
         this.logManager.add(
           'warn',
           'System',
@@ -513,7 +403,7 @@ class WebhookManager extends EventEmitter {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
-      this._clearAuthFailures(req.ip as string, id);
+      this._guard.clearAuthFailures(req.ip as string, id);
     }
 
     let body: unknown;
