@@ -370,6 +370,12 @@ const settingsSchema: SettingSection[] = [
         default: false,
       },
       {
+        key: 'panel',
+        label: null,
+        type: 'mcp-panel',
+        condition: { key: 'enabled', value: true },
+      },
+      {
         key: 'external_url',
         label: 'settings.mcp.external_url',
         description: 'settings.mcp.external_url_desc',

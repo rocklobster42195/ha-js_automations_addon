@@ -392,7 +392,7 @@
     },
     "mcp": {
       "enabled": "Enable MCP server",
-      "enabled_desc": "Lets AI clients (e.g. Claude Desktop) read and control scripts. The server listens on port 3002 (fixed, see add-on network configuration). Find the access token in the MCP tab.",
+      "enabled_desc": "Lets AI clients (e.g. Claude Desktop) read and control scripts. The server listens on port 3002 (fixed, see add-on network configuration). Find the access token and setup help right below.",
       "external_url": "External URL",
       "external_url_desc": "Base URL shown in the MCP tab (e.g. https://mcp.example.com). Only needed behind a reverse proxy or tunnel.",
       "trust_proxy": "Trust Reverse Proxy",
@@ -401,7 +401,7 @@
       "allowlist_desc": "Optional: allowed IP addresses or IPv4 CIDR ranges, comma-separated (e.g. 192.168.1.0/24). Empty = any IP with a valid token.",
       "group_read": "<b>Read</b> — inspect scripts, logs and entities. Content the AI client reads is sent to its provider.",
       "group_control": "<b>Control</b> — start and stop scripts, call services.",
-      "group_write": "<b>Write</b> — change and delete scripts. Every change is stored as a Git commit.",
+      "group_write": "<b>Write</b> — change and delete scripts. Every change is stored as a Git commit; if the scripts folder has no Git repository yet, one is created automatically on the first change.",
       "tools": {
         "list_scripts": "List scripts",
         "list_scripts_desc": "Name, status, header tags and error state of all scripts and libraries.",
@@ -533,6 +533,22 @@
       "capability_enforcement_desc": "When enabled, scripts that use network (http/https/fetch) or shell execution (child_process) without declaring @permission in their header will throw a PermissionDeniedError at runtime.",
       "store_encryption": "Encrypt ha.store Secrets",
       "store_encryption_desc": "Encrypts secrets stored with ha.store.set(key, value, true) at rest. The key lives in this add-on's private data. BEFORE switching to another add-on (e.g. beta to stable) or an older version, turn this off again, otherwise the secrets are unreadable there. A plaintext safety copy (.storage/store.json.pre-encryption) is kept for 14 days. The add-on option store_encryption, if set, overrides this switch."
+    },
+    "mcp_panel": {
+      "status": "Status",
+      "running": "running on port {{port}}",
+      "not_running": "not running yet (starting, or port {{port}} is still in use by the other add-on)",
+      "endpoint": "Endpoint",
+      "token": "Access token",
+      "copy": "Copy",
+      "reveal": "Show / hide",
+      "rotate": "Create new token",
+      "rotate_confirm": "Create a new access token? Every AI client using the old one stops working until you update it.",
+      "copy_config": "Copy Claude Desktop config",
+      "config_hint": "Paste it into claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js on the computer running Claude Desktop.",
+      "privacy": "Everything an AI client reads through these tools (scripts, logs, entity states) is sent to its provider. Secrets are filtered on a best-effort basis — do not rely on it for credentials.",
+      "activity": "Recent tool calls",
+      "activity_empty": "No calls yet."
     }
   },
   "banner_close_tooltip": "Close",

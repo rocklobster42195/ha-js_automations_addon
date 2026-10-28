@@ -393,7 +393,7 @@
     },
     "mcp": {
       "enabled": "MCP-Server aktivieren",
-      "enabled_desc": "Erlaubt KI-Clients (z.B. Claude Desktop), Skripte zu lesen und zu steuern. Der Server lauscht auf Port 3002 (fix, siehe Netzwerk-Konfiguration des Add-ons). Das Zugriffstoken findest du im MCP-Tab.",
+      "enabled_desc": "Erlaubt KI-Clients (z.B. Claude Desktop), Skripte zu lesen und zu steuern. Der Server lauscht auf Port 3002 (fix, siehe Netzwerk-Konfiguration des Add-ons). Zugriffstoken und Einrichtung findest du direkt darunter.",
       "external_url": "Externe URL",
       "external_url_desc": "Basis-URL, die im MCP-Tab angezeigt wird (z.B. https://mcp.example.com). Nur hinter einem Reverse Proxy oder Tunnel nötig.",
       "trust_proxy": "Reverse Proxy vertrauen",
@@ -402,7 +402,7 @@
       "allowlist_desc": "Optional: erlaubte IP-Adressen oder IPv4-CIDR-Bereiche, kommagetrennt (z.B. 192.168.1.0/24). Leer = alle IPs mit gültigem Token.",
       "group_read": "<b>Lesen</b> — Skripte, Logs und Entities einsehen. Inhalte, die der KI-Client liest, gehen an dessen Anbieter.",
       "group_control": "<b>Steuern</b> — Skripte starten und stoppen, Services aufrufen.",
-      "group_write": "<b>Schreiben</b> — Skripte ändern und löschen. Jede Änderung wird als Git-Commit abgelegt.",
+      "group_write": "<b>Schreiben</b> — Skripte ändern und löschen. Jede Änderung wird als Git-Commit abgelegt; hat der Skript-Ordner noch kein Git-Repository, wird es bei der ersten Änderung automatisch angelegt.",
       "tools": {
         "list_scripts": "Skripte auflisten",
         "list_scripts_desc": "Name, Status, Header-Tags und Fehlerzustand aller Skripte und Libraries.",
@@ -534,6 +534,22 @@
       "capability_enforcement_desc": "Wenn aktiviert, werfen Skripte, die Netzwerk (http/https/fetch) oder Shell-Befehle (child_process) ohne @permission im Header nutzen, zur Laufzeit einen PermissionDeniedError.",
       "store_encryption": "ha.store-Secrets verschlüsseln",
       "store_encryption_desc": "Verschlüsselt Secrets, die mit ha.store.set(key, value, true) gespeichert werden. Der Schlüssel liegt in den privaten Daten dieses Add-ons. VOR dem Wechsel auf ein anderes Add-on (z. B. Beta zu Stable) oder eine ältere Version wieder ausschalten, sonst sind die Secrets dort nicht lesbar. Eine Klartext-Sicherungskopie (.storage/store.json.pre-encryption) bleibt 14 Tage erhalten. Die Add-on-Option store_encryption überschreibt diesen Schalter, falls gesetzt."
+    },
+    "mcp_panel": {
+      "status": "Status",
+      "running": "läuft auf Port {{port}}",
+      "not_running": "läuft noch nicht (startet gerade, oder Port {{port}} ist noch vom anderen Add-on belegt)",
+      "endpoint": "Endpunkt",
+      "token": "Zugriffstoken",
+      "copy": "Kopieren",
+      "reveal": "Anzeigen / verbergen",
+      "rotate": "Neues Token erzeugen",
+      "rotate_confirm": "Neues Zugriffstoken erzeugen? Jeder KI-Client mit dem alten Token funktioniert nicht mehr, bis du ihn aktualisierst.",
+      "copy_config": "Claude-Desktop-Konfiguration kopieren",
+      "config_hint": "In claude_desktop_config.json einfügen (Einstellungen → Entwickler → Konfiguration bearbeiten). Benötigt Node.js auf dem Rechner, auf dem Claude Desktop läuft.",
+      "privacy": "Alles, was ein KI-Client über diese Tools liest (Skripte, Logs, Entity-Zustände), geht an dessen Anbieter. Secrets werden nur nach bestem Wissen gefiltert — verlass dich bei Zugangsdaten nicht darauf.",
+      "activity": "Letzte Tool-Aufrufe",
+      "activity_empty": "Noch keine Aufrufe."
     }
   },
   "statusbar": {
