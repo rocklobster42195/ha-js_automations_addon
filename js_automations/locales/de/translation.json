@@ -698,5 +698,8 @@
     "entity_discovered": "Entity automatisch aus Home Assistant erkannt.",
     "entity_manual": "Manuell konfiguriert.",
     "entity_guessed": "Geratener Standardwert — noch nicht gegen eine echte Entity bestätigt."
-  }
+  },
+  "external_update_reloaded": "\"{{filename}}\" wurde von einem KI-Assistenten geändert und neu geladen.",
+  "external_update_conflict": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, du hast aber ungespeicherte Änderungen. Beim Speichern wird dessen Version überschrieben (sie bleibt in der Git-Historie).",
+  "external_update_overwrite_confirm": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, nachdem du mit dem Bearbeiten begonnen hast. Mit deiner Version überschreiben? (Die KI-Version bleibt in der Git-Historie.)"
 }

@@ -397,6 +397,7 @@ export class EditorViewElement extends LitElement {
     // on — one more listener here rather than threading a shared store through both components.
     window.addEventListener('git-status-refresh', this._refreshGitStatus);
     this._refreshGitStatus();
+    this._bindContentChangeSocket();
   }
 
   disconnectedCallback() {
@@ -407,6 +408,76 @@ export class EditorViewElement extends LitElement {
     window.removeEventListener('git-status-refresh', this._refreshGitStatus);
     this._diffEditorInstance?.dispose();
     this._diffEditorInstance = null;
+  }
+
+  /** The socket client may connect after this component; retry briefly instead of missing the event. */
+  private _bindContentChangeSocket(attempt = 0): void {
+    if (window.socket) {
+      window.socket.on('script_content_changed', this._onScriptContentChanged);
+    } else if (attempt < 20) {
+      setTimeout(() => this._bindContentChangeSocket(attempt + 1), 500);
+    }
+  }
+
+  /** A file was rewritten behind the editor's back (an AI assistant over MCP): refresh open tabs. */
+  private _onScriptContentChanged = async ({ filename }: { filename: string }): Promise<void> => {
+    const scriptTab = this._openTabs.find((t) => t.filename === filename && !t.type);
+    const cardTab = this._openTabs.find((t) => t.type === 'card' && t.parentScript === filename);
+    if (scriptTab) await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`);
+    if (cardTab) await this._syncTabFromDisk(cardTab, `api/scripts/${filename}/card`);
+    this._refreshGitStatus();
+  };
+
+  /** Clean tab → silently take the new content (keeps cursor/undo); dirty tab → keep the user's
+   * edits, remember the conflict and warn once. */
+  private async _syncTabFromDisk(tab: JsaTab, url: string): Promise<void> {
+    try {
+      const res = await window.apiFetch!(url);
+      if (!res.ok) return;
+      const content: string = (await res.json()).content ?? '';
+      if (content === tab.originalContent) return;
+      const name = tab.parentScript ?? tab.filename;
+
+      if (!tab.isDirty) {
+        // originalContent first, so the model-change callback sees "equal" and does not flag the tab dirty.
+        tab.originalContent = content;
+        window.monacoEditor?.setModelValue(tab.model as never, content);
+        tab.isDirty = false;
+        tab.externalChange = false;
+        this._renderTabs();
+        window.alertToast?.show(
+          this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
+            filename: name,
+          }),
+          { variant: 'info' }
+        );
+      } else if (!tab.externalChange) {
+        tab.externalChange = true;
+        window.alertToast?.show(
+          this._t(
+            'external_update_conflict',
+            '"{{filename}}" was changed by an AI assistant, but you have unsaved edits. Saving will overwrite its version (it stays in the Git history).',
+            { filename: name }
+          ),
+          { variant: 'warning' }
+        );
+      }
+    } catch {
+      // Best-effort: a failed refresh leaves the tab as it was.
+    }
+  }
+
+  /** Asks before a save overwrites a change the user never saw. Returns false to abort the save. */
+  private async _confirmOverwriteExternalChange(tab: JsaTab): Promise<boolean> {
+    if (!tab.externalChange) return true;
+    const ok = await window.confirmDialog?.confirm(
+      this._t(
+        'external_update_overwrite_confirm',
+        '"{{filename}}" was changed by an AI assistant after you started editing. Overwrite it with your version? (The AI version stays in the Git history.)',
+        { filename: tab.parentScript ?? tab.filename }
+      )
+    );
+    return !!ok;
   }
 
   private _refreshGitStatus = async (): Promise<void> => {
@@ -977,6 +1048,8 @@ export class EditorViewElement extends LitElement {
 
     const content = window.monacoEditor?.getModelValue(activeTab.model) ?? '';
 
+    if (!(await this._confirmOverwriteExternalChange(activeTab))) return;
+
     if (activeTab.type === 'card') {
       await window.apiFetch!(`api/scripts/${activeTab.parentScript}/card`, {
         method: 'PUT',
@@ -985,6 +1058,7 @@ export class EditorViewElement extends LitElement {
       });
       activeTab.originalContent = content;
       activeTab.isDirty = false;
+      activeTab.externalChange = false;
       this._renderTabs();
       // Card content lives inside the parent script's file, not this virtual tab — refresh so
       // the Commit button is correct if/when the user switches back to the parent script tab.
@@ -1001,6 +1075,7 @@ export class EditorViewElement extends LitElement {
 
     activeTab.originalContent = content;
     activeTab.isDirty = false;
+    activeTab.externalChange = false;
     this._renderTabs();
     this._refreshGitStatus();
     await window.loadScripts?.();
