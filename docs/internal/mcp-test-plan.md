@@ -1,0 +1,115 @@
+# MCP-Server — Testplan für die HA-Dev-Instanz
+
+Stand 2026-10-28. Gebaut und mit automatischen Tests abgesichert (Backend, Frontend, SDK-Client über HTTP und stdio) — aber **noch nie gegen eine echte Home-Assistant-Instanz, einen echten Browser mit Monaco oder Claude Desktop**. Dieser Plan listet, was dort geprüft werden muss. Wie der Stand auf die Dev-Instanz kommt (Beta-Release oder lokaler Dev-Server), spielt für die Checks keine Rolle.
+
+Konzept: [`ai_concept.md`](./ai_concept.md) · Nutzer-Doku: [`../guide/mcp.md`](../guide/mcp.md) · Technik: [`../TECH-README.md`](../TECH-README.md#20-mcp-server)
+
+**Legende:** ⚠️ = bisher gar nicht verifiziert (Annahme aus Doku/Code), 🔒 = sicherheitsrelevant.
+
+---
+
+## 0. Vorbereitung
+
+- [ ] Git-Stand der Skripte der Dev-Instanz sichern (oder Backup ziehen), bevor Schreib-Tools an sind.
+- [ ] Ein paar harmlose Test-Skripte bereitstellen: eins mit `@card`, eins in TS mit `@npm`, eins mit absichtlichem Laufzeitfehler, eins mit einem fest eingetragenen Passwort (`password: 'x'`) zum Prüfen der Maskierung.
+- [ ] Zwei Entities zum gefahrlosen Schalten wählen (z. B. `input_boolean.*`) für `call_service`.
+- [ ] Claude Desktop auf einem Rechner, der die Dev-Instanz im Netz erreicht.
+
+## 1. Start und Netzwerk
+
+- [ ] ⚠️ Add-on-Konfiguration → **Netzwerk** zeigt Port **3002** mit Beschreibung "MCP server for AI clients" (Stable und Beta).
+- [ ] Settings → MCP-Server: Schalter an → **Rest erscheint**; Status "läuft auf Port 3002".
+- [ ] ⚠️ Der angezeigte **Endpunkt** (`http://<host>:3002/mcp`) ist von deinem PC aus erreichbar. Welcher Host steht drin (Ingress!)? Stimmt er?
+- [ ] `curl -i http://<ha>:3002/mcp` → **401**. Mit Token: `curl -i -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' http://<ha>:3002/mcp` → **200** mit `serverInfo`.
+- [ ] 🔒 5× falsches Token → danach auch das richtige Token **429** (10 Minuten Sperre). Log zeigt die Warnung.
+- [ ] 🔒 IP-Allowlist: eigene IP nicht eingetragen → 403; eingetragen (Einzel-IP und CIDR) → 200.
+- [ ] Schalter aus → Port antwortet nicht mehr; wieder an → läuft ohne Add-on-Neustart.
+- [ ] Wenn Stable **und** Beta existieren: das zweite meldet "Port belegt, retry" und läuft, sobald das erste gestoppt ist.
+- [ ] Webhook-Regression: `examples/webhook_api_test.js` aus Postman/curl wie früher (Auth, Allowlist, 429), da `request-guard` aus dem Webhook-Manager extrahiert wurde.
+
+## 2. Claude Desktop
+
+- [ ] ⚠️ "Für Claude Desktop installieren" → Datei `js-automations.mcpb` (Beta: `js-automations-beta.mcpb`) wird **über Ingress heruntergeladen** (kein 404/Login-Seite).
+- [ ] ⚠️ Doppelklick öffnet Claude Desktop, Installationsdialog zeigt Name/Icon/Beschreibung.
+- [ ] ⚠️ **Sind URL und Token im Dialog vorbelegt?** (Offen: übernimmt Claude Desktop den `default` bei einem "sensitiven" Feld? Wenn nein, Token einmal per Hand einfügen — dann in der Doku vermerken.)
+- [ ] ⚠️ Der offizielle Validator läuft sauber: `npx @anthropic-ai/mcpb validate <manifest.json>` (nicht automatisiert prüfbar, wurde im Entwicklungslauf blockiert).
+- [ ] ⚠️ Der Boolean "Selbstsigniertes Zertifikat akzeptieren" kommt in der Bridge an (nur relevant bei HTTPS mit eigenem Zertifikat).
+- [ ] Nach der Installation sind die Tools in Claude Desktop sichtbar; ein einfacher Auftrag ("Liste meine JSA-Skripte") funktioniert, der Aufruf erscheint im Dev-Tools-Tab **MCP**.
+- [ ] Alternative: "Claude-Desktop-Konfiguration kopieren" in `claude_desktop_config.json` einfügen → funktioniert (braucht Node.js auf dem PC).
+- [ ] 🔒 Token rotieren → alter Client bekommt eine verständliche Meldung ("token is wrong or was rotated").
+- [ ] Add-on neu starten → Token bleibt gleich, Aufruf-Log ist leer.
+
+## 3. Lese-Tools gegen echte Skripte
+
+- [ ] `list_scripts`: alle Skripte und Libraries, Status stimmt (laufend/gestoppt/Fehler), **Blockly-Skripte fehlen**.
+- [ ] `read_script` mit Karte: Karte erscheint als **lesbares JavaScript**, kein Base64.
+- [ ] 🔒 `read_script` auf dem Skript mit Passwort: Wert ist `***`, Hinweis "masked" steht dabei. Außerdem Stichprobe über alle echten Skripte: nichts Vertrauliches im Klartext, aber auch keine unsinnigen Treffer (Erwartung: `TOKEN_URL`-Konstanten und `` `Bearer ${token}` `` bleiben unberührt).
+- [ ] `get_logs`: Filter nach Skript, Level, Zeitraum, Text; Secrets im Log maskiert.
+- [ ] `get_script_errors` auf dem Skript mit Laufzeitfehler: Status, Stacktrace; nach einem TS-Syntaxfehler: Compiler-Meldung aus dem System-Log.
+- [ ] `get_events`: nach dem Schalten einer Entity erscheint der `state_changed`.
+- [ ] `list_entities`/`get_entity` auf der **großen** Instanz: Filter nach Domain/Suche, Limit-Hinweis, Antwortzeit.
+- [ ] ⚠️ `get_api_reference`: **die Doku liegt im Container** (`authoring.md`, `API_REFERENCE.md`, `ha-api.d.ts`) — alle Themen liefern Text, nicht "not available in this installation".
+- [ ] 🔒 `get_store` (Schalter an): Secrets erscheinen nie, `*token*`/`*password*`-Schlüssel sind maskiert.
+
+## 4. Steuern
+
+- [ ] `start_script`/`stop_script`/`restart_script` an einem JS- **und** einem TS-Skript (inkl. `@npm`-Installation beim ersten Start).
+- [ ] Nach `restart_script` meldet die Antwort korrekt "läuft" bzw. "läuft nicht mehr" (Skript mit Sofort-Absturz testen).
+- [ ] `call_service` (Schalter an): `input_boolean.turn_on` klappt; 🔒 `homeassistant.restart`, `hassio.*`, `shell_command.*` werden **abgelehnt**.
+- [ ] Libraries lassen sich nicht starten (klare Fehlermeldung).
+
+## 5. Schreiben (Schalter an)
+
+- [ ] `write_script` neues JS und neues TS: Datei liegt im richtigen Ordner (Library mit Präfix `libraries/`); erscheint in der Sidebar.
+- [ ] Syntaxfehler: abgelehnt, Datei unverändert, Fehlerliste mit Zeile.
+- [ ] ⚠️ **Typcheck mit den echten generierten Typen** (`entities.d.ts`, `services.d.ts` in `.storage`): ein korrektes Skript meldet keine Warnungen; ein falscher Entity-Name/Service wird erkannt. Dauer bei einem großen Skript (z. B. `smart_watering.ts`) — Erwartung < 1 s.
+- [ ] ⚠️ **Git:** Repo wird beim ersten Schreiben lazy angelegt; History-Panel zeigt `mcp: snapshot before changing …` und `mcp: …`. Bei eigener, **ungespeicherter/uncommitteter** Änderung vorher: der Snapshot enthält sie.
+- [ ] Karte bleibt erhalten, wenn ein Skript mit Karte neu geschrieben wird; `write_card` ändert sie und warnt bei fehlendem `@card`.
+- [ ] `delete_script`: Datei, Karte und Webhook-Registrierungen weg; im History-Panel unter "gelöschte Skripte" wiederherstellbar.
+- [ ] ⚠️ **Dateiwächter:** das geschriebene `.ts` wird kompiliert (`dist`), Entities/`@expose` werden wie nach einem manuellen Speichern aktualisiert; kein doppeltes Verarbeiten durch die `.mcp-tmp`-Datei.
+- [ ] Läuft das Skript, steht in der Antwort der Hinweis "restart_script aufrufen" — und es wird **nicht** neu gestartet.
+- [ ] ⚠️ **Editor (echtes Monaco):** Tab offen und sauber → Inhalt aktualisiert sich, Cursor/Undo bleiben, Hinweis-Toast. Tab mit ungespeicherten Änderungen → Warnung, Text bleibt; Speichern fragt nach.
+- [ ] **Ende-zu-Ende:** Prompt "Plan a JSA script (interview)" in Claude Desktop → Interview → Skript wird geschrieben → `restart_script` → `get_script_errors`/`get_logs` → Korrektur. Stil entspricht den Konventionen (Header, Config, `ha.register`)?
+
+## 6. Prompts und Resources
+
+- [ ] In Claude Desktop erscheinen **New JSA script** und **Plan a JSA script (interview)**.
+- [ ] Die Dokumentation ist als Resource auswählbar.
+- [ ] Beim Verbinden liest der Assistent von selbst den Authoring-Guide (Server-Anweisungen greifen).
+
+## 7. Oberfläche
+
+- [ ] Panel in Settings: Kopieren (URL, Token, Config), Anzeigen/Verbergen, Neu erzeugen mit Rückfrage; Texte in **Deutsch und Englisch**; schmale Breite.
+- [ ] Dev-Tools-Tab **MCP**: Live-Log; fehlgeschlagener Aufruf aufklappen und kopieren; Trennlinie zu den Feedback-Notizen.
+- [ ] Settings → Allgemein (Expert Mode): einzelne Dev-Tools-Tabs ausblenden; aktiver Tab springt weiter; Zustand bleibt nach Neuladen.
+- [ ] ⚠️ Breakpoint in einem Skript bei **ausgeblendetem WATCH-Tab**: der Tab erscheint wieder, "Continue" funktioniert.
+- [ ] ⚠️ Kopier-Knöpfe über das Ingress-HTTPS (Clipboard braucht sicheren Kontext).
+- [ ] Alle Tools aus → Client zeigt keine Verbindungsfehler, nur keine Tools.
+
+## 8. Maintainer-Modus
+
+- [ ] Schalter erscheint nur mit Expert Mode; aus → `jsa_feedback` ist nicht sichtbar.
+- [ ] An: beim Arbeiten mit Claude entstehen Notizen **ohne dass Claude sie kommentiert**.
+- [ ] Gleiche Beobachtung dreimal → Claude erwähnt sie **einmal**, danach nicht mehr.
+- [ ] Harten Fehler provozieren (z. B. ein Tool, das trotz korrekter Nutzung abstürzt) → Claude meldet ihn **sofort** in der nächsten Antwort.
+- [ ] Notizen im Tab: aufklappen, kopieren (englischer, Issue-tauglicher Text), löschen.
+- [ ] Ehrliche Einschätzung festhalten: Wie zuverlässig hält sich das Modell an "still"/"sofort"? (Nur Schwelle und Einmaligkeit sind serverseitig erzwungen.)
+
+## 9. Robustheit und Betrieb
+
+- [ ] Zwei Clients gleichzeitig (Claude Desktop + curl): keine Vermischung, Schreiben nacheinander ohne Git-`index.lock`-Fehler.
+- [ ] HA-Verbindung getrennt/neu gestartet: Tools antworten mit Fehlermeldung statt zu hängen; Server bleibt oben.
+- [ ] Sehr großes Skript (> 512 000 Zeichen) wird abgelehnt.
+- [ ] 🔒 **Backup/Restore:** `.storage/mcp.json` (Token im Klartext) ist über `backup-scope.ts` vom Backup **ausgeschlossen** (wie `store.key`). Prüfen: Backup erzeugen → Zip enthält keine `mcp.json`; Restore-Diff listet sie nicht als "gelöscht"; nach dem Restore existiert ein **neues** Token und die `.mcpb` muss neu installiert werden. Offene Randbemerkung: `webhooks.json` (Webhook-Tokens) steht weiterhin im Backup — bestehendes Verhalten, bewusst unverändert.
+- [ ] 🔒 Der Download-Link (`/api/mcp/mcpb`) liefert das Token nur über die HA-Ingress-Sitzung, nicht über Port 3002 (kurz gegenprüfen: `curl http://<ha>:3002/api/mcp/mcpb` → 404).
+- [ ] Ressourcen: RAM/CPU im Leerlauf mit eingeschaltetem MCP vs. aus (Event-Puffer, Zähler) — keine auffällige Änderung.
+
+## 10. Abnahme
+
+- [ ] Alle ⚠️-Punkte entschieden (bestanden, in der Doku vermerkt oder als Aufgabe angelegt).
+- [ ] Ergebnisse unten eintragen; Doku (`mcp.md` → "Limitations", Troubleshooting) mit den echten Beobachtungen abgleichen.
+- [ ] Erst danach: `npm run ship:minor` ("With A Little Help From My Friends"); die Release-Notizen stehen bereits in `CHANGELOG.md` unter `<!-- NEXT -->`.
+
+## Ergebnisse
+
+_(hier eintragen: Datum, Stand/Commit, was bestanden/offen, Auffälligkeiten)_

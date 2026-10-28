@@ -1,5 +1,39 @@
 <!-- NEXT -->
 
+feat: MCP server for AI assistants, one-click Claude Desktop install, authoring guide
+
+### With A Little Help From My Friends
+
+Let an AI assistant work with your scripts. JS Automations is now an MCP server: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run, and — if you allow it — write and restart scripts. You stay in control: it is off by default, every tool has its own switch, and every change is saved as a Git commit. See the new [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md).
+
+**MCP server**
+
+- New server on port **3002** (separate from the webhook port), switched on under **Settings → MCP Server**; access token with show / copy / create-new, optional IP allowlist and reverse-proxy settings
+- **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config
+- 16 tools in three groups (read, control, write), each with its own switch. Writing, `call_service`, `delete_script` and `get_store` are **off by default**
+- Writes are syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; a script's Lovelace card is preserved; nothing is restarted automatically
+- Open editor tabs reload when an assistant changes the file; unsaved edits are kept and saving asks before overwriting
+- Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned
+- Prompts **New JSA script** and **Plan a JSA script (interview)**, plus the documentation as resources
+- New **Authoring Scripts** guide (script structure, header tags, conventions, cards) and a header tag reference in the API Reference
+- Works with other MCP clients too (Streamable HTTP + bearer token)
+
+**Developer tools (Expert Mode)**
+
+- New **MCP** tab: live log of tool calls with expandable, copyable errors
+- Dev-tools tabs can be **switched off** individually under Settings → General
+- **Maintainer mode** (for JSA developers): the assistant quietly notes API, feature and documentation ideas, raises each once after it came up three times, and reports hard errors immediately; notes appear in the MCP tab and can be copied as GitHub-issue text
+
+**Under the hood**
+
+- Rate limiting, lockout and allowlist moved into a shared module used by both the webhook and the MCP server
+- Script overview shared between the UI and MCP
+
+**Fixes**
+
+- None — this release only adds features.
+
+
 ---
 
 ## [3.1.0] - 2026-10-26

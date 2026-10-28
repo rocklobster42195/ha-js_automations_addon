@@ -29,6 +29,7 @@ It is intended as a contributor-level deep-dive, not a quick-start guide. For AP
 17. [Capability & Permission System](#17-capability--permission-system)
 18. [Card Manager: Script Pack System](#18-card-manager-script-pack-system)
 19. [Resource Consumption and Known Limits](#19-resource-consumption-and-known-limits)
+20. [MCP Server](#20-mcp-server)
 
 ---
 
@@ -1016,3 +1017,62 @@ The `msgId` counter in `HAConnector` is a monotonically increasing integer that 
 ### Script Pack Card Size
 
 The `__JSA_CARD__` block is stored as Base64 inside the script file. Large card bundles (complex Lit/web component, bundled dependencies) can significantly increase the script file size. There is no hard limit enforced, but the full card source is read and decoded on every `installCard()` call and on every preview request — keep card bundles reasonably sized.
+
+---
+
+## 20. MCP Server
+
+The MCP server lets an external AI client (Claude Desktop, …) inspect and control JSA. It is a second, separate Express server — not part of the Ingress app and not part of the webhook server. User-facing description: [MCP guide](./guide/mcp.md). Design notes: `docs/internal/ai_concept.md`.
+
+### Why a separate port
+
+`WEBHOOK_PORT` (3001) is public by design; the MCP server grants script access and must be exposable independently (LAN/VPN vs. tunnel). Like the webhook port it is **fixed** (3002): the container only publishes ports declared in `config.yaml`, so a configurable port would silently break reachability. Stable and Beta both map it and share `STORAGE_DIR`, hence the token (`mcp.json`, excluded from backups via `backup-scope.ts`); the sibling-guard / `EADDRINUSE` retry mechanism is the same as for webhooks. `JSA_MCP_PORT` overrides the port for tests only.
+
+### Modules (`js_automations/core/`)
+
+| Module                                                             | Role                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request-guard.ts`                                                 | Shared hardening, extracted from the webhook manager: per-IP rate limit, failed-auth backoff, IPv4 CIDR allowlist, constant-time token compare. Used by both servers                                                                                                                              |
+| `mcp-manager.ts`                                                   | Express server on 3002 (route `/mcp` only), start/stop follows `mcp.enabled`, Bearer auth, token persistence in `.storage/mcp.json`. Delegates authenticated requests to the protocol handler (`setHandler`)                                                                                      |
+| `mcp-protocol.ts`                                                  | Protocol layer on the official `@modelcontextprotocol/sdk`: **stateless** Streamable HTTP with JSON responses — a fresh `McpServer`/transport per request, so a settings change applies to the next request and there are no sessions. Registers tools, prompts, resources, server `instructions` |
+| `mcp-tool-catalog.ts`                                              | Static list of every tool with group and default. The settings schema generates one switch per entry (`tool_<name>`); the protocol only exposes tools that are registered **and** switched on. `maintainerOnly` tools have no switch                                                              |
+| `mcp-tools-read.ts` / `-control.ts` / `-write.ts` / `-feedback.ts` | Tool implementations per group                                                                                                                                                                                                                                                                    |
+| `mcp-script-files.ts`                                              | One resolver for file names from clients: plain `.js`/`.ts` in scripts or libraries only (no paths, no Blockly)                                                                                                                                                                                   |
+| `mcp-script-check.ts`                                              | Pre-write check. Syntax errors block; the TypeScript type check (against `STORAGE_DIR/ha-api.d.ts` + generated typings, Node globals filtered) only warns                                                                                                                                         |
+| `mcp-secret-filter.ts`                                             | Best-effort masking of named values and known token formats in everything handed to a client; `maskDeep` for structured values (JSON escaping would otherwise hide patterns)                                                                                                                      |
+| `mcp-event-buffer.ts`                                              | Ring buffer (300) of HA events for `get_events`; only fed while MCP is enabled                                                                                                                                                                                                                    |
+| `mcp-activity-log.ts`                                              | In-memory ring buffer (200) of tool calls → socket event `mcp_activity`, `GET /api/mcp/activity`                                                                                                                                                                                                  |
+| `mcp-feedback-store.ts`                                            | Maintainer-mode notes (`.storage/mcp-feedback.json`): fuzzy de-duplication, counts, "told" state                                                                                                                                                                                                  |
+| `mcp-prompts.ts`                                                   | Prompts `new_script`, `grill_script` and the documentation resources                                                                                                                                                                                                                              |
+| `mcpb-builder.ts` + `js_automations/mcpb/bridge.js`                | One-click Claude Desktop extension                                                                                                                                                                                                                                                                |
+| `script-list.ts`                                                   | Script overview shared by `GET /api/scripts` and `list_scripts`                                                                                                                                                                                                                                   |
+
+`routes/mcp-route.ts` (`/api/mcp`): status, token reveal/rotate, activity, feedback, `GET /mcpb?url=`.
+
+### Request flow
+
+`POST /mcp` → rate limit → IP allowlist → auth lockout check → Bearer token (failures feed the backoff) → JSON body parse (after auth) → `McpProtocol.handle()` → tool callback → activity log entry. Tool errors are returned as MCP `isError` results, not HTTP errors. With **all** tools off the protocol still answers `tools/list` with an empty list (the SDK would otherwise reply "Method not found").
+
+### Write path (`write_script`)
+
+Validate name → reject embedded `__JSA_CARD__` → check (syntax blocks) → keep the existing card block (`read_script` strips it) → **snapshot commit** of the current file state → atomic write (tmp + rename) → commit → `status_update` and `script_content_changed` socket events. Calls are serialized (`index.lock`). The editor reloads clean tabs on `script_content_changed` and flags dirty tabs (`JsaTab.externalChange`), asking before a save overwrites.
+
+### The `.mcpb` bridge
+
+Claude Desktop runs local stdio servers only. `bridge.js` is a dependency-free Node script (global `fetch`): one JSON-RPC line in → one POST to `/mcp` → reply line out. Notifications (HTTP 202) produce no output; failures become JSON-RPC errors for every request id of the message so the client never waits. The manifest (MCPB 0.3) is generated per download with the endpoint and token as `user_config` defaults; the Beta add-on gets its own extension name.
+
+### Maintainer mode
+
+`general.maintainer_mode` (expert settings) appends maintainer instructions to the server `instructions` and enables the `jsa_feedback` tool. The store decides what is mentioned to the user: hard errors immediately, normal notes once at the third repeat (`MENTION_THRESHOLD`); the tool result tells the model which.
+
+### Adding a tool
+
+1. Add an entry to `MCP_TOOL_CATALOG` (group, default; `maintainerOnly` if applicable).
+2. Implement it in the matching `mcp-tools-*.ts` with `protocol.registerTool`; validate input with zod; return `{ content, isError? }`. Secrets must pass `mcp-secret-filter`; file names must pass `mcp-script-files`.
+3. Add `settings.mcp.tools.<name>` and `<name>_desc` to both locale files (the `check:i18n` script enforces parity).
+4. Add a test next to `test/mcp-tools-*.test.js` using the SDK client against a real `McpManager` (pick a random port via `JSA_MCP_PORT` before requiring the module).
+5. Document the tool in [the MCP guide](./guide/mcp.md).
+
+### Built files
+
+Backend TypeScript is compiled in place; every new `.js` output must be listed in `.gitignore` (and, outside the existing patterns, in the ignore list of `eslint.config.js`). `js_automations/mcpb/bridge.js` is **hand-written** JavaScript and is tracked.
