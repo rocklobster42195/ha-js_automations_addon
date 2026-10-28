@@ -147,6 +147,18 @@ describe('mcp-activity-panel', () => {
       expect(text(el)).to.contain('Suggest grouping the options');
     });
 
+    it('separates the notes from the call log with a titled divider', async () => {
+      const el = await mount(true, [entry(), entry({ id: 2 })], [note()]);
+      const titles = Array.from(el.shadowRoot!.querySelectorAll('.section-title')).map((t) =>
+        t.textContent!.replace(/\s+/g, ' ').trim()
+      );
+      expect(titles).to.deep.equal(['JSA feedback from the assistant (1)', 'Tool calls (2)']);
+      expect(el.shadowRoot!.querySelector('.section-title.divider')).to.not.be.null;
+
+      const without = await mount(true, [entry()]);
+      expect(without.shadowRoot!.querySelectorAll('.section-title').length).to.equal(0);
+    });
+
     it('marks hard errors', async () => {
       const el = await mount(true, [], [note({ severity: 'hard_error', kind: 'bug' })]);
       const badge = notesEls(el)[0].querySelector('.fb-badge')!;

@@ -719,7 +719,8 @@
     "mcp_feedback_kind_api": "API",
     "mcp_feedback_kind_feature": "Feature",
     "mcp_feedback_kind_docs": "Doku",
-    "mcp_feedback_kind_other": "Sonstiges"
+    "mcp_feedback_kind_other": "Sonstiges",
+    "mcp_calls_title": "Tool-Aufrufe"
   },
   "preview": {
     "card_config": "Karten-Konfiguration",

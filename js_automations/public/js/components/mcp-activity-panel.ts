@@ -103,6 +103,11 @@ export class McpActivityPanel extends LitElement {
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .section-title.divider {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #333;
+    }
     .fb {
       padding: 4px 0;
       border-bottom: 1px solid #1c1c1c;
@@ -268,7 +273,9 @@ export class McpActivityPanel extends LitElement {
                 ${this._t('devtools.mcp_feedback_title', 'JSA feedback from the assistant')} (${this._notes.length})
               </div>
               ${this._notes.map((n) => this._renderNote(n))}
-              <div class="section-title"></div>`
+              <div class="section-title divider">
+                ${this._t('devtools.mcp_calls_title', 'Tool calls')} (${this._activity.length})
+              </div>`
           : ''
       }
       ${
