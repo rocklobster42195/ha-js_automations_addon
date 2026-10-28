@@ -28,7 +28,7 @@ Zurückgestellt: `ha.ai()` als Laufzeit-API für Skripte (z. B. `smart_watering.
 - **Der Port ist fest, nicht konfigurierbar** (wie `WEBHOOK_PORT = 3001`): der Container veröffentlicht nur Ports aus `config.yaml` (`ports:`). Neu: `3002/tcp: 3002` samt `ports_description` in `config.yaml` **und** `js_automations_beta/config.yaml`. Stable und Beta teilen sich wie beim Webhook-Port den Host-Port (Sibling-Guard, `EADDRINUSE`-Retry); der User kann ihn in der HA-Add-on-Oberfläche umlegen.
 - Server startet nur, wenn in den Settings aktiviert (**Default aus**).
 - **Auth:** ein statisches Bearer-Token, getrennt von den Webhook-Tokens. Reveal/Copy/Rotate im UI; Rotate invalidiert sofort. Kein OAuth.
-- Beta und Stable haben getrennte Tokens (je Add-on-`/data`); der Host-Port wird wie beim Webhook geteilt.
+- Beta und Stable teilen sich `STORAGE_DIR` und damit das Token (`mcp.json`) sowie den Host-Port (wie beim Webhook); es läuft immer nur eines von beiden.
 
 ### Claude Desktop
 
