@@ -1523,6 +1523,26 @@ ha.onStop(() => stop());
 
 ---
 
+## Script Header Tags
+
+A script's metadata lives in the first `/** ... */` block of the file, one tag per line. For how headers fit into a well-formed script (structure, conventions, cards), see [Authoring Scripts](./guide/authoring.md).
+
+| Tag            | Value                                                             | Purpose                                                                                                            |
+| -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `@name`        | text                                                              | Display name in the sidebar (falls back to the file name)                                                          |
+| `@icon`        | `mdi:...`                                                         | Sidebar icon (default `mdi:script-text`)                                                                           |
+| `@description` | text                                                              | Short description; also the card's name in Lovelace's "Add Card" picker                                            |
+| `@label`       | text                                                              | Groups scripts in the sidebar; inherits icon/color from a matching HA Label                                        |
+| `@area`        | HA area id                                                        | Area of the entities this script registers/exposes                                                                 |
+| `@loglevel`    | `debug` \| `info` \| `warn` \| `error`                            | Minimum log level (default `info`)                                                                                 |
+| `@npm`         | package names (comma/space separated)                             | npm packages installed automatically                                                                               |
+| `@include`     | library file names (comma/space separated)                        | Shared global libraries made available to the script                                                               |
+| `@expose`      | `switch` (default) \| `button`                                    | Exposes the script itself as an entity (`switch`: on while running; `button`: press (re)starts it)                 |
+| `@permission`  | `network`, `fs:read`, `fs:write`, `fs`, `exec`, `webhook`, `mqtt` | Declares capabilities (see [Capability & Permission System](#capability--permission-system))                       |
+| `@card`        | _(none)_ \| `dev`                                                 | Marks the file as a Script Pack with a Lovelace card; `dev` = preview only ([Script Packs](./guide/card-packs.md)) |
+
+---
+
 ## Capability & Permission System
 
 Scripts can declare which sensitive capabilities they use via `@permission` in the script header. This serves two purposes: **transparency** (the script list shows badges for each declared/detected capability) and optionally **enforcement** (undeclared capabilities throw at runtime).

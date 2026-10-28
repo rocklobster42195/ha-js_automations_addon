@@ -149,6 +149,7 @@ ha.log(weather.temp); // TypeScript knows this is a number
 
 The topics below have grown too deep for a README section — each has its own guide with worked examples and (where a picture beats a paragraph) screenshots:
 
+- **[Authoring Scripts](./docs/guide/authoring.md)** — script structure, header tags, conventions and cards in one place; the best starting point for writing (or prompting an AI to write) a JSA script.
 - **[Native Entities (`ha.register`)](./docs/guide/native-entities.md)** — MQTT Discovery entities, device grouping, staying available while stopped, `ha.unregister()`.
 - **[Notifications (`ha.notify` & `ha.ask`)](./docs/guide/notifications.md)** — simple, persistent, and actionable (button-response) notifications.
 - **[Creation Wizard](./docs/guide/creation-wizard.md)** — the **+** button's New / Upload / Import modes.
