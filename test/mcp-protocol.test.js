@@ -8,12 +8,14 @@ const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 const { z } = require('zod');
 
+// The port is read when the module loads, so choose it first (parallel test files must not collide).
+const PORT = 20000 + Math.floor(Math.random() * 20000);
+process.env.JSA_MCP_PORT = String(PORT);
 const McpManager = require('../js_automations/core/mcp-manager.js');
 const { McpProtocol } = require('../js_automations/core/mcp-protocol.js');
 const { McpActivityLog } = require('../js_automations/core/mcp-activity-log.js');
 const { MCP_TOOL_CATALOG, isToolEnabled } = require('../js_automations/core/mcp-tool-catalog.js');
 
-const PORT = 3002;
 const URL_ = new URL(`http://127.0.0.1:${PORT}/mcp`);
 
 function portIsFree(port) {

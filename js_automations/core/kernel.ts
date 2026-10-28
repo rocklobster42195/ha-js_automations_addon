@@ -33,6 +33,8 @@ import WebhookManager from './webhook-manager';
 import McpManager from './mcp-manager';
 import { McpActivityLog } from './mcp-activity-log';
 import { McpProtocol } from './mcp-protocol';
+import { McpEventBuffer } from './mcp-event-buffer';
+import { registerReadTools } from './mcp-tools-read';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -117,6 +119,7 @@ class Kernel extends EventEmitter {
   mcpManager!: McpManager;
   mcpActivity!: McpActivityLog;
   mcpProtocol!: McpProtocol;
+  mcpEvents!: McpEventBuffer;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -207,6 +210,20 @@ class Kernel extends EventEmitter {
       // CardManager — handles Script Pack card installation
       this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
       this.workerManager.cardManager = this.cardManager;
+
+      // MCP tools (the protocol layer only exposes those switched on in the settings)
+      this.mcpEvents = new McpEventBuffer();
+      registerReadTools(this.mcpProtocol, {
+        workerManager: this.workerManager,
+        logManager: this.logManager,
+        haConnector: this.haConnector,
+        cardManager: this.cardManager,
+        eventBuffer: this.mcpEvents,
+        scriptsDir: SCRIPTS_DIR,
+        librariesDir: config.LIBRARIES_DIR,
+        docsDir: path.resolve(__dirname, '../../docs'),
+        typesDir: path.join(__dirname, 'types'),
+      });
 
       // Create SystemService before EntityManager so we can pass it
       this.systemService = new SystemService(config, this.workerManager);
@@ -652,6 +669,9 @@ class Kernel extends EventEmitter {
           'Home Assistant restart requested — the next disconnect will be treated as planned.'
         );
       }
+
+      // Keep recent events for the MCP get_events tool (only while MCP is enabled)
+      if (this.mcpManager.isEnabled()) this.mcpEvents.push(event);
 
       // Forward all events to the Event Inspector (opt-in via bridge)
       this.emit('ha_event', event);

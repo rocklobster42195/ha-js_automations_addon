@@ -5,9 +5,10 @@ const { tmpdir } = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
 
+// The port is read when the module loads, so choose it first (parallel test files must not collide).
+const PORT = 20000 + Math.floor(Math.random() * 20000);
+process.env.JSA_MCP_PORT = String(PORT);
 const McpManager = require('../js_automations/core/mcp-manager.js');
-
-const PORT = 3002; // fixed in mcp-manager.ts
 
 function portIsFree(port) {
   return new Promise((resolve) => {

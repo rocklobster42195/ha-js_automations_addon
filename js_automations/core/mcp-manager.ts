@@ -8,8 +8,9 @@ import { EventEmitter } from 'events';
 import { RequestGuard, ipAllowed, tokensMatch } from './request-guard';
 
 // Fixed, not user-configurable: the container only publishes ports declared in
-// config.yaml `ports:` (same reason as WEBHOOK_PORT in webhook-manager.ts).
-const MCP_PORT = 3002;
+// config.yaml `ports:` (same reason as WEBHOOK_PORT in webhook-manager.ts). JSA_MCP_PORT only
+// exists so tests can run in parallel on free ports.
+const MCP_PORT = Number(process.env.JSA_MCP_PORT) || 3002;
 const MCP_PATH = '/mcp';
 const BODY_LIMIT = '2mb'; // script sources can be large
 const TOKEN_PREFIX = 'jsamcp_';
@@ -259,6 +260,10 @@ class McpManager extends EventEmitter {
 
     this._guard.clearAuthFailures(ip, 'mcp');
     next();
+  }
+
+  isEnabled(): boolean {
+    return !!this._settings().enabled;
   }
 
   getPort(): number {
