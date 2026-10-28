@@ -313,6 +313,7 @@
       "danger": "Gefahrenzone",
       "mqtt": "MQTT Broker",
       "webhook": "Webhooks",
+      "mcp": "MCP-Server",
       "backup": "Backup",
       "versioning": "Versionierung"
     },
@@ -389,6 +390,16 @@
       "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig. Der Webhook-Server lauscht immer auf Port 3001 (fix, siehe Netzwerk-Konfiguration des Add-ons).",
       "trust_proxy": "Reverse Proxy vertrauen",
       "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem Webhook-Port steht — sonst können Aufrufer ihre IP fälschen."
+    },
+    "mcp": {
+      "enabled": "MCP-Server aktivieren",
+      "enabled_desc": "Erlaubt KI-Clients (z.B. Claude Desktop), Skripte zu lesen und zu steuern. Der Server lauscht auf Port 3002 (fix, siehe Netzwerk-Konfiguration des Add-ons). Das Zugriffstoken findest du im MCP-Tab.",
+      "external_url": "Externe URL",
+      "external_url_desc": "Basis-URL, die im MCP-Tab angezeigt wird (z.B. https://mcp.example.com). Nur hinter einem Reverse Proxy oder Tunnel nötig.",
+      "trust_proxy": "Reverse Proxy vertrauen",
+      "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem MCP-Port steht — sonst können Aufrufer ihre IP fälschen.",
+      "allowlist": "IP-Allowlist",
+      "allowlist_desc": "Optional: erlaubte IP-Adressen oder IPv4-CIDR-Bereiche, kommagetrennt (z.B. 192.168.1.0/24). Leer = alle IPs mit gültigem Token."
     },
     "backup": {
       "schedule_enabled": "Automatisches Backup",

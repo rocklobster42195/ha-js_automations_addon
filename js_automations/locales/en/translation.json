@@ -312,6 +312,7 @@
       "danger": "Danger Zone",
       "mqtt": "MQTT Broker",
       "webhook": "Webhooks",
+      "mcp": "MCP Server",
       "backup": "Backup",
       "versioning": "Versioning"
     },
@@ -388,6 +389,16 @@
       "external_url_desc": "Base URL shown in the Webhook Panel for copying (e.g. https://myha.example.com). Only needed behind a reverse proxy. The webhook server always listens on port 3001 (fixed, see add-on network configuration).",
       "trust_proxy": "Trust Reverse Proxy",
       "trust_proxy_desc": "Reads the real caller IP from X-Forwarded-For. Only enable this when a trusted reverse proxy actually sits in front of the webhook port — otherwise callers can spoof their IP."
+    },
+    "mcp": {
+      "enabled": "Enable MCP server",
+      "enabled_desc": "Lets AI clients (e.g. Claude Desktop) read and control scripts. The server listens on port 3002 (fixed, see add-on network configuration). Find the access token in the MCP tab.",
+      "external_url": "External URL",
+      "external_url_desc": "Base URL shown in the MCP tab (e.g. https://mcp.example.com). Only needed behind a reverse proxy or tunnel.",
+      "trust_proxy": "Trust Reverse Proxy",
+      "trust_proxy_desc": "Reads the real caller IP from X-Forwarded-For. Only enable this when a trusted reverse proxy actually sits in front of the MCP port — otherwise callers can spoof their IP.",
+      "allowlist": "IP allowlist",
+      "allowlist_desc": "Optional: allowed IP addresses or IPv4 CIDR ranges, comma-separated (e.g. 192.168.1.0/24). Empty = any IP with a valid token."
     },
     "backup": {
       "schedule_enabled": "Automatic Backup",

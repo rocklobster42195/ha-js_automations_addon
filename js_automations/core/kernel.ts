@@ -30,6 +30,7 @@ import SettingsManager from './settings-manager'; // Static-like module
 import workerManager from './worker-manager'; // Singleton module
 import MqttManager from './mqtt-manager';
 import WebhookManager from './webhook-manager';
+import McpManager from './mcp-manager';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -111,6 +112,7 @@ class Kernel extends EventEmitter {
   entityManager!: EntityManager;
   mqttManager!: MqttManager;
   webhookManager!: WebhookManager;
+  mcpManager!: McpManager;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -183,6 +185,7 @@ class Kernel extends EventEmitter {
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.mcpManager = new McpManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
       this.gitManager = new GitManager(this.settingsManager, this.logManager, SCRIPTS_DIR);
       this.workerManager = workerManager;
@@ -365,6 +368,11 @@ class Kernel extends EventEmitter {
       if (this.io) this.io.emit('webhook_config_changed', webhookConfig);
     });
 
+    // Forward MCP status changes to the UI (MCP tab)
+    this.mcpManager.on('status_changed', (status: unknown) => {
+      if (this.io) this.io.emit('mcp_status_changed', status);
+    });
+
     // Forward git status changes to the UI (status-bar icon)
     this.gitManager.on('git_status_changed', async () => {
       if (!this.io) return;
@@ -383,6 +391,7 @@ class Kernel extends EventEmitter {
     this.bridge.connect();
     this.systemService.start();
     this.backupManager.start();
+    this.mcpManager.init();
 
     console.log('🚀 Kernel starting application...');
 

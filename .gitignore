@@ -86,6 +86,7 @@ js_automations/core/fs-service.js
 js_automations/core/settings-schema.js
 js_automations/core/webhook-manager.js
 js_automations/core/request-guard.js
+js_automations/core/mcp-manager.js
 js_automations/core/mqtt-manager.js
 js_automations/core/ha-connection.js
 js_automations/core/settings-manager.js
@@ -104,6 +105,7 @@ js_automations/core/secret-sentinels.js
 js_automations/services/system-service.js
 js_automations/routes/settings-route.js
 js_automations/routes/webhook-route.js
+js_automations/routes/mcp-route.js
 js_automations/routes/store-route.js
 js_automations/routes/ha-routes.js
 js_automations/routes/system-route.js
