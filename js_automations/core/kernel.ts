@@ -31,6 +31,8 @@ import workerManager from './worker-manager'; // Singleton module
 import MqttManager from './mqtt-manager';
 import WebhookManager from './webhook-manager';
 import McpManager from './mcp-manager';
+import { McpActivityLog } from './mcp-activity-log';
+import { McpProtocol } from './mcp-protocol';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -113,6 +115,8 @@ class Kernel extends EventEmitter {
   mqttManager!: MqttManager;
   webhookManager!: WebhookManager;
   mcpManager!: McpManager;
+  mcpActivity!: McpActivityLog;
+  mcpProtocol!: McpProtocol;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -186,6 +190,9 @@ class Kernel extends EventEmitter {
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.mcpManager = new McpManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.mcpActivity = new McpActivityLog();
+      this.mcpProtocol = new McpProtocol(this.settingsManager, this.logManager, this.mcpActivity, config.VERSION);
+      this.mcpManager.setHandler((req, res) => this.mcpProtocol.handle(req, res));
       this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
       this.gitManager = new GitManager(this.settingsManager, this.logManager, SCRIPTS_DIR);
       this.workerManager = workerManager;
@@ -371,6 +378,10 @@ class Kernel extends EventEmitter {
     // Forward MCP status changes to the UI (MCP tab)
     this.mcpManager.on('status_changed', (status: unknown) => {
       if (this.io) this.io.emit('mcp_status_changed', status);
+    });
+
+    this.mcpActivity.on('entry', (entry: unknown) => {
+      if (this.io) this.io.emit('mcp_activity', entry);
     });
 
     // Forward git status changes to the UI (status-bar icon)

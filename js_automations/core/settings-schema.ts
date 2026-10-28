@@ -8,6 +8,8 @@
  * 3. Defaults: Initialization of settings.json
  */
 
+import { MCP_TOOL_CATALOG, MCP_TOOL_GROUPS, toolSettingsKey } from './mcp-tool-catalog';
+
 interface SettingOption {
   value: string;
   label: string;
@@ -44,6 +46,25 @@ interface SettingSection {
   icon: string;
   items: SettingItem[];
 }
+
+// One on/off switch per MCP tool, grouped by read / control / write. Visible only while MCP is enabled.
+const mcpToolItems: SettingItem[] = MCP_TOOL_GROUPS.flatMap((group) => [
+  {
+    key: `tools_${group}_info`,
+    label: null,
+    type: 'info',
+    text: `settings.mcp.group_${group}`,
+    condition: { key: 'enabled', value: true },
+  },
+  ...MCP_TOOL_CATALOG.filter((tool) => tool.group === group).map((tool) => ({
+    key: toolSettingsKey(tool.name),
+    label: `settings.mcp.tools.${tool.name}`,
+    description: `settings.mcp.tools.${tool.name}_desc`,
+    type: 'boolean',
+    default: tool.defaultEnabled,
+    condition: { key: 'enabled', value: true },
+  })),
+]);
 
 const settingsSchema: SettingSection[] = [
   {
@@ -372,6 +393,7 @@ const settingsSchema: SettingSection[] = [
         default: '',
         condition: { key: 'enabled', value: true },
       },
+      ...mcpToolItems,
     ],
   },
   {

@@ -186,7 +186,7 @@ function startApp(): void {
   );
   const haRouter = haRoutesFactory(haConnector);
   const webhookRouter = webhookRouteFactory(kernel.webhookManager);
-  const mcpRouter = mcpRouteFactory(kernel.mcpManager);
+  const mcpRouter = mcpRouteFactory(kernel.mcpManager, kernel.mcpActivity);
   const backupRouter = backupRouteFactory(kernel.backupManager);
   const gitRouter = gitRouteFactory(kernel.gitManager);
   const restoreRouter = restoreRouteFactory(kernel.restoreManager, kernel.backupManager);
