@@ -66,6 +66,10 @@ export class McpPanel extends LitElement {
       flex: 1;
       min-width: 0;
     }
+    .value.wrap {
+      white-space: normal;
+      word-break: break-all;
+    }
     .badge {
       font-size: 0.72rem;
       font-weight: 700;
@@ -125,12 +129,14 @@ export class McpPanel extends LitElement {
       font-family: monospace;
       font-size: 0.76rem;
     }
+    /* Wraps instead of overflowing: on narrow screens target and meta drop to a second line. */
     .log-row {
       display: flex;
-      gap: 8px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 8px;
       padding: 2px 0;
       border-bottom: 1px solid #1c1c1c;
-      white-space: nowrap;
     }
     .log-time {
       color: #777;
@@ -142,10 +148,13 @@ export class McpPanel extends LitElement {
       color: #aaa;
       overflow: hidden;
       text-overflow: ellipsis;
-      flex: 1;
+      white-space: nowrap;
+      flex: 1 1 120px;
       min-width: 0;
     }
     .log-meta {
+      margin-left: auto;
+      white-space: nowrap;
       color: #666;
     }
     .log-ok {
@@ -276,11 +285,11 @@ export class McpPanel extends LitElement {
   private _renderActivity(e: McpActivityEntry) {
     const time = new Date(e.ts).toLocaleTimeString([], { hour12: false });
     return html`<div class="log-row" title=${e.error ?? ''}>
+      <span class=${e.ok ? 'log-ok' : 'log-fail'}>${e.ok ? '✓' : '✗'}</span>
       <span class="log-time">${time}</span>
       <span class="log-tool">${e.tool}</span>
       <span class="log-target">${e.target ?? ''}</span>
       <span class="log-meta">${e.ip} · ${e.durationMs} ms</span>
-      <span class=${e.ok ? 'log-ok' : 'log-fail'}>${e.ok ? '✓' : '✗'}</span>
     </div>`;
   }
 
@@ -314,7 +323,7 @@ export class McpPanel extends LitElement {
         </div>
         <div class="row">
           <span class="label">${this._t('settings.mcp_panel.endpoint', 'Endpoint')}</span>
-          <span class="value">${this._endpoint}</span>
+          <span class="value wrap">${this._endpoint}</span>
           ${this._copyBtn('url', this._t('settings.mcp_panel.copy', 'Copy'), () => void this._copy('url', this._endpoint))}
         </div>
         <div class="row">
