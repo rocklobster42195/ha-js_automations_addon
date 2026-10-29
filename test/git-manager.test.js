@@ -40,3 +40,24 @@ test('ahead counts unpushed commits and resets after push', async (t) => {
   await git.commit('third', { paths: ['a.ts'] });
   assert.equal((await git.getStatus()).ahead, 1);
 });
+
+test('a script whose deletion was committed can still be restored', async (t) => {
+  const { scriptsDir, git } = setup(t);
+  const file = path.join(scriptsDir, 'gone.ts');
+
+  writeFileSync(file, '// v1');
+  await git.commit('create', { paths: ['gone.ts'] });
+  writeFileSync(file, '// v2');
+  await git.commit('update', { paths: ['gone.ts'] });
+
+  require('node:fs').unlinkSync(file);
+  assert.equal((await git.listDeletedScripts()).length, 1, 'listed while the deletion is uncommitted');
+  await git.restoreDeletedScript('gone.ts');
+  assert.equal(require('node:fs').readFileSync(file, 'utf8'), '// v2', 'restored from HEAD');
+
+  require('node:fs').unlinkSync(file);
+  await git.commit('delete', { paths: ['gone.ts'], includeDeletions: true });
+  assert.equal((await git.listDeletedScripts()).length, 1, 'listed after the deletion was committed');
+  await git.restoreDeletedScript('gone.ts');
+  assert.equal(require('node:fs').readFileSync(file, 'utf8'), '// v2', 'restored from the commit before the deletion');
+});
