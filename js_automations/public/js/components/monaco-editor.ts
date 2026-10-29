@@ -67,6 +67,25 @@ interface SnippetDef {
   variants?: Record<string, string>;
 }
 
+const CODICON_FONT_ID = 'jsa-codicon-font';
+
+/**
+ * Monaco's icon font (find widget, hover actions, ...) is declared with @font-face inside
+ * editor.main.css. This component renders inside a Shadow DOM, where browsers ignore @font-face, and
+ * the stylesheet never reaches the document itself (document.styleSheets holds no Monaco sheet) — so
+ * the font was never requested and the icons showed up as hex codes (EA66, ...). Declaring it once
+ * on the document fixes that; the shadow-root stylesheet keeps providing everything else.
+ */
+export function ensureCodiconFont(): void {
+  if (document.getElementById(CODICON_FONT_ID)) return;
+  const style = document.createElement('style');
+  style.id = CODICON_FONT_ID;
+  style.textContent =
+    '@font-face{font-family:codicon;font-display:block;' +
+    'src:url(https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/base/browser/ui/codicons/codicon/codicon.ttf) format("truetype");}';
+  document.head.appendChild(style);
+}
+
 const REGISTER_DOMAINS = ['sensor', 'switch', 'select', 'number', 'text', 'button'];
 
 const SNIPPET_REGISTRY: SnippetDef[] = [
@@ -680,6 +699,7 @@ export class MonacoEditorElement extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    ensureCodiconFont();
     const bridge: JsaMonacoEditorBridge = {
       createModel: this.createModel,
       disposeModel: this.disposeModel,
