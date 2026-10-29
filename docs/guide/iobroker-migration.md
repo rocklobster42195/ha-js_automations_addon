@@ -176,8 +176,7 @@ const DEFAULT_CONFIG: BathroomConfig = {
 // Entity IDs, thresholds and times live in the store (Store Explorer → bathroom_motion_light_config).
 // Changes to the entity IDs need a restart of the script.
 const cfg = ha.persistent<BathroomConfig>('bathroom_motion_light_config', DEFAULT_CONFIG);
-// The type argument matters: without it TypeScript infers the literal type `false` and `reminderSent.value = true` fails.
-const reminderSent = ha.persistent<boolean>('bathroom_reminder_sent', false);
+const reminderSent = ha.persistent('bathroom_reminder_sent', false);
 
 const missing = [
   cfg.motionSensor,

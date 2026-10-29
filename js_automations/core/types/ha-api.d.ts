@@ -6,6 +6,12 @@
  * Dynamic parts (EntityID, GlobalStoreSchema, ServiceMap) are merged at runtime.
  */
 
+/**
+ * Widens a literal primitive type to its base type, so `ha.persistent('flag', false).value` is a `boolean` and not
+ * the literal type `false` (which would reject `flag.value = true`). Used by `ha.persistent()`.
+ */
+type JsaWiden<T> = T extends string ? string : T extends number ? number : T extends boolean ? boolean : T;
+
 // Placeholder for dynamically generated entities.d.ts content
 // This will be replaced by the actual content of entities.d.ts
 interface HAEntities {}
@@ -1208,7 +1214,7 @@ interface HA {
    * const enabled = ha.persistent('enabled', false);
    * enabled.value = true;
    */
-  persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: T };
+  persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: JsaWiden<T> };
 
   /**
    * Creates a deep proxy for an object stored in `ha.store`,

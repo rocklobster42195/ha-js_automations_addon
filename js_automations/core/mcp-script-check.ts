@@ -57,14 +57,26 @@ export function checkSyntax(source: string, filename: string): CheckIssue[] {
 
 export function checkTypes(source: string, filename: string, opts: CheckOptions): CheckIssue[] {
   const virtualPath = path.join(opts.targetDir, filename);
-  const apiTypes = [path.join(opts.storageDir, 'ha-api.d.ts'), path.join(opts.typesDir, 'ha-api.d.ts')].find((p) =>
-    fs.existsSync(p)
-  );
-  if (!apiTypes) return [];
-  const roots = [virtualPath, apiTypes];
-  for (const extra of ['entities.d.ts', 'services.d.ts']) {
-    const p = path.join(opts.storageDir, extra);
-    if (fs.existsSync(p)) roots.push(p);
+  // The bundled ha-api.d.ts is always current. The copy in the storage folder is created once and never
+  // refreshed, so it is only a fallback. It is mapped to the storage path, where its triple-slash references
+  // to the generated entities.d.ts / services.d.ts resolve; missing generated files get empty stand-ins.
+  const apiPath = path.join(opts.storageDir, 'ha-api.d.ts');
+  const read = (p: string): string | null => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
+  const apiSource = read(path.join(opts.typesDir, 'ha-api.d.ts')) ?? read(apiPath);
+  if (apiSource === null) return [];
+  const virtualFiles = new Map<string, string>([
+    [path.resolve(virtualPath), source],
+    [path.resolve(apiPath), apiSource],
+  ]);
+  const standIns: Record<string, string> = {
+    'entities.d.ts': 'interface HAEntities {}\ninterface GlobalStoreSchema {}\n',
+    'services.d.ts': 'interface ServiceMap {}\n',
+  };
+  const roots = [virtualPath, apiPath];
+  for (const [file, standIn] of Object.entries(standIns)) {
+    const p = path.join(opts.storageDir, file);
+    if (!fs.existsSync(p)) virtualFiles.set(path.resolve(p), standIn);
+    roots.push(p);
   }
 
   const options: ts.CompilerOptions = {
@@ -78,16 +90,18 @@ export function checkTypes(source: string, filename: string, opts: CheckOptions)
     types: [],
   };
   const host = ts.createCompilerHost(options);
-  const isVirtual = (f: string): boolean => path.resolve(f) === path.resolve(virtualPath);
+  const virtualSource = (f: string): string | undefined => virtualFiles.get(path.resolve(f));
   const baseGetSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (f, languageVersion, ...rest) =>
-    isVirtual(f)
-      ? ts.createSourceFile(f, source, languageVersion, true)
+  host.getSourceFile = (f, languageVersion, ...rest) => {
+    const text = virtualSource(f);
+    return text !== undefined
+      ? ts.createSourceFile(f, text, languageVersion, true)
       : baseGetSourceFile(f, languageVersion, ...rest);
+  };
   const baseFileExists = host.fileExists.bind(host);
-  host.fileExists = (f) => isVirtual(f) || baseFileExists(f);
+  host.fileExists = (f) => virtualSource(f) !== undefined || baseFileExists(f);
   const baseReadFile = host.readFile.bind(host);
-  host.readFile = (f) => (isVirtual(f) ? source : baseReadFile(f));
+  host.readFile = (f) => virtualSource(f) ?? baseReadFile(f);
 
   const program = ts.createProgram(roots, options, host);
   const sourceFile = program.getSourceFile(virtualPath);
