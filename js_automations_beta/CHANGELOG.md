@@ -1,3 +1,15 @@
+## [3.2.0-beta.2] - 2026-10-29
+
+### Type check on large instances
+
+Everything from [3.2.0-beta.0](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.0) and [3.2.0-beta.1](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.1) applies.
+
+**Fixes**
+
+- **Typings:** `ha.call()` no longer reports "Expression produces a union type that is too complex to represent". On instances with a few hundred entities or more, every call with an `entity_id` was flagged in the editor and in the type check of scripts written by an assistant. Entity-ID suggestions in `ha.call()` stay.
+
+---
+
 ## [3.2.0-beta.1] - 2026-10-29
 
 ### Fixes for the MCP-server beta
