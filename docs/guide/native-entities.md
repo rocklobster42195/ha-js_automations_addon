@@ -5,9 +5,8 @@
 ```javascript
 ha.register('sensor.outside_temp', {
   name: 'Outside Temperature',
-  icon: 'mdi:thermometer',
   unit: '°C',
-  device_class: 'temperature',
+  device_class: 'temperature', // no custom icon: Home Assistant uses the device class's own
   state_class: 'measurement',
   initial_state: 0,
 });
@@ -66,6 +65,28 @@ ha.register('sensor.outside_temp', {
 ```
 
 Combine with `expire_after` if a stale value should still eventually be flagged unavailable on its own.
+
+## Reacting to commands from Home Assistant
+
+An interactive entity (`switch`, `number`, `select`, `text`, `button`) receives its commands through the normal [`ha.on()`](../API_REFERENCE.md#5-reactive-triggers-haon) trigger on its own entity ID. The value HA sends arrives as `e.state`:
+
+```typescript
+ha.register('switch.garage_light', { name: 'Garage light' });
+
+ha.on('switch.garage_light', (e) => {
+  const on = e.state === 'ON'; // commands are the raw payload: 'ON' / 'OFF' for a switch (upper case!)
+  ha.call('light.turn_on', { entity_id: 'light.garage' }); // or whatever the switch should do
+  ha.update('switch.garage_light', on ? 'on' : 'off'); // confirm — see below
+});
+```
+
+Things that are easy to get wrong:
+
+- **Upper case:** a command arrives as `'ON'` / `'OFF'`, while the same entity's state (`ha.getState()`, state-change events from HA) is `'on'` / `'off'`. Compare case-insensitively (`e.state.toLowerCase()`) if a trigger can see both.
+- **No automatic state:** the entity does not switch by itself. Until the script calls `ha.update()`, HA keeps showing the last published state (`unknown` if there never was one). Publish the new state when the command succeeded, or publish the old one to refuse it.
+- **No old value:** for a command, `e.old_state` is `null` and `e.attributes` is empty.
+- **Local cache:** right after the command `ha.getStateValue(id)` returns the raw command string (`'ON'`), not `true`.
+- **`unknown` / `unavailable`** are never delivered as commands.
 
 ## Removing entities at runtime (`ha.unregister`)
 

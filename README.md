@@ -16,6 +16,9 @@
 > **Actively evolving:** JS Automations is stable enough for daily/production use, but it's still a young project under active development. New features and improvements land regularly, so expect more frequent updates than a fully mature add-on — check the [releases](https://github.com/rocklobster42195/ha-js_automations_addon/releases) for what's new. Feedback and bug reports are always welcome!
 
 > [!TIP]
+> **Try the 3.2 beta — let an AI assistant work with your scripts.** The beta adds an **MCP server**: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run and — only if you allow it — write and restart scripts. It is off by default and every tool has its own switch. Look for **"JS Automations (Beta)"** in the Add-on Store; [how stable and beta coexist](./js_automations_beta/README.md) (stop the stable add-on first). Feedback is very welcome: [open an issue](https://github.com/rocklobster42195/ha-js_automations_addon/issues).
+
+> [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md)
 
 > **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
@@ -43,6 +46,7 @@
 - **History & Computed Helpers (`ha.history`)** — Raw state history and long-term statistics, plus `trend()`, `derivative()`, `integral()`, `stats()`, `timeSince()` and `timeInState()` on HA entities or any data array.
 - **Global Libraries & Auto-NPM** — Write shared code once and `@include` it anywhere. npm packages listed in the script header are installed automatically.
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
+- **NEW: MCP Server (AI assistants)** — Let Claude Desktop (or any MCP client) list and read your scripts, check logs and errors, and — if you allow it — write and restart scripts. One-click install for Claude Desktop, a switch for every tool, writing off by default, every change saved as a Git commit. See the [MCP guide](./docs/guide/mcp.md).
 - **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()`. See the [Script Packs guide](./docs/guide/card-packs.md).
 
 ---
@@ -149,6 +153,9 @@ ha.log(weather.temp); // TypeScript knows this is a number
 
 The topics below have grown too deep for a README section — each has its own guide with worked examples and (where a picture beats a paragraph) screenshots:
 
+- **[Migrating from ioBroker](./docs/guide/iobroker-migration.md)** — ID mapping, API translation table and a worked example; also drives the AI prompt that converts ioBroker scripts.
+- **[MCP Server (AI assistants)](./docs/guide/mcp.md)** — connect Claude Desktop or another MCP client, tool permissions, security and privacy, maintainer mode.
+- **[Authoring Scripts](./docs/guide/authoring.md)** — script structure, header tags, conventions and cards in one place; the best starting point for writing (or prompting an AI to write) a JSA script.
 - **[Native Entities (`ha.register`)](./docs/guide/native-entities.md)** — MQTT Discovery entities, device grouping, staying available while stopped, `ha.unregister()`.
 - **[Notifications (`ha.notify` & `ha.ask`)](./docs/guide/notifications.md)** — simple, persistent, and actionable (button-response) notifications.
 - **[Creation Wizard](./docs/guide/creation-wizard.md)** — the **+** button's New / Upload / Import modes.

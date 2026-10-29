@@ -108,6 +108,10 @@ function initDevPanelTabs() {
       panel.classList.toggle('hidden', panel.id !== `dev-tab-${target}`);
     });
   });
+
+  // Tabs switched off in Settings → General (expert mode) — apply now and on every settings change.
+  window.applyDevTabVisibility?.(window.currentSettings);
+  window.addEventListener('settings-changed', (e) => window.applyDevTabVisibility?.(e.detail));
 }
 
 window.initDevPanelTabs = initDevPanelTabs;

@@ -741,8 +741,10 @@ export class WatchPanel extends LitElement {
 
     list.querySelector('.watch-hint')?.remove();
 
-    // Auto-switch to WATCH tab
+    // Auto-switch to WATCH tab. A paused script is waiting for "Continue", so the tab is shown again
+    // even if the user switched it off in the settings (until the next settings change re-hides it).
     const watchTab = document.querySelector('.log-pane-tab[data-tab="watch"]');
+    watchTab?.classList.remove('hidden');
     if (watchTab && !watchTab.classList.contains('active')) (watchTab as HTMLElement).click();
 
     const now = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });

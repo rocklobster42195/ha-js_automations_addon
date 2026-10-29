@@ -6,6 +6,12 @@
  * Dynamic parts (EntityID, GlobalStoreSchema, ServiceMap) are merged at runtime.
  */
 
+/**
+ * Widens a literal primitive type to its base type, so `ha.persistent('flag', false).value` is a `boolean` and not
+ * the literal type `false` (which would reject `flag.value = true`). Used by `ha.persistent()`.
+ */
+type JsaWiden<T> = T extends string ? string : T extends number ? number : T extends boolean ? boolean : T;
+
 // Placeholder for dynamically generated entities.d.ts content
 // This will be replaced by the actual content of entities.d.ts
 interface HAEntities {}
@@ -568,12 +574,15 @@ interface HA {
    * Creates a persistent entity in Home Assistant's registry.
    * Calling `ha.register()` again with the same `entityId` updates the configuration.
    *
+   * Commands from Home Assistant (switch, number, select, text) arrive through `ha.on(entityId, cb)`: `e.state` is the raw
+   * payload (`'ON'` / `'OFF'` for a switch, upper case) and `e.old_state` is `null`. The entity does not change by itself —
+   * confirm a command with `ha.update()`.
+   *
    * @example
    * ha.register('sensor.outside_temp', {
    *   name: 'Outside Temperature',
-   *   icon: 'mdi:thermometer',
    *   unit: '°C',
-   *   device_class: 'temperature',
+   *   device_class: 'temperature', // no custom icon: Home Assistant uses the device class's own
    *   state_class: 'measurement',
    *   initial_state: 0,
    * });
@@ -1208,7 +1217,7 @@ interface HA {
    * const enabled = ha.persistent('enabled', false);
    * enabled.value = true;
    */
-  persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: T };
+  persistent<T extends string | number | boolean>(key: string, defaultValue: T): { value: JsaWiden<T> };
 
   /**
    * Creates a deep proxy for an object stored in `ha.store`,

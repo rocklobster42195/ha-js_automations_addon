@@ -792,7 +792,10 @@ export class ScriptModal extends LitElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
       });
-      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Status ${res.status}`);
+      }
       window.alertToast?.show(this._t('wizard_from_repo_restore_success', 'Restored {{path}}.', { path }), {
         variant: 'success',
       });
@@ -801,8 +804,10 @@ export class ScriptModal extends LitElement {
       this.close();
     } catch (e) {
       window.alertToast?.show(
+        // The toast renders plain text, so the default HTML-escaping of interpolated values would show up literally.
         this._t('wizard_from_repo_restore_error', 'Restore failed: {{error}}', {
           error: e instanceof Error ? e.message : String(e),
+          interpolation: { escapeValue: false },
         })
       );
     } finally {

@@ -221,10 +221,25 @@ class GitManager extends EventEmitter {
     return results.sort((a, b) => (a.lastCommitDate < b.lastCommitDate ? 1 : -1));
   }
 
+  /**
+   * Last committed content of a file. Normally that is HEAD (deleted on disk, not yet committed). When the
+   * deletion itself was committed (an MCP assistant commits its deletions), HEAD no longer has the file:
+   * take it from the commit before the one that removed it.
+   */
+  private async _lastContent(filePath: string): Promise<string> {
+    try {
+      return await this.showFileAtCommit('HEAD', filePath);
+    } catch {
+      const last = (await this.git.log({ file: filePath, maxCount: 1 })).latest;
+      if (!last) throw new Error(`No history for ${filePath}`);
+      return this.showFileAtCommit(`${last.hash}^`, filePath);
+    }
+  }
+
   /** Writes a deleted script's last committed content back to disk. Does not commit — the file
    * just reappears as an uncommitted-clean script, same as anything restored from history. */
   async restoreDeletedScript(filePath: string): Promise<void> {
-    const content = await this.showFileAtCommit('HEAD', filePath);
+    const content = await this._lastContent(filePath);
     const absPath = path.join(this.scriptsDir, filePath);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf8');

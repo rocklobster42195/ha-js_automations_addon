@@ -26,6 +26,7 @@ type SettingsItemType =
   | 'git-test'
   | 'git-push'
   | 'restore-open'
+  | 'mcp-panel'
   | 'info'
   | 'text'
   | 'password';
@@ -952,6 +953,8 @@ export class SettingsView extends LitElement {
             ${this._t('settings.backup.restore_open_btn', 'Backup wiederherstellen...')}
           </button>
         `;
+      case 'mcp-panel':
+        return html`<mcp-panel></mcp-panel>`;
       case 'info':
         return html`<div class="settings-info-box">${unsafeHTML(this._t(item.text ?? ''))}</div>`;
       default:

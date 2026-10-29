@@ -35,6 +35,7 @@ import systemRouteFactory from './routes/system-route';
 import settingsRouter from './routes/settings-route';
 import haRoutesFactory from './routes/ha-routes';
 import webhookRouteFactory from './routes/webhook-route';
+import mcpRouteFactory from './routes/mcp-route';
 import backupRouteFactory from './routes/backup-route';
 import gitRouteFactory from './routes/git-route';
 import restoreRouteFactory from './routes/restore-route';
@@ -185,6 +186,21 @@ function startApp(): void {
   );
   const haRouter = haRoutesFactory(haConnector);
   const webhookRouter = webhookRouteFactory(kernel.webhookManager);
+  const mcpRouter = mcpRouteFactory(
+    kernel.mcpManager,
+    kernel.mcpActivity,
+    {
+      version: config.VERSION,
+      bridgePath: path.join(__dirname, 'mcpb', 'bridge.js'),
+      iconPath: path.resolve(__dirname, '..', 'icon.png'),
+    },
+    {
+      store: kernel.mcpFeedback,
+      isMaintainerMode: () =>
+        (kernel.settingsManager.getSettings() as { general?: { maintainer_mode?: boolean } }).general
+          ?.maintainer_mode === true,
+    }
+  );
   const backupRouter = backupRouteFactory(kernel.backupManager);
   const gitRouter = gitRouteFactory(kernel.gitManager);
   const restoreRouter = restoreRouteFactory(kernel.restoreManager, kernel.backupManager);
@@ -194,6 +210,7 @@ function startApp(): void {
   app.use('/api/settings', settingsRouter);
   app.use('/api/ha', haRouter);
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/mcp', mcpRouter);
   app.use('/api/backup', backupRouter);
   app.use('/api/git', gitRouter);
   app.use('/api/restore', restoreRouter);

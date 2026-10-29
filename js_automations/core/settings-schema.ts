@@ -8,6 +8,8 @@
  * 3. Defaults: Initialization of settings.json
  */
 
+import { MCP_TOOL_CATALOG, MCP_TOOL_GROUPS, toolSettingsKey } from './mcp-tool-catalog';
+
 interface SettingOption {
   value: string;
   label: string;
@@ -45,6 +47,46 @@ interface SettingSection {
   items: SettingItem[];
 }
 
+// One on/off switch per MCP tool, grouped by read / control / write. Visible only while MCP is enabled.
+const mcpToolItems: SettingItem[] = MCP_TOOL_GROUPS.flatMap((group) => [
+  {
+    key: `tools_${group}_info`,
+    label: null,
+    type: 'info',
+    text: `settings.mcp.group_${group}`,
+    condition: { key: 'enabled', value: true },
+  },
+  ...MCP_TOOL_CATALOG.filter((tool) => tool.group === group && !tool.maintainerOnly).map((tool) => ({
+    key: toolSettingsKey(tool.name),
+    label: `settings.mcp.tools.${tool.name}`,
+    description: `settings.mcp.tools.${tool.name}_desc`,
+    type: 'boolean',
+    default: tool.defaultEnabled,
+    condition: { key: 'enabled', value: true },
+  })),
+]);
+
+// Dev-tools tabs the user can switch off to save space (expert mode only). Keep in sync with
+// DEV_TABS in public/js/components/dev-tabs.ts.
+const DEV_TAB_NAMES = ['watch', 'repl', 'mqtt', 'events', 'webhooks', 'mcp'];
+const devTabItems: SettingItem[] = [
+  {
+    key: 'devtabs_info',
+    label: null,
+    type: 'info',
+    text: 'settings.general.devtabs_hint',
+    condition: { key: 'expert_mode', value: true },
+  },
+  ...DEV_TAB_NAMES.map((name) => ({
+    key: `devtab_${name}`,
+    label: `settings.general.devtab_${name}`,
+    type: 'boolean',
+    default: true,
+    indent: true,
+    condition: { key: 'expert_mode', value: true },
+  })),
+];
+
 const settingsSchema: SettingSection[] = [
   {
     id: 'general',
@@ -70,6 +112,16 @@ const settingsSchema: SettingSection[] = [
         type: 'boolean',
         default: false,
       },
+      {
+        key: 'maintainer_mode',
+        label: 'settings.general.maintainer_mode',
+        description: 'settings.general.maintainer_mode_desc',
+        type: 'boolean',
+        default: false,
+        indent: true,
+        condition: { key: 'expert_mode', value: true },
+      },
+      ...devTabItems,
       {
         key: 'confirm_delete',
         label: 'settings.general.confirm_delete',
@@ -334,6 +386,51 @@ const settingsSchema: SettingSection[] = [
         type: 'boolean',
         default: false,
       },
+    ],
+  },
+  {
+    id: 'mcp',
+    label: 'settings.sections.mcp',
+    icon: 'mdi:robot-outline',
+    items: [
+      {
+        key: 'enabled',
+        label: 'settings.mcp.enabled',
+        description: 'settings.mcp.enabled_desc',
+        type: 'boolean',
+        default: false,
+      },
+      {
+        key: 'panel',
+        label: null,
+        type: 'mcp-panel',
+        condition: { key: 'enabled', value: true },
+      },
+      {
+        key: 'external_url',
+        label: 'settings.mcp.external_url',
+        description: 'settings.mcp.external_url_desc',
+        type: 'text',
+        default: '',
+        condition: { key: 'enabled', value: true },
+      },
+      {
+        key: 'trust_proxy',
+        label: 'settings.mcp.trust_proxy',
+        description: 'settings.mcp.trust_proxy_desc',
+        type: 'boolean',
+        default: false,
+        condition: { key: 'enabled', value: true },
+      },
+      {
+        key: 'allowlist',
+        label: 'settings.mcp.allowlist',
+        description: 'settings.mcp.allowlist_desc',
+        type: 'text',
+        default: '',
+        condition: { key: 'enabled', value: true },
+      },
+      ...mcpToolItems,
     ],
   },
   {

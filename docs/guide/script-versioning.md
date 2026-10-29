@@ -36,3 +36,7 @@ Push is deliberately separate from Commit, so a flaky connection never blocks yo
 > **Token format differs by host.** GitHub takes the bare token. GitLab and Bitbucket usually expect `oauth2:TOKEN` or `username:TOKEN`.
 
 The token is injected into the push URL per request and never written to the repository's `.git/config`. In Settings it is masked — use the eye icon to reveal it.
+
+## Changes made by an AI assistant (MCP)
+
+When an AI assistant writes or deletes a script through the [MCP server](./mcp.md), JS Automations commits it automatically — you do not have to press **Commit**. First your current state of the file is saved as `mcp: snapshot before changing <file>`, then the change as `mcp: <description>`. If the scripts folder has no Git repository yet, one is created on the first such change. Use the History panel to compare an assistant's version with yours or to restore either one.

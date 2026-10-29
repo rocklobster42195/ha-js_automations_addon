@@ -313,6 +313,7 @@
       "danger": "Gefahrenzone",
       "mqtt": "MQTT Broker",
       "webhook": "Webhooks",
+      "mcp": "MCP-Server",
       "backup": "Backup",
       "versioning": "Versionierung"
     },
@@ -328,7 +329,16 @@
       "hide_mobile_toggle_in_desktop": "Mobil-Umschalter im Desktopmodus verbergen",
       "hide_mobile_toggle_in_desktop_desc": "Blendet den Umschalter zwischen Mobil- und Desktopansicht im Desktopmodus aus. Im Mobilmodus bleibt er immer sichtbar.",
       "language_option_de": "Deutsch",
-      "language_option_en": "English"
+      "language_option_en": "English",
+      "devtabs_hint": "Welche Dev-Tools-Tabs angezeigt werden. Nicht benötigte Tabs ausschalten spart Platz in der Tab-Leiste.",
+      "devtab_watch": "Tab WATCH",
+      "devtab_repl": "Tab REPL",
+      "devtab_mqtt": "Tab MQTT",
+      "devtab_events": "Tab EVENTS",
+      "devtab_webhooks": "Tab WEBHOOKS",
+      "devtab_mcp": "Tab MCP",
+      "maintainer_mode": "Maintainer-Modus (MCP)",
+      "maintainer_mode_desc": "Für JSA-Entwickler: sagt einem verbundenen KI-Assistenten, dass er mit den Entwicklern von JS Automations arbeitet. Er hält dann still API-, Feature- und Doku-Ideen fest (und meldet harte Fehler sofort). Die Notizen bleiben auf diesem Gerät und erscheinen im Dev-Tools-Tab MCP."
     },
     "editor": {
       "show_toolbar": "Toolbar anzeigen",
@@ -389,6 +399,53 @@
       "external_url_desc": "Basis-URL, die im Webhook-Panel zum Kopieren angezeigt wird (z.B. https://meine-ha.example.com). Nur hinter einem Reverse Proxy nötig. Der Webhook-Server lauscht immer auf Port 3001 (fix, siehe Netzwerk-Konfiguration des Add-ons).",
       "trust_proxy": "Reverse Proxy vertrauen",
       "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem Webhook-Port steht — sonst können Aufrufer ihre IP fälschen."
+    },
+    "mcp": {
+      "enabled": "MCP-Server aktivieren",
+      "enabled_desc": "Erlaubt KI-Clients (z.B. Claude Desktop), Skripte zu lesen und zu steuern. Der Server lauscht auf Port 3002 (fix, siehe Netzwerk-Konfiguration des Add-ons). Zugriffstoken und Einrichtung findest du direkt darunter.",
+      "external_url": "Externe URL",
+      "external_url_desc": "Basis-URL, die im MCP-Tab angezeigt wird (z.B. https://mcp.example.com). Nur hinter einem Reverse Proxy oder Tunnel nötig.",
+      "trust_proxy": "Reverse Proxy vertrauen",
+      "trust_proxy_desc": "Liest die echte Aufrufer-IP aus X-Forwarded-For. Nur aktivieren, wenn tatsächlich ein vertrauenswürdiger Reverse Proxy vor dem MCP-Port steht — sonst können Aufrufer ihre IP fälschen.",
+      "allowlist": "IP-Allowlist",
+      "allowlist_desc": "Optional: erlaubte IP-Adressen oder IPv4-CIDR-Bereiche, kommagetrennt (z.B. 192.168.1.0/24). Leer = alle IPs mit gültigem Token.",
+      "group_read": "<b>Lesen</b> — Skripte, Logs und Entities einsehen. Inhalte, die der KI-Client liest, gehen an dessen Anbieter.",
+      "group_control": "<b>Steuern</b> — Skripte starten und stoppen, Services aufrufen.",
+      "group_write": "<b>Schreiben</b> — Skripte ändern und löschen. Jede Änderung wird als Git-Commit abgelegt; hat der Skript-Ordner noch kein Git-Repository, wird es bei der ersten Änderung automatisch angelegt.",
+      "tools": {
+        "list_scripts": "Skripte auflisten",
+        "list_scripts_desc": "Name, Status, Header-Tags und Fehlerzustand aller Skripte und Libraries.",
+        "read_script": "Skript lesen",
+        "read_script_desc": "Quelltext eines Skripts (bekannte Secret-Muster werden maskiert).",
+        "get_logs": "Logs lesen",
+        "get_logs_desc": "Skript-Logs, filterbar nach Level und Zeitraum (Secrets werden maskiert).",
+        "get_script_errors": "Skript-Fehler lesen",
+        "get_script_errors_desc": "Letzter Fehler eines Skripts mit Stacktrace.",
+        "get_events": "Events lesen",
+        "get_events_desc": "Letzte Events aus dem Event Inspector.",
+        "list_entities": "Entities auflisten",
+        "list_entities_desc": "Entities aus Home Assistant mit State, filterbar nach Domain.",
+        "get_entity": "Entity lesen",
+        "get_entity_desc": "State und Attribute einer einzelnen Entity.",
+        "get_api_reference": "API-Referenz lesen",
+        "get_api_reference_desc": "Authoring-Guide, ha-api.d.ts und API-Referenz als Schreibhilfe für die KI.",
+        "get_store": "Store lesen",
+        "get_store_desc": "Inhalt von ha.store. Als Secret gespeicherte Werte werden nie ausgegeben, Werte unter Schlüsselnamen wie token oder password werden maskiert. Standardmäßig aus.",
+        "start_script": "Skript starten",
+        "start_script_desc": "Startet ein gestopptes Skript.",
+        "stop_script": "Skript stoppen",
+        "stop_script_desc": "Stoppt ein laufendes Skript.",
+        "restart_script": "Skript neu starten",
+        "restart_script_desc": "Startet ein Skript neu, z.B. nach einer Änderung.",
+        "call_service": "Service aufrufen",
+        "call_service_desc": "Führt einen Home-Assistant-Service aus und kann reale Geräte schalten. Standardmäßig aus.",
+        "write_script": "Skript schreiben",
+        "write_script_desc": "Legt Skripte und Libraries an oder ändert sie (mit Syntaxprüfung und Git-Commit). Standardmäßig aus.",
+        "write_card": "Karte schreiben",
+        "write_card_desc": "Schreibt die Lovelace-Karte eines Skripts. Standardmäßig aus.",
+        "delete_script": "Skript löschen",
+        "delete_script_desc": "Löscht ein Skript oder eine Library. Standardmäßig aus."
+      }
     },
     "backup": {
       "schedule_enabled": "Automatisches Backup",
@@ -486,6 +543,23 @@
       "capability_enforcement_desc": "Wenn aktiviert, werfen Skripte, die Netzwerk (http/https/fetch) oder Shell-Befehle (child_process) ohne @permission im Header nutzen, zur Laufzeit einen PermissionDeniedError.",
       "store_encryption": "ha.store-Secrets verschlüsseln",
       "store_encryption_desc": "Verschlüsselt Secrets, die mit ha.store.set(key, value, true) gespeichert werden. Der Schlüssel liegt in den privaten Daten dieses Add-ons. VOR dem Wechsel auf ein anderes Add-on (z. B. Beta zu Stable) oder eine ältere Version wieder ausschalten, sonst sind die Secrets dort nicht lesbar. Eine Klartext-Sicherungskopie (.storage/store.json.pre-encryption) bleibt 14 Tage erhalten. Die Add-on-Option store_encryption überschreibt diesen Schalter, falls gesetzt."
+    },
+    "mcp_panel": {
+      "status": "Status",
+      "running": "läuft auf Port {{port}}",
+      "not_running": "läuft noch nicht (startet gerade, oder Port {{port}} ist noch vom anderen Add-on belegt)",
+      "endpoint": "Endpunkt",
+      "token": "Zugriffstoken",
+      "copy": "Kopieren",
+      "reveal": "Anzeigen / verbergen",
+      "rotate": "Neues Token erzeugen",
+      "rotate_confirm": "Neues Zugriffstoken erzeugen? Jeder KI-Client mit dem alten Token funktioniert nicht mehr, bis du ihn aktualisierst.",
+      "copy_config": "Claude-Desktop-Konfiguration kopieren",
+      "config_hint": "Alternativ in claude_desktop_config.json einfügen (Einstellungen → Entwickler → Konfiguration bearbeiten). Benötigt Node.js auf dem Rechner, auf dem Claude Desktop läuft.",
+      "privacy": "Alles, was ein KI-Client über diese Tools liest (Skripte, Logs, Entity-Zustände), geht an dessen Anbieter. Secrets werden nur nach bestem Wissen gefiltert — verlass dich bei Zugangsdaten nicht darauf.",
+      "activity_hint": "Welche Tools ein KI-Client aufruft, siehst du im Dev-Tools-Tab „MCP“ (Expert-Modus).",
+      "install": "Für Claude Desktop installieren",
+      "install_hint": "Lädt eine .mcpb-Datei herunter — ein Doppelklick darauf richtet Claude Desktop ein. Die Datei enthält dein Zugriffstoken, gib sie nicht weiter. Claude Desktop muss auf einem Rechner laufen, der den Endpunkt erreicht."
     }
   },
   "statusbar": {
@@ -635,7 +709,20 @@
     "webhook_rotate_confirm": "Token für \"{{id}}\" erneuern? Externe Dienste, die den alten Token verwenden, müssen aktualisiert werden.",
     "webhook_delete": "Löschen",
     "webhook_delete_confirm": "Webhook \"{{id}}\" endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
-    "webhook_ip_filtered": "IP-gefiltert"
+    "webhook_ip_filtered": "IP-gefiltert",
+    "mcp_disabled": "Der MCP-Server ist ausgeschaltet. Aktiviere ihn unter Einstellungen → MCP-Server.",
+    "mcp_empty": "Noch keine Tool-Aufrufe. Sie erscheinen hier, sobald ein KI-Client den Server nutzt.",
+    "mcp_feedback_title": "JSA-Feedback vom Assistenten",
+    "mcp_feedback_delete": "Notiz löschen",
+    "mcp_feedback_hard_error": "harter Fehler",
+    "mcp_feedback_kind_bug": "Bug",
+    "mcp_feedback_kind_api": "API",
+    "mcp_feedback_kind_feature": "Feature",
+    "mcp_feedback_kind_docs": "Doku",
+    "mcp_feedback_kind_other": "Sonstiges",
+    "mcp_calls_title": "Tool-Aufrufe",
+    "mcp_copy": "Kopieren",
+    "mcp_details": "Details ein-/ausblenden"
   },
   "preview": {
     "card_config": "Karten-Konfiguration",
@@ -650,5 +737,13 @@
     "entity_discovered": "Entity automatisch aus Home Assistant erkannt.",
     "entity_manual": "Manuell konfiguriert.",
     "entity_guessed": "Geratener Standardwert — noch nicht gegen eine echte Entity bestätigt."
-  }
+  },
+  "external_update_reloaded": "\"{{filename}}\" wurde von einem KI-Assistenten geändert und neu geladen.",
+  "external_update_conflict": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, du hast aber ungespeicherte Änderungen. Beim Speichern wird dessen Version überschrieben (sie bleibt in der Git-Historie).",
+  "external_update_overwrite_confirm": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, nachdem du mit dem Bearbeiten begonnen hast. Mit deiner Version überschreiben? (Die KI-Version bleibt in der Git-Historie.)",
+  "external_update_banner": "Ein KI-Assistent hat diese Datei geändert, während du sie bearbeitet hast. Beim Speichern wird dessen Version überschrieben (sie bleibt in der Git-Historie).",
+  "external_update_load_theirs": "Meine Änderungen verwerfen und laden",
+  "external_update_deleted_closed": "\"{{filename}}\" wurde von einem KI-Assistenten gelöscht, der Tab wurde geschlossen.",
+  "external_update_deleted": "\"{{filename}}\" wurde von einem KI-Assistenten gelöscht, du hast aber ungespeicherte Änderungen.",
+  "external_update_deleted_banner": "Ein KI-Assistent hat diese Datei gelöscht, während du sie bearbeitet hast. Beim Speichern wird sie neu angelegt (die gelöschte Version bleibt in der Git-Historie)."
 }

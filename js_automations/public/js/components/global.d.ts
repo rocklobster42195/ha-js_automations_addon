@@ -204,6 +204,11 @@ export interface JsaTab {
   /** Monaco tabs only — last-saved content, compared against the live model to derive isDirty.
    * null on a not-yet-saved card tab, where every edit is dirty until the first save. */
   originalContent?: string | null;
+  /** The file was changed on disk (e.g. by an AI assistant over MCP) while this tab had unsaved
+   * edits. Saving asks for confirmation first, because it would overwrite that change. */
+  externalChange?: boolean;
+  /** An AI assistant deleted the file while this tab had unsaved edits; saving recreates it. */
+  deleted?: boolean;
   /** Card tabs only — the parent script's filename (card tab's own filename is
    * `${parentScript}[card]`). */
   parentScript?: string;
@@ -343,6 +348,7 @@ declare global {
     /** blockly-editor.js — highlights the block on the active .blocks canvas that threw. */
     highlightBlocklyError?: (scriptId: string, blockId: string, message: string) => void;
     currentSettings?: JsaSettings | null;
+    applyDevTabVisibility?: (settings: JsaSettings | null | undefined) => void;
     getHAStates?: () => Promise<JsaHaState[]>;
     cachedEntities?: JsaHaState[];
     /** In-flight dedup for fetchAllStatesDeduped() (see ha-entity-cache.ts). */

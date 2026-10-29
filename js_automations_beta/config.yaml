@@ -12,8 +12,10 @@ ingress: true
 ingress_port: 3000
 ports:
   3001/tcp: 3001
+  3002/tcp: 3002
 ports_description:
   3001/tcp: "Webhook receiver (ha.onWebhook)"
+  3002/tcp: "MCP server for AI clients"
 panel_icon: "mdi:robot-angry-outline"
 homeassistant_api: true
 hassio_api: true

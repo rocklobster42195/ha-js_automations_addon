@@ -30,6 +30,16 @@ import SettingsManager from './settings-manager'; // Static-like module
 import workerManager from './worker-manager'; // Singleton module
 import MqttManager from './mqtt-manager';
 import WebhookManager from './webhook-manager';
+import McpManager from './mcp-manager';
+import { McpActivityLog } from './mcp-activity-log';
+import { McpProtocol } from './mcp-protocol';
+import { McpEventBuffer } from './mcp-event-buffer';
+import { registerReadTools } from './mcp-tools-read';
+import { registerControlTools } from './mcp-tools-control';
+import { registerWriteTools } from './mcp-tools-write';
+import { registerPrompts } from './mcp-prompts';
+import { McpFeedbackStore } from './mcp-feedback-store';
+import { registerFeedbackTool } from './mcp-tools-feedback';
 import EntityManager from './entity-manager';
 import CompilerManager from './compiler-manager';
 import BlocklyCompiler from './blockly-compiler';
@@ -111,6 +121,11 @@ class Kernel extends EventEmitter {
   entityManager!: EntityManager;
   mqttManager!: MqttManager;
   webhookManager!: WebhookManager;
+  mcpManager!: McpManager;
+  mcpActivity!: McpActivityLog;
+  mcpProtocol!: McpProtocol;
+  mcpEvents!: McpEventBuffer;
+  mcpFeedback!: McpFeedbackStore;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -183,6 +198,10 @@ class Kernel extends EventEmitter {
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.mcpManager = new McpManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.mcpActivity = new McpActivityLog();
+      this.mcpProtocol = new McpProtocol(this.settingsManager, this.logManager, this.mcpActivity, config.VERSION);
+      this.mcpManager.setHandler((req, res) => this.mcpProtocol.handle(req, res));
       this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
       this.gitManager = new GitManager(this.settingsManager, this.logManager, SCRIPTS_DIR);
       this.workerManager = workerManager;
@@ -197,6 +216,50 @@ class Kernel extends EventEmitter {
       // CardManager — handles Script Pack card installation
       this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
       this.workerManager.cardManager = this.cardManager;
+
+      // MCP tools (the protocol layer only exposes those switched on in the settings)
+      this.mcpEvents = new McpEventBuffer();
+      registerReadTools(this.mcpProtocol, {
+        workerManager: this.workerManager,
+        logManager: this.logManager,
+        storeManager: this.storeManager,
+        haConnector: this.haConnector,
+        cardManager: this.cardManager,
+        eventBuffer: this.mcpEvents,
+        scriptsDir: SCRIPTS_DIR,
+        librariesDir: config.LIBRARIES_DIR,
+        docsDir: path.resolve(__dirname, '../../docs'),
+        typesDir: path.join(__dirname, 'types'),
+        storageDir: STORAGE_DIR,
+      });
+      registerControlTools(this.mcpProtocol, {
+        workerManager: this.workerManager,
+        depManager: this.depManager,
+        stateManager: this.stateManager,
+        haConnector: this.haConnector,
+        scriptsDir: SCRIPTS_DIR,
+        librariesDir: config.LIBRARIES_DIR,
+        notifyStatusUpdate: () => this.io?.emit('status_update'),
+      });
+      this.mcpFeedback = new McpFeedbackStore(STORAGE_DIR);
+      registerFeedbackTool(this.mcpProtocol, { store: this.mcpFeedback });
+      registerPrompts(this.mcpProtocol, {
+        docsDir: path.resolve(__dirname, '../../docs'),
+        typesDir: path.join(__dirname, 'types'),
+      });
+      registerWriteTools(this.mcpProtocol, {
+        workerManager: this.workerManager,
+        cardManager: this.cardManager,
+        depManager: this.depManager,
+        gitManager: this.gitManager,
+        storeManager: this.storeManager,
+        scriptsDir: SCRIPTS_DIR,
+        librariesDir: config.LIBRARIES_DIR,
+        storageDir: STORAGE_DIR,
+        typesDir: path.join(__dirname, 'types'),
+        notifyStatusUpdate: () => this.io?.emit('status_update'),
+        notifyContentChanged: (filename) => this.io?.emit('script_content_changed', { filename, source: 'mcp' }),
+      });
 
       // Create SystemService before EntityManager so we can pass it
       this.systemService = new SystemService(config, this.workerManager);
@@ -365,6 +428,18 @@ class Kernel extends EventEmitter {
       if (this.io) this.io.emit('webhook_config_changed', webhookConfig);
     });
 
+    // Forward MCP status changes to the UI (MCP tab)
+    this.mcpManager.on('status_changed', (status: unknown) => {
+      if (this.io) this.io.emit('mcp_status_changed', status);
+    });
+
+    this.mcpFeedback.on('changed', () => {
+      if (this.io) this.io.emit('mcp_feedback_changed');
+    });
+    this.mcpActivity.on('entry', (entry: unknown) => {
+      if (this.io) this.io.emit('mcp_activity', entry);
+    });
+
     // Forward git status changes to the UI (status-bar icon)
     this.gitManager.on('git_status_changed', async () => {
       if (!this.io) return;
@@ -383,6 +458,7 @@ class Kernel extends EventEmitter {
     this.bridge.connect();
     this.systemService.start();
     this.backupManager.start();
+    this.mcpManager.init();
 
     console.log('🚀 Kernel starting application...');
 
@@ -632,6 +708,9 @@ class Kernel extends EventEmitter {
           'Home Assistant restart requested — the next disconnect will be treated as planned.'
         );
       }
+
+      // Keep recent events for the MCP get_events tool (only while MCP is enabled)
+      if (this.mcpManager.isEnabled()) this.mcpEvents.push(event);
 
       // Forward all events to the Event Inspector (opt-in via bridge)
       this.emit('ha_event', event);
