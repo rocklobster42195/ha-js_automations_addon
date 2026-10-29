@@ -16,6 +16,9 @@
 > **Actively evolving:** JS Automations is stable enough for daily/production use, but it's still a young project under active development. New features and improvements land regularly, so expect more frequent updates than a fully mature add-on — check the [releases](https://github.com/rocklobster42195/ha-js_automations_addon/releases) for what's new. Feedback and bug reports are always welcome!
 
 > [!TIP]
+> **Try the 3.2 beta — let an AI assistant work with your scripts.** The beta adds an **MCP server**: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run and — only if you allow it — write and restart scripts. It is off by default and every tool has its own switch. Look for **"JS Automations (Beta)"** in the Add-on Store; [how stable and beta coexist](./js_automations_beta/README.md) (stop the stable add-on first). Feedback is very welcome: [open an issue](https://github.com/rocklobster42195/ha-js_automations_addon/issues).
+
+> [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md)
 
 > **Script Library:** Browse and import ready-to-use scripts → [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/)
