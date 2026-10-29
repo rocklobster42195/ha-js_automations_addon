@@ -12,8 +12,9 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config
 - 16 tools in three groups (read, control, write), each with its own switch. Writing, `call_service`, `delete_script` and `get_store` are **off by default**
 - Writes are syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; a script's Lovelace card is preserved; nothing is restarted automatically
-- Open editor tabs reload when an assistant changes the file; unsaved edits are kept and saving asks before overwriting
-- Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned
+- Open editor tabs reload when an assistant changes the file (a card preview too); unsaved edits are kept, a lasting banner points out the conflict and saving asks before overwriting; a script an assistant deletes closes its tab
+- Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned. Script source and log text are marked as untrusted data for the assistant
+- `get_api_reference` can search the documentation and return just the matching passages
 - Prompts **New JSA script**, **Plan a JSA script (interview)** and **Convert an ioBroker script**, plus the documentation as resources
 - New [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) for moving ioBroker scripts to JS Automations (ID mapping, API translation table, worked example)
 - Assistants keep credentials out of script source: they are empty fields of the persisted config, with a warning and a persistent notification until the user fills them in
@@ -33,7 +34,11 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 **Fixes**
 
-- None — this release only adds features.
+- `@card dev` is honoured again by `ha.frontend.installCard()`: the card is no longer written to `www` and registered as a Lovelace resource while the script is still in preview mode
+- The card preview reloads after the card was changed from outside the editor
+- **New script → From repo** can restore a script whose deletion was already committed; a failed restore shows the plain error message instead of escaped JSON
+- `ha.persistent('key', false)` is typed as `boolean` instead of the literal `false`, so assigning `true` no longer fails the type check
+- Documentation: how a native entity receives commands from Home Assistant (`'ON'` / `'OFF'` through `ha.on()`), all `ha.on` filter operators with and without a threshold
 
 
 ---
