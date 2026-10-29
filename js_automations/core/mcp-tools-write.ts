@@ -83,7 +83,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
   const commitFile = async (fullPath: string, message: string, includeDeletions = false): Promise<string> => {
     try {
       const r = await gitManager.commit(message, { paths: [rel(fullPath)], includeDeletions });
-      return r.hash ? `git commit ${r.hash}` : 'git: nothing new to commit';
+      return r.hash ? `git commit ${r.hash}` : 'git: no commit needed (file is unchanged since the last commit)';
     } catch (e) {
       return `git commit FAILED (${(e as Error).message}) — the change itself was applied`;
     }
