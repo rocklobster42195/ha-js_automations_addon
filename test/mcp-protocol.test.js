@@ -138,6 +138,12 @@ test('MCP client can list and call tools; switches and auth are enforced', async
     assert.ok(res.error || res.isError, 'call must fail');
   });
 
+  await t.test('a connecting client is noted in the system log, with its name and address', () => {
+    const line = logs.find((l) => /Client connected: test 1.0.0 from /.test(l.message));
+    assert.ok(line, JSON.stringify(logs));
+    assert.equal(line.level, 'info');
+  });
+
   await t.test('every call lands in the activity log (newest first)', () => {
     const entries = activity.list();
     assert.deepEqual(

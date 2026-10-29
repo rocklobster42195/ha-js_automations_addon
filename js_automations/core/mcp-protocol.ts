@@ -124,6 +124,7 @@ export class McpProtocol {
 
   async handle(req: Request, res: Response): Promise<void> {
     const ip = (req.ip as string) || 'unknown';
+    this._logConnection(req.body, ip);
     const server = new McpServer(
       { name: 'js-automations', version: this._version },
       {
@@ -180,6 +181,17 @@ export class McpProtocol {
     });
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
+  }
+
+  /** Notes new client connections in the system log, so "does my AI client reach JSA at all?" can be answered. */
+  private _logConnection(body: unknown, ip: string): void {
+    for (const message of Array.isArray(body) ? body : [body]) {
+      if (!message || typeof message !== 'object' || (message as { method?: string }).method !== 'initialize') continue;
+      const info = (message as { params?: { clientInfo?: { name?: unknown; version?: unknown } } }).params?.clientInfo;
+      const name = typeof info?.name === 'string' ? info.name.slice(0, 60) : 'unknown client';
+      const version = typeof info?.version === 'string' ? ` ${info.version.slice(0, 20)}` : '';
+      this._logManager.add('info', 'System', `[MCP] Client connected: ${name}${version} from ${ip}`);
+    }
   }
 
   private async _runTool(def: McpToolDefinition, args: Record<string, unknown>, ip: string) {
