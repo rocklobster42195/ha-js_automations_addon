@@ -79,11 +79,22 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
 
   const rel = (fullPath: string): string => path.relative(deps.scriptsDir, fullPath).split(path.sep).join('/');
 
+  const NO_COMMIT = 'git: nothing to commit';
+
+  /**
+   * Safety commit of local edits that were not in Git yet, taken before an MCP change overwrites the file.
+   * Returns null when there was nothing to save (the usual case), so the result does not mention it at all.
+   */
+  const snapshotNote = async (fullPath: string, message: string): Promise<string | null> => {
+    const r = await commitFile(fullPath, message);
+    return r === NO_COMMIT ? null : `saved earlier uncommitted edits first: ${r}`;
+  };
+
   /** Commits just this file; never throws (a Git problem must not undo or block the change). */
   const commitFile = async (fullPath: string, message: string, includeDeletions = false): Promise<string> => {
     try {
       const r = await gitManager.commit(message, { paths: [rel(fullPath)], includeDeletions });
-      return r.hash ? `git commit ${r.hash}` : 'git: no commit needed (file is unchanged since the last commit)';
+      return r.hash ? `git commit ${r.hash}` : NO_COMMIT;
     } catch (e) {
       return `git commit FAILED (${(e as Error).message}) — the change itself was applied`;
     }
@@ -183,7 +194,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const verb = existing ? 'update' : 'create';
         const commitMessage = `mcp: ${args.message ? String(args.message) : `${verb} ${name}`}`;
         const notes: string[] = [];
-        if (existing) notes.push(`snapshot: ${await commitFile(fullPath, `mcp: snapshot before changing ${name}`)}`);
+        if (existing) {
+          const snap = await snapshotNote(fullPath, `mcp: snapshot before changing ${name}`);
+          if (snap) notes.push(snap);
+        }
         writeAtomic(fullPath, content);
         notes.push(await commitFile(fullPath, commitMessage));
         deps.notifyStatusUpdate();
@@ -250,9 +264,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           ? script.replace(CARD_BLOCK, () => block)
           : `${script.trimEnd()}\n\n${block}\n`;
 
-        const notes = [
-          `snapshot: ${await commitFile(found.fullPath, `mcp: snapshot before changing card of ${name}`)}`,
-        ];
+        const notes: string[] = [];
+        const snap = await snapshotNote(found.fullPath, `mcp: snapshot before changing card of ${name}`);
+        if (snap) notes.push(snap);
         writeAtomic(found.fullPath, next);
         notes.push(
           await commitFile(found.fullPath, `mcp: ${args.message ? String(args.message) : `update card of ${name}`}`)
@@ -287,7 +301,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const name = path.basename(found.fullPath);
         const displayName = (ScriptHeaderParser.parse(found.fullPath) as { name?: string | null }).name || name;
 
-        const notes = [`snapshot: ${await commitFile(found.fullPath, `mcp: snapshot before deleting ${name}`)}`];
+        const notes: string[] = [];
+        const snap = await snapshotNote(found.fullPath, `mcp: snapshot before deleting ${name}`);
+        if (snap) notes.push(snap);
         workerManager.stopScript(name, 'deleted');
         fs.unlinkSync(found.fullPath);
         workerManager.purgeWebhooksForScript(name);
