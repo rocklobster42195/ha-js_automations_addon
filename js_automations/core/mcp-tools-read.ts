@@ -344,11 +344,18 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       Object.entries(API_TOPICS)
         .map(([name, t]) => `${name} (${t.about})`)
         .join(' ') +
-      ' Without a topic, only this topic list is returned.',
-    inputSchema: { topic: z.enum(Object.keys(API_TOPICS) as [string, ...string[]]).optional() },
+      ' Without a topic, only this topic list is returned. The api_reference and types topics are large: pass "search" ' +
+      '(keywords, e.g. "ha.on filter threshold") to get only the matching passages instead of a whole topic; combine it ' +
+      'with a topic to search just that one.',
+    inputSchema: {
+      topic: z.enum(Object.keys(API_TOPICS) as [string, ...string[]]).optional(),
+      search: z.string().min(2).max(100).optional().describe('Keywords; every word must appear in a passage'),
+    },
     readOnly: true,
     handler: (args) => {
       const topic = args.topic as string | undefined;
+      const search = typeof args.search === 'string' ? args.search.trim() : '';
+      if (search) return text(searchDocs(deps, search, topic));
       if (!topic) {
         return text(
           Object.entries(API_TOPICS)
@@ -365,6 +372,60 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       }
     },
   });
+}
+
+const SEARCH_CONTEXT_LINES = 6;
+const SEARCH_MAX_CHARS = 12000;
+
+/** Keyword search over the documentation topics: passages (a few lines around each match), not whole files. */
+function searchDocs(deps: McpReadToolDeps, query: string, onlyTopic?: string): string {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let size = 0;
+  let truncated = false;
+
+  for (const [name, spec] of Object.entries(API_TOPICS)) {
+    if (onlyTopic && name !== onlyTopic) continue;
+    let lines: string[];
+    try {
+      lines = fs
+        .readFileSync(path.join(spec.dir === 'docs' ? deps.docsDir : deps.typesDir, spec.file), 'utf8')
+        .split('\n');
+    } catch {
+      continue;
+    }
+    // A passage matches when every word occurs within the window around a line that holds the first word;
+    // overlapping windows are merged.
+    const hits: Array<[number, number]> = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].toLowerCase().includes(words[0])) continue;
+      const from = Math.max(0, i - SEARCH_CONTEXT_LINES);
+      const to = Math.min(lines.length - 1, i + SEARCH_CONTEXT_LINES);
+      const around = lines
+        .slice(from, to + 1)
+        .join('\n')
+        .toLowerCase();
+      if (!words.every((w) => around.includes(w))) continue;
+      const last = hits[hits.length - 1];
+      if (last && from <= last[1] + 1) last[1] = to;
+      else hits.push([from, to]);
+    }
+    for (const [from, to] of hits) {
+      const passage = `--- ${name}, lines ${from + 1}-${to + 1} ---\n${lines.slice(from, to + 1).join('\n')}`;
+      if (size + passage.length > SEARCH_MAX_CHARS) {
+        truncated = true;
+        break;
+      }
+      out.push(passage);
+      size += passage.length;
+    }
+    if (truncated) break;
+  }
+
+  if (!out.length) {
+    return `No passage contains all of: ${words.join(', ')}. Try fewer or different keywords, or call a topic without "search".`;
+  }
+  return out.join('\n\n') + (truncated ? '\n\n… more matches; narrow the search or pass a topic.' : '');
 }
 
 /** Builds a predicate matching log entries that belong to a script (by file name or display name). */

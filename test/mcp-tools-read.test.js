@@ -34,6 +34,17 @@ function setup(t) {
   for (const [name, content] of Object.entries(files)) writeFileSync(path.join(scriptsDir, name), content);
   writeFileSync(path.join(librariesDir, 'helper.js'), `/** @name Helper */\nexports.x = 1;\n`);
   writeFileSync(path.join(docsDir, 'guide', 'authoring.md'), '# Authoring guide');
+  writeFileSync(
+    path.join(docsDir, 'API_REFERENCE.md'),
+    [
+      '# API',
+      '',
+      ...Array(30).fill('filler'),
+      'ha.on filter: ne, eq, gt with a threshold',
+      ...Array(30).fill('more filler'),
+      'ha.log writes a line',
+    ].join('\n')
+  );
   writeFileSync(path.join(typesDir, 'ha-api.d.ts'), 'declare const ha: any;');
 
   const now = Date.now();
@@ -297,5 +308,19 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.equal((await call('get_api_reference', { topic: 'authoring' })).text, '# Authoring guide');
     assert.equal((await call('get_api_reference', { topic: 'types' })).text, 'declare const ha: any;');
     assert.equal((await call('get_api_reference', { topic: 'cards' })).isError, true, 'file missing in this fixture');
+  });
+
+  await t.test('get_api_reference: keyword search returns passages, not whole topics', async () => {
+    const hit = await call('get_api_reference', { search: 'Filter THRESHOLD' });
+    assert.match(hit.text, /--- api_reference, lines \d+-\d+ ---/);
+    assert.ok(hit.text.includes('ha.on filter: ne, eq, gt with a threshold'));
+    assert.ok(!hit.text.includes('ha.log writes a line'), 'far-away lines are left out');
+    assert.ok(hit.text.length < 600);
+
+    assert.match(
+      (await call('get_api_reference', { search: 'threshold', topic: 'authoring' })).text,
+      /^No passage contains/
+    );
+    assert.match((await call('get_api_reference', { search: 'nonexistentword' })).text, /^No passage contains/);
   });
 });
