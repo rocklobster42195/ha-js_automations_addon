@@ -70,6 +70,8 @@ test('prompts, resources and server instructions reach the client', async (t) =>
     assert.match(text, /get_api_reference with topic "authoring"/);
     assert.match(text, /DEFAULT_CONFIG/);
     assert.match(text, /restart_script/);
+    assert.match(text, /ONE ha\.persistent object per script/);
+    assert.match(text, /never one store key per value/);
     assert.match(text, /EMPTY field of the persisted config/);
     assert.match(text, /get_store shows an empty credential field as empty/);
     assert.match(text, /persistent notification/);

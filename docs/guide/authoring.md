@@ -65,11 +65,11 @@ ha.log('Garage Watch started.');
 
 ### Where configuration lives
 
-| Put it in                               | What                                                                                                                                                               | Why                                                                                                                                                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `const CONFIG` at the top of the script | Entity IDs, thresholds, times, texts                                                                                                                               | Versioned in Git, visible in the editor, an assistant can correct it with `write_script`; a changed value takes effect with the next restart                                                    |
-| `ha.persistent()`                       | Runtime state that must survive a restart ("reminder already sent"), and values the user is meant to change **while the script runs** (a card, the Store Explorer) | Survives restarts and script edits; **not** in Git; after the first start the store entry wins over the constant in the code (name that constant `DEFAULT_CONFIG`, it only seeds the first run) |
-| The store, empty by default             | Credentials                                                                                                                                                        | Never in source; see [Credentials](#credentials)                                                                                                                                                |
+| Put it in                               | What                                                                                                                                                                                                                                     | Why                                                                                                                                                                                             |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `const CONFIG` at the top of the script | Entity IDs, thresholds, times, texts                                                                                                                                                                                                     | Versioned in Git, visible in the editor, an assistant can correct it with `write_script`; a changed value takes effect with the next restart                                                    |
+| `ha.persistent()`                       | Runtime state that must survive a restart ("reminder already sent") — **one object `<script>_state`** for all of it — and values the user is meant to change **while the script runs** (a card, the Store Explorer) in `<script>_config` | Survives restarts and script edits; **not** in Git; after the first start the store entry wins over the constant in the code (name that constant `DEFAULT_CONFIG`, it only seeds the first run) |
+| The store, empty by default             | Credentials                                                                                                                                                                                                                              | Never in source; see [Credentials](#credentials)                                                                                                                                                |
 
 A mapping of entity IDs that is still being corrected belongs in `CONFIG`: once it is persisted, a wrong ID can only be fixed in the Store Explorer, and the code change would have no effect. Pass the type explicitly for objects (`ha.persistent<MyConfig>(...)`) so the stored shape wins over inference.
 
@@ -114,6 +114,24 @@ Rules:
 - `ha.persistent(key, default)` for runtime state that must survive restarts and for values the user changes while the script runs (auto-saves on mutation).
 - `ha.store` for values shared across scripts. Pass `true` / `{ secret: true }` to store a value as a secret — encrypted on disk (when store encryption is on) and masked in the UI. **Never hard-code tokens or passwords in source** — see [Credentials](#credentials).
 - Keep entity IDs, thresholds and times in the typed `CONFIG` constant; keep hard-wired internals as `const`s next to it.
+- **Restart-proof values** (flags, counters, "last sent" timestamps) go into **one** `ha.persistent` object per script, named `<script>_state` and typed with an interface — not one store key per value. The store is shared by all scripts; a script that leaves dozens of single keys behind makes it unreadable. Only a lone value may be a plain key (`ha.persistent('garage_alert_sent', false)`).
+
+```typescript
+interface GarageState {
+  alertSent: boolean;
+  lastOpened: number; // epoch ms
+  openCount: number;
+}
+
+// One store key holds everything that has to survive a restart; changes are saved automatically.
+const state = ha.persistent<GarageState>('garage_watch_state', { alertSent: false, lastOpened: 0, openCount: 0 });
+
+state.openCount++;
+state.lastOpened = Date.now();
+state.alertSent = false;
+```
+
+At most two keys per script: `<script>_state` (runtime state) and `<script>_config` (only if values are tunable at runtime or it holds credentials, see below).
 
 ### Credentials
 
@@ -255,6 +273,7 @@ Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `
 
 - [ ] Header first; only needed tags; `@permission` for network / fs / exec / webhook / mqtt
 - [ ] Order: header → types → config → logic
+- [ ] Restart-proof values live in **one** `<script>_state` object (a lone flag may be a plain key), not in many single keys
 - [ ] One typed `CONFIG` constant (entity IDs, thresholds, times, texts); only runtime state and runtime-tunable values persisted; credentials are **empty** fields of the persisted config (or `ha.store` secrets), never in source, with a warning + persistent notification while they are empty
 - [ ] Entities created with `ha.register()`; IDs predictable (no `device` option if the exact ID matters)
 - [ ] Timeouts and error handling around external calls
