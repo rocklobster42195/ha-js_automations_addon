@@ -706,8 +706,11 @@ interface HA {
    */
   unregister(entityId: string): void;
 
-  /** A live cache of all Home Assistant entity states. */
-  readonly states: HAEntities;
+  /**
+   * A live cache of all Home Assistant entity states. Known entity IDs are typed exactly; an ID held in a
+   * variable or config (`ha.states[CONFIG.sensor]`) gives `HAState | undefined`.
+   */
+  readonly states: HAEntities & { [entityId: string]: HAState | undefined };
   /** Gets the current state object for a given entity ID. */
   getState<K extends EntityID>(entityId: K): K extends keyof HAEntities ? HAEntities[K] : HAState | undefined;
   /** Gets a specific attribute value for an entity. */

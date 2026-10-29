@@ -384,7 +384,9 @@ class WorkerManager extends EventEmitter {
       }
       return 'string';
     }
-    if (field.selector?.text !== undefined) return 'string';
+    // HA's text selector also takes numbers for numeric fields (e.g. number.set_value is declared as text but
+    // accepts 22 as well as "22"), so a number must not be flagged as a type error.
+    if (field.selector?.text !== undefined) return 'string | number';
     return 'any';
   }
 
