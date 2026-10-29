@@ -67,3 +67,36 @@ test('the check uses the bundled ha-api.d.ts, not a stale copy in the storage fo
   assert.equal(unknown.length, 1, 'the real, current types are applied');
   assert.match(unknown[0], /definitelyNotAnApi/);
 });
+
+test('ha.states can be indexed with an entity ID held in a variable, known IDs stay precisely typed', (t) => {
+  const entities = 'interface HAEntities { "light.kitchen": HAState<HAAttributes>; }';
+  assert.deepEqual(
+    typeIssues(
+      t,
+      [
+        'const id: string = "sensor.anything";',
+        "const lux = ha.states[id]?.state === 'on';",
+        "const kitchen: string = ha.states['light.kitchen'].state;",
+        'const cfg = { dark: "binary_sensor.dark" };',
+        "if (ha.states[cfg.dark]?.state === 'off') ha.log('dark');",
+      ].join('\n'),
+      { 'entities.d.ts': entities }
+    ),
+    []
+  );
+});
+
+test('a service field with a text selector accepts a number as well as a string', (t) => {
+  const services = 'interface ServiceMap { number: { set_value: { value: string | number } } }';
+  assert.deepEqual(
+    typeIssues(
+      t,
+      [
+        "ha.call('number.set_value', { entity_id: 'number.x', value: 42 });",
+        "ha.call('number.set_value', { entity_id: 'number.x', value: '42' });",
+      ].join('\n'),
+      { 'services.d.ts': services }
+    ),
+    []
+  );
+});

@@ -209,7 +209,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         if (previous !== null && previous === content) lines.push('The content is identical to the previous version.');
         if (check.typeIssues.length) {
           lines.push(
-            `Type warnings (${check.typeIssues.length}) — the file was written anyway; fix them if they are real:\n${formatIssues(check.typeIssues)}\n` +
+            `Type warnings (${check.typeIssues.length}) — the file was written anyway. Fix every warning that points to a real mistake with another write_script call before you report the script as done, and tell the user about any you leave on purpose:\n${formatIssues(check.typeIssues)}\n` +
               'If a warning is about the payload of ha.call(), the typed payload of every service is in get_api_reference topic "services" (search "domain.service", e.g. "media_player.play_media").'
           );
         } else if (name.endsWith('.ts')) {
