@@ -130,6 +130,24 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.equal(readFileSync(file('demo.ts'), 'utf8'), before);
   });
 
+  await t.test('credentials in the source are flagged, empty persisted credentials are not', async () => {
+    const leaky = await call('write_script', {
+      filename: 'leaky.ts',
+      content: "/** @name Leaky */\nconst apiKey = 'sk_live_abcdef123456';\nha.log('x');\n",
+    });
+    assert.equal(leaky.isError, false);
+    assert.match(leaky.text, /WARNING: 1 value\(s\) in the source look like credentials/);
+    assert.match(leaky.text, /empty fields of the persisted config/);
+    assert.ok(existsSync(file('leaky.ts')), 'still written, the assistant is told to fix it');
+
+    const clean = await call('write_script', {
+      filename: 'clean.ts',
+      content:
+        "/** @name Clean */\ninterface C { apiKey: string }\nconst config = ha.persistent<C>('clean_config', { apiKey: '' });\nif (!config.apiKey) ha.warn('API key missing');\n",
+    });
+    assert.doesNotMatch(clean.text, /look like credentials/);
+  });
+
   await t.test('type problems are returned as warnings but the file is written', async () => {
     const r = await call('write_script', {
       filename: 'typed.ts',

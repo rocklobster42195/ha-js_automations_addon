@@ -7,7 +7,7 @@ How a well-formed JS Automations (JSA) script looks and why. This page is the on
 1. **A script is one file.** Metadata (header), logic, and optionally a Lovelace card all live together. No YAML, no separate repos.
 2. **Make things real HA entities.** Use `ha.register()` / `@expose` so state shows up natively in Home Assistant (dashboards, history, automations) instead of hiding in script variables. See [Native Entities](./native-entities.md).
 3. **Config is data, not code to edit.** Anything a user might tune goes into one typed config object, persisted with `ha.persistent()`/`ha.store`, editable from the UI — not scattered magic numbers.
-4. **Declare what you use.** Sensitive capabilities are declared with `@permission`; secrets go into `ha.store` as secrets, never into source.
+4. **Declare what you use.** Sensitive capabilities are declared with `@permission`; credentials live in the store (see [Credentials](#credentials)), never in source.
 5. **Fail loudly and clean up.** Log with `ha.log/warn/error`, handle errors, and let Mark-and-Sweep remove entities you no longer register.
 
 ## Script structure
@@ -106,8 +106,47 @@ Rules:
 ### State and config
 
 - `ha.persistent(key, default)` for config and runtime state that must survive restarts (auto-saves on mutation).
-- `ha.store` for values shared across scripts. Pass `true` / `{ secret: true }` for credentials — encrypted on disk and masked in the UI. **Never hard-code tokens or passwords in source.**
+- `ha.store` for values shared across scripts. Pass `true` / `{ secret: true }` to store a value as a secret — encrypted on disk (when store encryption is on) and masked in the UI. **Never hard-code tokens or passwords in source** — see [Credentials](#credentials).
 - Keep user-tunable values in the config object; keep hard-wired internals as `const`s next to it.
+
+### Credentials
+
+Credentials (API keys, passwords, tokens) are never written into the script. Instead the script **creates the place for them on its first start**, leaves it empty and asks the user to fill it in:
+
+```typescript
+interface WeatherConfig {
+  apiKey: string; // credential — stays empty until the user enters it
+  city: string;
+}
+
+const DEFAULT_CONFIG: WeatherConfig = { apiKey: '', city: 'Berlin' };
+const config = ha.persistent<WeatherConfig>('weather_config', DEFAULT_CONFIG); // key exists after the first start
+
+function start() {
+  ha.log(`Weather for ${config.city}`);
+  // ... the feature that needs config.apiKey
+}
+
+if (config.apiKey) {
+  start();
+} else {
+  ha.warn(
+    'API key missing — fill in "apiKey" of the store entry "weather_config" (Store Explorer), then restart the script.'
+  );
+  ha.notify(
+    'The weather script needs an API key. Open the Store Explorer, edit "weather_config", enter "apiKey" and restart the script.',
+    {
+      title: 'Weather script',
+      persistent: true,
+    }
+  );
+}
+```
+
+- For a **single value** use a key with an empty value: `const apiKey = ha.persistent('weather_api_key', '');` (read and write `apiKey.value`).
+- Use **empty** defaults, not placeholders like `'YOUR_KEY_HERE'` — an empty value is easy to test for and cannot be mistaken for a real credential.
+- While a required credential is empty: warn in the log, raise a **persistent notification** that names the store key, and do not start the feature that needs it. Do not crash or retry in a loop.
+- `ha.persistent` values are ordinary store values: visible in the Store Explorer and written unencrypted to `store.json`. For especially sensitive values use a **secret** instead — `ha.store.set('weather_api_key', '', true)` on first start (only if `ha.store.get(...)` is still `undefined`) — which is masked in the UI and encrypted at rest when store encryption is switched on.
 
 ### Triggers and timing
 
@@ -210,7 +249,7 @@ Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `
 
 - [ ] Header first; only needed tags; `@permission` for network / fs / exec / webhook / mqtt
 - [ ] Order: header → types → config → logic
-- [ ] Config object typed, persisted if user-tunable; secrets in `ha.store`, not in source
+- [ ] Config object typed, persisted if user-tunable; credentials are **empty** fields of the persisted config (or `ha.store` secrets), never in source; a warning + persistent notification while they are empty
 - [ ] Entities created with `ha.register()`; IDs predictable (no `device` option if the exact ID matters)
 - [ ] Timeouts and error handling around external calls
 - [ ] Language-dependent strings via `ha.localize`; comments in English

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { isValidScriptName, resolveScript, type ScriptDirs } from './mcp-script-files';
 import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
+import { maskSecrets } from './mcp-secret-filter';
 import ScriptHeaderParser from './script-header-parser';
 import type { WorkerManagerInstance } from './script-list';
 import type CardManager from './card-manager';
@@ -166,6 +167,14 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           );
         } else if (name.endsWith('.ts')) {
           lines.push('Type check: no problems found.');
+        }
+        const credentialHits = maskSecrets(content.replace(CARD_BLOCK, '')).masked;
+        if (credentialHits) {
+          lines.push(
+            `WARNING: ${credentialHits} value(s) in the source look like credentials. Do not keep credentials in source code: ` +
+              "declare them as empty fields of the persisted config (e.g. apiKey: '' in DEFAULT_CONFIG via ha.persistent), warn while they are " +
+              'empty and tell the user to fill them in with the Store Explorer. Then rewrite the script.'
+          );
         }
         lines.push(notes.join('; '));
         const text_ = lines.join('\n') + runningNote(name);

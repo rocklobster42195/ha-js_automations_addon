@@ -50,7 +50,8 @@ const SERVER_INSTRUCTIONS = [
   'Before writing or changing a script, call get_api_reference with topic "authoring" and follow it: scripts have a JSDoc header,',
   'a typed config block and native entities via ha.register(). Use list_scripts and read_script to see existing conventions,',
   'write_script to save (it is syntax-checked and committed to Git), then restart_script and get_script_errors / get_logs to verify.',
-  'Never put credentials into script source; they belong in ha.store as secrets.',
+  'Never put credentials into script source: keep them in the store (an empty field of the persisted ha.persistent() config, or an ha.store secret),',
+  'warn while they are empty and tell the user where to fill them in.',
 ].join(' ');
 
 // Added for maintainer mode only: the person at the other end develops JSA itself.
