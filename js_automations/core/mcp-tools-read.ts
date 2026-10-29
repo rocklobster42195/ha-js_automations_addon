@@ -47,6 +47,11 @@ export const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; a
   },
   api_reference: { dir: 'docs', file: 'API_REFERENCE.md', about: 'Every ha.* function with examples (large).' },
   types: { dir: 'types', file: 'ha-api.d.ts', about: 'TypeScript definitions of the ha global (large).' },
+  iobroker: {
+    dir: 'docs',
+    file: 'guide/iobroker-migration.md',
+    about: 'Converting ioBroker scripts: ID mapping, API translation table, a worked example.',
+  },
   cards: {
     dir: 'docs',
     file: 'guide/card-packs.md',

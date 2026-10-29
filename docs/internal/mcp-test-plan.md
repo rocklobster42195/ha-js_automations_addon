@@ -77,6 +77,14 @@ Konzept: [`ai_concept.md`](./ai_concept.md) · Nutzer-Doku: [`../guide/mcp.md`](
 - [ ] Die Dokumentation ist als Resource auswählbar.
 - [ ] Beim Verbinden liest der Assistent von selbst den Authoring-Guide (Server-Anweisungen greifen).
 
+### 6a. ioBroker-Umwandlung
+
+- [ ] Prompt "Convert an ioBroker script" erscheint in Claude Desktop; mit einem echten ioBroker-Skript (z. B. dem Bad-Bewegungsmelder) durchspielen.
+- [ ] Die KI listet die ioBroker-IDs und schlägt per `list_entities` eine Zuordnung vor, **fragt bei Unsicherem nach** und erfindet keine IDs.
+- [ ] Das Ergebnis hat alle zugeordneten Entity-IDs in der persistierten Config, prüft sie beim Start (`ha.entityExists`) und besteht den Typcheck ohne Warnungen.
+- [ ] Die Umwandlungs-Notizen am Ende nennen vereinfachte/nicht übertragbare Stellen.
+- [ ] Lücken in JSA, die beim Umwandeln auffallen, landen als Notiz im MCP-Tab (Maintainer-Modus).
+
 ## 7. Oberfläche
 
 - [ ] Panel in Settings: Kopieren (URL, Token, Config), Anzeigen/Verbergen, Neu erzeugen mit Rückfrage; Texte in **Deutsch und Englisch**; schmale Breite.

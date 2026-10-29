@@ -72,9 +72,10 @@ Blockly scripts are not visible to assistants.
 
 ### Prompts and documentation
 
-Assistants that support prompt templates offer two:
+Assistants that support prompt templates offer three:
 
 - **New JSA script** — writes a script following the project conventions (see [Authoring Scripts](./authoring.md)).
+- **Convert an ioBroker script** — paste a script from the ioBroker JavaScript adapter; the assistant maps the ioBroker IDs to your Home Assistant entities (asking about every guess, never inventing IDs), converts it following the [migration guide](./iobroker-migration.md) and lists what could not be converted.
 - **Plan a JSA script (interview)** — the assistant asks you questions one at a time (trigger, entities, edge cases, settings, notifications) and writes the script only after you confirm the specification.
 
 The documentation is also exposed as resources. On connecting, every client is told to read the authoring guide before writing a script and never to put credentials into source code.

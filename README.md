@@ -150,6 +150,7 @@ ha.log(weather.temp); // TypeScript knows this is a number
 
 The topics below have grown too deep for a README section — each has its own guide with worked examples and (where a picture beats a paragraph) screenshots:
 
+- **[Migrating from ioBroker](./docs/guide/iobroker-migration.md)** — ID mapping, API translation table and a worked example; also drives the AI prompt that converts ioBroker scripts.
 - **[MCP Server (AI assistants)](./docs/guide/mcp.md)** — connect Claude Desktop or another MCP client, tool permissions, security and privacy, maintainer mode.
 - **[Authoring Scripts](./docs/guide/authoring.md)** — script structure, header tags, conventions and cards in one place; the best starting point for writing (or prompting an AI to write) a JSA script.
 - **[Native Entities (`ha.register`)](./docs/guide/native-entities.md)** — MQTT Discovery entities, device grouping, staying available while stopped, `ha.unregister()`.

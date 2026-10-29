@@ -143,7 +143,7 @@ if (config.apiKey) {
 }
 ```
 
-- For a **single value** use a key with an empty value: `const apiKey = ha.persistent('weather_api_key', '');` (read and write `apiKey.value`).
+- For a **single value** use a key with an empty value: `const apiKey = ha.persistent<string>('weather_api_key', '');` (read and write `apiKey.value`; keep the type argument, otherwise TypeScript infers the literal type `''`).
 - Use **empty** defaults, not placeholders like `'YOUR_KEY_HERE'` — an empty value is easy to test for and cannot be mistaken for a real credential.
 - While a required credential is empty: warn in the log, raise a **persistent notification** that names the store key, and do not start the feature that needs it. Do not crash or retry in a loop.
 - `ha.persistent` values are ordinary store values: visible in the Store Explorer and written unencrypted to `store.json`. For especially sensitive values use a **secret** instead — `ha.store.set('weather_api_key', '', true)` on first start (only if `ha.store.get(...)` is still `undefined`) — which is masked in the UI and encrypted at rest when store encryption is switched on.
