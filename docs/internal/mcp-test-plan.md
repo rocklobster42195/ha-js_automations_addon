@@ -121,3 +121,10 @@ Konzept: [`ai_concept.md`](./ai_concept.md) · Nutzer-Doku: [`../guide/mcp.md`](
 ## Ergebnisse
 
 _(hier eintragen: Datum, Stand/Commit, was bestanden/offen, Auffälligkeiten)_
+
+### 2026-10-29 — Claude Desktop, Installation der `.mcpb` (lokale Dev-Instanz mit Kopie des Skript-Ordners)
+
+- ✅ Die Datei lässt sich herunterladen und in Claude Desktop installieren.
+- ✅ **Endpunkt und Token sind vorbelegt** (Dialog zeigt den Endpunkt `http://localhost:3002/mcp`, das Token als "Wert verborgen"). Damit ist die offene Frage, ob ein "sensitives" Feld den `default` übernimmt, beantwortet: **ja**.
+- ⚠️ Der Dialog zeigt **"Accept self-signed certificate: true"**, obwohl das Manifest `false` als Vorgabe setzt. Zu klären: Häkchen selbst gesetzt, oder stellt Claude Desktop den Boolean falsch dar? Bei `http://` ohne Wirkung, bei `https://` würde es die Zertifikatsprüfung abschalten — die Vorgabe muss `false` bleiben.
+- ℹ️ Im Dialog erscheinen **Platzhalterkästchen** ("FSI", "PDI", "LRI") um die Werte und den Namen. Das sind unsichtbare Unicode-Isolationszeichen, die Claude Desktop unter Windows nicht darstellt — vermutlich kein Fehler von JSA (die Zeichen setzt die App selbst). Nur beobachten; ggf. bei Anthropic melden.
