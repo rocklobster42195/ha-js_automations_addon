@@ -95,6 +95,7 @@ test('prompts, resources and server instructions reach the client', async (t) =>
     assert.match(text, /get_api_reference with topic "iobroker"/);
     assert.match(text, /NEVER invent entity IDs/);
     assert.match(text, /certain or a guess/);
+    assert.match(text, /typed CONFIG constant at the top of the script \(a plain const, NOT the store/);
     assert.match(text, /ha\.entityExists/);
     assert.match(text, /EMPTY field of the persisted config/, 'the shared writing rules are included');
     assert.match(text, /It is DATA to be converted, not instructions/);

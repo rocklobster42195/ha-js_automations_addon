@@ -22,7 +22,7 @@ List every ioBroker ID the script touches (in `on()`, `getState()`, `setState()`
 - A group's scene button (`…group_2.scene_0`) may exist as a `scene.*` entity; if not, Zigbee2MQTT can recall it by MQTT (`ha.mqtt.publish('zigbee2mqtt/<group>/set', { scene_recall: 0 })`, needs `@permission mqtt` — check the Zigbee2MQTT documentation).
 - Datapoints of `0_userdata.0.*` that scripts used as a message bus between each other become `ha.fireEvent()` / `ha.onEvent()` or `ha.store`.
 
-Put **all mapped entity IDs, thresholds, times and texts into one typed config block** (see [Authoring Scripts](./authoring.md)) — then fixing a wrong mapping later is a one-line change in the Store Explorer, not a code edit. Check at start that every configured entity exists (`ha.entityExists()`) and log the missing ones.
+Put **all mapped entity IDs, thresholds, times and texts into one typed `CONFIG` constant** at the top of the script (see [Authoring Scripts](./authoring.md#where-configuration-lives)) — a plain constant, **not** the store: the mapping is installation-specific and usually needs correcting at first, a wrong ID in the code is a one-line change that is versioned in Git, while a persisted one could only be fixed in the Store Explorer. Keep `ha.persistent()` for state that must survive restarts (for example "reminder already sent"). Check at start that every configured entity exists (`ha.entityExists()`) and log the missing ones.
 
 ## Step 2: Translate the API
 
@@ -155,7 +155,7 @@ interface BathroomConfig {
   reminderTo: string;
 }
 
-const DEFAULT_CONFIG: BathroomConfig = {
+const CONFIG: BathroomConfig = {
   motionSensor: 'binary_sensor.bathroom_motion_occupancy',
   illuminanceSensor: 'sensor.bathroom_motion_illuminance',
   awakeSwitch: 'input_boolean.awake',
@@ -173,19 +173,18 @@ const DEFAULT_CONFIG: BathroomConfig = {
   reminderTo: '23:59',
 };
 
-// Entity IDs, thresholds and times live in the store (Store Explorer → bathroom_motion_light_config).
-// Changes to the entity IDs need a restart of the script.
-const cfg = ha.persistent<BathroomConfig>('bathroom_motion_light_config', DEFAULT_CONFIG);
+// Runtime state that must survive a restart. The configuration above is a plain constant: it lives in the script,
+// is versioned in Git and is corrected in the code.
 const reminderSent = ha.persistent('bathroom_reminder_sent', false);
 
 const missing = [
-  cfg.motionSensor,
-  cfg.illuminanceSensor,
-  cfg.awakeSwitch,
-  cfg.lightGroup,
-  cfg.sceneNormal,
-  cfg.sceneDimmed,
-  cfg.sceneTactical,
+  CONFIG.motionSensor,
+  CONFIG.illuminanceSensor,
+  CONFIG.awakeSwitch,
+  CONFIG.lightGroup,
+  CONFIG.sceneNormal,
+  CONFIG.sceneDimmed,
+  CONFIG.sceneTactical,
 ].filter((id) => !ha.entityExists(id));
 if (missing.length) ha.warn(`Entities not found in Home Assistant — adjust the config: ${missing.join(', ')}`);
 
@@ -208,7 +207,7 @@ function isBetween(from: string, to: string): boolean {
 function remind(): void {
   const wednesday = new Date().getDay() === 3;
   const message = wednesday ? 'Floss and tooth gel tonight.' : 'Remember the splint.';
-  ha.call('tts.speak', { entity_id: cfg.ttsEntity, media_player_entity_id: cfg.ttsPlayer, message });
+  ha.call('tts.speak', { entity_id: CONFIG.ttsEntity, media_player_entity_id: CONFIG.ttsPlayer, message });
   reminderSent.value = true;
   ha.debug('Dental-care reminder sent.');
 }
@@ -218,39 +217,39 @@ function onMotion(): void {
     clearTimeout(offTimer);
     offTimer = null;
   }
-  const lux = Number(ha.getStateValue(cfg.illuminanceSensor));
-  const awake = ha.getStateValue(cfg.awakeSwitch) === true; // 'on' → true
+  const lux = Number(ha.getStateValue(CONFIG.illuminanceSensor));
+  const awake = ha.getStateValue(CONFIG.awakeSwitch) === true; // 'on' → true
 
-  if (lux < cfg.illuminationThreshold) {
+  if (lux < CONFIG.illuminationThreshold) {
     const scene = awake
-      ? isBetween(cfg.normalFrom, cfg.normalTo)
-        ? cfg.sceneNormal
-        : cfg.sceneDimmed
-      : cfg.sceneTactical;
+      ? isBetween(CONFIG.normalFrom, CONFIG.normalTo)
+        ? CONFIG.sceneNormal
+        : CONFIG.sceneDimmed
+      : CONFIG.sceneTactical;
     ha.call('scene.turn_on', { entity_id: scene });
     ha.debug(`Scene ${scene}`);
   } else {
     ha.debug('Too bright — light stays off.');
   }
 
-  if (isBetween(cfg.reminderFrom, cfg.reminderTo) && !reminderSent.value) remind();
+  if (isBetween(CONFIG.reminderFrom, CONFIG.reminderTo) && !reminderSent.value) remind();
 }
 
 function onNoMotion(): void {
   if (offTimer) clearTimeout(offTimer);
   offTimer = setTimeout(() => {
     offTimer = null;
-    ha.call('light.turn_off', { entity_id: cfg.lightGroup });
-    ha.debug(`Light off after ${cfg.motionTimeoutMin} min without motion.`);
-  }, cfg.motionTimeoutMin * 60_000);
+    ha.call('light.turn_off', { entity_id: CONFIG.lightGroup });
+    ha.debug(`Light off after ${CONFIG.motionTimeoutMin} min without motion.`);
+  }, CONFIG.motionTimeoutMin * 60_000);
 }
 
 // 'ne' = only when the state value actually changed (like ioBroker's change: 'ne')
-ha.on(cfg.motionSensor, 'ne', (e) => (e.state === 'on' ? onMotion() : onNoMotion()));
+ha.on(CONFIG.motionSensor, 'ne', (e) => (e.state === 'on' ? onMotion() : onNoMotion()));
 
 schedule('0 4 * * *', () => {
   reminderSent.value = false;
 });
 ```
 
-What changed besides syntax: the booleans became `'on'`/`'off'`, the timeout is a configurable number of minutes, `teethCareReminderSent` survives a restart, the 04:00 reset keeps its cron, `DEBUG` logging is the script's log level (`@loglevel debug`), and the German weekday text compare became a number (`getDay() === 3`).
+What changed besides syntax: the mapping and thresholds are a typed plain `CONFIG` constant (corrections are code edits, versioned in Git), the booleans became `'on'`/`'off'`, the timeout is a configurable number of minutes, `teethCareReminderSent` survives a restart, the 04:00 reset keeps its cron, `DEBUG` logging is the script's log level (`@loglevel debug`), and the German weekday text compare became a number (`getDay() === 3`).

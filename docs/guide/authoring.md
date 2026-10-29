@@ -6,7 +6,7 @@ How a well-formed JS Automations (JSA) script looks and why. This page is the on
 
 1. **A script is one file.** Metadata (header), logic, and optionally a Lovelace card all live together. No YAML, no separate repos.
 2. **Make things real HA entities.** Use `ha.register()` / `@expose` so state shows up natively in Home Assistant (dashboards, history, automations) instead of hiding in script variables. See [Native Entities](./native-entities.md).
-3. **Config is data, not code to edit.** Anything a user might tune goes into one typed config object, persisted with `ha.persistent()`/`ha.store`, editable from the UI — not scattered magic numbers.
+3. **Config is one typed block.** Everything installation-specific or tunable — entity IDs, thresholds, times, texts — sits in one typed `CONFIG` constant at the top, not scattered as magic numbers. Only runtime state, values the user must change while the script runs, and credentials live in the store (see [Where configuration lives](#where-configuration-lives)).
 4. **Declare what you use.** Sensitive capabilities are declared with `@permission`; credentials live in the store (see [Credentials](#credentials)), never in source.
 5. **Fail loudly and clean up.** Log with `ha.log/warn/error`, handle errors, and let Mark-and-Sweep remove entities you no longer register.
 
@@ -33,15 +33,12 @@ interface GarageConfig {
   notifyTarget: string;
 }
 
-// Seed values on first run. After that the store entry is the source of truth —
-// edit it in the Store Explorer, not here.
-const DEFAULT_CONFIG: GarageConfig = {
+// Installation-specific values and thresholds: a plain constant, versioned in Git, corrected in the code.
+const CONFIG: GarageConfig = {
   doorEntity: 'cover.garage_door',
   maxOpenMinutes: 15,
   notifyTarget: 'notify.mobile_app_my_phone',
 };
-
-const config = ha.persistent<GarageConfig>('garage_watch_config', DEFAULT_CONFIG);
 
 ha.register('binary_sensor.garage_open_too_long', {
   name: 'Garage open too long',
@@ -51,13 +48,13 @@ ha.register('binary_sensor.garage_open_too_long', {
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-ha.on(config.doorEntity, (e) => {
+ha.on(CONFIG.doorEntity, (e) => {
   if (timer) clearTimeout(timer);
   if (e.state === 'open') {
     timer = setTimeout(() => {
       ha.update('binary_sensor.garage_open_too_long', 'on');
-      ha.notify('Garage door has been open too long', { target: config.notifyTarget });
-    }, config.maxOpenMinutes * 60_000);
+      ha.notify('Garage door has been open too long', { target: CONFIG.notifyTarget });
+    }, CONFIG.maxOpenMinutes * 60_000);
   } else {
     ha.update('binary_sensor.garage_open_too_long', 'off');
   }
@@ -66,7 +63,15 @@ ha.on(config.doorEntity, (e) => {
 ha.log('Garage Watch started.');
 ```
 
-**Config naming:** use `DEFAULT_CONFIG` when the config is persisted via `ha.persistent()`/`ha.store` (the constant only seeds the first run). Use plain `CONFIG` when it is a fixed constant that is never persisted. Pass the type explicitly (`ha.persistent<MyConfig>(...)`) so the stored shape wins over inference.
+### Where configuration lives
+
+| Put it in                               | What                                                                                                                                                               | Why                                                                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `const CONFIG` at the top of the script | Entity IDs, thresholds, times, texts                                                                                                                               | Versioned in Git, visible in the editor, an assistant can correct it with `write_script`; a changed value takes effect with the next restart                                                    |
+| `ha.persistent()`                       | Runtime state that must survive a restart ("reminder already sent"), and values the user is meant to change **while the script runs** (a card, the Store Explorer) | Survives restarts and script edits; **not** in Git; after the first start the store entry wins over the constant in the code (name that constant `DEFAULT_CONFIG`, it only seeds the first run) |
+| The store, empty by default             | Credentials                                                                                                                                                        | Never in source; see [Credentials](#credentials)                                                                                                                                                |
+
+A mapping of entity IDs that is still being corrected belongs in `CONFIG`: once it is persisted, a wrong ID can only be fixed in the Store Explorer, and the code change would have no effect. Pass the type explicitly for objects (`ha.persistent<MyConfig>(...)`) so the stored shape wins over inference.
 
 ## Header tags
 
@@ -106,9 +111,9 @@ Rules:
 
 ### State and config
 
-- `ha.persistent(key, default)` for config and runtime state that must survive restarts (auto-saves on mutation).
+- `ha.persistent(key, default)` for runtime state that must survive restarts and for values the user changes while the script runs (auto-saves on mutation).
 - `ha.store` for values shared across scripts. Pass `true` / `{ secret: true }` to store a value as a secret — encrypted on disk (when store encryption is on) and masked in the UI. **Never hard-code tokens or passwords in source** — see [Credentials](#credentials).
-- Keep user-tunable values in the config object; keep hard-wired internals as `const`s next to it.
+- Keep entity IDs, thresholds and times in the typed `CONFIG` constant; keep hard-wired internals as `const`s next to it.
 
 ### Credentials
 
@@ -250,7 +255,7 @@ Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `
 
 - [ ] Header first; only needed tags; `@permission` for network / fs / exec / webhook / mqtt
 - [ ] Order: header → types → config → logic
-- [ ] Config object typed, persisted if user-tunable; credentials are **empty** fields of the persisted config (or `ha.store` secrets), never in source; a warning + persistent notification while they are empty
+- [ ] One typed `CONFIG` constant (entity IDs, thresholds, times, texts); only runtime state and runtime-tunable values persisted; credentials are **empty** fields of the persisted config (or `ha.store` secrets), never in source, with a warning + persistent notification while they are empty
 - [ ] Entities created with `ha.register()`; IDs predictable (no `device` option if the exact ID matters)
 - [ ] Timeouts and error handling around external calls
 - [ ] Language-dependent strings via `ha.localize`; comments in English
