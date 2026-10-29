@@ -106,6 +106,14 @@ test('write tools check, write, commit and delete safely', async (t) => {
   const file = (name) => path.join(scriptsDir, name);
   const subjects = () => git('log', '--format=%s').trim().split('\n');
 
+  await t.test('write_script description carries the core authoring rules', async () => {
+    const { tools } = await client.listTools();
+    const description = tools.find((x) => x.name === 'write_script').description;
+    assert.match(description, /const CONFIG/);
+    assert.match(description, /ONE ha.persistent object per script/);
+    assert.match(description, /credentials never go into the source/);
+  });
+
   await t.test('creates a new TypeScript script with a Git commit and notifies the editor', async () => {
     const src = `/**\n * @name Demo\n */\nconst x: number = 1;\nha.log(String(x));\n`;
     const r = await call('write_script', { filename: 'demo.ts', content: src, message: 'first version' });

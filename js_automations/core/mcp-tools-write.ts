@@ -105,8 +105,11 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     name: 'write_script',
     title: 'Write script',
     description:
-      'Creates or replaces a script or library with the complete new source. Read the authoring guide first ' +
-      '(get_api_reference topic "authoring") and read_script the file before changing it. The source is syntax-checked ' +
+      'Creates or replaces a script or library with the complete new source. ALWAYS read the authoring guide first ' +
+      '(get_api_reference topic "authoring") and read_script the file before changing it. Core rules: entity IDs, thresholds, ' +
+      'times and texts go into one typed `const CONFIG` in the source (not the store); values that must survive a restart go ' +
+      'into ONE ha.persistent object per script (key "<script>_state"), never one store key per value; credentials never go ' +
+      'into the source (empty fields in the store, with a warning while empty). The source is syntax-checked ' +
       '(errors block the write) and type-checked (TypeScript only; problems are returned as warnings). Every change is ' +
       'committed to Git, so it can be undone. The Lovelace card of an existing script is preserved (use write_card to change ' +
       'it). Does not start or restart the script. New file names: lowercase letters, digits and underscores, ".js" or ".ts"; ' +
