@@ -14,7 +14,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - Writes are syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; a script's Lovelace card is preserved; nothing is restarted automatically
 - Open editor tabs reload when an assistant changes the file (a card preview too); unsaved edits are kept, a lasting banner points out the conflict and saving asks before overwriting; a script an assistant deletes closes its tab
 - Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned. Script source and log text are marked as untrusted data for the assistant
-- `get_api_reference` can search the documentation and return just the matching passages
+- `get_api_reference` can search the documentation and return just the matching passages; the new topic `services` serves the typed Home Assistant services of your instance (for example the `media` payload of `media_player.play_media`)
 - Prompts **New JSA script**, **Plan a JSA script (interview)** and **Convert an ioBroker script**, plus the documentation as resources
 - New [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) for moving ioBroker scripts to JS Automations (ID mapping, API translation table, worked example)
 - Assistants keep credentials out of script source: they are empty fields of the persisted config, with a warning and a persistent notification until the user fills them in

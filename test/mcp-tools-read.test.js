@@ -23,7 +23,18 @@ function setup(t) {
   const librariesDir = path.join(scriptsDir, 'libraries');
   const docsDir = path.join(dir, 'docs');
   const typesDir = path.join(dir, 'types');
-  for (const d of [librariesDir, path.join(docsDir, 'guide'), typesDir]) mkdirSync(d, { recursive: true });
+  const storageDir = path.join(dir, 'storage');
+  for (const d of [librariesDir, path.join(docsDir, 'guide'), typesDir, storageDir]) mkdirSync(d, { recursive: true });
+  writeFileSync(
+    path.join(storageDir, 'services.d.ts'),
+    [
+      'interface Services {',
+      '  media_player: {',
+      '    play_media: { entity_id: string; media: { media_content_id: string; media_content_type: string } };',
+      '  };',
+      '}',
+    ].join('\n')
+  );
 
   const files = {
     'hello.js': `/**\n * @name Hello Script\n * @description Says hello\n * @permission network\n */\nconst API_KEY = 'abcd1234secretvalue';\nha.log('hi');\n`,
@@ -158,6 +169,7 @@ function setup(t) {
     eventBuffer,
     scriptsDir,
     librariesDir,
+    storageDir,
     docsDir,
     typesDir,
   });
@@ -308,6 +320,13 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.equal((await call('get_api_reference', { topic: 'authoring' })).text, '# Authoring guide');
     assert.equal((await call('get_api_reference', { topic: 'types' })).text, 'declare const ha: any;');
     assert.equal((await call('get_api_reference', { topic: 'cards' })).isError, true, 'file missing in this fixture');
+  });
+
+  await t.test('get_api_reference: the services topic serves the typed HA services of this instance', async () => {
+    assert.match((await call('get_api_reference')).text, /^services: /m);
+    const hit = await call('get_api_reference', { search: 'play_media', topic: 'services' });
+    assert.match(hit.text, /--- services, lines \d+-\d+ ---/);
+    assert.ok(hit.text.includes('media_content_id: string'));
   });
 
   await t.test('get_api_reference: keyword search returns passages, not whole topics', async () => {

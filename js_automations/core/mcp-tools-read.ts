@@ -28,6 +28,8 @@ export interface McpReadToolDeps {
   docsDir: string;
   /** Directory containing ha-api.d.ts. */
   typesDir: string;
+  /** Storage directory with the generated services.d.ts of this Home Assistant instance. */
+  storageDir: string;
 }
 
 const LOG_SEVERITY: Record<string, number> = { error: 0, warn: 1, info: 2, debug: 3 };
@@ -44,7 +46,7 @@ const UNTRUSTED_NOTICE =
 const iso = (ts: number): string => new Date(ts).toISOString();
 
 /** Doc topics `get_api_reference` can serve (file relative to docsDir / typesDir). */
-export const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; about: string }> = {
+export const API_TOPICS: Record<string, { dir: 'docs' | 'types' | 'storage'; file: string; about: string }> = {
   authoring: {
     dir: 'docs',
     file: 'guide/authoring.md',
@@ -52,6 +54,12 @@ export const API_TOPICS: Record<string, { dir: 'docs' | 'types'; file: string; a
   },
   api_reference: { dir: 'docs', file: 'API_REFERENCE.md', about: 'Every ha.* function with examples (large).' },
   types: { dir: 'types', file: 'ha-api.d.ts', about: 'TypeScript definitions of the ha global (large).' },
+  services: {
+    dir: 'storage',
+    file: 'services.d.ts',
+    about:
+      'Typed Home Assistant services of THIS instance: the payload each ha.call("domain.service", ...) accepts, e.g. media_player.play_media. Use search "domain.service".',
+  },
   iobroker: {
     dir: 'docs',
     file: 'guide/iobroker-migration.md',
@@ -364,7 +372,7 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         );
       }
       const spec = API_TOPICS[topic];
-      const file = path.join(spec.dir === 'docs' ? deps.docsDir : deps.typesDir, spec.file);
+      const file = topicPath(deps, spec);
       try {
         return text(fs.readFileSync(file, 'utf8'));
       } catch {
@@ -372,6 +380,11 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       }
     },
   });
+}
+
+function topicPath(deps: McpReadToolDeps, spec: { dir: 'docs' | 'types' | 'storage'; file: string }): string {
+  const dir = spec.dir === 'docs' ? deps.docsDir : spec.dir === 'types' ? deps.typesDir : deps.storageDir;
+  return path.join(dir, spec.file);
 }
 
 const SEARCH_CONTEXT_LINES = 6;
@@ -388,9 +401,7 @@ function searchDocs(deps: McpReadToolDeps, query: string, onlyTopic?: string): s
     if (onlyTopic && name !== onlyTopic) continue;
     let lines: string[];
     try {
-      lines = fs
-        .readFileSync(path.join(spec.dir === 'docs' ? deps.docsDir : deps.typesDir, spec.file), 'utf8')
-        .split('\n');
+      lines = fs.readFileSync(topicPath(deps, spec), 'utf8').split('\n');
     } catch {
       continue;
     }

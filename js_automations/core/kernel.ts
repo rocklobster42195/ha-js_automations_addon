@@ -230,6 +230,7 @@ class Kernel extends EventEmitter {
         librariesDir: config.LIBRARIES_DIR,
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
+        storageDir: STORAGE_DIR,
       });
       registerControlTools(this.mcpProtocol, {
         workerManager: this.workerManager,

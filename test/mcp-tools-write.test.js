@@ -86,11 +86,11 @@ function setup(t) {
     rmSync(dir, { recursive: true, force: true });
   });
   const git = (...args) => execFileSync('git', args, { cwd: scriptsDir, encoding: 'utf8' });
-  return { manager, scriptsDir, librariesDir, calls, workers, events, git };
+  return { manager, scriptsDir, librariesDir, calls, workers, events, git, settings };
 }
 
 test('write tools check, write, commit and delete safely', async (t) => {
-  const { manager, scriptsDir, librariesDir, calls, workers, events, git } = setup(t);
+  const { manager, scriptsDir, librariesDir, calls, workers, events, git, settings } = setup(t);
   await new Promise((r) => (manager.server.listening ? r() : manager.server.once('listening', r)));
   const client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(
@@ -112,6 +112,17 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(description, /const CONFIG/);
     assert.match(description, /ONE ha.persistent object per script/);
     assert.match(description, /credentials never go into the source/);
+  });
+
+  await t.test('maintainer mode adds a reminder to record feedback to the write result', async () => {
+    const src = `/**\n * @name Remind\n */\nha.log('x');\n`;
+    const plain = await call('write_script', { filename: 'remind.js', content: src });
+    assert.doesNotMatch(plain.text, /jsa_feedback/);
+    settings.general = { maintainer_mode: true };
+    const maintainer = await call('write_script', { filename: 'remind.js', content: src + '// again\n' });
+    delete settings.general;
+    assert.match(maintainer.text, /record it now with jsa_feedback/);
+    await call('delete_script', { filename: 'remind.js' });
   });
 
   await t.test('creates a new TypeScript script with a Git commit and notifies the editor', async () => {
