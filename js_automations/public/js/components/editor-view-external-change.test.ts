@@ -23,7 +23,7 @@ function fakeApi(responses: Record<string, string>) {
   return sinon.stub().callsFake(async (url: string, init?: { method?: string }) => {
     if (init?.method === 'POST' || init?.method === 'PUT') return { ok: true, json: async () => ({ ok: true }) };
     const content = responses[url];
-    if (content === undefined) return { ok: false, json: async () => ({}), text: async () => '' };
+    if (content === undefined) return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
     return { ok: true, json: async () => ({ content }) };
   });
 }
@@ -113,6 +113,56 @@ describe('editor-view: files changed on disk by an AI assistant', () => {
     expect(tab.isDirty).to.equal(true);
     expect(toast.callCount).to.equal(1);
     expect(toast.firstCall.args[1]).to.deep.equal({ variant: 'warning' });
+  });
+
+  it('shows a lasting banner for the conflict and lets the user load the AI version', async () => {
+    const tab = demoTab({ isDirty: true });
+    tabs().push(tab);
+    (el as unknown as { _activeTabFilename: string })._activeTabFilename = tab.filename;
+    await emitChange();
+    await el.updateComplete;
+
+    const banner = el.shadowRoot!.querySelector('.mode-banner.conflict');
+    expect(banner, 'banner for the unsaved edits').to.not.equal(null);
+
+    (banner!.querySelector('button') as HTMLButtonElement).click();
+    await aTimeout(0);
+    await el.updateComplete;
+
+    expect(setModelValue.calledOnceWith(tab.model, 'new from AI')).to.equal(true);
+    expect(tab.isDirty).to.equal(false);
+    expect(tab.externalChange).to.equal(false);
+    expect(el.shadowRoot!.querySelector('.mode-banner.conflict')).to.equal(null);
+  });
+
+  describe('a file deleted behind the editor', () => {
+    beforeEach(() => {
+      window.apiFetch = fakeApi({ 'api/git/status': '' }) as never;
+    });
+
+    it('closes a clean tab', async () => {
+      const closeTab = sinon.stub().resolves();
+      el.closeTab = closeTab;
+      tabs().push(demoTab());
+      await emitChange();
+      expect(closeTab.calledOnceWith('demo.ts')).to.equal(true);
+      expect(toast.firstCall.args[1]).to.deep.equal({ variant: 'info' });
+    });
+
+    it('keeps a tab with unsaved edits and shows a banner; saving recreates the file', async () => {
+      const closeTab = sinon.stub().resolves();
+      el.closeTab = closeTab;
+      const tab = demoTab({ isDirty: true });
+      tabs().push(tab);
+      (el as unknown as { _activeTabFilename: string })._activeTabFilename = tab.filename;
+      await emitChange();
+      await el.updateComplete;
+
+      expect(closeTab.called).to.equal(false);
+      expect(tab.deleted).to.equal(true);
+      expect(el.shadowRoot!.querySelector('.mode-banner.conflict')).to.not.equal(null);
+      expect(toast.firstCall.args[1]).to.deep.equal({ variant: 'warning' });
+    });
   });
 
   it('reloads the paired card tab too', async () => {

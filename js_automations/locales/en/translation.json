@@ -740,5 +740,10 @@
   },
   "external_update_reloaded": "\"{{filename}}\" was updated by an AI assistant and reloaded.",
   "external_update_conflict": "\"{{filename}}\" was changed by an AI assistant, but you have unsaved edits. Saving will overwrite its version (it stays in the Git history).",
-  "external_update_overwrite_confirm": "\"{{filename}}\" was changed by an AI assistant after you started editing. Overwrite it with your version? (The AI version stays in the Git history.)"
+  "external_update_overwrite_confirm": "\"{{filename}}\" was changed by an AI assistant after you started editing. Overwrite it with your version? (The AI version stays in the Git history.)",
+  "external_update_banner": "An AI assistant changed this file while you were editing. Saving overwrites its version (it stays in the Git history).",
+  "external_update_load_theirs": "Discard my edits and load it",
+  "external_update_deleted_closed": "\"{{filename}}\" was deleted by an AI assistant and its tab was closed.",
+  "external_update_deleted": "\"{{filename}}\" was deleted by an AI assistant, but you have unsaved edits.",
+  "external_update_deleted_banner": "An AI assistant deleted this file while you were editing. Saving creates it again (the deleted version stays in the Git history)."
 }

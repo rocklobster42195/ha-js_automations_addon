@@ -740,5 +740,10 @@
   },
   "external_update_reloaded": "\"{{filename}}\" wurde von einem KI-Assistenten geändert und neu geladen.",
   "external_update_conflict": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, du hast aber ungespeicherte Änderungen. Beim Speichern wird dessen Version überschrieben (sie bleibt in der Git-Historie).",
-  "external_update_overwrite_confirm": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, nachdem du mit dem Bearbeiten begonnen hast. Mit deiner Version überschreiben? (Die KI-Version bleibt in der Git-Historie.)"
+  "external_update_overwrite_confirm": "\"{{filename}}\" wurde von einem KI-Assistenten geändert, nachdem du mit dem Bearbeiten begonnen hast. Mit deiner Version überschreiben? (Die KI-Version bleibt in der Git-Historie.)",
+  "external_update_banner": "Ein KI-Assistent hat diese Datei geändert, während du sie bearbeitet hast. Beim Speichern wird dessen Version überschrieben (sie bleibt in der Git-Historie).",
+  "external_update_load_theirs": "Meine Änderungen verwerfen und laden",
+  "external_update_deleted_closed": "\"{{filename}}\" wurde von einem KI-Assistenten gelöscht, der Tab wurde geschlossen.",
+  "external_update_deleted": "\"{{filename}}\" wurde von einem KI-Assistenten gelöscht, du hast aber ungespeicherte Änderungen.",
+  "external_update_deleted_banner": "Ein KI-Assistent hat diese Datei gelöscht, während du sie bearbeitet hast. Beim Speichern wird sie neu angelegt (die gelöschte Version bleibt in der Git-Historie)."
 }

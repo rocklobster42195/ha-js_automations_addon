@@ -257,6 +257,7 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(r.text, /typed_vault \(secret\)/);
     assert.ok(!r.text.includes('other_config'), "another script's entries are not mentioned");
     assert.ok(!r.text.includes('filled-in-value-123') && !r.text.includes('tok-123456'), 'values are never shown');
+    assert.ok(events.includes('changed:typed.ts'), 'open editor tabs are told the file is gone');
     assert.equal((await call('delete_script', { filename: 'typed.ts' })).isError, true);
 
     calls.length = 0;

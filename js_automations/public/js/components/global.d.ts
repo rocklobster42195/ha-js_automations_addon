@@ -207,6 +207,8 @@ export interface JsaTab {
   /** The file was changed on disk (e.g. by an AI assistant over MCP) while this tab had unsaved
    * edits. Saving asks for confirmation first, because it would overwrite that change. */
   externalChange?: boolean;
+  /** An AI assistant deleted the file while this tab had unsaved edits; saving recreates it. */
+  deleted?: boolean;
   /** Card tabs only — the parent script's filename (card tab's own filename is
    * `${parentScript}[card]`). */
   parentScript?: string;

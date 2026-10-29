@@ -311,6 +311,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         await depManager.prune();
         notes.push(await commitFile(found.fullPath, `mcp: delete ${name}`, true));
         deps.notifyStatusUpdate();
+        deps.notifyContentChanged(name);
         return text(
           `Deleted ${found.isLibrary ? 'library' : 'script'} "${name}". ${notes.join('; ')}\nIt can be restored from the version history (Git) in the UI.` +
             (found.isLibrary ? '' : leftoverStoreNotice(displayName))

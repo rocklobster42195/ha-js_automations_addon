@@ -300,6 +300,28 @@ export class EditorViewElement extends LitElement {
       color: #64b5f6;
       border-bottom-color: #0d47a1;
     }
+    .mode-banner.conflict {
+      background: #2e2a1a;
+      color: var(--warning, #ffb74d);
+      border-bottom-color: var(--warning, #ffb74d);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mode-banner.conflict button {
+      margin-left: auto;
+      flex-shrink: 0;
+      background: transparent;
+      color: inherit;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .mode-banner.conflict button:hover {
+      background: rgba(255, 183, 77, 0.15);
+    }
     .mode-banner i {
       margin-right: 6px;
     }
@@ -423,22 +445,27 @@ export class EditorViewElement extends LitElement {
   private _onScriptContentChanged = async ({ filename }: { filename: string }): Promise<void> => {
     const scriptTab = this._openTabs.find((t) => t.filename === filename && !t.type);
     const cardTab = this._openTabs.find((t) => t.type === 'card' && t.parentScript === filename);
-    if (scriptTab) await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`);
+    if (scriptTab && (await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`)) === 'gone') {
+      await this._handleDeletedFile(scriptTab);
+      this._refreshGitStatus();
+      return;
+    }
     if (cardTab) await this._syncTabFromDisk(cardTab, `api/scripts/${filename}/card`);
     this._refreshGitStatus();
   };
 
   /** Clean tab → silently take the new content (keeps cursor/undo); dirty tab → keep the user's
    * edits, remember the conflict and warn once. */
-  private async _syncTabFromDisk(tab: JsaTab, url: string): Promise<void> {
+  private async _syncTabFromDisk(tab: JsaTab, url: string, discardEdits = false): Promise<'gone' | void> {
     try {
       const res = await window.apiFetch!(url);
+      if (res.status === 404 && !tab.type) return 'gone';
       if (!res.ok) return;
       const content: string = (await res.json()).content ?? '';
-      if (content === tab.originalContent) return;
+      if (content === tab.originalContent && !discardEdits) return;
       const name = tab.parentScript ?? tab.filename;
 
-      if (!tab.isDirty) {
+      if (!tab.isDirty || discardEdits) {
         // originalContent first, so the model-change callback sees "equal" and does not flag the tab dirty.
         tab.originalContent = content;
         window.monacoEditor?.setModelValue(tab.model as never, content);
@@ -453,6 +480,7 @@ export class EditorViewElement extends LitElement {
         );
       } else if (!tab.externalChange) {
         tab.externalChange = true;
+        this._renderTabs();
         window.alertToast?.show(
           this._t(
             'external_update_conflict',
@@ -1059,6 +1087,7 @@ export class EditorViewElement extends LitElement {
       activeTab.originalContent = content;
       activeTab.isDirty = false;
       activeTab.externalChange = false;
+      activeTab.deleted = false;
       this._renderTabs();
       // Card content lives inside the parent script's file, not this virtual tab — refresh so
       // the Commit button is correct if/when the user switches back to the parent script tab.
@@ -1076,6 +1105,7 @@ export class EditorViewElement extends LitElement {
     activeTab.originalContent = content;
     activeTab.isDirty = false;
     activeTab.externalChange = false;
+    activeTab.deleted = false;
     this._renderTabs();
     this._refreshGitStatus();
     await window.loadScripts?.();
@@ -1309,8 +1339,69 @@ export class EditorViewElement extends LitElement {
     `;
   }
 
+  /** The file was deleted behind the editor's back: close a clean tab, keep a dirty one (saving recreates the file). */
+  private async _handleDeletedFile(tab: JsaTab): Promise<void> {
+    if (!tab.isDirty) {
+      await this.closeTab(tab.filename);
+      window.alertToast?.show(
+        this._t(
+          'external_update_deleted_closed',
+          '"{{filename}}" was deleted by an AI assistant and its tab was closed.',
+          {
+            filename: tab.filename,
+          }
+        ),
+        { variant: 'info' }
+      );
+      return;
+    }
+    if (tab.deleted) return;
+    tab.deleted = true;
+    this._renderTabs();
+    window.alertToast?.show(
+      this._t('external_update_deleted', '"{{filename}}" was deleted by an AI assistant, but you have unsaved edits.', {
+        filename: tab.filename,
+      }),
+      { variant: 'warning' }
+    );
+  }
+
+  /** Throws away the user's unsaved edits and takes the version an AI assistant wrote. */
+  private _loadExternalVersion(tab: JsaTab): void {
+    const script = tab.parentScript ?? tab.filename;
+    const url = tab.type === 'card' ? `api/scripts/${script}/card` : `api/scripts/${script}/content`;
+    void this._syncTabFromDisk(tab, url, true);
+  }
+
   private _renderModeBanner(activeTab: JsaTab | undefined) {
     if (!activeTab) return nothing;
+    if (activeTab.deleted && activeTab.isDirty) {
+      return html`
+        <div class="mode-banner conflict">
+          <span>
+            <i class="mdi mdi-alert"></i>${this._t(
+              'external_update_deleted_banner',
+              'An AI assistant deleted this file while you were editing. Saving creates it again (the deleted version stays in the Git history).'
+            )}
+          </span>
+        </div>
+      `;
+    }
+    if (activeTab.externalChange && activeTab.isDirty) {
+      return html`
+        <div class="mode-banner conflict">
+          <span>
+            <i class="mdi mdi-alert"></i>${this._t(
+              'external_update_banner',
+              'An AI assistant changed this file while you were editing. Saving overwrites its version (it stays in the Git history).'
+            )}
+          </span>
+          <button @click=${() => this._loadExternalVersion(activeTab)}>
+            ${this._t('external_update_load_theirs', 'Discard my edits and load it')}
+          </button>
+        </div>
+      `;
+    }
     if (activeTab.type === 'card') {
       return html`
         <div class="mode-banner card">
