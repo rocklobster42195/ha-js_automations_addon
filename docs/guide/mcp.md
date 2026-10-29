@@ -57,7 +57,7 @@ Every tool can be switched on or off individually under **Settings → MCP Serve
 | Control | `start_script`, `stop_script`, `restart_script` | Control scripts; start/restart report whether the script is still running a moment later                                                                                                   | on      |
 | Control | `call_service`                                  | Call a Home Assistant service (acts on real devices; host-level services are refused)                                                                                                      | **off** |
 | Write   | `write_script`, `write_card`                    | Create or change scripts, libraries and Lovelace cards                                                                                                                                     | **off** |
-| Write   | `delete_script`                                 | Delete a script or library                                                                                                                                                                 | **off** |
+| Write   | `delete_script`                                 | Delete a script or library. Its Store entries (saved config, possibly credentials) remain and are listed in the result                                                                     | **off** |
 
 Blockly scripts are not visible to assistants.
 

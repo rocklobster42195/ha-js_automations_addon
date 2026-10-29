@@ -8,18 +8,20 @@ import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { isValidScriptName, resolveScript, type ScriptDirs } from './mcp-script-files';
 import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
-import { maskSecrets } from './mcp-secret-filter';
+import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
 import ScriptHeaderParser from './script-header-parser';
 import type { WorkerManagerInstance } from './script-list';
 import type CardManager from './card-manager';
 import type DependencyManager from './dependency-manager';
 import type GitManager from './git-manager';
+import type StoreManager from './store-manager';
 
 export interface McpWriteToolDeps extends ScriptDirs {
   workerManager: WorkerManagerInstance;
   cardManager: CardManager;
   depManager: DependencyManager;
   gitManager: GitManager;
+  storeManager: StoreManager;
   /** STORAGE_DIR (ha-api.d.ts and the generated entity/service typings live here). */
   storageDir: string;
   typesDir: string;
@@ -38,7 +40,34 @@ const text = (content: string): McpToolResult => ({ content });
 const fail = (message: string): McpToolResult => ({ content: message, isError: true });
 
 export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps): void {
-  const { workerManager, cardManager, depManager, gitManager } = deps;
+  const { workerManager, cardManager, depManager, gitManager, storeManager } = deps;
+
+  /**
+   * Store entries a script left behind (its persisted config and state; the store records the script's display
+   * name as owner). Deleting a script never deletes them, and an assistant cannot either — so say what remains,
+   * and where a credential-like field is still filled in, without ever showing a value.
+   */
+  const leftoverStoreNotice = (displayName: string): string => {
+    const owned = Object.entries(storeManager.getAllPublic()).filter(([, entry]) => entry.owner === displayName);
+    if (!owned.length) return '';
+    const describe = ([key, entry]: (typeof owned)[number]): string => {
+      if (entry.isSecret) return `${key} (secret)`;
+      const value = entry.value;
+      const filled: string[] = [];
+      if (isSensitiveName(key) && typeof value === 'string' && value !== '') filled.push(key);
+      if (value && typeof value === 'object') {
+        for (const [field, v] of Object.entries(value)) {
+          if (isSensitiveName(field) && typeof v === 'string' && v !== '') filled.push(field);
+        }
+      }
+      return filled.length ? `${key} (credential-like field filled in: ${filled.join(', ')})` : key;
+    };
+    const shown = owned.slice(0, 10).map(describe).join('; ');
+    return (
+      `\nStore entries of this script remain (its saved config/state): ${shown}${owned.length > 10 ? '; …' : ''}. ` +
+      'Deleting a script does not delete them and assistants cannot either — the user can remove them in the Store Explorer.'
+    );
+  };
 
   // Git and file writes of concurrent MCP calls must not interleave (index.lock, torn reads).
   let queue: Promise<unknown> = Promise.resolve();
@@ -241,7 +270,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     title: 'Delete script',
     description:
       'Deletes a script or library: stops it, removes the file, its card and its webhook registrations. The last state and ' +
-      'the deletion are committed to Git, so it can be restored from the version history.',
+      'the deletion are committed to Git, so it can be restored from the version history. Its Store entries (saved config, ' +
+      'possibly credentials) are NOT deleted — the result lists them so the user can remove them in the Store Explorer.',
     inputSchema: { filename: z.string().describe('File name as shown by list_scripts') },
     handler: (args) =>
       serialized(async () => {
@@ -249,6 +279,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const found = resolveScript(deps, filename);
         if (!found) return fail(`No script or library named "${filename}".`);
         const name = path.basename(found.fullPath);
+        const displayName = (ScriptHeaderParser.parse(found.fullPath) as { name?: string | null }).name || name;
 
         const notes = [`snapshot: ${await commitFile(found.fullPath, `mcp: snapshot before deleting ${name}`)}`];
         workerManager.stopScript(name, 'deleted');
@@ -259,7 +290,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         notes.push(await commitFile(found.fullPath, `mcp: delete ${name}`, true));
         deps.notifyStatusUpdate();
         return text(
-          `Deleted ${found.isLibrary ? 'library' : 'script'} "${name}". ${notes.join('; ')}\nIt can be restored from the version history (Git) in the UI.`
+          `Deleted ${found.isLibrary ? 'library' : 'script'} "${name}". ${notes.join('; ')}\nIt can be restored from the version history (Git) in the UI.` +
+            (found.isLibrary ? '' : leftoverStoreNotice(displayName))
         );
       }),
   });

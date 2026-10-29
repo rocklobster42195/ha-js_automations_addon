@@ -251,6 +251,7 @@ class Kernel extends EventEmitter {
         cardManager: this.cardManager,
         depManager: this.depManager,
         gitManager: this.gitManager,
+        storeManager: this.storeManager,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
         storageDir: STORAGE_DIR,

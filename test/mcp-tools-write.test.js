@@ -37,6 +37,15 @@ function setup(t) {
     stopScript: (n, r) => calls.push(['stop', n, r]),
     purgeWebhooksForScript: (n) => calls.push(['purge', n]),
   };
+  // Store entries as the real store reports them: the owner is the script's display name.
+  const storeEntries = {
+    typed_config: { value: { apiKey: 'filled-in-value-123', city: 'Berlin' }, owner: 'Typed', isSecret: false },
+    typed_unset: { value: { apiKey: '' }, owner: 'Typed', isSecret: false },
+    typed_vault: { value: null, owner: 'Typed', isSecret: true },
+    typed_token: { value: 'tok-123456', owner: 'Typed', isSecret: false },
+    other_config: { value: { apiKey: 'other-secret-value' }, owner: 'Somebody Else', isSecret: false },
+  };
+  const storeManager = { getAllPublic: () => storeEntries };
   const cardManager = { removeCard: (p) => calls.push(['removeCard', path.basename(p)]) };
   const depManager = { prune: async () => calls.push(['prune']) };
   const events = [];
@@ -63,6 +72,7 @@ function setup(t) {
     cardManager,
     depManager,
     gitManager,
+    storeManager,
     scriptsDir,
     librariesDir,
     storageDir,
@@ -232,10 +242,18 @@ test('write tools check, write, commit and delete safely', async (t) => {
     );
     assert.equal(subjects()[0], 'mcp: delete typed.ts');
     assert.match(git('show', 'HEAD~1:typed.ts'), /definitelyNotAnApi/, 'last state is in history');
+    assert.match(r.text, /Store entries of this script remain/);
+    assert.match(r.text, /typed_config \(credential-like field filled in: apiKey\)/);
+    assert.match(r.text, /typed_token \(credential-like field filled in: typed_token\)/);
+    assert.match(r.text, /typed_unset[;.]/, 'an empty credential field is listed but not flagged');
+    assert.match(r.text, /typed_vault \(secret\)/);
+    assert.ok(!r.text.includes('other_config'), "another script's entries are not mentioned");
+    assert.ok(!r.text.includes('filled-in-value-123') && !r.text.includes('tok-123456'), 'values are never shown');
     assert.equal((await call('delete_script', { filename: 'typed.ts' })).isError, true);
 
     calls.length = 0;
-    await call('delete_script', { filename: 'libraries/helpers.ts' });
+    const lib = await call('delete_script', { filename: 'libraries/helpers.ts' });
+    assert.doesNotMatch(lib.text, /Store entries/, 'libraries own no store entries');
     assert.ok(!calls.some((c) => c[0] === 'removeCard'), 'libraries have no card');
   });
 });
