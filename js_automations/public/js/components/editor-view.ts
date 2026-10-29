@@ -472,6 +472,8 @@ export class EditorViewElement extends LitElement {
         tab.isDirty = false;
         tab.externalChange = false;
         this._renderTabs();
+        // The card preview renders the saved card, so it must follow an update made behind the editor's back too.
+        if (tab.type === 'card' && window.CardPreview?.isOpen()) window.CardPreview.reload();
         window.alertToast?.show(
           this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
             filename: name,

@@ -200,7 +200,7 @@ if (config.apiKey) {
 A card is a plain Web Component shipped inside the script file. The pieces:
 
 1. **Header:** `@card` (or `@card dev` while developing).
-2. **Script side:** register the entities the card shows, keep them updated, and expose each button as `ha.action(name, handler)`. Call `ha.frontend.installCard()` (optionally with a `config` that pre-fills the "Add Card" picker).
+2. **Script side:** register the entities the card shows, keep them updated, and expose each button as `ha.action(name, handler)`. Call `ha.frontend.installCard()` (optionally with a `config` that pre-fills the "Add Card" picker). With `@card dev` in the header the call installs nothing and only logs a warning (preview only); with a plain `@card` it writes the card to the HA `www` folder and registers it as a Lovelace resource — start with `@card dev` while iterating.
 3. **Card side:** a Web Component. Home Assistant pushes `hass` into it; read entities from `hass.states[...]`. Call `__jsa__.connect(hass)` once and trigger actions with `await __jsa__.callAction(name, payload)`. The `__jsa__` object is injected by JSA — don't define it.
 
 The two directions are separate one-way channels: **script → card** happens through normal HA entities, **card → script** through `callAction` ↔ `ha.action`. They never call each other directly. Full explanation: [Script Packs](./card-packs.md).

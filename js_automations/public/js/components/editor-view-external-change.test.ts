@@ -178,6 +178,17 @@ describe('editor-view: files changed on disk by an AI assistant', () => {
     expect(card.originalContent).to.equal('card from AI');
   });
 
+  it('reloads an open card preview when the card was changed behind the editor', async () => {
+    const reload = sinon.stub();
+    window.CardPreview = { isOpen: () => true, reload } as never;
+    tabs().push(
+      demoTab({ filename: 'demo.ts[card]', type: 'card', parentScript: 'demo.ts', originalContent: 'old card' })
+    );
+    await emitChange();
+    delete window.CardPreview;
+    expect(reload.calledOnce).to.equal(true);
+  });
+
   describe('saving a tab with an external change', () => {
     const save = async (tab: JsaTab) => {
       tabs().push(tab);

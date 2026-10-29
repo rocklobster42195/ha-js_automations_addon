@@ -1091,7 +1091,7 @@ class WorkerManager extends EventEmitter {
 
         // 9. ha.frontend.installCard() — install embedded card and register Lovelace resource
         if (msg.type === 'install_card' && this.cardManager) {
-          const devMode = scriptMeta.headers?.card === 'dev';
+          const devMode = scriptMeta.card === 'dev';
           if (devMode) {
             this.emit('log', {
               source: path.basename(fullPath, path.extname(fullPath)),
