@@ -86,6 +86,27 @@ export function ensureCodiconFont(): void {
   document.head.appendChild(style);
 }
 
+/**
+ * Monaco decides "the mouse left the editor" with a document-level mousemove listener and
+ * `editorNode.contains(event.target)`. For a listener on the document, every event from inside a Shadow
+ * DOM is retargeted to the outermost shadow host, so `contains` was false on every move: Monaco reported
+ * "mouse left" immediately and cancelled each hover tooltip (error messages, type info). Counting the
+ * shadow hosts that enclose the editor as part of it restores the tooltips. Pinned to the CDN's Monaco
+ * 0.44.0, which does this check in MouseHandler._onMouseMove.
+ */
+export function treatEnclosingShadowHostsAsInside(editorNode: HTMLElement): void {
+  const nativeContains = Node.prototype.contains;
+  editorNode.contains = function (this: Node, other: Node | null): boolean {
+    if (nativeContains.call(this, other)) return true;
+    let root = this.getRootNode();
+    while (root instanceof ShadowRoot) {
+      if (root.host === other) return true;
+      root = root.host.getRootNode();
+    }
+    return false;
+  };
+}
+
 const REGISTER_DOMAINS = ['sensor', 'switch', 'select', 'number', 'text', 'button'];
 
 const SNIPPET_REGISTRY: SnippetDef[] = [
@@ -687,6 +708,7 @@ export class MonacoEditorElement extends LitElement {
 
   private _monaco: Monaco | null = null;
   private _editor: IStandaloneCodeEditor | null = null;
+  private _hoverFixedNode: HTMLElement | null = null;
   private _allEntities: string[] = [];
   private _allStoreKeys: StoreKeyEntry[] = [];
   private _libDisposables: { dispose(): void }[] = [];
@@ -791,6 +813,9 @@ export class MonacoEditorElement extends LitElement {
         fontSize: 13,
         minimap: { enabled: true },
         suggest: { showWords: false },
+        // Render straight into this component's Shadow DOM (which already carries the Monaco stylesheet)
+        // instead of a second, Monaco-owned shadow root nested inside it.
+        useShadowDOM: false,
       });
 
       const savedWordWrap = (localStorage.getItem('js_editor_wordwrap') as 'on' | 'off') || 'off';
@@ -860,6 +885,12 @@ export class MonacoEditorElement extends LitElement {
 
   setModel = (model: ITextModel | null): void => {
     this._editor?.setModel(model);
+    // The editor's DOM node only exists once it has a model, so the hover fix is applied here (once).
+    const editorNode = this._editor?.getDomNode();
+    if (editorNode && editorNode !== this._hoverFixedNode) {
+      treatEnclosingShadowHostsAsInside(editorNode);
+      this._hoverFixedNode = editorNode;
+    }
     this._applySearchHighlight();
   };
 
