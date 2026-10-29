@@ -1,3 +1,18 @@
+## [3.2.0-beta.1] - 2026-10-29
+
+### Fixes for the MCP-server beta
+
+Everything from [3.2.0-beta.0](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.0) applies; this beta fixes what the first tests turned up.
+
+**Fixes**
+
+- **Editor:** error and type tooltips show on hover again. They never appeared, because inside the editor's Shadow DOM every mouse move counted as "the mouse left the editor".
+- **Editor:** the icons of the search widget and quick fixes are shown instead of hex codes.
+- **Typings:** `ha.states[id]` accepts an entity ID held in a variable or `CONFIG` (it was a type error), and service fields that Home Assistant declares as text accept numbers, for example `number.set_value`.
+- **MCP:** when a written script has type warnings, the assistant is asked to fix real mistakes before it reports the script as done.
+
+---
+
 ## [3.2.0-beta.0] - 2026-10-29
 
 ### MCP server for AI assistants
