@@ -49,6 +49,7 @@ export function buildManifest(opts: { version: string; url: string; token: strin
       },
     },
     tools_generated: true,
+    prompts_generated: true,
     user_config: {
       url: {
         type: 'string',

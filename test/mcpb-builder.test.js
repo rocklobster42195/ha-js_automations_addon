@@ -47,6 +47,9 @@ test('manifest has every field the MCPB spec requires and the user_config the br
   assert.equal(m.author.name, 'JS Automations');
   assert.equal(m.icon, 'icon.png');
 
+  assert.equal(m.tools_generated, true);
+  assert.equal(m.prompts_generated, true, 'the server offers prompts at runtime');
+
   assert.equal(m.server.type, 'node');
   assert.equal(m.server.entry_point, 'server/index.js');
   assert.equal(m.server.mcp_config.command, 'node');
