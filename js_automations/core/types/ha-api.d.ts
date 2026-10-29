@@ -49,9 +49,16 @@ type AllServiceIds = {
 type ServiceData<T extends string> = T extends `${infer D}.${infer S}`
   ? D extends keyof ServiceMap
     ? S extends keyof ServiceMap[D]
-      ? {
-          [K in keyof ServiceMap[D][S]]: K extends 'entity_id' ? EntityID | EntityID[] : ServiceMap[D][S][K];
-        } & { entity_id?: EntityID | EntityID[] }
+      ? 'entity_id' extends keyof ServiceMap[D][S]
+        ? {
+            [K in keyof ServiceMap[D][S]]: K extends 'entity_id' ? EntityID | EntityID[] : ServiceMap[D][S][K];
+          }
+        : ServiceMap[D][S] & {
+            // Only added when the service does not declare entity_id itself. Having both would intersect two
+            // copies of the full entity-ID union, which TypeScript gives up on (TS2590 "union type too
+            // complex") on every ha.call() once an instance has a few hundred entities.
+            entity_id?: EntityID | EntityID[];
+          }
       : Record<string, any>
     : Record<string, any>
   : Record<string, any>;

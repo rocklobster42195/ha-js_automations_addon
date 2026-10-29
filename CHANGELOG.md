@@ -38,6 +38,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - The card preview reloads after the card was changed from outside the editor
 - **New script → From repo** can restore a script whose deletion was already committed; a failed restore shows the plain error message instead of escaped JSON
 - Editor: error and type tooltips show on hover again (they never appeared), and the editor icons (search, quick fixes) no longer show as hex codes
+- Typings: `ha.call()` no longer reports "Expression produces a union type that is too complex" on instances with a few hundred entities or more
 - Typings: `ha.states[id]` accepts an entity ID held in a variable or `CONFIG` (it was a type error), and service fields declared as text by Home Assistant accept numbers (for example `number.set_value`)
 - `ha.persistent('key', false)` is typed as `boolean` instead of the literal `false`, so assigning `true` no longer fails the type check
 - Documentation: how a native entity receives commands from Home Assistant (`'ON'` / `'OFF'` through `ha.on()`), all `ha.on` filter operators with and without a threshold

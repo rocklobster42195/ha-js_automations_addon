@@ -100,3 +100,30 @@ test('a service field with a text selector accepts a number as well as a string'
     []
   );
 });
+
+test('ha.call() with an entity_id stays free of "union too complex" errors on an instance with many entities', (t) => {
+  const domains = ['sensor', 'light', 'switch', 'number', 'input_number', 'cover'];
+  let entities = 'interface HAEntities {\n';
+  for (let i = 0; i < 1500; i++)
+    entities += '  "' + domains[i % domains.length] + '.dev_' + i + '": HAState<HAAttributes>;\n';
+  entities += '}\n';
+  // One service that declares an entity_id field is enough: its entity_id type was intersected with the
+  // generic one (two entity-ID unions) and TypeScript gave up on every ha.call() — real HA instances have
+  // several such services (homeassistant.update_entity, ...).
+  const services =
+    'interface ServiceMap {\n  light: { turn_off: {}; turn_on: {} };\n  number: { set_value: { value: string | number } };\n' +
+    '  homeassistant: { update_entity: { entity_id: any } };\n}\n';
+  const issues = typeIssues(
+    t,
+    [
+      "ha.call('light.turn_off', { entity_id: 'light.dev_1' });",
+      'const id: string = "light.dev_2";',
+      "ha.call('light.turn_off', { entity_id: id });",
+      "ha.call('light.turn_off', { entity_id: ['light.dev_1', id] });",
+      'const domain = id.split(".")[0];',
+      "if (domain === 'number') ha.call(`${domain}.set_value`, { entity_id: id, value: 21 });",
+    ].join('\n'),
+    { 'entities.d.ts': entities, 'services.d.ts': services }
+  );
+  assert.deepEqual(issues, []);
+});
