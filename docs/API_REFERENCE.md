@@ -140,7 +140,30 @@ ha.on('sensor.power_usage', 'gt', (e) => {
 ha.on('sensor.temperature', 'gt', 25, (e) => {
   ha.warn("It's getting hot!");
 });
+
+// Run only if the state actually changed ('ne' = not equal to the old state)
+ha.on('binary_sensor.motion', 'ne', (e) => {
+  ha.log(`Motion changed: ${e.old_state} → ${e.state}`);
+});
+
+// Run only if the new state differs from a fixed value
+ha.on('light.hallway', 'ne', 'on', (e) => {
+  ha.log('Hallway light is not on');
+});
 ```
+
+Filter operators for `ha.on(pattern, filter, [threshold], callback)`:
+
+| Filter | Meaning       | Without threshold (new vs. old state) | With threshold (new state vs. threshold) |
+| ------ | ------------- | ------------------------------------- | ---------------------------------------- |
+| `ne`   | not equal     | state changed                         | new state ≠ threshold                    |
+| `eq`   | equal         | state is unchanged                    | new state = threshold                    |
+| `gt`   | greater than  | value increased                       | new value > threshold                    |
+| `ge`   | greater/equal | value did not decrease                | new value ≥ threshold                    |
+| `lt`   | less than     | value decreased                       | new value < threshold                    |
+| `le`   | less/equal    | value did not increase                | new value ≤ threshold                    |
+
+`gt`, `ge`, `lt` and `le` compare numbers: if the new state (or, without a threshold, the old state) is not numeric, the callback does not run. `ne` and `eq` compare the state strings.
 
 ### 6. Waiting for States (`ha.waitFor` / `ha.waitUntil`)
 
