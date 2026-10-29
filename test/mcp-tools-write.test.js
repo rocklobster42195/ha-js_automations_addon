@@ -184,6 +184,7 @@ test('write tools check, write, commit and delete safely', async (t) => {
     });
     assert.equal(r.isError, false);
     assert.match(r.text, /Type warnings \(\d+\)/);
+    assert.match(r.text, /topic "services"/);
     assert.match(r.text, /definitelyNotAnApi/);
     assert.ok(existsSync(file('typed.ts')));
   });
