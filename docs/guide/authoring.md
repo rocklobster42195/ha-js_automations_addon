@@ -98,6 +98,7 @@ Rules:
 ### Entities
 
 - Create your own entities with `ha.register()` (domains: `sensor`, `binary_sensor`, `switch`, `select`, `number`, `text`, `button`); update with `ha.update()`.
+- With a `device_class` (e.g. `temperature`, `humidity`), leave out `icon`: Home Assistant shows the device class's own icon and ignores a custom one, and JSA logs a warning.
 - Group related entities into one device with the `device` option. Remember: with `device` set, HA derives the entity ID from device + entity name slugs.
 - Entities a script stops registering are removed on its next run (Mark-and-Sweep). For dynamic sets, call `ha.unregister()` immediately.
 - Use `stale_ok: true` for values that stay meaningful while the script is stopped.

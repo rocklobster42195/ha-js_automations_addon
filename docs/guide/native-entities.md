@@ -5,9 +5,8 @@
 ```javascript
 ha.register('sensor.outside_temp', {
   name: 'Outside Temperature',
-  icon: 'mdi:thermometer',
   unit: '°C',
-  device_class: 'temperature',
+  device_class: 'temperature', // no custom icon: Home Assistant uses the device class's own
   state_class: 'measurement',
   initial_state: 0,
 });
