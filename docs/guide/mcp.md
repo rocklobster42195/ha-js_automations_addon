@@ -44,20 +44,20 @@ Clients without header support can use the `mcp-remote` snippet from the panel. 
 
 Every tool can be switched on or off individually under **Settings → MCP Server**. Defaults:
 
-| Group   | Tool                                            | What it does                                                                                              | Default |
-| ------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------- |
-| Read    | `list_scripts`                                  | Name, status, header tags and error state of all scripts and libraries                                    | on      |
-| Read    | `read_script`                                   | Source code (card shown as plain JavaScript, known credentials masked)                                    | on      |
-| Read    | `get_logs`                                      | Recent log lines, filterable by script, level, age and text                                               | on      |
-| Read    | `get_script_errors`                             | Why a script is not working: status, recent errors, compiler messages                                     | on      |
-| Read    | `get_events`                                    | The last 300 Home Assistant events seen while MCP is on                                                   | on      |
-| Read    | `list_entities`, `get_entity`                   | Entities with state and attributes                                                                        | on      |
-| Read    | `get_api_reference`                             | The documentation an assistant needs to write scripts (this site's authoring guide, API reference, types) | on      |
-| Read    | `get_store`                                     | `ha.store` values. Secrets are never returned; keys like `token` or `password` are masked                 | **off** |
-| Control | `start_script`, `stop_script`, `restart_script` | Control scripts; start/restart report whether the script is still running a moment later                  | on      |
-| Control | `call_service`                                  | Call a Home Assistant service (acts on real devices; host-level services are refused)                     | **off** |
-| Write   | `write_script`, `write_card`                    | Create or change scripts, libraries and Lovelace cards                                                    | **off** |
-| Write   | `delete_script`                                 | Delete a script or library                                                                                | **off** |
+| Group   | Tool                                            | What it does                                                                                                                                                                               | Default |
+| ------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| Read    | `list_scripts`                                  | Name, status, header tags and error state of all scripts and libraries                                                                                                                     | on      |
+| Read    | `read_script`                                   | Source code (card shown as plain JavaScript, known credentials masked)                                                                                                                     | on      |
+| Read    | `get_logs`                                      | Recent log lines, filterable by script, level, age and text                                                                                                                                | on      |
+| Read    | `get_script_errors`                             | Why a script is not working: status, recent errors, compiler messages                                                                                                                      | on      |
+| Read    | `get_events`                                    | The last 300 Home Assistant events seen while MCP is on                                                                                                                                    | on      |
+| Read    | `list_entities`, `get_entity`                   | Entities with state and attributes                                                                                                                                                         | on      |
+| Read    | `get_api_reference`                             | The documentation an assistant needs to write scripts (this site's authoring guide, API reference, types)                                                                                  | on      |
+| Read    | `get_store`                                     | `ha.store` values. Secrets are never returned; keys like `token` or `password` are masked (an empty value stays visibly empty, so an assistant can tell whether a credential is filled in) | **off** |
+| Control | `start_script`, `stop_script`, `restart_script` | Control scripts; start/restart report whether the script is still running a moment later                                                                                                   | on      |
+| Control | `call_service`                                  | Call a Home Assistant service (acts on real devices; host-level services are refused)                                                                                                      | **off** |
+| Write   | `write_script`, `write_card`                    | Create or change scripts, libraries and Lovelace cards                                                                                                                                     | **off** |
+| Write   | `delete_script`                                 | Delete a script or library                                                                                                                                                                 | **off** |
 
 Blockly scripts are not visible to assistants.
 

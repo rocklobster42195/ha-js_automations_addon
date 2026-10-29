@@ -72,6 +72,9 @@ test('maskDeep masks string leaves and strings under sensitive keys, leaves othe
     url: 'https://example.com/a',
   });
   assert.equal(maskDeep(null), null);
+  // An empty credential must stay visibly empty so a missing key can be told from a filled one.
+  assert.deepEqual(maskDeep({ apiKey: '', city: 'Berlin' }), { apiKey: '', city: 'Berlin' });
+  assert.deepEqual(maskDeep({ apiKey: 'abc', city: 'Berlin' }), { apiKey: MASK, city: 'Berlin' });
 });
 
 test('maskWithNotice appends a count', () => {

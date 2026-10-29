@@ -95,6 +95,27 @@ function setup(t) {
         updated: '2026-01-01T00:00:00Z',
         accessed: '',
       },
+      empty_api_key: {
+        value: '',
+        owner: 'hello.js',
+        isSecret: false,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
+      weather_config: {
+        value: { apiKey: '', city: 'Berlin' },
+        owner: 'hello.js',
+        isSecret: false,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
+      filled_config: {
+        value: { apiKey: 'real-key-123456', city: 'Berlin' },
+        owner: 'hello.js',
+        isSecret: false,
+        updated: '2026-01-01T00:00:00Z',
+        accessed: '',
+      },
       config: {
         value: { url: 'x', note: 'password = "abcdefgh12"' },
         owner: 'a.js',
@@ -256,6 +277,11 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match(all, /api_credentials \| \(secret, value withheld\)/);
     assert.match(all, /wifi_password \| \*\*\* \(masked: sensitive key name\)/);
     assert.ok(!all.includes('hunter2hunter2'));
+    // empty credentials stay empty (so "still missing" can be told from "filled in"), filled ones are masked
+    assert.match(all, /empty_api_key \| "" \(empty\) \|/);
+    assert.match(all, /weather_config \| \{"apiKey":"","city":"Berlin"\}/);
+    assert.match(all, /filled_config \| \{"apiKey":"\*\*\*","city":"Berlin"\}/);
+    assert.ok(!all.includes('real-key-123456'));
     assert.ok(!all.includes('abcdefgh12'), 'sensitive text inside a plain value is masked as well');
     assert.match((await call('get_store', { key: 'guest_mode' })).text, /^guest_mode/);
     assert.equal((await call('get_store', { search: 'zzz' })).text, 'No matching store entries.');

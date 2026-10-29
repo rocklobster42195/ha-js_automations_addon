@@ -306,7 +306,7 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       const lines = entries.slice(0, 200).map(([key, e]) => {
         let value: string;
         if (e.isSecret) value = '(secret, value withheld)';
-        else if (isSensitiveName(key)) value = '*** (masked: sensitive key name)';
+        else if (isSensitiveName(key)) value = e.value === '' ? '"" (empty)' : '*** (masked: sensitive key name)';
         else {
           value = JSON.stringify(maskDeep(e.value)) ?? 'undefined';
           if (value.length > 500) value = value.slice(0, 500) + '…';

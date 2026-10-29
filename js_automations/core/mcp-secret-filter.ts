@@ -68,7 +68,8 @@ export function maskSecrets(input: string): MaskResult {
 
 /**
  * Masks a structured value before it is serialized: string leaves go through the filter, and strings
- * under sensitive key names are replaced entirely. Needed because JSON.stringify escapes inner quotes,
+ * under sensitive key names are replaced entirely — except empty ones, which stay empty so an assistant can tell a
+ * credential that is still missing from one that is filled in. Needed because JSON.stringify escapes inner quotes,
  * which would hide `password = "x"` inside a string from the text patterns.
  */
 export function maskDeep(value: unknown): unknown {
@@ -76,7 +77,10 @@ export function maskDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(maskDeep);
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, typeof v === 'string' && isSensitiveName(k) ? MASK : maskDeep(v)])
+      Object.entries(value).map(([k, v]) => [
+        k,
+        typeof v === 'string' && isSensitiveName(k) ? (v === '' ? v : MASK) : maskDeep(v),
+      ])
     );
   }
   return value;
