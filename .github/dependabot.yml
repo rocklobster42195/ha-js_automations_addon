@@ -8,6 +8,16 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 has no JavaScript API (transpileModule, createProgram, ...), which script
+      # compilation (compiler-manager) and the MCP type check (mcp-script-check) are built on.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # The browser loads these two from a CDN with the version pinned in
+      # js_automations/public/index.html. The npm packages must stay in step with that pin
+      # (Blockly also runs on the server, in blockly-compiler), so upgrade them by hand, together.
+      - dependency-name: blockly
+      - dependency-name: monaco-editor
   - package-ecosystem: github-actions
     directory: /
     schedule:
