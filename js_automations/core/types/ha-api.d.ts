@@ -574,6 +574,10 @@ interface HA {
    * Creates a persistent entity in Home Assistant's registry.
    * Calling `ha.register()` again with the same `entityId` updates the configuration.
    *
+   * Commands from Home Assistant (switch, number, select, text) arrive through `ha.on(entityId, cb)`: `e.state` is the raw
+   * payload (`'ON'` / `'OFF'` for a switch, upper case) and `e.old_state` is `null`. The entity does not change by itself —
+   * confirm a command with `ha.update()`.
+   *
    * @example
    * ha.register('sensor.outside_temp', {
    *   name: 'Outside Temperature',
