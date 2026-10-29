@@ -188,6 +188,7 @@ test('jsa_feedback is hidden outside maintainer mode; instructions and tool repl
     assert.match(instructions, /MAINTAINER MODE/);
     assert.match(instructions, /github\.com\/rocklobster42195\/ha-js_automations_addon/);
     assert.match(instructions, /silently/);
+    assert.match(instructions, /Before you send your final reply, call jsa_feedback/);
     assert.match(instructions, /hard_error and tell the user immediately/);
     assert.match(instructions, /get_api_reference/, 'normal instructions are kept');
     await client.close();
