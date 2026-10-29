@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
-import { isValidScriptName, resolveScript, type ScriptDirs } from './mcp-script-files';
+import { isValidScriptName, missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
 import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
 import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
 import ScriptHeaderParser from './script-header-parser';
@@ -228,7 +228,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const filename = String(args.filename ?? '');
         const source = String(args.source ?? '');
         const found = resolveScript(deps, filename);
-        if (!found) return fail(`No script named "${filename}". Create it with write_script first.`);
+        if (!found)
+          return fail(
+            missingScriptMessage(filename, `No script named "${filename}". Create it with write_script first.`)
+          );
         if (found.isLibrary) return fail('Libraries cannot have a card.');
         if (!source.trim()) return fail('The card source is empty.');
         if (source.includes('__JSA_CARD') || source.length > MAX_SOURCE_CHARS) {
@@ -277,7 +280,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       serialized(async () => {
         const filename = String(args.filename ?? '');
         const found = resolveScript(deps, filename);
-        if (!found) return fail(`No script or library named "${filename}".`);
+        if (!found) return fail(missingScriptMessage(filename, `No script or library named "${filename}".`));
         const name = path.basename(found.fullPath);
         const displayName = (ScriptHeaderParser.parse(found.fullPath) as { name?: string | null }).name || name;
 

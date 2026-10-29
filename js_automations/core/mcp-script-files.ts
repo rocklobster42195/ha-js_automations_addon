@@ -19,6 +19,12 @@ export function isValidScriptName(name: string): boolean {
   return path.basename(clean) === clean && /^[\w.\- ]+\.(js|ts)$/.test(clean) && !clean.endsWith('.d.ts');
 }
 
+/** Error text for a name that did not resolve: tells an invalid name (path parts, odd extension) from a missing file. */
+export function missingScriptMessage(filename: string, fallback: string): string {
+  if (isValidScriptName(filename)) return fallback;
+  return `Invalid file name "${filename}". Use a plain ".js" or ".ts" name without path parts, as shown by list_scripts (libraries: "libraries/name.ts").`;
+}
+
 /**
  * Resolves a script/library file name to its existing path. Only plain .js/.ts files directly
  * in the scripts or libraries folder are allowed. A "libraries/" prefix selects the library.

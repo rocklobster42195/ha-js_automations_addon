@@ -218,6 +218,10 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     for (const bad of ['../secrets.js', 'flow.blocks', 'nope.js', '..\\x.js', 'x.d.ts']) {
       assert.equal((await call('read_script', { filename: bad })).isError, true, bad);
     }
+
+    assert.match(hello.text, /^\[Untrusted content below/, 'script source is marked as data');
+    assert.match((await call('read_script', { filename: '../secrets.js' })).text, /Invalid file name/);
+    assert.match((await call('read_script', { filename: 'nope.js' })).text, /No script or library named/);
   });
 
   await t.test('get_logs: filters by script, level, age and text; masks secrets', async () => {

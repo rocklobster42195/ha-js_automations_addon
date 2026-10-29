@@ -4,7 +4,7 @@
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
-import { resolveScript, type ScriptDirs } from './mcp-script-files';
+import { missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
 import type { WorkerManagerInstance } from './script-list';
 import ScriptHeaderParser from './script-header-parser';
 import type DependencyManager from './dependency-manager';
@@ -40,7 +40,13 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
   /** Resolves a runnable script (libraries have no runtime). */
   const resolveRunnable = (filename: string) => {
     const found = resolveScript(deps, filename);
-    if (!found) return { error: fail(`No script named "${filename}". Use list_scripts to see the available files.`) };
+    if (!found) {
+      return {
+        error: fail(
+          missingScriptMessage(filename, `No script named "${filename}". Use list_scripts to see the available files.`)
+        ),
+      };
+    }
     if (found.isLibrary)
       return {
         error: fail(
