@@ -1,3 +1,20 @@
+## [3.2.0-beta.3] - 2026-10-30
+
+### Access levels for the MCP server
+
+Everything from [3.2.0-beta.0](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.0) to [3.2.0-beta.2](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.2) applies.
+
+**Changes**
+
+- **Settings → MCP Server:** the sixteen switches are replaced by an **access level** — *Read only*, *Read + control* (default, as before), *Read + control + write* or *Custom*. `get_store`, `call_service` and `delete_script` keep their own switches, off by default, whatever the level is. *Custom* still shows a switch per tool. Settings you had changed before are kept (they become *Custom*).
+- A hint explains that Claude Desktop's own per-tool permissions are a second layer and do not replace these settings.
+
+**Fixes**
+
+- **MCP maintainer mode:** a tool result no longer tells the assistant what to do or to keep something from you. An assistant had (rightly) rejected the reminder at the end of `write_script` results as a prompt injection. The notes for the developers are now requested in the server instructions only, with one short line at the end instead of silence.
+
+---
+
 ## [3.2.0-beta.2] - 2026-10-29
 
 ### Type check on large instances
