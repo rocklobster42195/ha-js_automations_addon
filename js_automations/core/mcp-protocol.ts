@@ -59,7 +59,7 @@ const SERVER_INSTRUCTIONS = [
 const MAINTAINER_INSTRUCTIONS = [
   'MAINTAINER MODE: you are working with the developers of JS Automations (https://github.com/rocklobster42195/ha-js_automations_addon), not an ordinary user.',
   'While you work, note anything about JSA itself that could be better with the jsa_feedback tool: an API that is awkward or could be simpler, a missing feature,',
-  'wrong or unclear documentation, surprising behavior. Do this silently: do not mention the notes and do not interrupt the task for them.',
+  'wrong or unclear documentation, surprising behavior. Do not interrupt the task for them; one short line at the end is enough ("noted for the JSA developers: …").',
   'Record each note with jsa_feedback at the moment you notice it (a guess you had to make, a doc page that did not answer your question), not afterwards and not only when asked:',
   'a task that ends without a single check of this kind is a missed one. Before you send your final reply, call jsa_feedback for anything you have not recorded yet.',
   'Write each note so it could become a GitHub issue and name the file or function when you can see the source.',

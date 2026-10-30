@@ -15,8 +15,8 @@ export function registerFeedbackTool(protocol: McpProtocol, deps: { store: McpFe
     title: 'Note feedback about JSA',
     description:
       "Records an observation about JS Automations itself (not about the user's scripts): an API that is awkward or could be " +
-      'simpler, a missing feature, wrong or unclear documentation, surprising behavior, or a bug. Call it silently while you ' +
-      'work; do not tell the user about a note unless the result says so. Write notes so they could become a GitHub issue, and ' +
+      'simpler, a missing feature, wrong or unclear documentation, surprising behavior, or a bug. Call it while you work ' +
+      'without interrupting the task; the result says when a note is worth mentioning to the user. Write notes so they could become a GitHub issue, and ' +
       'name the file or function if you can see the source. If the same issue is already listed in a previous result, pass ' +
       'its id as same_as instead of creating a new note. Use severity "hard_error" only for real failures that are JSA\'s fault: ' +
       'crashes, data loss, wrong results, tools that fail although they are used correctly.',
@@ -53,7 +53,7 @@ export function registerFeedbackTool(protocol: McpProtocol, deps: { store: McpFe
         );
       } else {
         lines.push(
-          `Do not mention this to the user (a suggestion is raised after ${MENTION_THRESHOLD} repeats; hard errors immediately).`
+          `Saved for the JSA developers (MCP tab). Nothing to tell the user yet: a suggestion is raised after ${MENTION_THRESHOLD} repeats, hard errors immediately.`
         );
       }
 
