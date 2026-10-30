@@ -75,7 +75,7 @@ Clicking "Wiederherstellen" writes the file back to disk from its last committed
 These come from the prior version of this concept and don't conflict with anything decided above — kept here as implementation guidance:
 
 - **First-time setup:** if no `.git` exists in `SCRIPTS_DIR`, the first commit runs `git init`, sets `user.name`/`user.email` from settings, and creates the initial commit. The GitHub remote is added on first push.
-- **Push:** token is injected into the remote URL per-request (`https://TOKEN@github.com/user/repo.git`) and never written to `.git/config` or cached.
+- **Push:** the token is sent per command as an `Authorization` header scoped to the remote host (`-c http.<origin>/.extraHeader=…`, redirects followed) and never written to `.git/config` or cached. It used to be injected into the URL (`https://TOKEN@github.com/user/repo.git`); git drops such URL credentials when the server redirects, which ended pushes with "could not read Username".
 - **Token storage:** the raw token lives in `settings.json` (backend consumers read it straight from `settingsManager`), but it is **masked at the HTTP boundary** — every `mode:'password'` settings field (`versioning.git_token`, `mqtt.password`, `backup.webdav_password`) comes back from `GET /api/settings` as a `__JSA_SECRET_KEPT__` sentinel, is served individually only via `GET /api/settings/:section/:key/reveal`, and on save a blank/masked field means "unchanged" (`__JSA_SECRET_CLEAR__` is the one explicit wipe). See `core/secret-sentinels.ts` and `routes/settings-route.ts`.
 - **Revert safety matrix** — only non-destructive git operations are exposed in the UI:
 

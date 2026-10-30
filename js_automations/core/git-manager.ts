@@ -285,19 +285,38 @@ class GitManager extends EventEmitter {
     }
   }
 
-  /** https://github.com/user/repo.git ->https://TOKEN@github.com/user/repo.git (works the same
-   * for any HTTPS git host, e.g. GitLab/Gitea/Bitbucket — nothing here is GitHub-specific). Built
-   * fresh per call and never persisted — the caller must never `git remote set-url` with this. */
-  static buildAuthenticatedUrl(repoUrl: string, token: string): string {
-    return repoUrl.replace(/^https:\/\//, `https://${token}@`);
+  /**
+   * Git configuration (passed as `-c` options) that authenticates against an HTTPS remote WITHOUT putting the
+   * token into the URL.
+   *
+   * The token used to be embedded as `https://TOKEN@host/...`. Git forgets such URL credentials whenever the
+   * server redirects (it only keeps what the redirect target's URL carries), and a push then dies with
+   * "warning: redirecting to ..." followed by "could not read Username" — there is no terminal to ask on. An
+   * Authorization header scoped to the host is sent on every request to that host, redirects included, and
+   * redirects are followed for the push itself too. Same credentials as before: the token as the user name,
+   * empty password — what `https://TOKEN@host` meant — which GitHub, GitLab and Gitea accept alike.
+   *
+   * Built fresh for every command, handed to a throw-away simple-git instance and never persisted.
+   */
+  static buildAuthConfig(repoUrl: string, token: string): string[] {
+    const config = ['http.followRedirects=true'];
+    // Only HTTPS remotes take a token (as before); SSH or local paths are left to git's own configuration.
+    if (token && /^https:\/\//i.test(repoUrl)) {
+      const origin = new URL(repoUrl).origin;
+      const basic = Buffer.from(`${token}:`).toString('base64');
+      config.push(`http.${origin}/.extraHeader=Authorization: Basic ${basic}`);
+    }
+    return config;
   }
 
-  /** git's own auth-failure messages routinely echo the remote URL verbatim — which embeds the
-   * token via buildAuthenticatedUrl() above. Error messages get surfaced to the UI (status-bar
+  /** git's own auth-failure messages routinely echo the remote URL verbatim — which used to embed the
+   * token (see buildAuthConfig() above). Error messages get surfaced to the UI (status-bar
    * tooltip, settings alert) and written to the persisted log, so the raw token must never reach
    * either. Called with the token value that was actually used to build the URL for this attempt. */
   private static redactToken(message: string, token: string | undefined): string {
-    return token ? message.split(token).join('***') : message;
+    if (!token) return message;
+    const basic = Buffer.from(`${token}:`).toString('base64');
+    return message.split(token).join('***').split(basic).join('***');
   }
 
   /** Separate from commit() by design — a flaky remote connection should never block committing. */
@@ -312,10 +331,12 @@ class GitManager extends EventEmitter {
     try {
       const status = await this.git.status();
       const branch = status.current || 'main';
-      const url = settings.git_token
-        ? GitManager.buildAuthenticatedUrl(settings.git_repo_url, settings.git_token)
-        : settings.git_repo_url;
-      await this.git.push([url, `HEAD:refs/heads/${branch}`]);
+      // A throw-away instance: the credentials must not stay on the long-lived one that also runs commit().
+      const remote = simpleGit({
+        baseDir: this.scriptsDir,
+        config: GitManager.buildAuthConfig(settings.git_repo_url, settings.git_token || ''),
+      });
+      await remote.push([settings.git_repo_url, `HEAD:refs/heads/${branch}`]);
       await this.git.raw(['update-ref', PUSHED_REF, 'HEAD']);
       this.lastPushError = null;
       this.logManager.add('debug', 'Git', `[Git] Pushed to ${settings.git_repo_url}.`);
@@ -342,8 +363,7 @@ class GitManager extends EventEmitter {
   static async testGitConnection(repoUrl: string, token: string): Promise<GitResult> {
     if (!repoUrl) return { success: false, error: 'No repository URL configured' };
     try {
-      const url = token ? GitManager.buildAuthenticatedUrl(repoUrl, token) : repoUrl;
-      await simpleGit().listRemote([url]);
+      await simpleGit({ config: GitManager.buildAuthConfig(repoUrl, token) }).listRemote([repoUrl]);
       return { success: true };
     } catch (e) {
       return { success: false, error: GitManager.redactToken((e as Error).message, token) };
