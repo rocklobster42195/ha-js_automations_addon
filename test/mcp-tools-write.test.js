@@ -114,14 +114,14 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(description, /credentials never go into the source/);
   });
 
-  await t.test('maintainer mode adds a reminder to record feedback to the write result', async () => {
+  await t.test('maintainer mode never puts instructions into the write result', async () => {
     const src = `/**\n * @name Remind\n */\nha.log('x');\n`;
     const plain = await call('write_script', { filename: 'remind.js', content: src });
     assert.doesNotMatch(plain.text, /jsa_feedback/);
     settings.general = { maintainer_mode: true };
     const maintainer = await call('write_script', { filename: 'remind.js', content: src + '// again\n' });
     delete settings.general;
-    assert.match(maintainer.text, /record it now with jsa_feedback/);
+    assert.doesNotMatch(maintainer.text, /jsa_feedback/, 'a tool result must not tell the assistant what to do');
     await call('delete_script', { filename: 'remind.js' });
   });
 

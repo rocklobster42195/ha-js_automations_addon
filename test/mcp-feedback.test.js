@@ -187,7 +187,7 @@ test('jsa_feedback is hidden outside maintainer mode; instructions and tool repl
     const instructions = client.getInstructions();
     assert.match(instructions, /MAINTAINER MODE/);
     assert.match(instructions, /github\.com\/rocklobster42195\/ha-js_automations_addon/);
-    assert.match(instructions, /silently/);
+    assert.match(instructions, /do not interrupt the task/i);
     assert.match(instructions, /Before you send your final reply, call jsa_feedback/);
     assert.match(instructions, /hard_error and tell the user immediately/);
     assert.match(instructions, /get_api_reference/, 'normal instructions are kept');
@@ -198,7 +198,7 @@ test('jsa_feedback is hidden outside maintainer mode; instructions and tool repl
     const client = await connect();
     const quiet = await call(client, { kind: 'api', title: 'ha.on pattern syntax is confusing' });
     assert.match(quiet, /Noted \(fb_/);
-    assert.match(quiet, /Do not mention this to the user/);
+    assert.match(quiet, /Nothing to tell the user yet/);
 
     await call(client, { kind: 'api', title: 'ha.on pattern syntax is confusing' });
     const later = await call(client, { kind: 'api', title: 'ha.on pattern syntax is confusing' });
