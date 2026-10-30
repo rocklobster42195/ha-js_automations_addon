@@ -1,8 +1,7 @@
 // core/mcp-tool-catalog.ts
 // Static list of all MCP tools JSA can offer, with their group and default state.
-// Pure data on purpose: the settings schema generates one on/off switch per entry,
-// and the protocol layer only exposes tools that are both registered (implemented)
-// and switched on. See docs/internal/ai_concept.md §5.
+// Pure data on purpose: the settings schema derives its switches from it, and the protocol layer
+// only exposes tools that are both registered (implemented) and allowed. See docs/internal/ai_concept.md §5.
 
 export type McpToolGroup = 'read' | 'control' | 'write';
 
@@ -15,6 +14,26 @@ export interface McpToolMeta {
 }
 
 export const MCP_TOOL_GROUPS: McpToolGroup[] = ['read', 'control', 'write'];
+
+/**
+ * Settings → MCP Server → Access level: each level includes the ones before it. "custom" ignores the levels and
+ * uses the switch of every single tool.
+ */
+export type McpAccessLevel = 'read' | 'control' | 'write' | 'custom';
+
+export const MCP_ACCESS_LEVELS: McpAccessLevel[] = ['read', 'control', 'write', 'custom'];
+
+const LEVEL_GROUPS: Record<Exclude<McpAccessLevel, 'custom'>, McpToolGroup[]> = {
+  read: ['read'],
+  control: ['read', 'control'],
+  write: ['read', 'control', 'write'],
+};
+
+/**
+ * Tools that can do the most damage or reveal the most. They belong to no access level: each has its own
+ * switch, off by default, whatever the level is.
+ */
+export const MCP_SEPARATE_SWITCH_TOOLS: string[] = ['get_store', 'call_service', 'delete_script'];
 
 export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'list_scripts', group: 'read', defaultEnabled: true },
@@ -45,6 +64,24 @@ export function isToolEnabled(
   maintainerMode = false
 ): boolean {
   if (meta.maintainerOnly) return maintainerMode;
+  const level = settings?.access_level as McpAccessLevel | undefined;
+  if (level && level !== 'custom' && level in LEVEL_GROUPS && !MCP_SEPARATE_SWITCH_TOOLS.includes(meta.name)) {
+    return LEVEL_GROUPS[level].includes(meta.group);
+  }
   const value = settings?.[toolSettingsKey(meta.name)];
   return typeof value === 'boolean' ? value : meta.defaultEnabled;
+}
+
+/**
+ * Settings written before access levels existed carry one switch per tool. A user who changed any of them away
+ * from the default keeps exactly that choice by moving to "custom"; everyone else gets the default level.
+ */
+export function migrateMcpAccessLevel(mcp: Record<string, unknown> | undefined): void {
+  if (!mcp || mcp.access_level !== undefined) return;
+  const changed = MCP_TOOL_CATALOG.some((meta) => {
+    if (meta.maintainerOnly || MCP_SEPARATE_SWITCH_TOOLS.includes(meta.name)) return false;
+    const value = mcp[toolSettingsKey(meta.name)];
+    return typeof value === 'boolean' && value !== meta.defaultEnabled;
+  });
+  if (changed) mcp.access_level = 'custom';
 }

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { EventEmitter } from 'events';
 import schema from './settings-schema';
 import config from './config';
+import { migrateMcpAccessLevel } from './mcp-tool-catalog';
 
 const SETTINGS_FILE = path.join(config.STORAGE_DIR, 'settings.json');
 
@@ -71,6 +72,7 @@ class SettingsManager extends EventEmitter {
    * exist in the schema — copies forward only, doesn't touch the file until the next save().
    */
   private _migrateLegacyKeys(userSettings: SettingsData): void {
+    migrateMcpAccessLevel(userSettings.mcp as Record<string, unknown> | undefined);
     const versioning = userSettings.versioning as Record<string, unknown> | undefined;
     if (!versioning) return;
     const renames: [string, string][] = [
