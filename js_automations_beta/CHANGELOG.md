@@ -1,3 +1,15 @@
+## [3.2.0-beta.4] - 2026-10-30
+
+### Git push login
+
+Everything from [3.2.0-beta.0](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.0) to [3.2.0-beta.3](https://github.com/rocklobster42195/ha-js_automations_addon/releases/tag/v3.2.0-beta.3) applies.
+
+**Fixes**
+
+- **Script versioning:** pushing to a remote sends the access token as an authorization header instead of inside the URL. A redirect from the Git host used to make Git drop the token and end the push with "could not read Username"; redirects are now followed with the login intact. A rejected login is reported plainly ("Invalid username or token") instead of as a missing terminal. The token never appears in an error message.
+
+---
+
 ## [3.2.0-beta.3] - 2026-10-30
 
 ### Access levels for the MCP server
