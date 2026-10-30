@@ -2,7 +2,7 @@
 
 JS Automations can act as an [MCP](https://modelcontextprotocol.io) server. An AI assistant that supports MCP — for example **Claude Desktop** — can then list and read your scripts, check logs and errors, start and restart them and, if you allow it, write new ones. The thinking happens in the assistant you already use; JS Automations needs **no API key** and has no chat window of its own.
 
-You stay in control: the server is **off by default**, every tool has its own switch, writing is **off by default**, and every change an assistant makes is saved as a Git commit.
+You stay in control: the server is **off by default**, an **access level** limits what an assistant may do, the three riskiest tools have their own switches, writing is **off by default**, and every change an assistant makes is saved as a Git commit.
 
 ## Quick start (Claude Desktop)
 
@@ -42,7 +42,14 @@ Clients without header support can use the `mcp-remote` snippet from the panel. 
 
 ## What an assistant can do
 
-Every tool can be switched on or off individually under **Settings → MCP Server**. Defaults:
+What an assistant may do is set under **Settings → MCP Server**:
+
+- **Access level:** _Read only_, _Read + control_ (default: also start, stop and restart scripts), _Read + control + write_ (also write scripts and cards) or _Custom_, which shows a switch for every tool. Each level includes the ones before it.
+- **Switched on separately** (off by default, whatever the level is): `get_store`, `call_service` and `delete_script`.
+
+Claude Desktop additionally lets you decide per tool whether it may run without asking (_Settings → Extensions_). That is a second layer on the client side; it does not replace the settings in JS Automations, which also protect the server against other clients and a leaked token.
+
+The tools:
 
 | Group   | Tool                                            | What it does                                                                                                                                                                                                                                                                              | Default |
 | ------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |

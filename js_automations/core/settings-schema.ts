@@ -8,7 +8,13 @@
  * 3. Defaults: Initialization of settings.json
  */
 
-import { MCP_TOOL_CATALOG, MCP_TOOL_GROUPS, toolSettingsKey } from './mcp-tool-catalog';
+import {
+  MCP_ACCESS_LEVELS,
+  MCP_SEPARATE_SWITCH_TOOLS,
+  MCP_TOOL_CATALOG,
+  MCP_TOOL_GROUPS,
+  toolSettingsKey,
+} from './mcp-tool-catalog';
 
 interface SettingOption {
   value: string;
@@ -47,24 +53,57 @@ interface SettingSection {
   items: SettingItem[];
 }
 
-// One on/off switch per MCP tool, grouped by read / control / write. Visible only while MCP is enabled.
-const mcpToolItems: SettingItem[] = MCP_TOOL_GROUPS.flatMap((group) => [
+const mcpToolSwitch = (tool: (typeof MCP_TOOL_CATALOG)[number], condition: SettingCondition): SettingItem => ({
+  key: toolSettingsKey(tool.name),
+  label: `settings.mcp.tools.${tool.name}`,
+  description: `settings.mcp.tools.${tool.name}_desc`,
+  type: 'boolean',
+  default: tool.defaultEnabled,
+  condition,
+});
+
+// What an assistant may do: an access level, three tools that are switched on separately, and — only for the
+// level "custom" — one switch per remaining tool, grouped by read / control / write.
+const mcpToolItems: SettingItem[] = [
   {
-    key: `tools_${group}_info`,
-    label: null,
-    type: 'info',
-    text: `settings.mcp.group_${group}`,
+    key: 'access_level',
+    label: 'settings.mcp.access_level',
+    description: 'settings.mcp.access_level_desc',
+    type: 'select',
+    options: MCP_ACCESS_LEVELS.map((level) => ({ value: level, label: `settings.mcp.access_${level}` })),
+    default: 'control',
     condition: { key: 'enabled', value: true },
   },
-  ...MCP_TOOL_CATALOG.filter((tool) => tool.group === group && !tool.maintainerOnly).map((tool) => ({
-    key: toolSettingsKey(tool.name),
-    label: `settings.mcp.tools.${tool.name}`,
-    description: `settings.mcp.tools.${tool.name}_desc`,
-    type: 'boolean',
-    default: tool.defaultEnabled,
+  {
+    key: 'tools_separate_info',
+    label: null,
+    type: 'info',
+    text: 'settings.mcp.group_separate',
     condition: { key: 'enabled', value: true },
-  })),
-]);
+  },
+  ...MCP_TOOL_CATALOG.filter((tool) => MCP_SEPARATE_SWITCH_TOOLS.includes(tool.name)).map((tool) =>
+    mcpToolSwitch(tool, { key: 'enabled', value: true })
+  ),
+  {
+    key: 'tools_client_hint',
+    label: null,
+    type: 'info',
+    text: 'settings.mcp.client_hint',
+    condition: { key: 'enabled', value: true },
+  },
+  ...MCP_TOOL_GROUPS.flatMap((group) => [
+    {
+      key: `tools_${group}_info`,
+      label: null,
+      type: 'info',
+      text: `settings.mcp.group_${group}`,
+      condition: { key: 'access_level', value: 'custom' },
+    },
+    ...MCP_TOOL_CATALOG.filter(
+      (tool) => tool.group === group && !tool.maintainerOnly && !MCP_SEPARATE_SWITCH_TOOLS.includes(tool.name)
+    ).map((tool) => mcpToolSwitch(tool, { key: 'access_level', value: 'custom' })),
+  ]),
+];
 
 // Dev-tools tabs the user can switch off to save space (expert mode only). Keep in sync with
 // DEV_TABS in public/js/components/dev-tabs.ts.

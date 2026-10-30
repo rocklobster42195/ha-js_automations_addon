@@ -10,7 +10,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 - New server on port **3002** (separate from the webhook port), switched on under **Settings → MCP Server**; access token with show / copy / create-new, optional IP allowlist and reverse-proxy settings
 - **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config
-- 16 tools in three groups (read, control, write), each with its own switch. Writing, `call_service`, `delete_script` and `get_store` are **off by default**
+- 16 tools behind three **access levels** (read, read + control, read + control + write) plus separate switches for `get_store`, `call_service` and `delete_script`; "Custom" still offers a switch per tool. Writing, `call_service`, `delete_script` and `get_store` are **off by default**
 - Writes are syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; a script's Lovelace card is preserved; nothing is restarted automatically
 - Open editor tabs reload when an assistant changes the file (a card preview too); unsaved edits are kept, a lasting banner points out the conflict and saving asks before overwriting; a script an assistant deletes closes its tab
 - Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned. Script source and log text are marked as untrusted data for the assistant
