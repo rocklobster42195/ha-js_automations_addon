@@ -658,6 +658,15 @@ class WorkerManager extends EventEmitter {
     }
   }
 
+  /** True if the restart-rate safeguard would currently refuse to start this script. */
+  isRestartBlocked(scriptId: string): boolean {
+    const now = Date.now();
+    const recent = (this.restartTracker.get(scriptId) || []).filter(
+      (t) => now - t < this.settings.restart_protection_time
+    );
+    return recent.length >= this.settings.restart_protection_count;
+  }
+
   /**
    * Removes all native entities created by a specific script.
    */
@@ -888,6 +897,7 @@ class WorkerManager extends EventEmitter {
       workerData: {
         ...scriptMeta,
         path: executionPath,
+        scriptsDir: this.scriptsDir,
         initialConnected: this.haConnector ? !!this.haConnector.isReady : true,
         initialStates: (() => {
           const raw = this.haConnector ? this.haConnector.states : {};

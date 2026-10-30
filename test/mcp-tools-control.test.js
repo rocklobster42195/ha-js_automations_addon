@@ -21,15 +21,18 @@ function setup(t) {
   mkdirSync(librariesDir, { recursive: true });
   writeFileSync(path.join(scriptsDir, 'job.js'), `/**\n * @name Job\n * @npm axios, lodash\n */\nha.log('x');\n`);
   writeFileSync(path.join(scriptsDir, 'plain.js'), `ha.log('plain');\n`);
+  writeFileSync(path.join(scriptsDir, 'blocked.js'), `ha.log('blocked');\n`);
   writeFileSync(path.join(librariesDir, 'lib.js'), `exports.x = 1;\n`);
 
   const calls = [];
   const workers = new Map();
   const workerManager = {
     workers,
+    settings: { restart_protection_count: 5, restart_protection_time: 60000 },
+    isRestartBlocked: (name) => name === 'blocked.js',
     startScript: (fullPath) => {
       calls.push(['start', path.basename(fullPath)]);
-      if (fullPath.endsWith('plain.js')) return false; // simulates "could not start"
+      if (fullPath.endsWith('plain.js') || fullPath.endsWith('blocked.js')) return false; // simulates "could not start"
       workers.set(path.basename(fullPath), {});
       return true;
     },
@@ -119,6 +122,12 @@ test('control tools start, stop and restart scripts and call services', async (t
     const r = await call('start_script', { filename: 'plain.js' });
     assert.equal(r.isError, true);
     assert.match(r.text, /could not be started/);
+  });
+
+  await t.test('a start refused by the restart protection says so', async () => {
+    const r = await call('start_script', { filename: 'blocked.js' });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /restart protection is active/);
   });
 
   await t.test('libraries, unknown names and path tricks are refused', async () => {

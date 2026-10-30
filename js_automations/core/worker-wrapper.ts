@@ -1932,25 +1932,16 @@ function _parseCronExpression(exp: string): string {
 function loadLibraries(): void {
   const scriptPath = wd.path;
   try {
-    // 1. Read script content to parse headers
-    const content = fs.readFileSync(scriptPath, 'utf8');
+    // 1. Includes come from the header parser (header block only), so "@include" in
+    // string literals or comments further down is ignored.
+    const librariesToLoad = new Set<string>(Array.isArray(wd.includes) ? wd.includes : []);
 
-    // 2. Find all @include tags (supports multiple lines and comma-separation)
-    // Matches: @include lib1.js, lib2.js
-    const includeMatches = content.matchAll(/@include\s+(.+)/g);
-    const librariesToLoad = new Set<string>();
-
-    for (const match of includeMatches) {
-      match[1].split(',').forEach((lib) => {
-        const cleanName = lib.trim();
-        if (cleanName) librariesToLoad.add(cleanName);
-      });
-    }
-
-    // 3. Load and execute libraries
+    // 2. Load and execute libraries
     if (librariesToLoad.size > 0) {
-      // We assume the 'libraries' folder is in the same directory
+      // Compiled (.ts) libraries live next to the compiled script in dist/libraries.
       const libDir = path.join(path.dirname(scriptPath), 'libraries');
+      // Plain .js libraries are never compiled, so they only exist in the scripts folder.
+      const sourceLibDir = wd.scriptsDir ? path.join(wd.scriptsDir, 'libraries') : null;
 
       librariesToLoad.forEach((libName) => {
         // Handle potential .ts extensions in @include or missing extensions
@@ -1961,14 +1952,15 @@ function loadLibraries(): void {
           actualLibName += '.js';
         }
 
-        const libPath = path.join(libDir, actualLibName);
+        let libPath = path.join(libDir, actualLibName);
+        if (!fs.existsSync(libPath) && sourceLibDir) libPath = path.join(sourceLibDir, actualLibName);
 
         if (fs.existsSync(libPath)) {
           const libCode = fs.readFileSync(libPath, 'utf8');
           // Execute the code in the global context of this worker
           vm.runInThisContext(libCode, { filename: libPath });
         } else {
-          ha.warn(`Library not found: ${libName} (checked in ${libDir})`);
+          ha.warn(`Library not found: ${libName} (checked in ${libDir}${sourceLibDir ? ` and ${sourceLibDir}` : ''})`);
         }
       });
     }

@@ -64,6 +64,13 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
     if (settleMs) await sleep(settleMs);
     deps.notifyStatusUpdate();
     if (!started) {
+      if (workerManager.isRestartBlocked(name)) {
+        const { restart_protection_count: count, restart_protection_time: time } = workerManager.settings;
+        return fail(
+          `"${name}" was NOT started: restart protection is active (${count} starts within ${time / 1000}s, usually because the script crashed on startup). ` +
+            `Fix the error (get_script_errors / get_logs), then wait up to ${time / 1000}s before starting it again.`
+        );
+      }
       return fail(
         `"${name}" could not be started (not compiled yet, restart protection or missing file). Check get_logs for System messages.`
       );

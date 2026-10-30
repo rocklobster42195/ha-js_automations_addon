@@ -34,9 +34,10 @@ const TOKEN_PATTERNS: RegExp[] = [
 const QUOTED_HEX = /(["'`])[0-9a-fA-F]{32,}\1/g;
 
 // A named value is not a credential when it is an interpolated template (`Bearer ${token}` references one
-// instead of containing it) or a plain URL such as an OAuth token endpoint.
+// instead of containing it), a bare auth scheme prefix (`'Basic ' + x`) or a plain URL such as an OAuth token endpoint.
 function isCodeOrPlainUrl(quote: string, value: string): boolean {
   if (quote === '`' && value.includes('${')) return true;
+  if (/^(?:Basic|Bearer|Token)\s*$/i.test(value)) return true;
   return /^https?:\/\/[^\s@]+$/i.test(value);
 }
 
