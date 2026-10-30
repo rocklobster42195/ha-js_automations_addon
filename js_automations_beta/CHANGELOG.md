@@ -1,3 +1,9 @@
+## [3.2.0-beta.5] - 2026-10-30
+
+- fix: load .js libraries from .ts scripts, parse @include from header only, relax secret filter on auth prefixes, explain restart protection
+
+---
+
 ## [3.2.0-beta.4] - 2026-10-30
 
 ### Git push login
