@@ -5,13 +5,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 import ScriptHeaderParser from './script-header-parser';
 import CapabilityAnalyzer from './capability-analyzer';
+import { hasNotes } from './script-notes';
 import type CardManager from './card-manager';
 
 // worker-manager.ts exports a singleton instance (export = new WorkerManager()), not the class
 // itself, so the type has to be derived from the module's export value.
 export type WorkerManagerInstance = typeof import('./worker-manager');
 
-export function buildScriptList(workerManager: WorkerManagerInstance, cardManager: CardManager | undefined): any[] {
+export function buildScriptList(
+  workerManager: WorkerManagerInstance,
+  cardManager: CardManager | undefined,
+  notesDir?: string
+): any[] {
   const results: any[] = [];
   const conflicts = workerManager.getEntityConflicts();
 
@@ -51,6 +56,7 @@ export function buildScriptList(workerManager: WorkerManagerInstance, cardManage
       }
     }
     m.entity_conflicts = conflicts[filename] || null;
+    if (notesDir) m.hasNotes = hasNotes(notesDir, filename, isLibrary);
 
     // Card installation status: check registry + actual file presence
     if (m.card && cardManager) {

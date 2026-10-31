@@ -13,6 +13,8 @@ interface JsaConfig {
   DIST_DIR: string;
   LIBRARIES_DIR: string;
   DATA_DIR: string;
+  NOTES_DIR: string;
+  CARDS_DIR: string;
   ADDON_DIR: string;
   LOCALES_DIR: string;
   PUBLIC_DIR: string;
@@ -57,6 +59,8 @@ const STORE_ENCRYPTION_OVERRIDE = readStoreEncryptionOverride();
 const DIST_DIR = path.join(STORAGE_DIR, 'dist');
 const LIBRARIES_DIR = path.join(SCRIPTS_DIR, 'libraries');
 const DATA_DIR = path.join(SCRIPTS_DIR, 'data');
+const NOTES_DIR = path.join(SCRIPTS_DIR, 'notes');
+const CARDS_DIR = path.join(SCRIPTS_DIR, 'cards');
 const LOCALES_DIR = path.join(ADDON_DIR, 'locales');
 const PUBLIC_DIR = path.join(ADDON_DIR, 'public');
 
@@ -126,6 +130,8 @@ const config: JsaConfig = {
   DIST_DIR,
   LIBRARIES_DIR,
   DATA_DIR,
+  NOTES_DIR,
+  CARDS_DIR,
   ADDON_DIR,
   LOCALES_DIR,
   PUBLIC_DIR,

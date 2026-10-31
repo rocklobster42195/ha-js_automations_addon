@@ -1162,13 +1162,34 @@ ha.action('set-team', async ({ teamId }) => {
 
 ### `ha.frontend.installCard(options?)`
 
-Installs the card embedded in the script's `__JSA_CARD__` block to `config/www/jsa-cards/` and registers it as a Lovelace resource. Skips the write if the card source hash is unchanged. In `@card dev` mode, the file write and Lovelace registration are skipped — the preview panel receives the live card source instead.
+Installs the script's main card (the file `cards/<script>-card.js`; old scripts may still carry it as an embedded `__JSA_CARD__` block) to `config/www/jsa-cards/` and registers it as a Lovelace resource. Skips the write if the card source hash is unchanged. In `@card dev` mode, the file write and Lovelace registration are skipped — the preview panel receives the live card source instead.
 
 ```javascript
 await ha.frontend.installCard();
 
 await ha.frontend.installCard({
   config: { entity_id: 'sensor.openligadb_bmg', title: 'BMG' },
+});
+```
+
+| Option        | Type      | Description                                                                                                                                                                                                                                        |
+| ------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `card`        | `string`  | A **further card** of the script: the name of its file in `cards/` without `.js`, e.g. `garmin-day-card` for the script `garmin` (it must start with the script name and a hyphen). Omit it for the main card. Rejects if the file does not exist. |
+| `name`        | `string`  | Name in the "Add Card" picker. Default: the script name; a further card: the script name plus the card name (`Garmin – Day`).                                                                                                                      |
+| `description` | `string`  | Description in the picker. Default: the script description.                                                                                                                                                                                        |
+| `config`      | `object`  | Default config the picker pre-fills (`getStubConfig()`), for **this** card only.                                                                                                                                                                   |
+| `force`       | `boolean` | Reinstall even if the source is unchanged.                                                                                                                                                                                                         |
+
+**Several cards in one script:** call `installCard` once per card. Each card gets its own file in `config/www/jsa-cards/`, its own Lovelace resource and its own cache-busting hash, so changing one card reloads only that card. The picker entry (`window.customCards`) is added for you with `preview: true`; an entry of the same `type` that the card pushes itself is not added twice.
+
+```javascript
+// cards/garmin-card.js and cards/garmin-day-card.js belong to the script garmin.ts
+await ha.frontend.installCard();
+await ha.frontend.installCard({
+  card: 'garmin-day-card',
+  name: 'Garmin Tag',
+  description: 'Today at a glance',
+  config: { days: 1 },
 });
 ```
 

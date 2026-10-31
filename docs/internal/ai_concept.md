@@ -36,16 +36,17 @@ Entfallen gegenüber dem alten Konzept: BYOK-Anbieteranbindung, Editor-Chat-Pane
 - _Dev-Tools-Tab "MCP"_ (`<mcp-activity-panel>`): Aufruf-Log (In-Memory, 200) mit aufklappbaren, kopierbaren Fehlern und die Feedback-Notizen aus dem Maintainer-Modus.
 - _Settings → Allgemein (Expert Mode)_: Dev-Tools-Tabs einzeln abschaltbar (`devtab_*`), Maintainer-Modus.
 
-**Tools** (16, alle einzeln schaltbar; `mcp-tool-catalog.ts`):
+**Tools** (21, alle einzeln schaltbar; `mcp-tool-catalog.ts`):
 
-| Gruppe     | Tool                                                                                                             | Default |
-| ---------- | ---------------------------------------------------------------------------------------------------------------- | ------- |
-| Lesen      | list_scripts, read_script, get_logs, get_script_errors, get_events, list_entities, get_entity, get_api_reference | an      |
-| Lesen      | get_store (Secrets nie ausgegeben, sensible Schlüssel maskiert)                                                  | **aus** |
-| Steuern    | start_script, stop_script, restart_script                                                                        | an      |
-| Steuern    | call_service (host-nahe Services gesperrt)                                                                       | **aus** |
-| Schreiben  | write_script, write_card, delete_script                                                                          | **aus** |
-| Maintainer | jsa_feedback (nur im Maintainer-Modus, kein eigener Schalter)                                                    | —       |
+| Gruppe     | Tool                                                                                                                               | Default |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Lesen      | list_scripts, read_script, get_logs, get_script_errors, get_events, list_entities, get_entity, get_api_reference, get_script_notes | an      |
+| Lesen      | get_store (Secrets nie ausgegeben, sensible Schlüssel maskiert)                                                                    | **aus** |
+| Steuern    | start_script, stop_script, restart_script                                                                                          | an      |
+| Steuern    | run_snippet (nur lesen + Netzwerk, eigener Schalter)                                                                               | **aus** |
+| Steuern    | call_service (host-nahe Services gesperrt)                                                                                         | **aus** |
+| Schreiben  | write_script, write_card, edit_script, edit_card, save_script_notes, delete_script                                                 | **aus** |
+| Maintainer | jsa_feedback (nur im Maintainer-Modus, kein eigener Schalter)                                                                      | —       |
 
 **Schreiben.** Name validieren → Syntaxfehler blockieren, Typprobleme (nur TS, gegen `ha-api.d.ts` + generierte Typen) sind Warnungen → bestehender Karten-Block bleibt erhalten → **Snapshot-Commit** des Ist-Zustands → atomar schreiben → Commit (`mcp: …`). Kein automatischer Neustart (`restart_script` separat). Das Git-Repo wird beim ersten Schreiben lazy angelegt. Offene Editor-Tabs: sauber → Reload, ungespeichert → Warnung + Rückfrage beim Speichern (`script_content_changed`, `JsaTab.externalChange`).
 

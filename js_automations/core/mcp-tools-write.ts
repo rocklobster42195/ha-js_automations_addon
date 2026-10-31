@@ -9,7 +9,10 @@ import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { isValidScriptName, missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
 import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
 import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
+import { applyEdits, type TextEdit } from './mcp-edits';
 import ScriptHeaderParser from './script-header-parser';
+import { cardBase, cardFilePath, hasBlock, mainCardName, stripBlocks, writeCardFile } from './card-files';
+import { appendNotes, MAX_NOTES_CHARS, readNotes, removeNotes, writeNotes } from './script-notes';
 import type { WorkerManagerInstance } from './script-list';
 import type CardManager from './card-manager';
 import type DependencyManager from './dependency-manager';
@@ -22,6 +25,10 @@ export interface McpWriteToolDeps extends ScriptDirs {
   depManager: DependencyManager;
   gitManager: GitManager;
   storeManager: StoreManager;
+  /** Directory of the per-script notes (see script-notes.ts). */
+  notesDir: string;
+  /** Directory of the card source files (see card-files.ts). */
+  cardsDir: string;
   /** STORAGE_DIR (ha-api.d.ts and the generated entity/service typings live here). */
   storageDir: string;
   typesDir: string;
@@ -33,8 +40,18 @@ export interface McpWriteToolDeps extends ScriptDirs {
 const MAX_SOURCE_CHARS = 512_000;
 const CARD_BLOCK = /\/\* __JSA_CARD__[\s\S]*?__JSA_CARD_END__ \*\//;
 // Placeholder read_script leaves where the Base64 card block was; must not be written back.
-const CARD_PLACEHOLDER = /^\/\* card source: see the "Card source" section below \*\/\r?\n?/m;
+const CARD_PLACEHOLDER =
+  /^\/\* card source: (?:see the "Card source" section below|not included here[^\n]*?) \*\/\r?\n?/m;
 const NEW_FILE_NAME = /^[a-z0-9_]+\.(js|ts)$/;
+
+const CARD_RELOAD_HINT =
+  'Frontend: the card is installed or updated when the script runs (restart_script). Dashboards that are already open ' +
+  'keep the old card until the browser tab is hard-reloaded (Ctrl+F5); a brand-new card is unknown to Lovelace until then.';
+const MAX_COMMIT_SUBJECT = 120;
+const COMMIT_MESSAGE_HINT = `Short description for the Git commit (up to ${MAX_COMMIT_SUBJECT} characters; longer text is cut)`;
+// Cut instead of rejecting: a validation error would only surface after the whole source was sent.
+const commitSubject = (message: unknown, fallback: string): string =>
+  `mcp: ${(message ? String(message) : fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_COMMIT_SUBJECT)}`;
 
 const text = (content: string): McpToolResult => ({ content });
 const fail = (message: string): McpToolResult => ({ content: message, isError: true });
@@ -112,6 +129,105 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       ? `\n"${filename}" is running with the previous version — call restart_script to apply the change.`
       : '';
 
+  /** Shared by write_script and edit_script: checks, snapshot, atomic write, commit, warnings. */
+  const writeScriptCore = async (args: Record<string, unknown>): Promise<McpToolResult> => {
+    const filename = String(args.filename ?? '');
+    let content = String(args.content ?? '');
+    if (!isValidScriptName(filename)) {
+      return fail(
+        'Invalid file name. Use a plain ".js" or ".ts" name (optionally prefixed "libraries/"); Blockly files are not supported.'
+      );
+    }
+    if (content.length > MAX_SOURCE_CHARS) return fail(`Source is too large (limit ${MAX_SOURCE_CHARS} characters).`);
+    if (content.includes('__JSA_CARD__')) {
+      return fail('The source must not contain a __JSA_CARD__ block. Use write_card to change the Lovelace card.');
+    }
+    content = content.replace(CARD_PLACEHOLDER, '');
+
+    const existing = resolveScript(deps, filename);
+    let fullPath: string;
+    let isLibrary: boolean;
+    if (existing) {
+      fullPath = existing.fullPath;
+      isLibrary = existing.isLibrary;
+    } else {
+      const bare = filename.replace(/^libraries[/\\]/, '');
+      if (!NEW_FILE_NAME.test(bare)) {
+        return fail(
+          'New file names may only contain lowercase letters, digits and underscores, e.g. "garage_watch.ts".'
+        );
+      }
+      isLibrary = /^libraries[/\\]/.test(filename) || args.kind === 'library';
+      const dir = isLibrary ? deps.librariesDir : deps.scriptsDir;
+      const otherExt = bare.endsWith('.ts') ? bare.replace(/\.ts$/, '.js') : bare.replace(/\.js$/, '.ts');
+      if (fs.existsSync(path.join(dir, otherExt))) {
+        return fail(
+          `"${otherExt}" already exists. A script exists only once per name; a .ts file would hide the .js file. Pick another name.`
+        );
+      }
+      fullPath = path.join(dir, bare);
+    }
+    const name = path.basename(fullPath);
+
+    const check = checkScript(content, name, {
+      storageDir: deps.storageDir,
+      typesDir: deps.typesDir,
+      targetDir: path.dirname(fullPath),
+    });
+    if (check.syntaxErrors.length) {
+      return fail(
+        `Not written — syntax errors:\n${formatIssues(check.syntaxErrors)}\nFix them and call write_script again.`
+      );
+    }
+
+    // Keep the existing card: read_script strips the Base64 block, so the new source has none.
+    let previous: string | null = null;
+    if (existing) {
+      previous = fs.readFileSync(fullPath, 'utf8');
+      const card = CARD_BLOCK.exec(previous);
+      if (card) content = `${content.trimEnd()}\n\n${card[0]}\n`;
+    }
+
+    const verb = existing ? 'update' : 'create';
+    const commitMessage = commitSubject(args.message, `${verb} ${name}`);
+    const notes: string[] = [];
+    if (existing) {
+      const snap = await snapshotNote(fullPath, `mcp: snapshot before changing ${name}`);
+      if (snap) notes.push(snap);
+    }
+    writeAtomic(fullPath, content);
+    notes.push(await commitFile(fullPath, commitMessage));
+    deps.notifyStatusUpdate();
+    deps.notifyContentChanged(name);
+
+    const lines = [
+      `${existing ? 'Updated' : 'Created'} ${isLibrary ? 'library' : 'script'} "${name}" (${content.length} characters).`,
+    ];
+    if (previous !== null && previous === content) lines.push('The content is identical to the previous version.');
+    if (check.typeIssues.length) {
+      lines.push(
+        `Type warnings (${check.typeIssues.length}) — the file was written anyway. Fix every warning that points to a real mistake with another write_script call before you report the script as done, and tell the user about any you leave on purpose:\n${formatIssues(check.typeIssues)}\n` +
+          'If a warning is about the payload of ha.call(), the typed payload of every service is in get_api_reference topic "services" (search "domain.service", e.g. "media_player.play_media").'
+      );
+    } else if (name.endsWith('.ts')) {
+      lines.push('Type check: no problems found.');
+    }
+    const credentialHits = maskSecrets(content.replace(CARD_BLOCK, '')).masked;
+    if (credentialHits) {
+      lines.push(
+        `WARNING: ${credentialHits} value(s) in the source look like credentials. Do not keep credentials in source code: ` +
+          "declare them as empty fields of the persisted config (e.g. apiKey: '' in DEFAULT_CONFIG via ha.persistent), warn while they are " +
+          'empty and tell the user to fill them in with the Store Explorer. Then rewrite the script.'
+      );
+    }
+    lines.push(notes.join('; '));
+    lines.push(
+      'If this change involved decisions, device quirks or open points that the source does not show, record them with save_script_notes (if available).'
+    );
+    const text_ = lines.join('\n') + runningNote(name);
+    return text(text_ + (isLibrary ? '\nScripts that @include this library need a restart to pick it up.' : ''));
+  };
+
   protocol.registerTool({
     name: 'write_script',
     title: 'Write script',
@@ -129,160 +245,238 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       filename: z.string().describe('e.g. "garage_watch.ts" or "libraries/helpers.ts"'),
       content: z.string().describe('The complete file content, starting with the JSDoc header'),
       kind: z.enum(['script', 'library']).optional().describe('Only for new files; default "script"'),
-      message: z.string().max(120).optional().describe('Short description for the Git commit'),
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
     },
-    handler: (args) =>
-      serialized(async () => {
-        const filename = String(args.filename ?? '');
-        let content = String(args.content ?? '');
-        if (!isValidScriptName(filename)) {
-          return fail(
-            'Invalid file name. Use a plain ".js" or ".ts" name (optionally prefixed "libraries/"); Blockly files are not supported.'
-          );
-        }
-        if (content.length > MAX_SOURCE_CHARS)
-          return fail(`Source is too large (limit ${MAX_SOURCE_CHARS} characters).`);
-        if (content.includes('__JSA_CARD__')) {
-          return fail('The source must not contain a __JSA_CARD__ block. Use write_card to change the Lovelace card.');
-        }
-        content = content.replace(CARD_PLACEHOLDER, '');
-
-        const existing = resolveScript(deps, filename);
-        let fullPath: string;
-        let isLibrary: boolean;
-        if (existing) {
-          fullPath = existing.fullPath;
-          isLibrary = existing.isLibrary;
-        } else {
-          const bare = filename.replace(/^libraries[/\\]/, '');
-          if (!NEW_FILE_NAME.test(bare)) {
-            return fail(
-              'New file names may only contain lowercase letters, digits and underscores, e.g. "garage_watch.ts".'
-            );
-          }
-          isLibrary = /^libraries[/\\]/.test(filename) || args.kind === 'library';
-          const dir = isLibrary ? deps.librariesDir : deps.scriptsDir;
-          const otherExt = bare.endsWith('.ts') ? bare.replace(/\.ts$/, '.js') : bare.replace(/\.js$/, '.ts');
-          if (fs.existsSync(path.join(dir, otherExt))) {
-            return fail(
-              `"${otherExt}" already exists. A script exists only once per name; a .ts file would hide the .js file. Pick another name.`
-            );
-          }
-          fullPath = path.join(dir, bare);
-        }
-        const name = path.basename(fullPath);
-
-        const check = checkScript(content, name, {
-          storageDir: deps.storageDir,
-          typesDir: deps.typesDir,
-          targetDir: path.dirname(fullPath),
-        });
-        if (check.syntaxErrors.length) {
-          return fail(
-            `Not written — syntax errors:\n${formatIssues(check.syntaxErrors)}\nFix them and call write_script again.`
-          );
-        }
-
-        // Keep the existing card: read_script strips the Base64 block, so the new source has none.
-        let previous: string | null = null;
-        if (existing) {
-          previous = fs.readFileSync(fullPath, 'utf8');
-          const card = CARD_BLOCK.exec(previous);
-          if (card) content = `${content.trimEnd()}\n\n${card[0]}\n`;
-        }
-
-        const verb = existing ? 'update' : 'create';
-        const commitMessage = `mcp: ${args.message ? String(args.message) : `${verb} ${name}`}`;
-        const notes: string[] = [];
-        if (existing) {
-          const snap = await snapshotNote(fullPath, `mcp: snapshot before changing ${name}`);
-          if (snap) notes.push(snap);
-        }
-        writeAtomic(fullPath, content);
-        notes.push(await commitFile(fullPath, commitMessage));
-        deps.notifyStatusUpdate();
-        deps.notifyContentChanged(name);
-
-        const lines = [
-          `${existing ? 'Updated' : 'Created'} ${isLibrary ? 'library' : 'script'} "${name}" (${content.length} characters).`,
-        ];
-        if (previous !== null && previous === content) lines.push('The content is identical to the previous version.');
-        if (check.typeIssues.length) {
-          lines.push(
-            `Type warnings (${check.typeIssues.length}) — the file was written anyway. Fix every warning that points to a real mistake with another write_script call before you report the script as done, and tell the user about any you leave on purpose:\n${formatIssues(check.typeIssues)}\n` +
-              'If a warning is about the payload of ha.call(), the typed payload of every service is in get_api_reference topic "services" (search "domain.service", e.g. "media_player.play_media").'
-          );
-        } else if (name.endsWith('.ts')) {
-          lines.push('Type check: no problems found.');
-        }
-        const credentialHits = maskSecrets(content.replace(CARD_BLOCK, '')).masked;
-        if (credentialHits) {
-          lines.push(
-            `WARNING: ${credentialHits} value(s) in the source look like credentials. Do not keep credentials in source code: ` +
-              "declare them as empty fields of the persisted config (e.g. apiKey: '' in DEFAULT_CONFIG via ha.persistent), warn while they are " +
-              'empty and tell the user to fill them in with the Store Explorer. Then rewrite the script.'
-          );
-        }
-        lines.push(notes.join('; '));
-        const text_ = lines.join('\n') + runningNote(name);
-        return text(text_ + (isLibrary ? '\nScripts that @include this library need a restart to pick it up.' : ''));
-      }),
+    handler: (args) => serialized(() => writeScriptCore(args)),
   });
+
+  /** Shared by write_card and edit_card. */
+  const writeCardCore = async (args: Record<string, unknown>): Promise<McpToolResult> => {
+    const filename = String(args.filename ?? '');
+    const source = String(args.source ?? '');
+    const found = resolveScript(deps, filename);
+    if (!found)
+      return fail(missingScriptMessage(filename, `No script named "${filename}". Create it with write_script first.`));
+    if (found.isLibrary) return fail('Libraries cannot have a card.');
+    if (!source.trim()) return fail('The card source is empty.');
+    if (source.includes('__JSA_CARD') || source.length > MAX_SOURCE_CHARS) {
+      return fail('Invalid card source (contains a __JSA_CARD marker or is too large).');
+    }
+    const syntax = checkSyntax(source, 'card.js');
+    if (syntax.length) return fail(`Not written — syntax errors in the card:\n${formatIssues(syntax)}`);
+
+    const name = path.basename(found.fullPath);
+    const base = cardBase(name);
+    const card = args.card ? String(args.card) : undefined;
+    const isMain = !card || card === mainCardName(base);
+    if (!cardFilePath(deps.cardsDir, base, card)) {
+      return fail(
+        card
+          ? `Invalid card name "${card}". Use lowercase letters, digits, underscores and hyphens, starting with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+          : `The script name "${base}" cannot have card files: card files are named after the script, which may only contain lowercase letters, digits and underscores. Rename the script first.`
+      );
+    }
+
+    const notes: string[] = [];
+    const snap = await snapshotNote(found.fullPath, `mcp: snapshot before changing card of ${name}`);
+    if (snap) notes.push(snap);
+    writeCardFile(deps.cardsDir, base, card, source);
+    // An old embedded block moves out of the script with the first card save (the card file wins anyway).
+    const script = fs.readFileSync(found.fullPath, 'utf8');
+    if (isMain && hasBlock(script)) writeAtomic(found.fullPath, `${stripBlocks(script).trimEnd()}\n`);
+    notes.push(await commitFile(found.fullPath, commitSubject(args.message, `update card of ${name}`)));
+    deps.notifyStatusUpdate();
+    deps.notifyContentChanged(name);
+
+    const meta = ScriptHeaderParser.parse(found.fullPath) as { card?: boolean | string | null };
+    const lines = [`Card "${card ?? mainCardName(base)}" of "${name}" saved (${source.length} characters).`];
+    if (!isMain)
+      lines.push(
+        `This is a further card: it is installed when the script calls ha.frontend.installCard({ card: "${card}" }) (name, description and config are optional there).`
+      );
+    else if (!meta.card)
+      lines.push('Note: the header has no "@card" tag yet — add it with write_script so the card gets installed.');
+    else if (meta.card === 'dev')
+      lines.push('The header says "@card dev": the card is preview-only until you switch it to plain "@card".');
+    lines.push(notes.join('; '));
+    lines.push(CARD_RELOAD_HINT);
+    return text(lines.join('\n') + runningNote(name));
+  };
 
   protocol.registerTool({
     name: 'write_card',
     title: 'Write card',
     description:
-      'Sets the Lovelace card of an existing script (a plain Web Component, see the "cards" topic of get_api_reference). ' +
-      'Pass the card as plain JavaScript; JSA encodes and embeds it. The script header needs "@card" (or "@card dev") for ' +
-      'the card to be installed. Committed to Git like write_script.',
+      'Sets a Lovelace card of an existing script (a plain Web Component, see the "cards" topic of get_api_reference). ' +
+      'Pass the card as plain JavaScript; it is stored as its own file cards/<script>-card.js. Without "card" the main ' +
+      'card is written; "card" names a further card of the script and must start with "<script>-" (e.g. ' +
+      '"garmin-day-card" for garmin.ts); the script installs it with ha.frontend.installCard({ card: "garmin-day-card" }), the ' +
+      'main card with ha.frontend.installCard(). The ' +
+      'script header needs "@card" (or "@card dev") for the card to be installed. Committed to Git like write_script.',
     inputSchema: {
       filename: z.string().describe('The script that owns the card, e.g. "smart_watering.ts"'),
       source: z.string().describe('Card source as plain JavaScript'),
-      message: z.string().max(120).optional().describe('Short description for the Git commit'),
+      card: z
+        .string()
+        .optional()
+        .describe('Name of a further card, e.g. "garmin-day-card"; omit for the main card of the script'),
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
+    },
+    handler: (args) => serialized(() => writeCardCore(args)),
+  });
+
+  const EDITS_SCHEMA = z
+    .array(
+      z.object({
+        old_string: z.string().describe('Exact text to replace; must match once (or set replace_all)'),
+        new_string: z.string().describe('The replacement text'),
+        replace_all: z.boolean().optional().describe('Replace every occurrence instead of requiring a unique match'),
+      })
+    )
+    .min(1)
+    .max(50)
+    .describe('Edits applied in order; each sees the result of the previous one. All or nothing');
+  const EDIT_RULES =
+    'old_string must match the file exactly once, including indentation and line breaks: include enough surrounding ' +
+    'lines to make it unique, or set replace_all. If any edit cannot be applied, nothing is changed.';
+
+  const withEditNote = (r: McpToolResult, edited: { replacements: number }): McpToolResult =>
+    r.isError || typeof r.content !== 'string'
+      ? r
+      : { ...r, content: `Applied ${edited.replacements} replacement(s).\n${r.content}` };
+
+  protocol.registerTool({
+    name: 'edit_script',
+    title: 'Edit script',
+    description:
+      'Changes an existing script or library by search and replace, so you do not have to resend the whole source for ' +
+      'a small change. read_script the file first (use offset/limit for a part). ' +
+      EDIT_RULES +
+      ' The result is checked, committed to Git and reported exactly like write_script (syntax errors block, type ' +
+      'problems warn); the script is not restarted. The Lovelace card is not part of the text: use edit_card.',
+    inputSchema: {
+      filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"'),
+      edits: EDITS_SCHEMA,
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
     },
     handler: (args) =>
       serialized(async () => {
         const filename = String(args.filename ?? '');
-        const source = String(args.source ?? '');
         const found = resolveScript(deps, filename);
-        if (!found)
+        if (!found) {
           return fail(
-            missingScriptMessage(filename, `No script named "${filename}". Create it with write_script first.`)
+            missingScriptMessage(
+              filename,
+              `No script or library named "${filename}". Use write_script to create it, or list_scripts to see the files.`
+            )
           );
-        if (found.isLibrary) return fail('Libraries cannot have a card.');
-        if (!source.trim()) return fail('The card source is empty.');
-        if (source.includes('__JSA_CARD') || source.length > MAX_SOURCE_CHARS) {
-          return fail('Invalid card source (contains a __JSA_CARD marker or is too large).');
         }
-        const syntax = checkSyntax(source, 'card.js');
-        if (syntax.length) return fail(`Not written — syntax errors in the card:\n${formatIssues(syntax)}`);
+        // An old embedded card block is not part of the text being edited; writeScriptCore keeps it.
+        const current = fs.readFileSync(found.fullPath, 'utf8').replace(CARD_BLOCK, '');
+        const result = applyEdits(current, args.edits as TextEdit[]);
+        if (!result.ok) return fail(`Not changed — ${result.error}`);
+        const written = await writeScriptCore({
+          filename: found.isLibrary ? `libraries/${path.basename(found.fullPath)}` : path.basename(found.fullPath),
+          content: result.text,
+          message: args.message,
+        });
+        return withEditNote(written, result);
+      }),
+  });
 
+  protocol.registerTool({
+    name: 'edit_card',
+    title: 'Edit card',
+    description:
+      'Changes a Lovelace card of an existing script by search and replace, so you do not have to resend the whole card ' +
+      '(often tens of thousands of characters). read_script with part "card" shows it. ' +
+      EDIT_RULES +
+      ' The result is syntax-checked and committed like write_card; "card" names a further card, default is the main card.',
+    inputSchema: {
+      filename: z.string().describe('The script that owns the card, e.g. "smart_watering.ts"'),
+      edits: EDITS_SCHEMA,
+      card: z.string().optional().describe('Name of a further card, e.g. "garmin-day-card"; omit for the main card'),
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
+    },
+    handler: (args) =>
+      serialized(async () => {
+        const filename = String(args.filename ?? '');
+        const found = resolveScript(deps, filename);
+        if (!found) {
+          return fail(
+            missingScriptMessage(filename, `No script named "${filename}". Use list_scripts to see the files.`)
+          );
+        }
+        if (found.isLibrary) return fail('Libraries cannot have a card.');
+        const base = cardBase(found.fullPath);
+        const card = args.card && String(args.card) !== mainCardName(base) ? String(args.card) : undefined;
+        if (!cardFilePath(deps.cardsDir, base, card)) {
+          return fail(
+            card
+              ? `Invalid card name "${card}". It must start with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+              : `The script name "${base}" cannot have card files (lowercase letters, digits and underscores only). Rename the script first.`
+          );
+        }
+        const current = cardManager.getCardSource(found.fullPath, card);
+        if (current === null || current === undefined) {
+          return fail(
+            `"${filename}" has no ${card ? `card "${card}"` : 'card'} yet. Create it with write_card first (list_scripts shows the existing cards).`
+          );
+        }
+        const result = applyEdits(current, args.edits as TextEdit[]);
+        if (!result.ok) return fail(`Not changed — ${result.error}`);
+        const written = await writeCardCore({
+          filename,
+          source: result.text,
+          card,
+          message: args.message,
+        });
+        return withEditNote(written, result);
+      }),
+  });
+
+  protocol.registerTool({
+    name: 'save_script_notes',
+    title: 'Save script notes',
+    description:
+      'Saves notes about a script or library so a later session (or a new chat) can pick up where this one stopped. Write what ' +
+      'is not obvious from the source: decisions and their reasons, entity/device quirks, what was tested live and what not, ' +
+      'open points. Short Markdown, no source code copies, never credentials. mode "append" (default) adds a section; ' +
+      '"replace" rewrites everything (read get_script_notes first and keep what is still true); empty content with "replace" ' +
+      'deletes the notes. Notes are included in backups.',
+    inputSchema: {
+      filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"'),
+      content: z.string().describe('The notes (Markdown)'),
+      mode: z.enum(['append', 'replace']).optional().describe('Default "append"'),
+    },
+    handler: (args) =>
+      serialized(async () => {
+        const filename = String(args.filename ?? '');
+        const content = String(args.content ?? '');
+        const replace = args.mode === 'replace';
+        const found = resolveScript(deps, filename);
+        if (!found) return fail(missingScriptMessage(filename, `No script or library named "${filename}".`));
+        if (!replace && !content.trim()) return fail('The note is empty.');
+        if (maskSecrets(content).masked) {
+          return fail('Not saved — the text contains values that look like credentials. Remove them and save again.');
+        }
         const name = path.basename(found.fullPath);
-        const script = fs.readFileSync(found.fullPath, 'utf8');
-        const block = `/* __JSA_CARD__\n${Buffer.from(source, 'utf8').toString('base64')}\n__JSA_CARD_END__ */`;
-        const next = CARD_BLOCK.test(script)
-          ? script.replace(CARD_BLOCK, () => block)
-          : `${script.trimEnd()}\n\n${block}\n`;
-
-        const notes: string[] = [];
-        const snap = await snapshotNote(found.fullPath, `mcp: snapshot before changing card of ${name}`);
-        if (snap) notes.push(snap);
-        writeAtomic(found.fullPath, next);
-        notes.push(
-          await commitFile(found.fullPath, `mcp: ${args.message ? String(args.message) : `update card of ${name}`}`)
-        );
+        const current = readNotes(deps.notesDir, found.fullPath, found.isLibrary) ?? '';
+        const total = replace ? content.trim().length : current.length + content.trim().length;
+        if (total > MAX_NOTES_CHARS) {
+          return fail(
+            `Not saved — the notes would exceed ${MAX_NOTES_CHARS} characters. Use mode "replace" with a condensed version.`
+          );
+        }
+        const deleting = replace && !content.trim();
+        if (replace) writeNotes(deps.notesDir, found.fullPath, found.isLibrary, content);
+        else appendNotes(deps.notesDir, found.fullPath, found.isLibrary, content);
         deps.notifyStatusUpdate();
-        deps.notifyContentChanged(name);
-
-        const meta = ScriptHeaderParser.parse(found.fullPath) as { card?: boolean | string | null };
-        const lines = [`Card of "${name}" updated.`];
-        if (!meta.card)
-          lines.push('Note: the header has no "@card" tag yet — add it with write_script so the card gets installed.');
-        else if (meta.card === 'dev')
-          lines.push('The header says "@card dev": the card is preview-only until you switch it to plain "@card".');
-        lines.push(notes.join('; '));
-        return text(lines.join('\n') + runningNote(name));
+        return text(
+          deleting
+            ? `Notes of "${name}" deleted.`
+            : `Notes of "${name}" ${replace ? 'replaced' : 'extended'} (${total} characters).`
+        );
       }),
   });
 
@@ -309,6 +503,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         fs.unlinkSync(found.fullPath);
         workerManager.purgeWebhooksForScript(name);
         if (!found.isLibrary) cardManager.removeCard(found.fullPath);
+        removeNotes(deps.notesDir, found.fullPath, found.isLibrary);
         await depManager.prune();
         notes.push(await commitFile(found.fullPath, `mcp: delete ${name}`, true));
         deps.notifyStatusUpdate();

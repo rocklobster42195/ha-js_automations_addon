@@ -28,7 +28,17 @@ function portIsFree(port) {
 
 test('catalog defaults: write group, get_store, call_service and delete_script are off', () => {
   const off = MCP_TOOL_CATALOG.filter((m) => !m.maintainerOnly && !isToolEnabled({}, m)).map((m) => m.name);
-  assert.deepEqual(off.sort(), ['call_service', 'delete_script', 'get_store', 'write_card', 'write_script']);
+  assert.deepEqual(off.sort(), [
+    'call_service',
+    'delete_script',
+    'edit_card',
+    'edit_script',
+    'get_store',
+    'run_snippet',
+    'save_script_notes',
+    'write_card',
+    'write_script',
+  ]);
   assert.equal(
     isToolEnabled(
       { tool_get_store: true },

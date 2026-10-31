@@ -214,7 +214,7 @@ class Kernel extends EventEmitter {
       this.workerManager.setWebhookManager(this.webhookManager);
 
       // CardManager — handles Script Pack card installation
-      this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
+      this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector, config.CARDS_DIR);
       this.workerManager.cardManager = this.cardManager;
 
       // MCP tools (the protocol layer only exposes those switched on in the settings)
@@ -228,6 +228,8 @@ class Kernel extends EventEmitter {
         eventBuffer: this.mcpEvents,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
+        notesDir: config.NOTES_DIR,
+        cardsDir: config.CARDS_DIR,
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
         storageDir: STORAGE_DIR,
@@ -255,6 +257,8 @@ class Kernel extends EventEmitter {
         storeManager: this.storeManager,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
+        notesDir: config.NOTES_DIR,
+        cardsDir: config.CARDS_DIR,
         storageDir: STORAGE_DIR,
         typesDir: path.join(__dirname, 'types'),
         notifyStatusUpdate: () => this.io?.emit('status_update'),
@@ -623,16 +627,8 @@ class Kernel extends EventEmitter {
       // their full 15s timeout) during the busiest window of the boot, when the
       // event loop is also handling the initial state flood and MQTT discovery.
       setTimeout(() => {
-        const knownCardNames = this.workerManager
-          .getScripts()
-          .map((p) => {
-            const meta: any = ScriptHeaderParser.parse(p);
-            if (!meta.card) return null;
-            return path.basename(p, path.extname(p)) + '-card';
-          })
-          .filter((name): name is string => Boolean(name));
         this.cardManager
-          .performStartupCleanup(knownCardNames)
+          .performStartupCleanup(this.cardManager.knownCardNames(this.workerManager.getScripts()))
           .catch((e) => console.warn('[Kernel] Card startup cleanup failed:', e.message));
       }, 10000);
     } catch (err) {

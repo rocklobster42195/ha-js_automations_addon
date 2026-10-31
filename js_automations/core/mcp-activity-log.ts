@@ -12,6 +12,8 @@ export interface McpActivityEntry {
   ip: string;
   ok: boolean;
   error: string | null;
+  /** What the call did beyond its name, e.g. the code of a run_snippet. */
+  detail?: string | null;
   durationMs: number;
 }
 

@@ -346,7 +346,7 @@ interface HA {
   // --- Script Pack: Lovelace Card Installation ---
   frontend: {
     /**
-     * Installs the card embedded in this script's `__JSA_CARD__` block to
+     * Installs this script's main card (`cards/<script>-card.js`) to
      * `config/www/jsa-cards/` and registers it as a Lovelace resource.
      *
      * - Skips write if the card source is unchanged (hash-based).
@@ -360,8 +360,23 @@ interface HA {
      * await ha.frontend.installCard({
      *   config: { entity_id: 'sensor.openligadb_bmg', title: 'BMG' },
      * });
+     *
+     * @example
+     * // A further card of the same script: the file cards/garmin-day-card.js (the name starts with the script name)
+     * await ha.frontend.installCard();
+     * await ha.frontend.installCard({ card: 'garmin-day-card', name: 'Garmin Tag', description: 'Today at a glance' });
      */
     installCard(options?: {
+      /**
+       * A further card of this script: the name of its file in `cards/` without ".js", e.g. `garmin-day-card`
+       * for the script `garmin`. It must start with the script name and a hyphen. Omit it for the main card
+       * (`<script>-card`). Each card gets its own file in `www`, its own Lovelace resource and its own hash.
+       */
+      card?: string;
+      /** Name in the "Add Card" picker. Default: the script name (a further card: plus the card name, e.g. "Garmin – Day"). */
+      name?: string;
+      /** Description in the "Add Card" picker. Default: the script description. */
+      description?: string;
       /**
        * Default config Lovelace pre-fills when a user adds this card via the "Add Card"
        * picker (implemented as an injected `getStubConfig()`). Has no effect once the card

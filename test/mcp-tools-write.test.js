@@ -15,6 +15,7 @@ const GitManager = require('../js_automations/core/git-manager.js');
 const { McpProtocol } = require('../js_automations/core/mcp-protocol.js');
 const { McpActivityLog } = require('../js_automations/core/mcp-activity-log.js');
 const { registerWriteTools } = require('../js_automations/core/mcp-tools-write.js');
+const cardFiles = require('../js_automations/core/card-files.js');
 
 const CARD_SRC = 'class DemoCard extends HTMLElement {}\ncustomElements.define("demo-card", DemoCard);';
 const cardBlock = (src) => `/* __JSA_CARD__\n${Buffer.from(src).toString('base64')}\n__JSA_CARD_END__ */`;
@@ -46,7 +47,16 @@ function setup(t) {
     other_config: { value: { apiKey: 'other-secret-value' }, owner: 'Somebody Else', isSecret: false },
   };
   const storeManager = { getAllPublic: () => storeEntries };
-  const cardManager = { removeCard: (p) => calls.push(['removeCard', path.basename(p)]) };
+  const cardsDirOfTest = path.join(scriptsDir, 'cards');
+  const cardManager = {
+    removeCard: (p) => calls.push(['removeCard', path.basename(p)]),
+    // what the real CardManager does: card file first, an embedded block as fallback for the main card
+    getCardSource: (p, card) => {
+      const fromFile = cardFiles.readCardFile(cardsDirOfTest, cardFiles.cardBase(p), card);
+      if (fromFile !== null || card) return fromFile;
+      return cardFiles.extractBlocks(readFileSync(p, 'utf8'))[0]?.code ?? null;
+    },
+  };
   const depManager = { prune: async () => calls.push(['prune']) };
   const events = [];
 
@@ -58,6 +68,9 @@ function setup(t) {
       allowlist: '',
       tool_write_script: true,
       tool_write_card: true,
+      tool_edit_script: true,
+      tool_edit_card: true,
+      tool_save_script_notes: true,
       tool_delete_script: true,
     },
     versioning: {},
@@ -75,6 +88,8 @@ function setup(t) {
     storeManager,
     scriptsDir,
     librariesDir,
+    notesDir: path.join(scriptsDir, 'notes'),
+    cardsDir: path.join(scriptsDir, 'cards'),
     storageDir,
     typesDir: path.join(__dirname, '../js_automations/core/types'),
     notifyStatusUpdate: () => events.push('status'),
@@ -206,24 +221,186 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(rejected.text, /write_card/);
   });
 
-  await t.test('write_card replaces the block, validates syntax and warns about a missing @card tag', async () => {
+  await t.test('write_card stores the card as a file, moves an old block out and validates', async () => {
     const next = 'class Other extends HTMLElement {}\ncustomElements.define("other-card", Other);';
+    const cardFile = (name) => path.join(scriptsDir, 'cards', name + '.js');
     const ok = await call('write_card', { filename: 'carded.ts', source: next });
     assert.equal(ok.isError, false, ok.text);
+    assert.equal(readFileSync(cardFile('carded-card'), 'utf8'), next);
     const after = readFileSync(file('carded.ts'), 'utf8');
-    assert.ok(after.includes(Buffer.from(next).toString('base64')));
-    assert.ok(!after.includes(Buffer.from(CARD_SRC).toString('base64')));
-    assert.equal((after.match(/__JSA_CARD__/g) || []).length, 1);
+    assert.ok(!after.includes('__JSA_CARD__'), 'the old embedded block left the script');
     assert.doesNotMatch(ok.text, /no "@card" tag/);
+    assert.match(
+      git('show', '--stat', '--format=', 'HEAD'),
+      /cards\/carded-card\.js/,
+      'the card file is in the commit'
+    );
 
     const noTag = await call('write_card', { filename: 'demo.ts', source: next });
     assert.match(noTag.text, /no "@card" tag/);
-    assert.match(readFileSync(file('demo.ts'), 'utf8'), /__JSA_CARD_END__/);
+    assert.ok(existsSync(cardFile('demo-card')));
+    assert.ok(!readFileSync(file('demo.ts'), 'utf8').includes('__JSA_CARD'));
+
+    const further = await call('write_card', { filename: 'demo.ts', source: next, card: 'demo-day-card' });
+    assert.equal(further.isError, false, further.text);
+    assert.match(further.text, /installCard\(\{ card: "demo-day-card" \}\)/);
+    assert.ok(existsSync(cardFile('demo-day-card')));
+    assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: 'other-card' })).isError, true);
+    assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: '../x' })).isError, true);
 
     const bad = await call('write_card', { filename: 'carded.ts', source: 'class {' });
     assert.equal(bad.isError, true);
+    assert.equal(readFileSync(cardFile('carded-card'), 'utf8'), next, 'a rejected card leaves the file alone');
     assert.equal((await call('write_card', { filename: 'nope.ts', source: next })).isError, true);
     assert.equal((await call('write_card', { filename: 'carded.ts', source: '   ' })).isError, true);
+  });
+
+  await t.test('edit_script changes a few lines, reports like write_script and is all-or-nothing', async () => {
+    const src = '/**\n * @name Edit Me\n */\nconst LIMIT = 10;\nha.log("a");\nha.log("b");\n';
+    assert.equal((await call('write_script', { filename: 'edit_me.js', content: src })).isError, false);
+    const before = subjects().length;
+
+    const ok = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: 'const LIMIT = 10;', new_string: 'const LIMIT = 20;' }],
+      message: 'raise limit',
+    });
+    assert.equal(ok.isError, false, ok.text);
+    assert.match(ok.text, /Applied 1 replacement/);
+    assert.match(readFileSync(file('edit_me.js'), 'utf8'), /LIMIT = 20/);
+    assert.equal(subjects()[0], 'mcp: raise limit');
+    assert.equal(subjects().length, before + 1);
+
+    const two = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [
+        { old_string: 'LIMIT = 20', new_string: 'LIMIT = 30' },
+        { old_string: 'LIMIT = 30;', new_string: 'LIMIT = 40;' },
+      ],
+    });
+    assert.equal(two.isError, false, two.text);
+    assert.match(readFileSync(file('edit_me.js'), 'utf8'), /LIMIT = 40;/);
+
+    const unchanged = readFileSync(file('edit_me.js'), 'utf8');
+    const missing = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [
+        { old_string: 'LIMIT = 40;', new_string: 'LIMIT = 50;' },
+        { old_string: 'nowhere', new_string: 'x' },
+      ],
+    });
+    assert.equal(missing.isError, true);
+    assert.match(missing.text, /Edit 2 of 2.*not found/);
+    const many = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: 'ha.log("', new_string: 'ha.warn("' }],
+    });
+    assert.equal(many.isError, true);
+    assert.match(many.text, /matches 2 times/);
+    assert.equal(readFileSync(file('edit_me.js'), 'utf8'), unchanged, 'a failed edit changes nothing');
+
+    const all = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: 'ha.log("', new_string: 'ha.warn("', replace_all: true }],
+    });
+    assert.match(all.text, /Applied 2 replacement/);
+
+    const broken = await call('edit_script', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: 'ha.warn("a");', new_string: 'ha.warn(' }],
+    });
+    assert.equal(broken.isError, true);
+    assert.match(broken.text, /syntax errors/);
+    assert.match(readFileSync(file('edit_me.js'), 'utf8'), /ha\.warn\("a"\);/, 'a syntax error blocks the edit');
+
+    assert.equal(
+      (await call('edit_script', { filename: 'nope.js', edits: [{ old_string: 'a', new_string: 'b' }] })).isError,
+      true
+    );
+    assert.equal((await call('edit_script', { filename: 'edit_me.js', edits: [] })).isError, true);
+  });
+
+  await t.test('edit_script keeps an old embedded card block and never touches it', async () => {
+    const legacy = `/**\n * @name Legacy Edit\n * @card dev\n */\nha.log('legacy');\n\n${cardBlock(CARD_SRC)}\n`;
+    writeFileSync(file('legacy_edit.js'), legacy);
+    const r = await call('edit_script', {
+      filename: 'legacy_edit.js',
+      edits: [{ old_string: "ha.log('legacy');", new_string: "ha.log('edited');" }],
+    });
+    assert.equal(r.isError, false, r.text);
+    const after = readFileSync(file('legacy_edit.js'), 'utf8');
+    assert.match(after, /ha\.log\('edited'\);/);
+    assert.ok(after.includes(Buffer.from(CARD_SRC).toString('base64')), 'the block is still there');
+    assert.equal((after.match(/__JSA_CARD__/g) || []).length, 1);
+  });
+
+  await t.test('edit_card edits the card file, also an old embedded one, and a further card', async () => {
+    const cardFile = (n) => path.join(scriptsDir, 'cards', n + '.js');
+    const body =
+      'class Edit extends HTMLElement {\n  label() { return "Ausreichend"; }\n}\ncustomElements.define("edit-me-card", Edit);';
+    assert.equal((await call('write_card', { filename: 'edit_me.js', source: body })).isError, false);
+
+    const ok = await call('edit_card', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: '"Ausreichend"', new_string: '"Gut"' }],
+      message: 'wording',
+    });
+    assert.equal(ok.isError, false, ok.text);
+    assert.match(ok.text, /Applied 1 replacement/);
+    assert.match(readFileSync(cardFile('edit_me-card'), 'utf8'), /"Gut"/);
+    assert.equal(subjects()[0], 'mcp: wording');
+    assert.match(git('show', '--stat', '--format=', 'HEAD'), /cards\/edit_me-card\.js/);
+
+    const miss = await call('edit_card', { filename: 'edit_me.js', edits: [{ old_string: 'zzz', new_string: 'y' }] });
+    assert.equal(miss.isError, true);
+    const syntax = await call('edit_card', {
+      filename: 'edit_me.js',
+      edits: [{ old_string: 'class Edit extends HTMLElement {', new_string: 'class Edit extends HTMLElement {{' }],
+    });
+    assert.equal(syntax.isError, true);
+    assert.match(readFileSync(cardFile('edit_me-card'), 'utf8'), /class Edit/, 'a broken card edit changes nothing');
+
+    const e = [{ old_string: 'a', new_string: 'b' }];
+    assert.equal(
+      (await call('edit_card', { filename: 'edit_me.js', card: 'edit_me-day-card', edits: e })).isError,
+      true
+    );
+    assert.equal((await call('edit_card', { filename: 'edit_me.js', card: 'other-card', edits: e })).isError, true);
+    await call('write_card', { filename: 'edit_me.js', source: body, card: 'edit_me-day-card' });
+    const further = await call('edit_card', {
+      filename: 'edit_me.js',
+      card: 'edit_me-day-card',
+      edits: [{ old_string: 'Ausreichend', new_string: 'Tag' }],
+    });
+    assert.equal(further.isError, false, further.text);
+    assert.match(readFileSync(cardFile('edit_me-day-card'), 'utf8'), /Tag/);
+    assert.match(readFileSync(cardFile('edit_me-card'), 'utf8'), /Gut/, 'the main card is untouched');
+
+    const embedded = `/**\n * @name Emb\n * @card dev\n */\nha.log(1);\n\n${cardBlock('class A {}\nconst x = 1;')}\n`;
+    writeFileSync(file('emb.js'), embedded);
+    const mig = await call('edit_card', {
+      filename: 'emb.js',
+      edits: [{ old_string: 'const x = 1;', new_string: 'const x = 2;' }],
+    });
+    assert.equal(mig.isError, false, mig.text);
+    assert.match(readFileSync(cardFile('emb-card'), 'utf8'), /const x = 2;/);
+    assert.ok(!readFileSync(file('emb.js'), 'utf8').includes('__JSA_CARD'), 'the block left the script');
+  });
+
+  await t.test('a script whose name cannot have card files gets a message that names the script', async () => {
+    writeFileSync(file('Bad_Name.js'), '/** @name Bad */\nha.log(1);\n');
+    const r = await call('write_card', { filename: 'Bad_Name.js', source: 'class A extends HTMLElement {}' });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /script name "Bad_Name" cannot have card files/);
+    assert.doesNotMatch(r.text, /undefined/);
+  });
+
+  await t.test('write_script drops the placeholder read_script shows instead of a card block', async () => {
+    const src =
+      '/**\n * @name Placeholder\n */\nha.log(1);\n\n/* card source: not included here, read it with read_script part "card" (or "all") */\n';
+    const r = await call('write_script', { filename: 'placeholder.js', content: src });
+    assert.equal(r.isError, false, r.text);
+    assert.doesNotMatch(readFileSync(file('placeholder.js'), 'utf8'), /card source/);
   });
 
   await t.test('libraries land in libraries/, names and conflicts are validated', async () => {
@@ -252,6 +429,33 @@ test('write tools check, write, commit and delete safely', async (t) => {
     workers.clear();
   });
 
+  await t.test('notes are saved, kept out of Git on their own and committed with the script', async () => {
+    const before = subjects();
+    const saved = await call('save_script_notes', { filename: 'typed.ts', content: '# Typed\n- quirk A' });
+    assert.equal(saved.isError, false, saved.text);
+    const noteFile = path.join(scriptsDir, 'notes', 'typed.md');
+    assert.ok(existsSync(noteFile));
+    assert.deepEqual(subjects(), before, 'saving notes makes no commit of its own');
+
+    await call('save_script_notes', { filename: 'typed.ts', content: '- quirk B' });
+    assert.match(readFileSync(noteFile, 'utf8'), /quirk A[\s\S]*quirk B/, 'append keeps the earlier text');
+
+    const secret = await call('save_script_notes', {
+      filename: 'typed.ts',
+      content: "const apiKey = 'abcd1234secretvalue'",
+    });
+    assert.equal(secret.isError, true);
+
+    const src = readFileSync(file('typed.ts'), 'utf8');
+    await call('write_script', { filename: 'typed.ts', content: src + '// touched\n', message: 'x'.repeat(300) });
+    assert.ok(subjects()[0].length <= 'mcp: '.length + 120, 'a long message is cut, not rejected');
+    assert.match(
+      git('log', '-2', '--stat', '--format='),
+      /notes\/typed\.md/,
+      'notes ride along with the commits of their script'
+    );
+  });
+
   await t.test('delete_script stops, removes, cleans up and commits the deletion', async () => {
     calls.length = 0;
     const r = await call('delete_script', { filename: 'typed.ts' });
@@ -262,6 +466,8 @@ test('write tools check, write, commit and delete safely', async (t) => {
       ['stop', 'purge', 'removeCard', 'prune']
     );
     assert.equal(subjects()[0], 'mcp: delete typed.ts');
+    assert.ok(!existsSync(path.join(scriptsDir, 'notes', 'typed.md')), 'the notes go with the script');
+    assert.match(git('show', '--stat', '--format=', 'HEAD'), /notes\/typed\.md/, 'and the deletion is committed');
     assert.match(git('show', 'HEAD~1:typed.ts'), /definitelyNotAnApi/, 'last state is in history');
     assert.match(r.text, /Store entries of this script remain/);
     assert.match(r.text, /typed_config \(credential-like field filled in: apiKey\)/);

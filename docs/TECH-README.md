@@ -898,7 +898,7 @@ New settings in the `danger` section must always be added here.
 A Script Pack is a single `.js` (or `.ts`) file containing two things:
 
 1. **Normal JSA script** — backend logic with `ha.on()`, `ha.register()`, `ha.action()`, etc.
-2. **`__JSA_CARD__` block** — Base64-encoded Web Component source embedded as a block comment
+2. **The card** — Web Component source in `cards/<script>-card.js` (see `core/card-files.ts`). The single-file exchange form embeds it as a Base64 `__JSA_CARD__` block (`GET /:filename/download` packs, upload/import/create unpack); old scripts may still carry the block and keep working (the card file wins)
 
 ```
 /* __JSA_CARD__
@@ -906,7 +906,7 @@ A Script Pack is a single `.js` (or `.ts`) file containing two things:
 __JSA_CARD_END__ */
 ```
 
-CardManager extracts the block, decodes the Base64, writes the card JS file to `config/www/jsa-cards/`, and registers it as a Lovelace resource via HA WebSocket.
+CardManager reads the card file (or, for old scripts, extracts and decodes the block), writes the card JS file to `config/www/jsa-cards/`, and registers it as a Lovelace resource via HA WebSocket.
 
 ### `installCard(scriptFilePath, options)`
 
@@ -914,7 +914,7 @@ The main entry point. Called by WorkerManager when a worker sends an `install_ca
 
 **Flow:**
 
-1. `_extractCardBlock()` — Reads the script file, finds the `/* __JSA_CARD__` block, decodes Base64 → JavaScript source
+1. `_extractCardBlock()` — Reads `cards/<script>-card.js`; falls back to the script's `/* __JSA_CARD__` block (decoded Base64) for old scripts
 2. Hash check — SHA-256 of the card source. If `registry[scriptName].hash === hash` and `!options.force` → return early (no write needed)
 3. Preamble injection — `JSA_PREAMBLE` is prepended. The preamble contains the `__jsa__` object with `connect()` and `callAction()`; `{{SCRIPT_ID}}` is replaced with the script filename
 4. Config wrapping (optional) — If `options.config` is provided, `_wrapWithConfig()` wraps the card in an IIFE that calls `setConfig()` on the first `connectedCallback`
@@ -1016,7 +1016,7 @@ The `msgId` counter in `HAConnector` is a monotonically increasing integer that 
 
 ### Script Pack Card Size
 
-The `__JSA_CARD__` block is stored as Base64 inside the script file. Large card bundles (complex Lit/web component, bundled dependencies) can significantly increase the script file size. There is no hard limit enforced, but the full card source is read and decoded on every `installCard()` call and on every preview request — keep card bundles reasonably sized.
+The card is a plain file in `cards/`; only the packed single-file form (download) carries it as Base64, which is about a third larger. There is no hard limit enforced, but the full card source is read on every `installCard()` call and on every preview request — keep card bundles reasonably sized.
 
 ---
 
@@ -1062,7 +1062,23 @@ The MCP server lets an external AI client (Claude Desktop, …) inspect and cont
 
 ### Write path (`write_script`)
 
-Validate name → reject embedded `__JSA_CARD__` → check (syntax blocks) → keep the existing card block (`read_script` strips it) → **snapshot commit** of the current file state → atomic write (tmp + rename) → commit → `status_update` and `script_content_changed` socket events. The snapshot is only mentioned in the result when it saved uncommitted local edits (the usual case is "nothing to save"). Calls are serialized (`index.lock`). `delete_script` also emits `script_content_changed`. The editor reloads clean tabs (and an open card preview) on that event; a dirty tab keeps its text, gets `JsaTab.externalChange` (or `deleted`), shows a lasting banner and asks before a save overwrites; a clean tab of a deleted file is closed.
+Validate name → reject embedded `__JSA_CARD__` → check (syntax blocks) → keep a legacy embedded card block (`read_script` strips it; card files are untouched by `write_script`) → **snapshot commit** of the current file state → atomic write (tmp + rename) → commit → `status_update` and `script_content_changed` socket events. The snapshot is only mentioned in the result when it saved uncommitted local edits (the usual case is "nothing to save"). Calls are serialized (`index.lock`). `delete_script` also emits `script_content_changed`. The editor reloads clean tabs (and an open card preview) on that event; a dirty tab keeps its text, gets `JsaTab.externalChange` (or `deleted`), shows a lasting banner and asks before a save overwrites; a clean tab of a deleted file is closed.
+
+### Several cards per script
+
+`installCard(scriptPath, { card?, name?, description?, config?, force? })` (`card-manager.ts`): `card` is the file name of a further card in `cards/` without `.js` (`<script>-<x>-card`, validated by `cardFilePath`); without it the main card (`<script>-card`, file or old embedded block) is installed. Per card one www file `<cardName>.js` (picker entry + `JSA_PREAMBLE` + code + optional stub-config injection), one Lovelace resource and one registry entry. The registry keeps the main card under the script name (as before, `script-list.ts` relies on it) and further cards under their card name (a script name never contains a hyphen, so the keys cannot collide); `removeCard(script)` removes every entry whose key is the script name or starts with `<script>-`. The picker entry is skipped when `window.customCards` already has the same `type` (cards that still push their own entry). `knownCardNames(scriptPaths)` (main + every card file of scripts with an `@card` header) feeds `performStartupCleanup` from the kernel, the restore manager and the worker manager (after each install), so files of further cards are not deleted as orphans. Routes: `GET /:filename/cards`, `?card=` on `GET/PUT /:filename/card` and `/card/preview-html`. Editor: the card tab keeps `tab.card` / `tab.cards`, `_switchCard()` saves first and reloads the selected card, `CardPreview.setCard()` follows.
+
+### run_snippet
+
+`run_snippet` (`mcp-tools-control.ts`) wraps `WorkerManager.runRepl(code, { restricted: true, timeoutMs })`. Restricted mode: permissions `[network]` with capability enforcement on, empty store, an environment without tokens, `Module._load` refuses `fs`, `child_process`, `os`, `worker_threads`, `vm` and similar (also with the `node:` prefix; `worker-wrapper.ts`, option `restricted`), `console.*` is routed to `ha.log`, and the host refuses the mutating messages (`call_service`, `fire_event`, `update_state`, `remove_entity`, `store_set`, `store_delete`) with a warning. The worker exits as soon as the snippet has finished (the unrestricted Expert Mode REPL keeps running until its timeout so `ha.on` listeners can observe). A thrown error arrives as a `🔥 CRASH:` log line and is reported as a clean error. `McpToolResult.activityDetail` carries the code and output start to the MCP tab. `snippet-sandbox.ts` (`installConnectGuard`) wraps `net.Socket.prototype.connect` so that http, https, fetch and tls cannot reach the add-on itself (the JSA HTTP API is unauthenticated): IP literals of loopback/own interfaces, `localhost`, names that resolve to an own address (checked in the `lookup` callback) and local/unix sockets are refused. The module block applies only to what the snippet itself requires (not to code inside `node_modules`, so packages that load `fs` internally keep working). This is a best-effort sandbox, not a security boundary: dynamic `import()` is not intercepted, which is why the tool has its own switch, off by default.
+
+### Edit tools
+
+`edit_script` / `edit_card` (`core/mcp-edits.ts`, `applyEdits`) take a list of `{old_string, new_string, replace_all?}` edits, apply them in order to the current text (an old embedded card block is kept out of the edited text) and hand the result to the same core as `write_script` / `write_card` (syntax check, type warnings, snapshot, atomic write, commit). All or nothing: no match, several matches without `replace_all`, empty or identical edits fail with the number of the edit and change nothing. CRLF files match edits written with plain newlines.
+
+### Card files over MCP
+
+`list_scripts` lists the cards of a script (`cards`: name, size, `embedded` for a not yet migrated block). `read_script` with `part: "card"` reads the main card, `card: "<name>"` a further one. `write_card` writes `cards/<script>-card.js` (or `card: "<script>-<x>-card"`, stored but not installed yet), drops an old embedded block from the script on the first main-card save and commits through the script's commit, which includes the card files (`GitManager.changedCompanions`, like the notes).
 
 ### The `.mcpb` bridge
 

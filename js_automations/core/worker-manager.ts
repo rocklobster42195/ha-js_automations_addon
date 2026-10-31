@@ -1117,7 +1117,7 @@ class WorkerManager extends EventEmitter {
             .installCard(fullPath, { ...msg.options, devMode })
             .then((url) => {
               if (!devMode) {
-                const cardName = `${path.basename(fullPath, path.extname(fullPath))}-card`;
+                const cardName = msg.options?.card || `${path.basename(fullPath, path.extname(fullPath))}-card`;
                 const staticUrl = `/local/jsa-cards/${cardName}.js`;
                 this.emit('log', {
                   source: path.basename(fullPath, path.extname(fullPath)),
@@ -1130,14 +1130,9 @@ class WorkerManager extends EventEmitter {
                 });
                 // Fire-and-forget: clean up orphaned resources after each install
                 // so dev iterations don't accumulate stale Lovelace entries.
-                const knownCardNames = this.getScripts()
-                  .map((p) => {
-                    const meta: any = ScriptHeaderParser.parse(p);
-                    if (!meta.card) return null;
-                    return path.basename(p, path.extname(p)) + '-card';
-                  })
-                  .filter(Boolean) as string[];
-                this.cardManager!.performStartupCleanup(knownCardNames).catch(() => {});
+                this.cardManager!.performStartupCleanup(this.cardManager!.knownCardNames(this.getScripts())).catch(
+                  () => {}
+                );
               }
               worker.postMessage({ type: 'install_card_response', callId: msg.callId, url });
             })
@@ -1471,9 +1466,17 @@ class WorkerManager extends EventEmitter {
 
   /**
    * Runs a code snippet in a short-lived worker with the full ha API available.
-   * Resolves with { logs: [{level, message}], error: string|null } after completion or 5s timeout.
+   * Resolves with { logs: [{level, message}], error: string|null } after completion or the timeout (default 5s).
+   *
+   * restricted (MCP run_snippet): network only, no store, no tokens in the environment, no files/processes, and
+   * every call that would change something (services, events, entity states, store) is refused.
    */
-  runRepl(code: string): Promise<{ logs: { level: string; message: string }[]; error: string | null }> {
+  runRepl(
+    code: string,
+    options: { restricted?: boolean; timeoutMs?: number } = {}
+  ): Promise<{ logs: { level: string; message: string }[]; error: string | null }> {
+    const restricted = !!options.restricted;
+    const timeoutMs = options.timeoutMs ?? 5000;
     const tmpFile = path.join(os.tmpdir(), `jsa_repl_${Date.now()}.js`);
     const logs: { level: string; message: string }[] = [];
 
@@ -1482,7 +1485,13 @@ class WorkerManager extends EventEmitter {
     // top-level await (ERR_REQUIRE_ASYNC_MODULE). A rejection is re-thrown on nextTick so it
     // surfaces as a worker 'error' event (→ finish(err.message)) instead of a silent
     // "Unhandled Rejection" log followed by the 5s timeout.
-    const wrapped = '(async () => {\n' + code + '\n})().catch((e) => { process.nextTick(() => { throw e; }); });';
+    // A restricted snippet ends as soon as it has finished: any ha.* call that installs a message listener
+    // (ha.store.get, ha.on, ...) would otherwise keep the worker alive until the timeout and turn a success into one.
+    const wrapped = restricted
+      ? '(async () => {\n' +
+        code +
+        '\n})().then(() => { setTimeout(() => process.exit(0), 50); }, (e) => { process.nextTick(() => { throw e; }); });'
+      : '(async () => {\n' + code + '\n})().catch((e) => { process.nextTick(() => { throw e; }); });';
 
     return new Promise((resolve) => {
       try {
@@ -1492,7 +1501,8 @@ class WorkerManager extends EventEmitter {
       }
 
       // The REPL is an administrative context (like the UI): it sees every unlocked value.
-      const initialStoreValues: Record<string, unknown> = this.storeManager ? this.storeManager.valuesFor() : {};
+      const initialStoreValues: Record<string, unknown> =
+        this.storeManager && !restricted ? this.storeManager.valuesFor() : {};
       const language =
         this.settings.ui_language && this.settings.ui_language !== 'auto'
           ? this.settings.ui_language
@@ -1504,7 +1514,7 @@ class WorkerManager extends EventEmitter {
           resourceLimits: { maxOldGenerationSizeMb: 64 },
           workerData: {
             path: tmpFile,
-            name: 'REPL',
+            name: restricted ? 'Snippet' : 'REPL',
             filename: 'repl',
             loglevel: 'debug',
             language,
@@ -1516,14 +1526,18 @@ class WorkerManager extends EventEmitter {
             initialDeviceRegistry: this.cachedDeviceRegistry || [],
             initialLabels: this.cachedLabels || [],
             initialFloors: this.cachedFloors || [],
-            permissions: ['network', 'exec', 'filesystem'],
-            capabilityEnforcement: false,
+            permissions: restricted ? ['network'] : ['network', 'exec', 'filesystem'],
+            capabilityEnforcement: restricted,
+            restricted,
             filesystemEnabled: false,
             fsDataDir: '',
             fsQuotas: { internal: 0, shared: 0, media: 0 },
             defaultThrottle: 0,
           },
-          env: { ...process.env, NODE_PATH: path.resolve(this.storageDir, 'node_modules') },
+          // A snippet must not see the add-on's tokens (SUPERVISOR_TOKEN, HA_TOKEN, ...) in its environment.
+          env: restricted
+            ? { PATH: process.env.PATH ?? '', NODE_PATH: path.resolve(this.storageDir, 'node_modules') }
+            : { ...process.env, NODE_PATH: path.resolve(this.storageDir, 'node_modules') },
           execArgv: ['--enable-source-maps'],
         });
       } catch (e) {
@@ -1550,12 +1564,37 @@ class WorkerManager extends EventEmitter {
 
       const timer = setTimeout(() => {
         worker.terminate();
-        finish('Timeout: REPL execution exceeded 5 seconds.');
-      }, 5000);
+        finish(`Timeout: ${restricted ? 'snippet' : 'REPL'} execution exceeded ${timeoutMs / 1000} seconds.`);
+      }, timeoutMs);
+
+      // Everything that would change something outside the snippet.
+      const MUTATING = new Set([
+        'fire_event',
+        'call_service',
+        'update_state',
+        'remove_entity',
+        'store_set',
+        'store_delete',
+      ]);
 
       worker.on('message', async (msg: any) => {
         if (msg.type === 'log') {
           logs.push({ level: msg.level || 'info', message: msg.message });
+        }
+        if (restricted && MUTATING.has(msg.type)) {
+          logs.push({
+            level: 'warn',
+            message: `${msg.type === 'call_service' ? 'ha.call' : msg.type} is not available in run_snippet (read-only): nothing was changed.`,
+          });
+          // a pending ha.call() would otherwise wait for its answer until the timeout
+          if (msg.type === 'call_service' && msg.callId) {
+            worker.postMessage({
+              type: 'service_response',
+              callId: msg.callId,
+              error: 'ha.call is not available in run_snippet (read-only).',
+            });
+          }
+          return;
         }
         if (msg.type === 'fire_event' && this.haConnector) {
           this.haConnector.fireEvent(msg.eventType, msg.eventData || {});

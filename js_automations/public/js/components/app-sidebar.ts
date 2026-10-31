@@ -448,7 +448,7 @@ export class AppSidebar extends LitElement {
 
     let code = '';
     try {
-      const res = await window.apiFetch!(`api/scripts/${filename}/content`);
+      const res = await window.apiFetch!(`api/scripts/${filename}/content?packed=1`);
       if (res.ok) {
         const data = await res.json();
         code = data.content.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');

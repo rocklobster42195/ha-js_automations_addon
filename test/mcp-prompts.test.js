@@ -51,9 +51,14 @@ test('prompts, resources and server instructions reach the client', async (t) =>
     assert.match(instructions, /ha\.store/);
   });
 
-  await t.test('both prompts are listed with their arguments', async () => {
+  await t.test('all prompts are listed with their arguments', async () => {
     const { prompts } = await client.listPrompts();
-    assert.deepEqual(prompts.map((p) => p.name).sort(), ['convert_iobroker_script', 'grill_script', 'new_script']);
+    assert.deepEqual(prompts.map((p) => p.name).sort(), [
+      'convert_iobroker_script',
+      'grill_script',
+      'new_script',
+      'save_script_notes',
+    ]);
     const newScript = prompts.find((p) => p.name === 'new_script');
     assert.equal(newScript.arguments.find((a) => a.name === 'task').required, true);
     assert.equal(

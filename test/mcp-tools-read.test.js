@@ -16,6 +16,7 @@ const { McpEventBuffer } = require('../js_automations/core/mcp-event-buffer.js')
 const { registerReadTools } = require('../js_automations/core/mcp-tools-read.js');
 
 const CARD_SOURCE = 'class DemoCard extends HTMLElement {}';
+const DAY_CARD_SOURCE = 'class DayCard extends HTMLElement {}';
 
 function setup(t) {
   const dir = mkdtempSync(path.join(tmpdir(), 'jsa-mcp-tools-'));
@@ -24,7 +25,11 @@ function setup(t) {
   const docsDir = path.join(dir, 'docs');
   const typesDir = path.join(dir, 'types');
   const storageDir = path.join(dir, 'storage');
-  for (const d of [librariesDir, path.join(docsDir, 'guide'), typesDir, storageDir]) mkdirSync(d, { recursive: true });
+  const cardsDir = path.join(scriptsDir, 'cards');
+  for (const d of [librariesDir, cardsDir, path.join(docsDir, 'guide'), typesDir, storageDir]) {
+    mkdirSync(d, { recursive: true });
+  }
+  writeFileSync(path.join(cardsDir, 'carded-day-card.js'), DAY_CARD_SOURCE);
   writeFileSync(
     path.join(storageDir, 'services.d.ts'),
     [
@@ -91,7 +96,8 @@ function setup(t) {
   const cardManager = {
     registry: {},
     wwwCardsDir: path.join(dir, 'www'),
-    getCardSource: (p) => (p.endsWith('carded.ts') ? CARD_SOURCE : null),
+    getCardSource: (p, card) =>
+      card ? (card === 'carded-day-card' ? DAY_CARD_SOURCE : null) : p.endsWith('carded.ts') ? CARD_SOURCE : null,
   };
   const haConnector = {
     getStates: () => [
@@ -169,6 +175,8 @@ function setup(t) {
     eventBuffer,
     scriptsDir,
     librariesDir,
+    notesDir: path.join(scriptsDir, 'notes'),
+    cardsDir,
     storageDir,
     docsDir,
     typesDir,
@@ -201,7 +209,7 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     return { text: r.content[0].text, isError: !!r.isError };
   };
 
-  await t.test('all eight read tools are listed, nothing from other groups', async () => {
+  await t.test('all nine read tools are listed, nothing from other groups', async () => {
     const names = (await client.listTools()).tools.map((x) => x.name).sort();
     assert.deepEqual(names, [
       'get_api_reference',
@@ -209,6 +217,7 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
       'get_events',
       'get_logs',
       'get_script_errors',
+      'get_script_notes',
       'list_entities',
       'list_scripts',
       'read_script',
@@ -225,6 +234,11 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.equal(scripts.find((s) => s.filename === 'broken.js').status, 'error');
     assert.equal(scripts.find((s) => s.filename === 'helper.js').kind, 'library');
     assert.equal(scripts.find((s) => s.filename === 'carded.ts').card, true);
+    assert.deepEqual(scripts.find((s) => s.filename === 'carded.ts').cards, [
+      { name: 'carded-card', bytes: Buffer.byteLength(CARD_SOURCE), embedded: true },
+      { name: 'carded-day-card', bytes: Buffer.byteLength(DAY_CARD_SOURCE) },
+    ]);
+    assert.equal(scripts.find((s) => s.filename === 'hello.js').cards, undefined);
   });
 
   await t.test('read_script: masks secrets, appends plain card source, rejects bad names', async () => {
@@ -234,8 +248,26 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match(hello.text, /masked by JSA secret filter/);
 
     const carded = await call('read_script', { filename: 'carded.ts' });
-    assert.ok(carded.text.includes(CARD_SOURCE));
+    assert.ok(!carded.text.includes(CARD_SOURCE), 'card is not part of the default result');
+    assert.match(carded.text, /Lovelace card\(s\) that are not included/);
     assert.ok(!carded.text.includes('__JSA_CARD__'), 'base64 block must be stripped');
+
+    assert.match(carded.text, /carded-day-card \(\d+ bytes\)/, 'the result names the cards that are left out');
+    const dayCard = await call('read_script', { filename: 'carded.ts', part: 'card', card: 'carded-day-card' });
+    assert.ok(dayCard.text.includes(DAY_CARD_SOURCE) && !dayCard.text.includes(CARD_SOURCE));
+    const noCard = await call('read_script', { filename: 'carded.ts', part: 'card', card: 'carded-x-card' });
+    assert.equal(noCard.isError, true);
+    assert.match(noCard.text, /carded-card, carded-day-card/);
+
+    const cardOnly = await call('read_script', { filename: 'carded.ts', part: 'card' });
+    assert.ok(cardOnly.text.includes(CARD_SOURCE));
+    assert.ok(!cardOnly.text.includes("ha.log('card')"), 'part "card" has no script source');
+    const all = await call('read_script', { filename: 'carded.ts', part: 'all' });
+    assert.ok(all.text.includes(CARD_SOURCE) && all.text.includes("ha.log('card')"));
+    assert.equal((await call('read_script', { filename: 'hello.js', part: 'card' })).isError, true);
+
+    const slice = await call('read_script', { filename: 'carded.ts', offset: 2, limit: 2 });
+    assert.match(slice.text, /\[lines 2-3 of \d+; continue with offset 4\]/);
 
     assert.equal((await call('read_script', { filename: 'libraries/helper.js' })).isError, false);
     for (const bad of ['../secrets.js', 'flow.blocks', 'nope.js', '..\\x.js', 'x.d.ts']) {

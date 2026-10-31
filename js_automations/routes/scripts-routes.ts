@@ -5,6 +5,17 @@ import type { Server as SocketIOServer } from 'socket.io';
 import ScriptHeaderParser from '../core/script-header-parser';
 import CapabilityAnalyzer from '../core/capability-analyzer';
 import { buildScriptList } from '../core/script-list';
+import { moveNotes, removeNotes } from '../core/script-notes';
+import {
+  cardBase,
+  hasBlock,
+  moveCardFiles,
+  packScript,
+  stripBlocks,
+  unpackScript,
+  writeCardFile,
+} from '../core/card-files';
+import config from '../core/config';
 import type DependencyManager from '../core/dependency-manager';
 import type StateManager from '../core/state-manager';
 import type MqttManager from '../core/mqtt-manager';
@@ -41,7 +52,7 @@ export = (
 
   // GET List
   router.get('/', (req, res) => {
-    res.json(buildScriptList(workerManager, cardManager));
+    res.json(buildScriptList(workerManager, cardManager, config.NOTES_DIR));
   });
 
   // POST Control (Toggle/Restart)
@@ -91,6 +102,8 @@ export = (
     fs.unlinkSync(fullPath);
     workerManager.purgeWebhooksForScript(filename);
     if (cardManager) cardManager.removeCard(fullPath);
+    // Notes belong to the script: a new script with the same name must not inherit them.
+    removeNotes(config.NOTES_DIR, filename, path.dirname(fullPath) === LIBRARIES_DIR);
     await depManager.prune();
 
     // Deletions are never auto-staged in git (see git-manager.ts) — this is the opt-in point
@@ -226,7 +239,11 @@ export = (
     }
 
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
+      let content = fs.readFileSync(fullPath, 'utf8');
+      // ?packed=1 adds the card files as blocks (duplicating a script has to take its cards along)
+      if (req.query.packed && path.dirname(fullPath) === SCRIPTS_DIR) {
+        content = packScript(config.CARDS_DIR, filename, content);
+      }
       res.json({ content });
     } catch (e) {
       console.error(`[API] File not found: ${fullPath}`);
@@ -240,8 +257,9 @@ export = (
     const fullPath = getFilePath(filename);
     if (!fullPath) return res.status(404).send('<h1>Script not found</h1>');
 
-    const cardSource = cardManager ? cardManager.getCardSource(fullPath) : null;
-    if (!cardSource) return res.status(404).send('<h1>No __JSA_CARD__ block found in this script</h1>');
+    const card = typeof req.query.card === 'string' ? req.query.card : undefined;
+    const cardSource = cardManager ? cardManager.getCardSource(fullPath, card) : null;
+    if (!cardSource) return res.status(404).send('<h1>This script has no card</h1>');
 
     const scriptName = filename.replace(/\.[^.]+$/, '');
     const safeCardSource = cardSource.replace(/<\/script>/gi, '<\\/script>');
@@ -603,18 +621,26 @@ export = (
 </html>`);
   });
 
-  // GET Card Source (decoded from __JSA_CARD__ block)
+  // GET the cards of a script (main card first): feeds the card selector of the editor
+  router.get('/:filename/cards', (req, res) => {
+    const fullPath = getFilePath(req.params.filename);
+    if (!fullPath) return res.status(404).json({ error: 'File not found' });
+    res.json({ cards: cardManager ? cardManager.listCards(fullPath) : [] });
+  });
+
+  // GET Card Source: the card file, or (old scripts) the decoded __JSA_CARD__ block
   router.get('/:filename/card', (req, res) => {
     const filename = req.params.filename;
     const fullPath = getFilePath(filename);
     if (!fullPath) return res.status(404).json({ error: 'File not found' });
 
-    const source = cardManager ? cardManager.getCardSource(fullPath) : null;
-    // Return empty content (isNew: true) when no block exists yet — frontend opens a blank card tab
+    const card = typeof req.query.card === 'string' ? req.query.card : undefined;
+    const source = cardManager ? cardManager.getCardSource(fullPath, card) : null;
+    // Return empty content (isNew: true) when no card exists yet — frontend opens a blank card tab
     res.json({ content: source ?? '', isNew: !source });
   });
 
-  // PUT Card Source (re-encodes as Base64 and embeds back into the script file)
+  // PUT Card Source: writes cards/<script>-card.js; an old embedded block is dropped from the script on this first save
   router.put('/:filename/card', (req, res) => {
     const filename = req.params.filename;
     const fullPath = getFilePath(filename);
@@ -623,18 +649,16 @@ export = (
     const { content } = req.body;
     if (typeof content !== 'string') return res.status(400).json({ error: 'content required' });
 
-    let scriptSource = fs.readFileSync(fullPath, 'utf8');
-    const base64 = Buffer.from(content, 'utf8').toString('base64');
-    const newBlock = `/* __JSA_CARD__\n${base64}\n__JSA_CARD_END__ */`;
-
-    const cardBlockRegex = /\/\* __JSA_CARD__[\s\S]*?__JSA_CARD_END__ \*\//;
-    if (cardBlockRegex.test(scriptSource)) {
-      scriptSource = scriptSource.replace(cardBlockRegex, newBlock);
-    } else {
-      // No block yet — append to end of script (first save from card editor)
-      scriptSource = scriptSource.trimEnd() + '\n\n' + newBlock + '\n';
+    const card = typeof req.query.card === 'string' ? req.query.card : undefined;
+    if (!writeCardFile(config.CARDS_DIR, cardBase(filename), card, content)) {
+      return res.status(400).json({ error: 'Invalid card name' });
     }
-    fs.writeFileSync(fullPath, scriptSource, 'utf8');
+
+    const scriptSource = fs.readFileSync(fullPath, 'utf8');
+    if (hasBlock(scriptSource)) {
+      fs.writeFileSync(fullPath, `${stripBlocks(scriptSource).trimEnd()}\n`, 'utf8');
+      io.emit('script_content_changed', { filename, source: 'card' });
+    }
     res.json({ ok: true });
   });
 
@@ -662,6 +686,12 @@ export = (
     }
     const filePath = getFilePath(filename);
     if (filePath) {
+      // The single-file exchange form: the card files of a script are packed into it as blocks.
+      if (path.dirname(filePath) === SCRIPTS_DIR) {
+        const source = fs.readFileSync(filePath, 'utf8');
+        const packed = packScript(config.CARDS_DIR, filename, source);
+        if (packed !== source) return res.attachment(filename).type('text/javascript').send(packed);
+      }
       res.download(filePath, filename, (err) => {
         if (err) console.error(`[API] Error downloading script ${filename}:`, err);
       });
@@ -726,7 +756,12 @@ export = (
       return res.status(400).json({ error: `File '${filename}' already exists.` });
     }
 
-    fs.writeFileSync(fullPath, req.file.buffer, 'utf8');
+    const uploaded = req.file.buffer.toString('utf8');
+    fs.writeFileSync(
+      fullPath,
+      type === 'library' ? uploaded : unpackScript(config.CARDS_DIR, cardBase(filename), uploaded),
+      'utf8'
+    );
     res.json({ filename });
   });
 
@@ -799,7 +834,11 @@ export = (
         return res.status(400).json({ error: `File '${filename}' already exists.` });
       }
 
-      fs.writeFileSync(fullPath, code, 'utf8');
+      fs.writeFileSync(
+        fullPath,
+        type === 'library' ? code : unpackScript(config.CARDS_DIR, cardBase(filename), code),
+        'utf8'
+      );
       res.json({ filename });
     } catch (e) {
       res.status(400).json({ error: 'Import failed: ' + (e as Error).message });
@@ -808,7 +847,7 @@ export = (
 
   // POST Create
   router.post('/', async (req, res) => {
-    const { name, type, code, extension = '.js' } = req.body;
+    const { name, type, code, extension = '.js', duplicateOf } = req.body;
     const ext = extension.startsWith('.') ? extension : `.${extension}`;
     const filename =
       name
@@ -823,10 +862,28 @@ export = (
       ext === '.blocks'
         ? JSON.stringify({ jsa: {}, blocks: { languageVersion: 0, blocks: [] } }, null, 2)
         : 'ha.log("Ready.");\n';
-    fs.writeFileSync(fullPath, code || defaultCode, 'utf8');
+    // Card blocks in the given code (a duplicate or an imported pack) become card files of the new script.
+    const initialCode =
+      typeof code === 'string' && code && type !== 'library'
+        ? unpackScript(
+            config.CARDS_DIR,
+            cardBase(filename),
+            code,
+            typeof duplicateOf === 'string' ? cardBase(duplicateOf) : undefined
+          )
+        : code;
+    fs.writeFileSync(fullPath, initialCode || defaultCode, 'utf8');
 
-    // 2. Use the central parser to write the metadata header (or, for .blocks, the `jsa` JSON key)
-    ScriptHeaderParser.updateMetadata(fullPath, req.body);
+    // 2. Use the central parser to write the metadata header (or, for .blocks, the `jsa` JSON key).
+    // @permission and @card are not part of the form: carry them over from the original when duplicating, or
+    // from the header of the given code, otherwise a copy would silently lose its card and permissions.
+    const tagSource = typeof duplicateOf === 'string' ? getFilePath(duplicateOf) : fullPath;
+    const kept: any = tagSource ? ScriptHeaderParser.parse(tagSource) : {};
+    ScriptHeaderParser.updateMetadata(fullPath, {
+      ...req.body,
+      permissions: req.body.permissions ?? (kept.permissions?.length ? kept.permissions : undefined),
+      card: req.body.card ?? kept.card ?? undefined,
+    });
 
     res.json({ filename });
   });
@@ -864,6 +921,10 @@ export = (
         workerManager.stopScript(oldFilename, 'renaming/moving');
       }
       fs.renameSync(fullPath, newFullPath);
+      // Notes follow the script; a move between scripts and libraries is not a rename of the notes' owner.
+      if (wasLibrary === (type === 'library')) moveNotes(config.NOTES_DIR, oldFilename, newFilename, wasLibrary);
+      if (!wasLibrary && type !== 'library')
+        moveCardFiles(config.CARDS_DIR, cardBase(oldFilename), cardBase(newFilename));
       fullPath = newFullPath; // Update path for subsequent write
 
       // Secrets are shared by script file name: carry the rename over before the script restarts,

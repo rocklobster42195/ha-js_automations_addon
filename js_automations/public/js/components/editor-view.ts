@@ -295,6 +295,15 @@ export class EditorViewElement extends LitElement {
       color: var(--accent);
       border-bottom-color: var(--accent-dark, #1a4a8a);
     }
+    .mode-banner .card-select {
+      margin-left: 8px;
+      background: #11151f;
+      color: inherit;
+      border: 1px solid var(--accent-dark, #1a4a8a);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font: inherit;
+    }
     .mode-banner.lib {
       background: #1e2a36;
       color: #64b5f6;
@@ -442,21 +451,38 @@ export class EditorViewElement extends LitElement {
   }
 
   /** A file was rewritten behind the editor's back (an AI assistant over MCP): refresh open tabs. */
-  private _onScriptContentChanged = async ({ filename }: { filename: string }): Promise<void> => {
+  private _onScriptContentChanged = async ({
+    filename,
+    source,
+  }: {
+    filename: string;
+    source?: string;
+  }): Promise<void> => {
     const scriptTab = this._openTabs.find((t) => t.filename === filename && !t.type);
+    // Saving a card moved its old embedded block out of the script: the user did that themselves, so the script
+    // tab follows silently (no "AI assistant" notice) and the card tab is the one that was just saved.
+    if (source === 'card') {
+      if (scriptTab) await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`, false, true);
+      return;
+    }
     const cardTab = this._openTabs.find((t) => t.type === 'card' && t.parentScript === filename);
     if (scriptTab && (await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`)) === 'gone') {
       await this._handleDeletedFile(scriptTab);
       this._refreshGitStatus();
       return;
     }
-    if (cardTab) await this._syncTabFromDisk(cardTab, `api/scripts/${filename}/card`);
+    if (cardTab) await this._syncTabFromDisk(cardTab, `api/scripts/${filename}/card${this._cardQuery(cardTab)}`);
     this._refreshGitStatus();
   };
 
   /** Clean tab → silently take the new content (keeps cursor/undo); dirty tab → keep the user's
    * edits, remember the conflict and warn once. */
-  private async _syncTabFromDisk(tab: JsaTab, url: string, discardEdits = false): Promise<'gone' | void> {
+  private async _syncTabFromDisk(
+    tab: JsaTab,
+    url: string,
+    discardEdits = false,
+    quiet = false
+  ): Promise<'gone' | void> {
     try {
       const res = await window.apiFetch!(url);
       if (res.status === 404 && !tab.type) return 'gone';
@@ -464,6 +490,7 @@ export class EditorViewElement extends LitElement {
       const content: string = (await res.json()).content ?? '';
       if (content === tab.originalContent && !discardEdits) return;
       const name = tab.parentScript ?? tab.filename;
+      if (quiet && tab.isDirty) return;
 
       if (!tab.isDirty || discardEdits) {
         // originalContent first, so the model-change callback sees "equal" and does not flag the tab dirty.
@@ -474,12 +501,14 @@ export class EditorViewElement extends LitElement {
         this._renderTabs();
         // The card preview renders the saved card, so it must follow an update made behind the editor's back too.
         if (tab.type === 'card' && window.CardPreview?.isOpen()) window.CardPreview.reload();
-        window.alertToast?.show(
-          this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
-            filename: name,
-          }),
-          { variant: 'info' }
-        );
+        if (!quiet) {
+          window.alertToast?.show(
+            this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
+              filename: name,
+            }),
+            { variant: 'info' }
+          );
+        }
       } else if (!tab.externalChange) {
         tab.externalChange = true;
         this._renderTabs();
@@ -701,6 +730,14 @@ export class EditorViewElement extends LitElement {
         return;
       }
       const data = await res.json();
+      // All cards of the script (main first), for the selector; a failure just means no selector.
+      let cards: string[] = [];
+      try {
+        const listRes = await window.apiFetch!(`api/scripts/${scriptFilename}/cards`);
+        if (listRes.ok) cards = ((await listRes.json()).cards ?? []).map((c: { name: string }) => c.name);
+      } catch {
+        /* no selector */
+      }
 
       // isNew: no __JSA_CARD__ block exists yet — open with empty content, mark dirty so
       // Ctrl+S creates it. originalContent stays null (rather than '') so the dirty-check
@@ -711,6 +748,7 @@ export class EditorViewElement extends LitElement {
         icon: 'view-dashboard',
         type: 'card',
         parentScript: scriptFilename,
+        cards,
         model: null,
         isDirty: data.isNew,
         originalContent: data.isNew ? null : data.content,
@@ -976,6 +1014,7 @@ export class EditorViewElement extends LitElement {
     }
     document.body.classList.toggle('card-tab-active', !!parentScriptForPreview);
     window._activeCardParentScript = parentScriptForPreview;
+    window._activeCardName = isCardTab ? newTab.card : undefined;
 
     this._renderTabs();
   };
@@ -1081,7 +1120,7 @@ export class EditorViewElement extends LitElement {
     if (!(await this._confirmOverwriteExternalChange(activeTab))) return;
 
     if (activeTab.type === 'card') {
-      await window.apiFetch!(`api/scripts/${activeTab.parentScript}/card`, {
+      await window.apiFetch!(`api/scripts/${activeTab.parentScript}/card${this._cardQuery(activeTab)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -1268,7 +1307,11 @@ export class EditorViewElement extends LitElement {
   }
 
   private _tabDisplayName(tab: JsaTab): string {
-    if (tab.type === 'card') return (tab.parentScript ?? '').replace(/\.[^.]+$/, '') + ' ‹card›';
+    if (tab.type === 'card') {
+      const base = (tab.parentScript ?? '').replace(/\.[^.]+$/, '');
+      const part = tab.card ? tab.card.slice(base.length + 1).replace(/-card$/, '') : '';
+      return `${base} ‹card${part ? `: ${part}` : ''}›`;
+    }
     if (tab.type === 'diff') {
       return this._t('history_diff_tab_title', 'Diff: {{filename}} @ {{hash}}', {
         filename: tab.diffSubjectFilename ?? '',
@@ -1368,10 +1411,34 @@ export class EditorViewElement extends LitElement {
     );
   }
 
+  /** `?card=<name>` for a further card of the script, empty for the main card. */
+  private _cardQuery(tab: JsaTab): string {
+    return tab.card ? `?card=${encodeURIComponent(tab.card)}` : '';
+  }
+
+  /** Shows another card of the script in the card tab (saving unsaved edits of the current one first). */
+  private async _switchCard(tab: JsaTab, name: string): Promise<void> {
+    const next = name === tab.cards?.[0] ? undefined : name;
+    if (next === tab.card) return;
+    if (tab.isDirty && this._activeTabFilename === tab.filename) await this.saveActiveTab();
+    if (tab.isDirty) {
+      this._renderTabs(); // the save did not happen: stay on the current card, the selector snaps back
+      this.requestUpdate();
+      return;
+    }
+    tab.card = next;
+    window._activeCardName = next;
+    await this._syncTabFromDisk(tab, `api/scripts/${tab.parentScript}/card${this._cardQuery(tab)}`, true, true);
+    this._renderTabs();
+    this.requestUpdate();
+    window.CardPreview?.setCard(next);
+  }
+
   /** Throws away the user's unsaved edits and takes the version an AI assistant wrote. */
   private _loadExternalVersion(tab: JsaTab): void {
     const script = tab.parentScript ?? tab.filename;
-    const url = tab.type === 'card' ? `api/scripts/${script}/card` : `api/scripts/${script}/content`;
+    const url =
+      tab.type === 'card' ? `api/scripts/${script}/card${this._cardQuery(tab)}` : `api/scripts/${script}/content`;
     void this._syncTabFromDisk(tab, url, true);
   }
 
@@ -1408,7 +1475,24 @@ export class EditorViewElement extends LitElement {
       return html`
         <div class="mode-banner card">
           <i class="mdi mdi-card-text-outline"></i>Card Editor —
-          <strong>${activeTab.parentScript ?? ''}</strong> &nbsp;·&nbsp; Ctrl+S to save
+          <strong>${activeTab.parentScript ?? ''}</strong>
+          ${
+            activeTab.cards && activeTab.cards.length > 1
+              ? html`<select
+                  class="card-select"
+                  title=${this._t('card_select_title', 'Card of this script')}
+                  @change=${(e: Event) => void this._switchCard(activeTab, (e.target as HTMLSelectElement).value)}
+                >
+                  ${activeTab.cards.map(
+                    (name) =>
+                      html`<option value=${name} ?selected=${name === (activeTab.card ?? activeTab.cards![0])}>
+                        ${name}
+                      </option>`
+                  )}
+                </select>`
+              : nothing
+          }
+          &nbsp;·&nbsp; Ctrl+S to save
         </div>
       `;
     }
