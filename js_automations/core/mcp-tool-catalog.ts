@@ -53,6 +53,8 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'call_service', group: 'control', defaultEnabled: false },
   { name: 'write_script', group: 'write', defaultEnabled: false },
   { name: 'write_card', group: 'write', defaultEnabled: false },
+  { name: 'edit_script', group: 'write', defaultEnabled: false },
+  { name: 'edit_card', group: 'write', defaultEnabled: false },
   { name: 'save_script_notes', group: 'write', defaultEnabled: false },
   { name: 'delete_script', group: 'write', defaultEnabled: false },
 ];

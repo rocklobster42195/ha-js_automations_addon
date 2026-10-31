@@ -1064,6 +1064,10 @@ The MCP server lets an external AI client (Claude Desktop, …) inspect and cont
 
 Validate name → reject embedded `__JSA_CARD__` → check (syntax blocks) → keep a legacy embedded card block (`read_script` strips it; card files are untouched by `write_script`) → **snapshot commit** of the current file state → atomic write (tmp + rename) → commit → `status_update` and `script_content_changed` socket events. The snapshot is only mentioned in the result when it saved uncommitted local edits (the usual case is "nothing to save"). Calls are serialized (`index.lock`). `delete_script` also emits `script_content_changed`. The editor reloads clean tabs (and an open card preview) on that event; a dirty tab keeps its text, gets `JsaTab.externalChange` (or `deleted`), shows a lasting banner and asks before a save overwrites; a clean tab of a deleted file is closed.
 
+### Edit tools
+
+`edit_script` / `edit_card` (`core/mcp-edits.ts`, `applyEdits`) take a list of `{old_string, new_string, replace_all?}` edits, apply them in order to the current text (an old embedded card block is kept out of the edited text) and hand the result to the same core as `write_script` / `write_card` (syntax check, type warnings, snapshot, atomic write, commit). All or nothing: no match, several matches without `replace_all`, empty or identical edits fail with the number of the edit and change nothing. CRLF files match edits written with plain newlines.
+
 ### Card files over MCP
 
 `list_scripts` lists the cards of a script (`cards`: name, size, `embedded` for a not yet migrated block). `read_script` with `part: "card"` reads the main card, `card: "<name>"` a further one. `write_card` writes `cards/<script>-card.js` (or `card: "<script>-<x>-card"`, stored but not installed yet), drops an old embedded block from the script on the first main-card save and commits through the script's commit, which includes the card files (`GitManager.changedCompanions`, like the notes).

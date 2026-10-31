@@ -31,6 +31,8 @@ test('catalog defaults: write group, get_store, call_service and delete_script a
   assert.deepEqual(off.sort(), [
     'call_service',
     'delete_script',
+    'edit_card',
+    'edit_script',
     'get_store',
     'save_script_notes',
     'write_card',
