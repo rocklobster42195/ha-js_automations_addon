@@ -1,3 +1,16 @@
+## [3.2.0-beta.6] - 2026-10-31
+
+- docs: curate the changelog entry of the MCP release
+- Merge pull request #38 from rocklobster42195/feat/script-notes-card-files
+- fix: review findings (snippet network guard, notes with script, restore, pack names)
+- feat: several cards per script (installCard({ card }))
+- fix: show a short error for failed snippets in the MCP tab
+- feat: run_snippet (read-only snippet runner)
+- feat: edit_script and edit_card (search/replace)
+- feat: per-script notes, card source files, read_script parts
+
+---
+
 ## [3.2.0-beta.5] - 2026-10-30
 
 - fix: load .js libraries from .ts scripts, parse @include from header only, relax secret filter on auth prefixes, explain restart protection
