@@ -1,35 +1,40 @@
 <!-- NEXT -->
 
-feat: MCP server for AI assistants, one-click Claude Desktop install, authoring guide
+feat: MCP server for AI assistants, script notes, cards as files and several cards per script
 
 ### With A Little Help From My Friends
 
-Let an AI assistant work with your scripts. JS Automations is now an MCP server: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run, and — if you allow it — write and restart scripts. You stay in control: it is off by default, every tool has its own switch, and every change is saved as a Git commit. See the new [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md).
+Let an AI assistant work with your scripts. JS Automations is now an MCP server: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run, and — if you allow it — write, change and restart scripts. Long chats keep their context in per-script notes, large Lovelace cards are changed in small pieces instead of being sent over and over, and one script can now ship several cards. You stay in control: it is off by default, every tool has its own switch, and every change is saved as a Git commit. See the new [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md).
 
 **MCP server**
 
 - New server on port **3002** (separate from the webhook port), switched on under **Settings → MCP Server**; access token with show / copy / create-new, optional IP allowlist and reverse-proxy settings
-- **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config
-- 21 tools behind three **access levels** (read, read + control, read + control + write) plus separate switches for `get_store`, `call_service` and `delete_script`; "Custom" still offers a switch per tool. Writing, `call_service`, `delete_script` and `get_store` are **off by default**
-- Writes are syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; a script's Lovelace card is preserved; nothing is restarted automatically
+- **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config. Works with other MCP clients too (Streamable HTTP + bearer token)
+- 21 tools behind three **access levels** (read, read + control, read + control + write); `get_store`, `call_service`, `run_snippet` and `delete_script` have their own switches. Writing and those four are **off by default**; "Custom" offers a switch per tool
+- **Safe writes**: every change is syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; nothing is restarted automatically
+- **Small changes instead of resending everything**: `edit_script` and `edit_card` change a few places by search and replace (the text must match exactly once, all edits apply or none). `read_script` returns only the script by default; `part`, `card` and `offset`/`limit` read a card or a slice. A commit message that is too long is cut instead of rejected
+- **Notes that survive a new chat**: `save_script_notes` / `get_script_notes` keep decisions, device quirks and open points per script (`notes/<script>.md`, committed with the script, removed with it). `list_scripts` marks scripts that have notes, the script list shows a notebook icon, and the prompt **Save notes for a script** writes them from the current chat
+- **`run_snippet`**: run a short piece of JavaScript once and get its output back, for example to explore an API without writing, starting and deleting a probe script. Read-only: network access to other devices (not the add-on itself), no store, no files, no shell, 15 seconds by default. Every run shows up in the MCP tab with its code. Own switch, off by default
 - Open editor tabs reload when an assistant changes the file (a card preview too); unsaved edits are kept, a lasting banner points out the conflict and saving asks before overwriting; a script an assistant deletes closes its tab
-- Credentials are masked in everything an assistant reads; `ha.store` secrets are never returned. Script source and log text are marked as untrusted data for the assistant
+- Credentials are masked in everything an assistant reads and in the MCP tab; `ha.store` secrets are never returned. Script source, log text and snippet output are marked as untrusted data. Assistants keep credentials out of script source: they are empty fields of the persisted config, with a warning and a persistent notification until the user fills them in
 - `get_api_reference` can search the documentation and return just the matching passages; the new topic `services` serves the typed Home Assistant services of your instance (for example the `media` payload of `media_player.play_media`)
-- **Script notes**: assistants can keep notes per script (decisions, device quirks, open points) with `save_script_notes` and read them in a new chat with `get_script_notes`; a notebook icon marks scripts that have notes, they join the script's Git commit, and the prompt **Save notes for a script** writes them from the current chat
-- **Cards are their own files**: a script's Lovelace card lives in `cards/<script>-card.js` (further cards `cards/<script>-<name>-card.js`) instead of a Base64 block inside the script, so card edits make readable Git diffs and `write_card`/`read_script` handle the card on its own (`list_scripts` shows a script's cards, `card` picks one). Downloading a script packs its cards into the usual single file, importing or duplicating unpacks them; old scripts keep working and move their card out of the script the next time it is saved. Cards are committed with their script, follow a rename and are removed with the script (restorable via Git)
-- **Several cards per script**: `ha.frontend.installCard({ card: 'garmin-day-card', name, description, config })` installs a further card (`cards/<script>-<name>-card.js`) next to the main one. Every card gets its own file in `www`, its own Lovelace resource and hash (changing one reloads only that card), the "Add Card" picker entry is added for you with `preview: true` and sensible default texts, and the editor's card tab has a selector with a live preview per card. Deleting a script removes all its cards; `write_card`/`edit_card` take `card`
-- **`run_snippet`**: an assistant can run a short piece of JavaScript once and get its output back (explore an API without writing, starting and deleting a probe script). Read-only: network to other devices (not the add-on itself), no store, no files, no shell, 15 s by default; every run shows up in the MCP tab with its code. Own switch, off by default
-- **`edit_script` and `edit_card`**: change a few places of a script or card by search and replace instead of resending the whole source (a card can be tens of thousands of characters); the text must match exactly once, all edits apply or none, and the result is checked and committed like a write
-- `read_script` no longer includes the (large) card by default: `part` picks script, card or both, `offset`/`limit` read in slices; commit messages over 120 characters are cut instead of rejected; the result of `write_card` and of starting a script with a card points out that open dashboards need a hard reload
-- Prompts **New JSA script**, **Plan a JSA script (interview)** and **Convert an ioBroker script**, plus the documentation as resources
+- Prompts **New JSA script**, **Plan a JSA script (interview)**, **Convert an ioBroker script** and **Save notes for a script**, plus the documentation as resources
+
+**Lovelace cards**
+
+- **Cards are their own files**: a script's card lives in `cards/<script>-card.js` instead of a Base64 block inside the script, so card edits make readable Git diffs and an assistant can read or change the card on its own. Downloading a script packs its cards into the usual single file; uploading, importing or duplicating unpacks them. Old scripts keep working and move their card out of the script the next time it is saved. Cards are committed with their script, follow a rename and are removed with the script (and come back with *From repo*)
+- **Several cards per script**: `ha.frontend.installCard({ card: 'garmin-day-card', name, description, config })` installs a further card (`cards/<script>-<name>-card.js`) next to the main one. Each card gets its own file in `www`, its own Lovelace resource and its own hash, so changing one reloads only that card. The "Add Card" picker entry is created for you (with a live preview and sensible default texts), and an entry a card still adds by hand is not doubled
+- The editor's card tab has a **card selector** when a script has several cards; the live preview follows the selected card
+
+**Documentation**
+
+- New [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md), **Authoring Scripts** guide (script structure, header tags, conventions, cards) and a header tag reference in the API Reference
 - New [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) for moving ioBroker scripts to JS Automations (ID mapping, API translation table, worked example)
-- Assistants keep credentials out of script source: they are empty fields of the persisted config, with a warning and a persistent notification until the user fills them in
-- New **Authoring Scripts** guide (script structure, header tags, conventions, cards) and a header tag reference in the API Reference
-- Works with other MCP clients too (Streamable HTTP + bearer token)
+- The card guide describes card files, several cards per script, sharing and Git
 
 **Developer tools (Expert Mode)**
 
-- New **MCP** tab: live log of tool calls with expandable, copyable errors
+- New **MCP** tab: live log of tool calls with expandable, copyable details and errors (the code of a snippet included)
 - Dev-tools tabs can be **switched off** individually under Settings → General
 - **Maintainer mode** (for JSA developers): the assistant quietly notes API, feature and documentation ideas, raises each once after it came up three times, and reports hard errors immediately; notes appear in the MCP tab and can be copied as GitHub-issue text
 
@@ -42,6 +47,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 - `@card dev` is honoured again by `ha.frontend.installCard()`: the card is no longer written to `www` and registered as a Lovelace resource while the script is still in preview mode
 - The card preview reloads after the card was changed from outside the editor
+- Duplicating a script keeps its `@card` and `@permission` tags; before, the copy lost them and its card was cleaned up as orphaned
 - **New script → From repo** can restore a script whose deletion was already committed; a failed restore shows the plain error message instead of escaped JSON
 - Editor: error and type tooltips show on hover again (they never appeared), and the editor icons (search, quick fixes) no longer show as hex codes
 - Script versioning: pushing to a remote sends the access token as an authorization header instead of inside the URL, so a redirect from the Git host no longer ends a push with "could not read Username"; a failed push now says plainly that the login was rejected
