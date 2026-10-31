@@ -448,6 +448,8 @@
         "restart_script_desc": "Restarts a script, e.g. after a change.",
         "call_service": "Call service",
         "call_service_desc": "Runs a Home Assistant service and can switch real devices. Off by default.",
+        "run_snippet": "Run snippet",
+        "run_snippet_desc": "Runs a short piece of JavaScript once, read-only with network access (no store, no files, no changes in Home Assistant). Off by default.",
         "write_script": "Write script",
         "write_script_desc": "Creates or changes scripts and libraries (with syntax check and Git commit). Off by default.",
         "write_card": "Write card",

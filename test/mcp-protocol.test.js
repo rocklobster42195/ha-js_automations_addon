@@ -34,6 +34,7 @@ test('catalog defaults: write group, get_store, call_service and delete_script a
     'edit_card',
     'edit_script',
     'get_store',
+    'run_snippet',
     'save_script_notes',
     'write_card',
     'write_script',

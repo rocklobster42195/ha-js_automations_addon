@@ -45,7 +45,7 @@ Clients without header support can use the `mcp-remote` snippet from the panel. 
 What an assistant may do is set under **Settings → MCP Server**:
 
 - **Access level:** _Read only_, _Read + control_ (default: also start, stop and restart scripts), _Read + control + write_ (also write scripts and cards) or _Custom_, which shows a switch for every tool. Each level includes the ones before it.
-- **Switched on separately** (off by default, whatever the level is): `get_store`, `call_service` and `delete_script`.
+- **Switched on separately** (off by default, whatever the level is): `get_store`, `call_service`, `run_snippet` and `delete_script`.
 
 Claude Desktop additionally lets you decide per tool whether it may run without asking (_Settings → Extensions_). That is a second layer on the client side; it does not replace the settings in JS Automations, which also protect the server against other clients and a leaked token.
 
@@ -63,6 +63,7 @@ The tools:
 | Read    | `get_api_reference`                             | The documentation an assistant needs to write scripts (this site's authoring guide, API reference, types); with `search` only the matching passages. The topic `services` holds the typed Home Assistant services of your instance (what `ha.call('media_player.play_media', …)` accepts) | on      |
 | Read    | `get_store`                                     | `ha.store` values. Secrets are never returned; keys like `token` or `password` are masked (an empty value stays visibly empty, so an assistant can tell whether a credential is filled in)                                                                                                | **off** |
 | Control | `start_script`, `stop_script`, `restart_script` | Control scripts; start/restart report whether the script is still running a moment later                                                                                                                                                                                                  | on      |
+| Control | `run_snippet`                                   | Run a short JavaScript snippet once and return what it printed (see below). Read-only: network, no store, no files, no changes in Home Assistant                                                                                                                                          | **off** |
 | Control | `call_service`                                  | Call a Home Assistant service (acts on real devices; host-level services are refused)                                                                                                                                                                                                     | **off** |
 | Write   | `write_script`, `write_card`                    | Create or replace scripts, libraries and Lovelace cards                                                                                                                                                                                                                                   | **off** |
 | Write   | `edit_script`, `edit_card`                      | Change a few places of a script or card by search and replace instead of resending the whole source (a card can be tens of thousands of characters). The text must match exactly once; if any edit fails, nothing is changed. Checked and committed like the write tools                  | **off** |
@@ -79,6 +80,15 @@ Blockly scripts are not visible to assistants.
 - The **Lovelace card** is its own file (`cards/<script>-card.js`), so rewriting a script never touches it; `write_card` changes it (and commits it with the script). `list_scripts` shows a script's cards, `read_script` reads them separately.
 - A script is **never started or restarted** by writing. The assistant calls `restart_script` separately; if the script is running, the result says so.
 - If you have the file open in the editor, a clean tab reloads automatically. With unsaved edits, your text is kept, you get a warning, and saving asks before overwriting the assistant's version.
+
+### Run a snippet
+
+To explore an API or try a calculation, an assistant would otherwise write a probe script, start it, read the logs and delete it again. `run_snippet` does that in one step: it runs a short piece of JavaScript **once** in a throw-away worker and returns what the code printed (`ha.log(...)` or `console.log(...)`, objects as JSON).
+
+- **Read-only:** the snippet has network access (`fetch`, `https`) and can read states, history, statistics, templates and calendars. It has **no store** (so no credentials; give it a key in the chat if you want it to test a login), no files, no shell, and nothing in the add-on's environment (no tokens). `ha.call`, `ha.update`, events and store writes are refused with a warning, so nothing in Home Assistant can change.
+- **Limits:** 15 seconds by default (the assistant can ask for up to 60), output capped at 20,000 characters, one snippet at a time. The output is marked as untrusted data and credentials in it are masked.
+- **Visible:** every run appears in the **MCP tab** with its code and the beginning of its output.
+- **Own switch, off by default** (Settings → MCP Server), independent of the access level: arbitrary code is a different risk than reading or writing scripts. The restrictions keep accidents and casual misuse out; they are not a hard sandbox, so switch it on only for an assistant you trust.
 
 ### Script notes
 

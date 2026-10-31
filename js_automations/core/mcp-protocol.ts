@@ -11,6 +11,8 @@ export interface McpToolResult {
   /** Plain text for the model. Objects are serialized as indented JSON. */
   content: string | object;
   isError?: boolean;
+  /** Extra text for the MCP tab's activity view (e.g. the code a snippet ran); never sent to the model. */
+  activityDetail?: string;
 }
 
 export interface McpToolDefinition {
@@ -201,10 +203,12 @@ export class McpProtocol {
     const started = Date.now();
     let ok = true;
     let error: string | null = null;
+    let detail: string | null = null;
     let text: string;
     try {
       const result = await def.handler(args);
       ok = !result.isError;
+      detail = result.activityDetail ?? null;
       text = typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2);
       if (!ok) error = text;
     } catch (e) {
@@ -220,6 +224,7 @@ export class McpProtocol {
       ip,
       ok,
       error,
+      detail,
       durationMs: Date.now() - started,
     });
     return { content: [{ type: 'text' as const, text }], ...(ok ? {} : { isError: true }) };

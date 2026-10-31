@@ -33,7 +33,7 @@ const LEVEL_GROUPS: Record<Exclude<McpAccessLevel, 'custom'>, McpToolGroup[]> = 
  * Tools that can do the most damage or reveal the most. They belong to no access level: each has its own
  * switch, off by default, whatever the level is.
  */
-export const MCP_SEPARATE_SWITCH_TOOLS: string[] = ['get_store', 'call_service', 'delete_script'];
+export const MCP_SEPARATE_SWITCH_TOOLS: string[] = ['get_store', 'call_service', 'run_snippet', 'delete_script'];
 
 export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'list_scripts', group: 'read', defaultEnabled: true },
@@ -51,6 +51,7 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'stop_script', group: 'control', defaultEnabled: true },
   { name: 'restart_script', group: 'control', defaultEnabled: true },
   { name: 'call_service', group: 'control', defaultEnabled: false },
+  { name: 'run_snippet', group: 'control', defaultEnabled: false },
   { name: 'write_script', group: 'write', defaultEnabled: false },
   { name: 'write_card', group: 'write', defaultEnabled: false },
   { name: 'edit_script', group: 'write', defaultEnabled: false },

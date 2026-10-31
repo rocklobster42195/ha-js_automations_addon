@@ -19,6 +19,8 @@ const pp = parentPort;
 interface WorkerData {
   storageDir?: string;
   capabilityEnforcement?: boolean;
+  /** run_snippet sandbox: additionally blocks modules that reach the host (files, processes, ...). */
+  restricted?: boolean;
   permissions?: string[];
   name?: string;
   loglevel?: string;
@@ -115,6 +117,56 @@ if (wd.capabilityEnforcement) {
       throw new Error(`PermissionDeniedError: fetch() requires @permission network in your script header.`);
     };
   }
+}
+
+// run_snippet sandbox (MCP): a snippet an assistant wrote must not read files, start processes or inspect the
+// host. This blocks the usual ways to do that and keeps accidents out; it is not a hard security boundary
+// (worker threads are not one), the real protection is that run_snippet is switched off by default.
+if (wd.restricted) {
+  const BLOCKED_IN_SNIPPETS = new Set([
+    'fs',
+    'fs/promises',
+    'child_process',
+    'worker_threads',
+    'cluster',
+    'vm',
+    'os',
+    'repl',
+    'inspector',
+    'v8',
+    'wasi',
+    'module',
+  ]);
+  const _loadBeforeSandbox = (Module as any)._load;
+  (Module as any)._load = function (request: string, parent: any) {
+    const name = request.startsWith('node:') ? request.slice(5) : request;
+    // node-cron (used by ha.schedule) loads child_process itself; that is not the snippet's doing.
+    const parentFile = parent?.filename || '';
+    const fromCron = parentFile.includes('node_modules/node-cron') || parentFile.includes('node_modules\\node-cron');
+    if (_scriptExecuting && !fromCron && BLOCKED_IN_SNIPPETS.has(name)) {
+      throw new Error(`PermissionDeniedError: '${name}' is not available in run_snippet (read-only sandbox).`);
+    }
+    return _loadBeforeSandbox.apply(this, arguments);
+  };
+
+  // A snippet's output is what it logs: console.* would only reach the server's own console, so route it to ha.log.
+  const asText = (v: unknown): string => {
+    if (typeof v === 'string') return v;
+    try {
+      return JSON.stringify(v, null, 2) ?? String(v);
+    } catch {
+      return String(v);
+    }
+  };
+  const routed =
+    (level: 'log' | 'warn' | 'error') =>
+    (...args: unknown[]): void => {
+      (ha as any)[level](args.map(asText).join(' '));
+    };
+  console.log = routed('log');
+  console.info = routed('log');
+  console.warn = routed('warn');
+  console.error = routed('error');
 }
 
 // Default: Allow thread to exit if nothing is happening

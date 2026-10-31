@@ -36,13 +36,14 @@ Entfallen gegenüber dem alten Konzept: BYOK-Anbieteranbindung, Editor-Chat-Pane
 - _Dev-Tools-Tab "MCP"_ (`<mcp-activity-panel>`): Aufruf-Log (In-Memory, 200) mit aufklappbaren, kopierbaren Fehlern und die Feedback-Notizen aus dem Maintainer-Modus.
 - _Settings → Allgemein (Expert Mode)_: Dev-Tools-Tabs einzeln abschaltbar (`devtab_*`), Maintainer-Modus.
 
-**Tools** (20, alle einzeln schaltbar; `mcp-tool-catalog.ts`):
+**Tools** (21, alle einzeln schaltbar; `mcp-tool-catalog.ts`):
 
 | Gruppe     | Tool                                                                                                                               | Default |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | Lesen      | list_scripts, read_script, get_logs, get_script_errors, get_events, list_entities, get_entity, get_api_reference, get_script_notes | an      |
 | Lesen      | get_store (Secrets nie ausgegeben, sensible Schlüssel maskiert)                                                                    | **aus** |
 | Steuern    | start_script, stop_script, restart_script                                                                                          | an      |
+| Steuern    | run_snippet (nur lesen + Netzwerk, eigener Schalter)                                                                               | **aus** |
 | Steuern    | call_service (host-nahe Services gesperrt)                                                                                         | **aus** |
 | Schreiben  | write_script, write_card, edit_script, edit_card, save_script_notes, delete_script                                                 | **aus** |
 | Maintainer | jsa_feedback (nur im Maintainer-Modus, kein eigener Schalter)                                                                      | —       |

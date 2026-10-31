@@ -34,6 +34,7 @@ test('the separately switched tools follow their own switch at every level', () 
       tool_delete_script: true,
       tool_call_service: true,
       tool_get_store: true,
+      tool_run_snippet: true,
     });
     for (const name of MCP_SEPARATE_SWITCH_TOOLS) assert.ok(on.includes(name), `${name} on at level ${level}`);
   }

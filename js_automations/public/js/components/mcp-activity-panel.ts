@@ -10,6 +10,7 @@ interface McpActivityEntry {
   ip: string;
   ok: boolean;
   error: string | null;
+  detail?: string | null;
   durationMs: number;
 }
 
@@ -212,6 +213,9 @@ export class McpActivityPanel extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .error.info {
+      color: #8fa3ad;
+    }
     .error.open {
       white-space: pre-wrap;
       overflow: visible;
@@ -314,6 +318,7 @@ export class McpActivityPanel extends LitElement {
       `${e.tool}${e.target ? ` — ${e.target}` : ''} ${e.ok ? 'succeeded' : 'failed'}`,
       `${stamp(e.ts, true)} UTC · ${e.ip} · ${e.durationMs} ms`,
     ];
+    if (e.detail) lines.push('', e.detail);
     if (e.error) lines.push('', e.error);
     return lines.join('\n');
   }
@@ -384,16 +389,17 @@ export class McpActivityPanel extends LitElement {
     const time = new Date(e.ts).toLocaleTimeString([], { hour12: false });
     const key = `act:${e.id}`;
     const open = this._open.has(key);
+    const body = [e.detail, e.error].filter(Boolean).join('\n\n');
     return html`<div class="row">
       ${
-        e.error
+        body
           ? html`<button
-              class="state fail"
+              class="state ${e.ok ? 'ok' : 'fail'}"
               title=${this._t('devtools.mcp_details', 'Show or hide details')}
               aria-expanded=${open ? 'true' : 'false'}
               @click=${() => this._toggle(key)}
             >
-              <i class="mdi ${open ? 'mdi-chevron-down' : 'mdi-chevron-right'}"></i>✗
+              <i class="mdi ${open ? 'mdi-chevron-down' : 'mdi-chevron-right'}"></i>${e.ok ? '✓' : '✗'}
             </button>`
           : html`<span class="state ${e.ok ? 'ok' : 'fail'}">${e.ok ? '✓' : '✗'}</span>`
       }
@@ -401,8 +407,8 @@ export class McpActivityPanel extends LitElement {
       <span class="tool">${e.tool}</span>
       <span class="target">${e.target ?? ''}</span>
       <span class="meta">${e.ip} · ${e.durationMs} ms</span>
-      ${e.error ? this._iconBtn(`${key}:copy`, this._t('devtools.mcp_copy', 'Copy'), () => void this._copy(`${key}:copy`, this._entryText(e)), 'mdi-content-copy') : ''}
-      ${e.error ? html`<span class="error ${open ? 'open' : ''}">${e.error}</span>` : ''}
+      ${body ? this._iconBtn(`${key}:copy`, this._t('devtools.mcp_copy', 'Copy'), () => void this._copy(`${key}:copy`, this._entryText(e)), 'mdi-content-copy') : ''}
+      ${body ? html`<span class="error ${e.ok ? 'info' : ''} ${open ? 'open' : ''}">${body}</span>` : ''}
     </div>`;
   }
 

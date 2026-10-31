@@ -449,6 +449,8 @@
         "restart_script_desc": "Startet ein Skript neu, z.B. nach einer Änderung.",
         "call_service": "Service aufrufen",
         "call_service_desc": "Führt einen Home-Assistant-Service aus und kann reale Geräte schalten. Standardmäßig aus.",
+        "run_snippet": "Snippet ausführen",
+        "run_snippet_desc": "Führt einen kurzen JavaScript-Schnipsel einmal aus, nur lesend mit Netzwerk (kein Store, keine Dateien, keine Änderungen in Home Assistant). Standardmäßig aus.",
         "write_script": "Skript schreiben",
         "write_script_desc": "Legt Skripte und Libraries an oder ändert sie (mit Syntaxprüfung und Git-Commit). Standardmäßig aus.",
         "write_card": "Karte schreiben",
