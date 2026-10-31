@@ -83,6 +83,17 @@ test('duplicating renames the prefix of further cards to the copy', (t) => {
   assert.deepEqual(cf.listCardNames(target, 'garmin_copy'), ['garmin_copy-card', 'garmin_copy-day-card']);
 });
 
+test('a pack card with a sloppy name is repaired, one that cannot be named stays in the script', (t) => {
+  const { cardsDir } = setup(t);
+  const source = `${SCRIPT}\n${cf.encodeBlock(DAY, 'Day Card')}\n${cf.encodeBlock(MAIN, '###')}\n`;
+  const rest = cf.unpackScript(cardsDir, 'garmin', source);
+  assert.deepEqual(cf.listCardNames(cardsDir, 'garmin'), ['garmin-day-card'], '"Day Card" became garmin-day-card');
+  assert.equal(cf.readCardFile(cardsDir, 'garmin', 'garmin-day-card'), DAY);
+  const left = cf.extractBlocks(rest);
+  assert.equal(left.length, 1, 'the unusable block is not lost');
+  assert.equal(left[0].code, MAIN);
+});
+
 test('an old single-block pack still unpacks into the main card', (t) => {
   const { cardsDir } = setup(t);
   const old = `${SCRIPT}\n${cf.encodeBlock(MAIN)}\n`;
@@ -99,7 +110,6 @@ test('CardManager: the card file wins over an embedded block, the block is the f
   mkdirSync(path.join(dir, 'storage'), { recursive: true });
 
   assert.equal(manager.getCardSource(script), 'class Old extends HTMLElement {}');
-  assert.equal(manager.hasCardSource(script), true);
   cf.writeCardFile(cardsDir, 'garmin', undefined, MAIN);
   assert.equal(manager.getCardSource(script), MAIN);
   assert.equal(manager.getCardSource(script, 'garmin-day-card'), null);
@@ -151,4 +161,30 @@ test('Git: card files ride with their script commit and a card change marks the 
   assert.ok(existsSync(path.join(scriptsDir, 'garmin.ts')));
   assert.equal(readFileSync(path.join(cardsDir, 'garmin-card.js'), 'utf8'), MAIN + '\n// changed');
   assert.equal(readFileSync(path.join(cardsDir, 'garmin-day-card.js'), 'utf8'), DAY);
+});
+
+test('a restore brings back only what the script had when it was deleted', async (t) => {
+  const { scriptsDir, cardsDir } = setup(t);
+  const git = new GitManager({ getSettings: () => ({ versioning: {} }) }, { add: () => {} }, scriptsDir);
+  const script = path.join(scriptsDir, 'garmin.ts');
+  writeFileSync(script, SCRIPT);
+  cf.writeCardFile(cardsDir, 'garmin', undefined, MAIN);
+  cf.writeCardFile(cardsDir, 'garmin', 'garmin-old-card', 'class Old {}');
+  await git.commit('v1', { paths: ['garmin.ts'] });
+  // the old card is dropped on purpose and that is committed
+  rmSync(path.join(cardsDir, 'garmin-old-card.js'));
+  await git.commit('drop old card', { paths: ['garmin.ts'], includeDeletions: true });
+  // the script is deleted together with its notes, and that is committed too
+  const notesDir = path.join(scriptsDir, 'notes');
+  mkdirSync(notesDir, { recursive: true });
+  writeFileSync(path.join(notesDir, 'garmin.md'), 'remember this');
+  await git.commit('notes', { paths: ['garmin.ts'] });
+  rmSync(script);
+  rmSync(path.join(notesDir, 'garmin.md'));
+  cf.removeCardFiles(cardsDir, 'garmin');
+  await git.commit('delete', { paths: ['garmin.ts'], includeDeletions: true });
+
+  await git.restoreDeletedScript('garmin.ts');
+  assert.deepEqual(cf.listCardNames(cardsDir, 'garmin'), ['garmin-card'], 'the card dropped earlier stays dropped');
+  assert.equal(readFileSync(path.join(notesDir, 'garmin.md'), 'utf8'), 'remember this', 'the notes come back');
 });

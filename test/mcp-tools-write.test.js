@@ -387,6 +387,14 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.ok(!readFileSync(file('emb.js'), 'utf8').includes('__JSA_CARD'), 'the block left the script');
   });
 
+  await t.test('a script whose name cannot have card files gets a message that names the script', async () => {
+    writeFileSync(file('Bad_Name.js'), '/** @name Bad */\nha.log(1);\n');
+    const r = await call('write_card', { filename: 'Bad_Name.js', source: 'class A extends HTMLElement {}' });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /script name "Bad_Name" cannot have card files/);
+    assert.doesNotMatch(r.text, /undefined/);
+  });
+
   await t.test('write_script drops the placeholder read_script shows instead of a card block', async () => {
     const src =
       '/**\n * @name Placeholder\n */\nha.log(1);\n\n/* card source: not included here, read it with read_script part "card" (or "all") */\n';
@@ -458,6 +466,8 @@ test('write tools check, write, commit and delete safely', async (t) => {
       ['stop', 'purge', 'removeCard', 'prune']
     );
     assert.equal(subjects()[0], 'mcp: delete typed.ts');
+    assert.ok(!existsSync(path.join(scriptsDir, 'notes', 'typed.md')), 'the notes go with the script');
+    assert.match(git('show', '--stat', '--format=', 'HEAD'), /notes\/typed\.md/, 'and the deletion is committed');
     assert.match(git('show', 'HEAD~1:typed.ts'), /definitelyNotAnApi/, 'last state is in history');
     assert.match(r.text, /Store entries of this script remain/);
     assert.match(r.text, /typed_config \(credential-like field filled in: apiKey\)/);

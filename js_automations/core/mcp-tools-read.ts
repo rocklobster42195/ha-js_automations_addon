@@ -88,15 +88,22 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
   const { workerManager, logManager, storeManager, haConnector, cardManager, eventBuffer } = deps;
 
   /** The cards of a script: its card files, plus the main card of an old script that still has it embedded. */
-  const cardsOf = (fullPath: string): { name: string; characters: number; embedded?: true }[] => {
+  const cardsOf = (fullPath: string): { name: string; bytes: number; embedded?: true }[] => {
     const base = cardBase(fullPath);
     const main = mainCardName(base);
-    const cards: { name: string; characters: number; embedded?: true }[] = listCardNames(deps.cardsDir, base).map(
-      (name) => ({ name, characters: (readCardFile(deps.cardsDir, base, name) ?? '').length })
-    );
+    // Sizes come from the file system: listing must not read every card of every script.
+    const cards: { name: string; bytes: number; embedded?: true }[] = listCardNames(deps.cardsDir, base).map((name) => {
+      let bytes = 0;
+      try {
+        bytes = fs.statSync(path.join(deps.cardsDir, `${name}.js`)).size;
+      } catch {
+        /* vanished meanwhile */
+      }
+      return { name, bytes };
+    });
     if (!cards.some((c) => c.name === main)) {
       const embedded = cardManager.getCardSource(fullPath);
-      if (embedded) cards.unshift({ name: main, characters: embedded.length, embedded: true });
+      if (embedded) cards.unshift({ name: main, bytes: Buffer.byteLength(embedded), embedded: true });
     }
     return cards;
   };
@@ -174,7 +181,8 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         '/* card source: not included here, read it with read_script part "card" (or "all") */'
       );
       const cardName = args.card ? String(args.card) : undefined;
-      const card = (!found.isLibrary && cardManager.getCardSource(found.fullPath, cardName)) || '';
+      // The card text is only read when it is asked for; the list of cards below needs sizes only.
+      const card = (part !== 'script' && !found.isLibrary && cardManager.getCardSource(found.fullPath, cardName)) || '';
       const cards = found.isLibrary ? [] : cardsOf(found.fullPath);
 
       if (part === 'card' && !card) {
@@ -198,7 +206,7 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         output = `[lines ${from}-${end} of ${total}${end < total ? `; continue with offset ${end + 1}` : ''}]\n${output}`;
       }
       if (part === 'script' && cards.length) {
-        const list = cards.map((c) => `${c.name} (${c.characters} characters)`).join(', ');
+        const list = cards.map((c) => `${c.name} (${c.bytes} bytes)`).join(', ');
         output += `\n\n[This script has Lovelace card(s) that are not included: ${list}. Read one with part "card" (add "card" for a further card).]`;
       }
       return text(UNTRUSTED_NOTICE + maskWithNotice(output));

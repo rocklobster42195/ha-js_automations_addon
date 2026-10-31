@@ -677,11 +677,6 @@ class CardManager {
     return (part || cardName).replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  /** True when the script has a card file or a legacy embedded block. */
-  hasCardSource(scriptFilePath: string): boolean {
-    return this._extractCardBlock(scriptFilePath) !== null;
-  }
-
   /**
    * Downloads `url` once and caches it under config/www/jsa-cards/assets/<scriptName>/,
    * returning a stable /local/... URL that's reachable from any device on the HA

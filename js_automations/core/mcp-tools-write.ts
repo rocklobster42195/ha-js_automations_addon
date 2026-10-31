@@ -12,7 +12,7 @@ import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
 import { applyEdits, type TextEdit } from './mcp-edits';
 import ScriptHeaderParser from './script-header-parser';
 import { cardBase, cardFilePath, hasBlock, mainCardName, stripBlocks, writeCardFile } from './card-files';
-import { appendNotes, MAX_NOTES_CHARS, readNotes, writeNotes } from './script-notes';
+import { appendNotes, MAX_NOTES_CHARS, readNotes, removeNotes, writeNotes } from './script-notes';
 import type { WorkerManagerInstance } from './script-list';
 import type CardManager from './card-manager';
 import type DependencyManager from './dependency-manager';
@@ -271,7 +271,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     const isMain = !card || card === mainCardName(base);
     if (!cardFilePath(deps.cardsDir, base, card)) {
       return fail(
-        `Invalid card name "${card}". Use lowercase letters, digits, underscores and hyphens, starting with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+        card
+          ? `Invalid card name "${card}". Use lowercase letters, digits, underscores and hyphens, starting with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+          : `The script name "${base}" cannot have card files: card files are named after the script, which may only contain lowercase letters, digits and underscores. Rename the script first.`
       );
     }
 
@@ -410,7 +412,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const card = args.card && String(args.card) !== mainCardName(base) ? String(args.card) : undefined;
         if (!cardFilePath(deps.cardsDir, base, card)) {
           return fail(
-            `Invalid card name "${args.card}". It must start with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+            card
+              ? `Invalid card name "${card}". It must start with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+              : `The script name "${base}" cannot have card files (lowercase letters, digits and underscores only). Rename the script first.`
           );
         }
         const current = cardManager.getCardSource(found.fullPath, card);
@@ -499,6 +503,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         fs.unlinkSync(found.fullPath);
         workerManager.purgeWebhooksForScript(name);
         if (!found.isLibrary) cardManager.removeCard(found.fullPath);
+        removeNotes(deps.notesDir, found.fullPath, found.isLibrary);
         await depManager.prune();
         notes.push(await commitFile(found.fullPath, `mcp: delete ${name}`, true));
         deps.notifyStatusUpdate();

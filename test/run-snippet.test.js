@@ -14,7 +14,11 @@ const workerManager = require('../js_automations/core/worker-manager.js');
 const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'jsa-snippet-'));
 workerManager.setStorageDir(storage);
 
-const server = http.createServer((req, res) => res.end('{"hello":"world"}'));
+let hits = 0;
+const server = http.createServer((req, res) => {
+  hits++;
+  res.end('{"hello":"world"}');
+});
 const listening = new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 
 after(() => {
@@ -44,17 +48,51 @@ test('it ends promptly even after ha.store.get installed a message listener', as
   assert.ok(Date.now() - started < 5000);
 });
 
-test('network works (fetch and http)', async () => {
+test('network works: a connection to another host is attempted, not refused', async () => {
+  // 192.0.2.0/24 (TEST-NET-1) is reserved and unroutable: the attempt fails or times out, but is not refused by the sandbox.
+  const r = await snippet(
+    `try { await fetch('http://192.0.2.1:9/', { signal: AbortSignal.timeout(1500) }); console.log('reached'); } catch (e) { console.log('error: ' + e.name + ' ' + ((e.cause && e.cause.message) || e.message)); }`,
+    10000
+  );
+  const out = lines(r).join('|');
+  assert.match(out, /error: /, out);
+  assert.doesNotMatch(out, /PermissionDenied|add-on itself/, out);
+});
+
+test('the add-on itself cannot be reached: loopback, localhost, own addresses and local sockets', async () => {
   await listening;
   const port = server.address().port;
-  const viaFetch = await snippet(
-    `const r = await fetch('http://127.0.0.1:${port}/'); console.log(r.status, await r.text());`
+  const own = Object.values(os.networkInterfaces())
+    .flat()
+    .find((i) => i && i.family === 'IPv4' && !i.internal);
+  const targets = [`http://127.0.0.1:${port}/`, `http://localhost:${port}/`, `http://[::1]:${port}/`];
+  if (own) targets.push(`http://${own.address}:${port}/`);
+  const before = hits;
+  for (const url of targets) {
+    const viaFetch = await snippet(
+      `try { const r = await fetch('${url}'); console.log('reached ' + r.status); } catch (e) { console.log('error: ' + ((e.cause && e.cause.message) || e.message)); }`
+    );
+    assert.match(lines(viaFetch).join('|'), /connections to the add-on itself/, `fetch ${url}: ${lines(viaFetch)}`);
+    const viaHttp = await snippet(
+      `await new Promise((res) => { require('http').get('${url}').on('error', (e) => { console.log('error: ' + e.message); res(); }).on('response', () => { console.log('reached'); res(); }); });`
+    );
+    assert.match(lines(viaHttp).join('|'), /connections to the add-on itself/, `http ${url}: ${lines(viaHttp)}`);
+  }
+  const socket = await snippet(
+    `await new Promise((res) => { const s = require('net').connect('${process.platform === 'win32' ? '\\\\\\\\.\\\\pipe\\\\zz' : '/var/run/docker.sock'}'); s.on('error', (e) => { console.log('error: ' + e.message); res(); }); s.on('connect', () => { console.log('connected'); res(); }); });`
   );
-  assert.deepEqual(lines(viaFetch), ['info: 200 {"hello":"world"}']);
-  const viaHttp = await snippet(
-    `await new Promise((res) => require('http').get('http://127.0.0.1:${port}/', (r) => { let d = ''; r.on('data', (c) => (d += c)); r.on('end', () => { console.log('http ' + d); res(); }); }));`
-  );
-  assert.deepEqual(lines(viaHttp), ['info: http {"hello":"world"}']);
+  assert.match(lines(socket).join('|'), /connections to the add-on itself \(a local socket\)/, lines(socket).join('|'));
+  assert.equal(hits, before, 'the server was never reached');
+});
+
+test('a package may load fs itself, only the snippet is blocked', async () => {
+  const pkgDir = path.join(storage, 'node_modules', 'zzpkg');
+  fs.mkdirSync(pkgDir, { recursive: true });
+  fs.writeFileSync(path.join(pkgDir, 'index.js'), "module.exports = typeof require('fs').readdirSync;");
+  const viaPackage = await snippet(`console.log(require('zzpkg'));`);
+  assert.deepEqual(lines(viaPackage), ['info: function']);
+  const direct = await snippet(`console.log(typeof require('fs').readdirSync);`);
+  assert.match(crashText(direct), /not available in run_snippet/);
 });
 
 test('files, processes and host details are not available', async () => {

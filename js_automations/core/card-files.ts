@@ -140,17 +140,25 @@ export function packScript(cardsDir: string, scriptFilename: string, source: str
  * (the script may have been renamed on import).
  */
 export function unpackScript(cardsDir: string, base: string, source: string, fromBase?: string): string {
-  const blocks = extractBlocks(source);
-  if (blocks.length === 0) return source;
-  for (const block of blocks) {
+  if (!hasBlock(source)) return source;
+  const unpacked = source.replace(new RegExp(BLOCK.source, 'g'), (match: string, nameRaw: string, base64: string) => {
+    const encoded = base64.trim();
+    if (!encoded) return '';
     let card: string | undefined;
-    if (block.name) {
-      if (block.name.startsWith(`${base}-`)) card = block.name;
-      else if (fromBase && block.name.startsWith(`${fromBase}-`))
-        card = `${base}-${block.name.slice(fromBase.length + 1)}`;
-      else card = `${base}-${block.name}`;
+    const raw = nameRaw.trim();
+    if (raw) {
+      // "Day Card" becomes "day-card": a name that is not a valid card name is repaired where that is possible.
+      const wanted = raw
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      if (!wanted) return match;
+      if (wanted.startsWith(`${base}-`)) card = wanted;
+      else if (fromBase && wanted.startsWith(`${fromBase}-`)) card = `${base}-${wanted.slice(fromBase.length + 1)}`;
+      else card = `${base}-${wanted}`;
     }
-    writeCardFile(cardsDir, base, card, block.code);
-  }
-  return `${stripBlocks(source).trimEnd()}\n`;
+    // A block that cannot be written stays in the script instead of being lost.
+    return writeCardFile(cardsDir, base, card, Buffer.from(encoded, 'base64').toString('utf8')) ? '' : match;
+  });
+  return `${unpacked.replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }

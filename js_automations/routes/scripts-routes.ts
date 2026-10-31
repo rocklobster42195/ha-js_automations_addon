@@ -5,7 +5,7 @@ import type { Server as SocketIOServer } from 'socket.io';
 import ScriptHeaderParser from '../core/script-header-parser';
 import CapabilityAnalyzer from '../core/capability-analyzer';
 import { buildScriptList } from '../core/script-list';
-import { moveNotes } from '../core/script-notes';
+import { moveNotes, removeNotes } from '../core/script-notes';
 import {
   cardBase,
   hasBlock,
@@ -102,6 +102,8 @@ export = (
     fs.unlinkSync(fullPath);
     workerManager.purgeWebhooksForScript(filename);
     if (cardManager) cardManager.removeCard(fullPath);
+    // Notes belong to the script: a new script with the same name must not inherit them.
+    removeNotes(config.NOTES_DIR, filename, path.dirname(fullPath) === LIBRARIES_DIR);
     await depManager.prune();
 
     // Deletions are never auto-staged in git (see git-manager.ts) — this is the opt-in point

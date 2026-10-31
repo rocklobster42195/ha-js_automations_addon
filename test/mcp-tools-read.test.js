@@ -235,8 +235,8 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.equal(scripts.find((s) => s.filename === 'helper.js').kind, 'library');
     assert.equal(scripts.find((s) => s.filename === 'carded.ts').card, true);
     assert.deepEqual(scripts.find((s) => s.filename === 'carded.ts').cards, [
-      { name: 'carded-card', characters: CARD_SOURCE.length, embedded: true },
-      { name: 'carded-day-card', characters: DAY_CARD_SOURCE.length },
+      { name: 'carded-card', bytes: Buffer.byteLength(CARD_SOURCE), embedded: true },
+      { name: 'carded-day-card', bytes: Buffer.byteLength(DAY_CARD_SOURCE) },
     ]);
     assert.equal(scripts.find((s) => s.filename === 'hello.js').cards, undefined);
   });
@@ -252,7 +252,7 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match(carded.text, /Lovelace card\(s\) that are not included/);
     assert.ok(!carded.text.includes('__JSA_CARD__'), 'base64 block must be stripped');
 
-    assert.match(carded.text, /carded-day-card \(\d+ characters\)/, 'the result names the cards that are left out');
+    assert.match(carded.text, /carded-day-card \(\d+ bytes\)/, 'the result names the cards that are left out');
     const dayCard = await call('read_script', { filename: 'carded.ts', part: 'card', card: 'carded-day-card' });
     assert.ok(dayCard.text.includes(DAY_CARD_SOURCE) && !dayCard.text.includes(CARD_SOURCE));
     const noCard = await call('read_script', { filename: 'carded.ts', part: 'card', card: 'carded-x-card' });

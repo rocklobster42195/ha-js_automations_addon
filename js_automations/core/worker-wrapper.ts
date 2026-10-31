@@ -140,14 +140,18 @@ if (wd.restricted) {
   const _loadBeforeSandbox = (Module as any)._load;
   (Module as any)._load = function (request: string, parent: any) {
     const name = request.startsWith('node:') ? request.slice(5) : request;
-    // node-cron (used by ha.schedule) loads child_process itself; that is not the snippet's doing.
+    // Only what the snippet itself requires is blocked: packages (node-cron for ha.schedule, axios and others)
+    // load fs, os or child_process internally and must keep working.
     const parentFile = parent?.filename || '';
-    const fromCron = parentFile.includes('node_modules/node-cron') || parentFile.includes('node_modules\\node-cron');
-    if (_scriptExecuting && !fromCron && BLOCKED_IN_SNIPPETS.has(name)) {
+    const fromPackage = parentFile.includes('node_modules/') || parentFile.includes('node_modules\\');
+    if (_scriptExecuting && !fromPackage && BLOCKED_IN_SNIPPETS.has(name)) {
       throw new Error(`PermissionDeniedError: '${name}' is not available in run_snippet (read-only sandbox).`);
     }
     return _loadBeforeSandbox.apply(this, arguments);
   };
+
+  // The JSA HTTP API on this machine has no authentication: a snippet must not be able to call it.
+  require('./snippet-sandbox').installConnectGuard();
 
   // A snippet's output is what it logs: console.* would only reach the server's own console, so route it to ha.log.
   const asText = (v: unknown): string => {

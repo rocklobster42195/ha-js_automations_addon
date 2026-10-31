@@ -29,6 +29,11 @@ export function readNotes(notesDir: string, filename: string, isLibrary: boolean
   }
 }
 
+/** Removes the notes of a deleted script (they stay in Git history and come back with a restore). */
+export function removeNotes(notesDir: string, filename: string, isLibrary: boolean): void {
+  fs.rmSync(notesPath(notesDir, filename, isLibrary), { force: true });
+}
+
 /** Replaces the notes; empty content removes the file. */
 export function writeNotes(notesDir: string, filename: string, isLibrary: boolean, content: string): void {
   const file = notesPath(notesDir, filename, isLibrary);

@@ -280,36 +280,47 @@ class GitManager extends EventEmitter {
     await this._restoreCompanions(filePath);
   }
 
-  /** Brings back the notes and card sources a deleted script had (only those missing on disk). */
+  /**
+   * Brings back the notes and card sources a deleted script had when it was last there (only those missing on
+   * disk). Not every companion that was ever added: a card deleted on purpose long ago stays deleted.
+   */
   private async _restoreCompanions(scriptPath: string): Promise<void> {
     const isLibrary = scriptPath.startsWith('libraries/');
     const base = path.basename(scriptPath).replace(/\.(js|ts)$/, '');
-    const patterns = [`notes/${isLibrary ? 'libraries/' : ''}${base}.md`];
-    if (!isLibrary) patterns.push(`cards/${base}-*.js`);
-    for (const pattern of patterns) {
-      const raw = await this.git.raw([
-        'log',
-        '--all',
-        '--pretty=format:',
-        '--name-only',
-        '--diff-filter=A',
-        '--',
-        pattern,
-      ]);
-      for (const rel of new Set(
-        raw
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean)
-      )) {
-        const abs = path.join(this.scriptsDir, rel);
-        if (fs.existsSync(abs)) continue;
-        try {
-          fs.mkdirSync(path.dirname(abs), { recursive: true });
-          fs.writeFileSync(abs, await this._lastContent(rel), 'utf8');
-        } catch {
-          // A companion without a usable history entry is simply not restored.
-        }
+
+    // The repository state in which the script still existed: HEAD when only the working copy lost it, otherwise
+    // the commit before the one that deleted it.
+    let rev = 'HEAD';
+    try {
+      await this.git.raw(['cat-file', '-e', `HEAD:${scriptPath}`]);
+    } catch {
+      const last = (await this.git.log({ file: scriptPath, maxCount: 1 })).latest;
+      if (!last) return;
+      rev = `${last.hash}^`;
+    }
+
+    let listing: string;
+    try {
+      listing = await this.git.raw(['ls-tree', '-r', '--name-only', rev, '--', 'notes', 'cards']);
+    } catch {
+      return;
+    }
+    const belongs = (file: string): boolean =>
+      isLibrary
+        ? file === `notes/libraries/${base}.md`
+        : file === `notes/${base}.md` || (file.startsWith(`cards/${base}-`) && file.endsWith('.js'));
+
+    for (const rel of listing
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && belongs(l))) {
+      const abs = path.join(this.scriptsDir, rel);
+      if (fs.existsSync(abs)) continue;
+      try {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, await this.showFileAtCommit(rev, rel), 'utf8');
+      } catch {
+        // A companion that cannot be read from that commit is simply not restored.
       }
     }
   }
