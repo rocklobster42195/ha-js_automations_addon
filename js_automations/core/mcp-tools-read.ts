@@ -8,6 +8,8 @@ import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { isSensitiveName, maskDeep, maskWithNotice } from './mcp-secret-filter';
 import { missingScriptMessage, resolveScript } from './mcp-script-files';
 import { buildScriptList, type WorkerManagerInstance } from './script-list';
+import { readNotes } from './script-notes';
+import { cardBase, listCardNames, mainCardName, readCardFile } from './card-files';
 import ScriptHeaderParser from './script-header-parser';
 import type CardManager from './card-manager';
 import type LogManager from './log-manager';
@@ -24,6 +26,10 @@ export interface McpReadToolDeps {
   eventBuffer: McpEventBuffer;
   scriptsDir: string;
   librariesDir: string;
+  /** Directory of the per-script notes (see script-notes.ts). */
+  notesDir: string;
+  /** Directory of the card source files (see card-files.ts). */
+  cardsDir: string;
   /** Directory containing authoring.md, API_REFERENCE.md and the guides. */
   docsDir: string;
   /** Directory containing ha-api.d.ts. */
@@ -81,15 +87,36 @@ export const API_TOPICS: Record<string, { dir: 'docs' | 'types' | 'storage'; fil
 export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps): void {
   const { workerManager, logManager, storeManager, haConnector, cardManager, eventBuffer } = deps;
 
+  /** The cards of a script: its card files, plus the main card of an old script that still has it embedded. */
+  const cardsOf = (fullPath: string): { name: string; characters: number; embedded?: true }[] => {
+    const base = cardBase(fullPath);
+    const main = mainCardName(base);
+    const cards: { name: string; characters: number; embedded?: true }[] = listCardNames(deps.cardsDir, base).map(
+      (name) => ({ name, characters: (readCardFile(deps.cardsDir, base, name) ?? '').length })
+    );
+    if (!cards.some((c) => c.name === main)) {
+      const embedded = cardManager.getCardSource(fullPath);
+      if (embedded) cards.unshift({ name: main, characters: embedded.length, embedded: true });
+    }
+    return cards;
+  };
+
+  const listedCards = (m: { path?: string }) => {
+    if (!m.path || path.basename(path.dirname(m.path)) === 'libraries') return undefined;
+    const cards = cardsOf(m.path);
+    return cards.length ? cards : undefined;
+  };
+
   protocol.registerTool({
     name: 'list_scripts',
     title: 'List scripts',
     description:
       'Lists all JS Automations scripts and libraries with their header metadata (name, description, label, expose, ' +
-      'permissions, card) and runtime status (running, stopped, error). Use this first to find the file names the other tools need.',
+      'permissions, card) and runtime status (running, stopped, error). "hasNotes" marks scripts with saved notes from earlier ' +
+      'sessions: read them with get_script_notes before changing such a script. Use this first to find the file names the other tools need.',
     readOnly: true,
     handler: () => {
-      const scripts = buildScriptList(workerManager, cardManager)
+      const scripts = buildScriptList(workerManager, cardManager, deps.notesDir)
         .filter((m) => !String(m.filename).endsWith('.blocks'))
         .map((m) => ({
           filename: m.filename,
@@ -105,7 +132,9 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
           includes: m.includes?.length ? m.includes : undefined,
           npm: m.dependencies?.length ? m.dependencies : undefined,
           card: m.card || undefined,
+          cards: listedCards(m),
           entityConflicts: m.entity_conflicts || undefined,
+          hasNotes: m.hasNotes || undefined,
         }));
       return { content: { count: scripts.length, scripts } };
     },
@@ -115,9 +144,17 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
     name: 'read_script',
     title: 'Read script',
     description:
-      'Returns the source code of a script or library. If the script has a Lovelace card, the card source is appended ' +
-      'as plain JavaScript (the Base64 block is stripped). Known credential patterns are masked.',
-    inputSchema: { filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"') },
+      'Returns the source code of a script or library (known credential patterns are masked). A Lovelace card is large ' +
+      'and NOT included by default: the result says whether the script has one and how big it is. Use part "card" for the ' +
+      'card source (plain JavaScript) or "all" for both; list_scripts shows which cards a script has, "card" picks a further ' +
+      'card by name (default: the main card). Large parts can be read in slices with offset/limit (line numbers, 1-based).',
+    inputSchema: {
+      filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"'),
+      part: z.enum(['script', 'card', 'all']).optional().describe('Default "script"'),
+      card: z.string().optional().describe('Name of a further card, e.g. "garmin-day-card"; default is the main card'),
+      offset: z.number().int().min(1).optional().describe('First line to return (1-based)'),
+      limit: z.number().int().min(1).optional().describe('Maximum number of lines to return'),
+    },
     readOnly: true,
     handler: (args) => {
       const filename = String(args.filename ?? '');
@@ -130,15 +167,64 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
           )
         );
 
+      const part = args.part === 'card' || args.part === 'all' ? args.part : 'script';
       let source = fs.readFileSync(found.fullPath, 'utf8');
-      const hasCard = CARD_BLOCK.test(source);
-      source = source.replace(CARD_BLOCK, '/* card source: see the "Card source" section below */');
-      let output = source;
-      if (hasCard) {
-        const card = cardManager.getCardSource(found.fullPath);
-        if (card) output += `\n\n=== Card source (plain JavaScript) ===\n${card}`;
+      source = source.replace(
+        CARD_BLOCK,
+        '/* card source: not included here, read it with read_script part "card" (or "all") */'
+      );
+      const cardName = args.card ? String(args.card) : undefined;
+      const card = (!found.isLibrary && cardManager.getCardSource(found.fullPath, cardName)) || '';
+      const cards = found.isLibrary ? [] : cardsOf(found.fullPath);
+
+      if (part === 'card' && !card) {
+        return fail(
+          cardName
+            ? `"${filename}" has no card "${cardName}". Its cards: ${cards.map((c) => c.name).join(', ') || 'none'}.`
+            : `"${filename}" has no Lovelace card.`
+        );
+      }
+      let output = part === 'card' ? card : source;
+      if (part === 'all' && card) output += `\n\n=== Card source (plain JavaScript) ===\n${card}`;
+
+      const lines = output.split('\n');
+      const total = lines.length;
+      const sliced = args.offset !== undefined || args.limit !== undefined;
+      if (sliced) {
+        const from = Math.max(1, Number(args.offset ?? 1));
+        const to = args.limit !== undefined ? from + Number(args.limit) - 1 : total;
+        output = lines.slice(from - 1, to).join('\n');
+        const end = Math.min(to, total);
+        output = `[lines ${from}-${end} of ${total}${end < total ? `; continue with offset ${end + 1}` : ''}]\n${output}`;
+      }
+      if (part === 'script' && cards.length) {
+        const list = cards.map((c) => `${c.name} (${c.characters} characters)`).join(', ');
+        output += `\n\n[This script has Lovelace card(s) that are not included: ${list}. Read one with part "card" (add "card" for a further card).]`;
       }
       return text(UNTRUSTED_NOTICE + maskWithNotice(output));
+    },
+  });
+
+  protocol.registerTool({
+    name: 'get_script_notes',
+    title: 'Get script notes',
+    description:
+      'Returns the saved notes of a script or library: what earlier sessions learned about it (entity quirks, decisions and ' +
+      'their reasons, open points, test status). Notes can be outdated: check them against the source before relying on them.',
+    inputSchema: { filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"') },
+    readOnly: true,
+    handler: (args) => {
+      const filename = String(args.filename ?? '');
+      const found = resolveScript(deps, filename);
+      if (!found)
+        return fail(
+          missingScriptMessage(
+            filename,
+            `No script or library named "${filename}". Use list_scripts to see the available files.`
+          )
+        );
+      const notes = readNotes(deps.notesDir, found.fullPath, found.isLibrary);
+      return text(notes ? maskWithNotice(notes) : `No notes saved for "${path.basename(found.fullPath)}" yet.`);
     },
   });
 

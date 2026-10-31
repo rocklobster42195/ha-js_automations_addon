@@ -1,13 +1,13 @@
 # Script Packs (JSA Card Packs)
 
-A **Script Pack** is a single `.js`/`.ts` file that bundles two things that normally live in separate worlds:
+A **Script Pack** is a script together with its Lovelace card. On your own system the two are separate files; to share them they are packed into a single `.js`/`.ts` file. It bundles two things that normally live in separate worlds:
 
 1. **Backend logic** — a regular JSA script (`ha.on()`, `ha.register()`, `ha.action()`, NPM packages, TypeScript types, persistent state — everything covered in [Native Entities](./native-entities.md)).
-2. **A Lovelace card** — a plain Web Component (no framework required), embedded directly in the same file.
+2. **A Lovelace card** — a plain Web Component (no framework required), stored as `cards/<script>-card.js` next to your scripts.
 
 The add-on extracts the card on install, writes it to `config/www/jsa-cards/`, and registers it as a Lovelace resource automatically — no HACS, no manual resource management, no separate repo for the card half of a mini-integration.
 
-Traditionally, automation logic and its dashboard card are maintained, versioned, and deployed independently, and they talk to each other awkwardly — via entities, MQTT helpers, or REST hooks. A Script Pack collapses that boundary into one file.
+Traditionally, automation logic and its dashboard card are maintained, versioned, and deployed independently, and they talk to each other awkwardly — via entities, MQTT helpers, or REST hooks. A Script Pack collapses that boundary: one script, one card, one download.
 
 ## How it works: two one-way channels
 
@@ -33,7 +33,7 @@ This is the part that isn't obvious from looking at the code, so it's worth stat
 
 ## Authoring a Script Pack
 
-Add `@card` (or `@card dev` for development mode) to the script header, then append a `__JSA_CARD__` block containing your Web Component source, Base64-encoded:
+Add `@card` (or `@card dev` for development mode) to the script header. The card itself is a plain JavaScript file next to your scripts: `cards/<script>-card.js` (for `bundesliga_live.js` that is `cards/bundesliga_live-card.js`). You create and edit it in the IDE's **card editor tab**, or as a normal file. The script stays a normal script:
 
 ```javascript
 /**
@@ -47,17 +47,21 @@ ha.register('sensor.bundesliga_score', { name: 'BL Score' });
 ha.action('refresh', async () => {
   // fetch and update the entity
 });
-
-/* __JSA_CARD__
-<base64-encoded Web Component source>
-__JSA_CARD_END__ */
 ```
 
-You never hand-encode that Base64 block yourself — the IDE has a dedicated **card editor tab** where you write plain JavaScript/HTML; the tab handles the encoding when it saves. The same tab also gives you a **live preview panel** with real HA entity data and width presets that simulate actual Lovelace column sizes, so you can iterate on the card's appearance without installing anything.
+```javascript
+// cards/bundesliga_live-card.js
+class BundesligaCard extends HTMLElement {
+  /* your Web Component */
+}
+customElements.define('bundesliga-live-card', BundesligaCard);
+```
+
+The card editor tab writes that file when it saves. The same tab also gives you a **live preview panel** with real HA entity data and width presets that simulate actual Lovelace column sizes, so you can iterate on the card's appearance without installing anything.
 
 ## The `__jsa__` Bridge
 
-Every installed card gets a `const __jsa__` object injected server-side, ahead of your card's own source (it is not part of the Base64 you write):
+Every installed card gets a `const __jsa__` object injected server-side, ahead of your card's own source (it is not part of the card file you write):
 
 ```javascript
 class MyCard extends HTMLElement {
@@ -119,6 +123,14 @@ ha.update('sensor.bundesliga_score', 'scheduled', { team_icon: localUrl });
 ```
 
 See the [API Reference](../API_REFERENCE.md#frontend--card-assets-hafrontend) for `installCard()`/`cacheAsset()` options (force refresh, TTL, max size).
+
+## Card files, sharing and Git
+
+- **Where the card lives:** `cards/<script>-card.js`, named after the script. Further cards of the same script are `cards/<script>-<name>-card.js` (for example `garmin-day-card.js`). The prefix `<script>-` is what ties a card file to its script.
+- **Sharing:** the download of a script packs its card files into the one file (the card follows as a `/* __JSA_CARD__ ... __JSA_CARD_END__ */` block, Base64-encoded; further cards as `/* __JSA_CARD__ <name>`). Uploading or importing such a file unpacks the blocks into `cards/` again, so a pack is still a single file to hand around. Duplicating a script copies its cards too.
+- **Older scripts** that still carry the block inside the script keep working. The card file wins when both exist; the block moves out of the script the next time you save the card.
+- **Git and backup:** card files are committed together with their script (the script's Commit button also takes its notes and cards along) and are part of the backups. Renaming a script renames its card files; the tag names inside the card code stay, so dashboards using `custom:garmin-card` keep working. Deleting a script deletes its cards (they stay in the Git history and come back with _Aus Repo_).
+- Only the main card (`<script>-card.js`) is installed into Lovelace for now.
 
 ## Under the hood
 

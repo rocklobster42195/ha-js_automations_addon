@@ -437,6 +437,8 @@
         "get_entity_desc": "State und Attribute einer einzelnen Entity.",
         "get_api_reference": "API-Referenz lesen",
         "get_api_reference_desc": "Authoring-Guide, ha-api.d.ts und API-Referenz als Schreibhilfe für die KI.",
+        "get_script_notes": "Skript-Notizen lesen",
+        "get_script_notes_desc": "Gespeicherte Notizen zu einem Skript: Entscheidungen, Eigenheiten, offene Punkte.",
         "get_store": "Store lesen",
         "get_store_desc": "Inhalt von ha.store. Als Secret gespeicherte Werte werden nie ausgegeben, Werte unter Schlüsselnamen wie token oder password werden maskiert. Standardmäßig aus.",
         "start_script": "Skript starten",
@@ -451,6 +453,8 @@
         "write_script_desc": "Legt Skripte und Libraries an oder ändert sie (mit Syntaxprüfung und Git-Commit). Standardmäßig aus.",
         "write_card": "Karte schreiben",
         "write_card_desc": "Schreibt die Lovelace-Karte eines Skripts. Standardmäßig aus.",
+        "save_script_notes": "Skript-Notizen speichern",
+        "save_script_notes_desc": "Speichert Notizen zu einem Skript, damit ein neuer Chat dort weitermachen kann. Standardmäßig aus.",
         "delete_script": "Skript löschen",
         "delete_script_desc": "Löscht ein Skript oder eine Library. Standardmäßig aus."
       }
@@ -668,6 +672,7 @@
   "cap_preview_undeclared_warning": "Dieses Skript nutzt Berechtigungen, die nicht in @permission deklariert sind.",
   "cap_preview_undeclared_list": "Nicht deklariert:",
   "cap_preview_confirm": "Import bestätigen",
+  "script_notes_badge_title": "Notizen vorhanden",
   "cap_tip_network": "Netzwerkzugriff (deklariert)",
   "cap_tip_fs_read": "Lesezugriff auf Dateien (deklariert)",
   "cap_tip_fs_write": "Schreibzugriff auf Dateien (deklariert)",

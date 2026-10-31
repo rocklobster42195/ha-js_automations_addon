@@ -138,6 +138,7 @@ class GitManager extends EventEmitter {
       // .gitignore is infrastructure ensureRepo() creates, not a user file the wizard could ever
       // let someone select — fold it into every scoped commit so it doesn't sit untracked forever.
       toStage = toStage.filter((p) => scope.has(p) || p === '.gitignore');
+      toStage.push(...(await this.changedCompanionsOf(options.paths, !!options.includeDeletions)));
     }
     if (toStage.length === 0) {
       return { hash: null, filesChanged: 0 };
@@ -151,6 +152,39 @@ class GitManager extends EventEmitter {
     this.logManager.add('debug', 'Git', `[Git] Committed ${toStage.length} file(s): ${result.commit}.`);
     this.emit('git_status_changed');
     return { hash: result.commit || null, filesChanged: toStage.length };
+  }
+
+  /**
+   * Changed companion files of scripts: notes (notes/<script>.md) and card sources (cards/<script>-*.js). They travel
+   * with the commit of their script and are never committed on their own. Asked from git directly with -uall: the
+   * plain status reports a brand-new untracked folder as one entry, not as the files in it.
+   */
+  private async changedCompanions(): Promise<{ file: string; base: string; library: boolean; deleted: boolean }[]> {
+    const out = await this.git.raw(['status', '--porcelain', '-uall', '--', 'notes', 'cards']);
+    const found: { file: string; base: string; library: boolean; deleted: boolean }[] = [];
+    for (const line of out.split('\n')) {
+      if (line.length < 4) continue;
+      const file = line.slice(3).trim();
+      const note = /^notes\/(libraries\/)?([^/]+)\.md$/.exec(file);
+      const card = /^cards\/([a-z0-9_]+)-[a-z0-9_-]*\.js$/.exec(file);
+      const deleted = line[0] === 'D' || line[1] === 'D';
+      if (note) found.push({ file, base: note[2], library: !!note[1], deleted });
+      else if (card) found.push({ file, base: card[1], library: false, deleted });
+    }
+    return found;
+  }
+
+  /** The changed companion files that belong to the given script paths. */
+  private async changedCompanionsOf(scriptPaths: string[], includeDeletions: boolean): Promise<string[]> {
+    const owners = new Set(
+      scriptPaths
+        .filter((p) => /\.(js|ts)$/.test(p))
+        .map((p) => `${p.startsWith('libraries/')}:${path.basename(p).replace(/\.(js|ts)$/, '')}`)
+    );
+    if (owners.size === 0) return [];
+    return (await this.changedCompanions())
+      .filter((c) => owners.has(`${c.library}:${c.base}`) && (includeDeletions || !c.deleted))
+      .map((c) => c.file);
   }
 
   async log(filePath?: string): Promise<CommitEntry[]> {
@@ -203,7 +237,7 @@ class GitManager extends EventEmitter {
       raw
         .split('\n')
         .map((l) => l.trim())
-        .filter((l) => l.length > 0 && TRACKED_EXTENSIONS.some((ext) => l.endsWith(ext)))
+        .filter((l) => l.length > 0 && TRACKED_EXTENSIONS.some((ext) => l.endsWith(ext)) && !l.startsWith('cards/'))
     );
 
     const results: DeletedScriptEntry[] = [];
@@ -243,6 +277,41 @@ class GitManager extends EventEmitter {
     const absPath = path.join(this.scriptsDir, filePath);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf8');
+    await this._restoreCompanions(filePath);
+  }
+
+  /** Brings back the notes and card sources a deleted script had (only those missing on disk). */
+  private async _restoreCompanions(scriptPath: string): Promise<void> {
+    const isLibrary = scriptPath.startsWith('libraries/');
+    const base = path.basename(scriptPath).replace(/\.(js|ts)$/, '');
+    const patterns = [`notes/${isLibrary ? 'libraries/' : ''}${base}.md`];
+    if (!isLibrary) patterns.push(`cards/${base}-*.js`);
+    for (const pattern of patterns) {
+      const raw = await this.git.raw([
+        'log',
+        '--all',
+        '--pretty=format:',
+        '--name-only',
+        '--diff-filter=A',
+        '--',
+        pattern,
+      ]);
+      for (const rel of new Set(
+        raw
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+      )) {
+        const abs = path.join(this.scriptsDir, rel);
+        if (fs.existsSync(abs)) continue;
+        try {
+          fs.mkdirSync(path.dirname(abs), { recursive: true });
+          fs.writeFileSync(abs, await this._lastContent(rel), 'utf8');
+        } catch {
+          // A companion without a usable history entry is simply not restored.
+        }
+      }
+    }
   }
 
   async getStatus(): Promise<GitStatus> {
@@ -259,13 +328,22 @@ class GitManager extends EventEmitter {
     }
     const settings = this.getVersioningSettings();
     const status = await this.git.status();
+    const changedFiles = [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)];
+    // A changed note or card makes its script "changed" too, because that is what the editor's Commit button works on.
+    for (const c of await this.changedCompanions()) {
+      const dir = c.library ? 'libraries/' : '';
+      const owner = ['.ts', '.js']
+        .map((ext) => `${dir}${c.base}${ext}`)
+        .find((f) => fs.existsSync(path.join(this.scriptsDir, f)));
+      if (owner && !changedFiles.includes(owner)) changedFiles.push(owner);
+    }
     return {
       hasRepo: true,
       hasRemote: !!settings.git_enabled && !!settings.git_repo_url,
       ahead: await this.countUnpushedCommits(),
       dirty: !status.isClean(),
       lastPushError: this.lastPushError,
-      changedFiles: [...status.not_added, ...status.modified, ...status.renamed.map((r) => r.to)],
+      changedFiles,
     };
   }
 

@@ -346,7 +346,7 @@ interface HA {
   // --- Script Pack: Lovelace Card Installation ---
   frontend: {
     /**
-     * Installs the card embedded in this script's `__JSA_CARD__` block to
+     * Installs this script's main card (`cards/<script>-card.js`) to
      * `config/www/jsa-cards/` and registers it as a Lovelace resource.
      *
      * - Skips write if the card source is unchanged (hash-based).

@@ -44,6 +44,7 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'list_entities', group: 'read', defaultEnabled: true },
   { name: 'get_entity', group: 'read', defaultEnabled: true },
   { name: 'get_api_reference', group: 'read', defaultEnabled: true },
+  { name: 'get_script_notes', group: 'read', defaultEnabled: true },
   { name: 'get_store', group: 'read', defaultEnabled: false },
   { name: 'jsa_feedback', group: 'read', defaultEnabled: true, maintainerOnly: true },
   { name: 'start_script', group: 'control', defaultEnabled: true },
@@ -52,6 +53,7 @@ export const MCP_TOOL_CATALOG: McpToolMeta[] = [
   { name: 'call_service', group: 'control', defaultEnabled: false },
   { name: 'write_script', group: 'write', defaultEnabled: false },
   { name: 'write_card', group: 'write', defaultEnabled: false },
+  { name: 'save_script_notes', group: 'write', defaultEnabled: false },
   { name: 'delete_script', group: 'write', defaultEnabled: false },
 ];
 

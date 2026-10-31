@@ -442,8 +442,20 @@ export class EditorViewElement extends LitElement {
   }
 
   /** A file was rewritten behind the editor's back (an AI assistant over MCP): refresh open tabs. */
-  private _onScriptContentChanged = async ({ filename }: { filename: string }): Promise<void> => {
+  private _onScriptContentChanged = async ({
+    filename,
+    source,
+  }: {
+    filename: string;
+    source?: string;
+  }): Promise<void> => {
     const scriptTab = this._openTabs.find((t) => t.filename === filename && !t.type);
+    // Saving a card moved its old embedded block out of the script: the user did that themselves, so the script
+    // tab follows silently (no "AI assistant" notice) and the card tab is the one that was just saved.
+    if (source === 'card') {
+      if (scriptTab) await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`, false, true);
+      return;
+    }
     const cardTab = this._openTabs.find((t) => t.type === 'card' && t.parentScript === filename);
     if (scriptTab && (await this._syncTabFromDisk(scriptTab, `api/scripts/${filename}/content`)) === 'gone') {
       await this._handleDeletedFile(scriptTab);
@@ -456,7 +468,12 @@ export class EditorViewElement extends LitElement {
 
   /** Clean tab → silently take the new content (keeps cursor/undo); dirty tab → keep the user's
    * edits, remember the conflict and warn once. */
-  private async _syncTabFromDisk(tab: JsaTab, url: string, discardEdits = false): Promise<'gone' | void> {
+  private async _syncTabFromDisk(
+    tab: JsaTab,
+    url: string,
+    discardEdits = false,
+    quiet = false
+  ): Promise<'gone' | void> {
     try {
       const res = await window.apiFetch!(url);
       if (res.status === 404 && !tab.type) return 'gone';
@@ -464,6 +481,7 @@ export class EditorViewElement extends LitElement {
       const content: string = (await res.json()).content ?? '';
       if (content === tab.originalContent && !discardEdits) return;
       const name = tab.parentScript ?? tab.filename;
+      if (quiet && tab.isDirty) return;
 
       if (!tab.isDirty || discardEdits) {
         // originalContent first, so the model-change callback sees "equal" and does not flag the tab dirty.
@@ -474,12 +492,14 @@ export class EditorViewElement extends LitElement {
         this._renderTabs();
         // The card preview renders the saved card, so it must follow an update made behind the editor's back too.
         if (tab.type === 'card' && window.CardPreview?.isOpen()) window.CardPreview.reload();
-        window.alertToast?.show(
-          this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
-            filename: name,
-          }),
-          { variant: 'info' }
-        );
+        if (!quiet) {
+          window.alertToast?.show(
+            this._t('external_update_reloaded', '"{{filename}}" was updated by an AI assistant and reloaded.', {
+              filename: name,
+            }),
+            { variant: 'info' }
+          );
+        }
       } else if (!tab.externalChange) {
         tab.externalChange = true;
         this._renderTabs();

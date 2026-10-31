@@ -214,7 +214,7 @@ class Kernel extends EventEmitter {
       this.workerManager.setWebhookManager(this.webhookManager);
 
       // CardManager — handles Script Pack card installation
-      this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector);
+      this.cardManager = new CardManager(STORAGE_DIR, config.WWW_CARDS_DIR, this.haConnector, config.CARDS_DIR);
       this.workerManager.cardManager = this.cardManager;
 
       // MCP tools (the protocol layer only exposes those switched on in the settings)
@@ -228,6 +228,8 @@ class Kernel extends EventEmitter {
         eventBuffer: this.mcpEvents,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
+        notesDir: config.NOTES_DIR,
+        cardsDir: config.CARDS_DIR,
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
         storageDir: STORAGE_DIR,
@@ -255,6 +257,8 @@ class Kernel extends EventEmitter {
         storeManager: this.storeManager,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
+        notesDir: config.NOTES_DIR,
+        cardsDir: config.CARDS_DIR,
         storageDir: STORAGE_DIR,
         typesDir: path.join(__dirname, 'types'),
         notifyStatusUpdate: () => this.io?.emit('status_update'),

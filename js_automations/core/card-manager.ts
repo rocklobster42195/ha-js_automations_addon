@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import ScriptHeaderParser from './script-header-parser';
+import { cardBase, readCardFile, removeCardFiles } from './card-files';
 import type HAConnector from './ha-connection';
 
 const CARD_START = '__JSA_CARD__';
@@ -334,14 +335,23 @@ class CardManager {
   assetRegistry: Record<string, AssetRegistryEntry>;
   private assetFailures: Map<string, AssetFailure>;
   private _cleanupInFlight: Promise<void> | null = null;
+  /** Source files of the cards (SCRIPTS_DIR/cards); null = embedded blocks only. */
+  cardsDir: string | null;
 
   /**
    * @param storageDir  - Addon storage dir (for registry JSON)
    * @param wwwCardsDir - config/www/jsa-cards/
    * @param haConnector - HAConnector instance (may be null until connected)
+   * @param cardsDir    - SCRIPTS_DIR/cards, where the card source files live
    */
-  constructor(storageDir: string, wwwCardsDir: string, haConnector: HAConnector | null) {
+  constructor(
+    storageDir: string,
+    wwwCardsDir: string,
+    haConnector: HAConnector | null,
+    cardsDir: string | null = null
+  ) {
     this.storageDir = storageDir;
+    this.cardsDir = cardsDir;
     this.wwwCardsDir = wwwCardsDir;
     this.haConnector = haConnector;
     this.registryPath = path.join(storageDir, REGISTRY_FILE);
@@ -466,6 +476,8 @@ class CardManager {
     // Independent of whether a card was ever installed — a script can cache assets
     // via ha.frontend.cacheAsset() without necessarily having a __JSA_CARD__ block.
     this.removeAssets(scriptName);
+    // The card source files go with their script (Git history keeps them).
+    if (this.cardsDir) removeCardFiles(this.cardsDir, scriptName);
 
     const entry = this.registry[scriptName];
     if (!entry) return;
@@ -584,10 +596,17 @@ class CardManager {
   }
 
   /**
-   * Returns the raw decoded card source for a script (used by dev-mode preview).
+   * Returns the raw decoded card source for a script (used by dev-mode preview). The card file wins over a
+   * legacy embedded block; `card` selects a further card of the script (file only).
    */
-  getCardSource(scriptFilePath: string): string | null {
+  getCardSource(scriptFilePath: string, card?: string): string | null {
+    if (card) return this.cardsDir ? readCardFile(this.cardsDir, cardBase(scriptFilePath), card) : null;
     return this._extractCardBlock(scriptFilePath);
+  }
+
+  /** True when the script has a card file or a legacy embedded block. */
+  hasCardSource(scriptFilePath: string): boolean {
+    return this._extractCardBlock(scriptFilePath) !== null;
   }
 
   /**
@@ -737,6 +756,10 @@ class CardManager {
   // ---------------------------------------------------------------------------
 
   private _extractCardBlock(scriptFilePath: string): string | null {
+    if (this.cardsDir) {
+      const fromFile = readCardFile(this.cardsDir, cardBase(scriptFilePath));
+      if (fromFile) return fromFile;
+    }
     let raw: string;
     try {
       raw = fs.readFileSync(scriptFilePath, 'utf8');

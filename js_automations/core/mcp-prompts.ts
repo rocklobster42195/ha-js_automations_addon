@@ -58,6 +58,22 @@ ${VERIFY_LOOP}`,
   });
 
   protocol.registerPrompt({
+    name: 'save_script_notes',
+    title: 'Save notes for a script',
+    description: 'Summarize what this chat learned about a script into its notes, so a new chat can continue.',
+    args: {
+      script: z.string().optional().describe('File name, e.g. "garmin.ts"; omit if the chat is about one script'),
+    },
+    build: (args) =>
+      `Save the state of this conversation as notes for ${args.script ? `the script "${String(args.script)}"` : 'the script we are working on (ask which one if it is unclear)'}.
+
+1. Call get_script_notes first and keep what is still true.
+2. Write short Markdown with what the source does not show: decisions and why, entity/device quirks, what was tested live and what was not, open points and next steps. No code copies, no credentials.
+3. Save with save_script_notes (mode "replace" with the merged text, or "append" for a new section).
+4. Tell the user in two lines what you saved.`,
+  });
+
+  protocol.registerPrompt({
     name: 'grill_script',
     title: 'Plan a JSA script (interview)',
     description: 'Interview me about what the script should do before anything is written.',

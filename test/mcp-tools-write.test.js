@@ -58,6 +58,7 @@ function setup(t) {
       allowlist: '',
       tool_write_script: true,
       tool_write_card: true,
+      tool_save_script_notes: true,
       tool_delete_script: true,
     },
     versioning: {},
@@ -75,6 +76,8 @@ function setup(t) {
     storeManager,
     scriptsDir,
     librariesDir,
+    notesDir: path.join(scriptsDir, 'notes'),
+    cardsDir: path.join(scriptsDir, 'cards'),
     storageDir,
     typesDir: path.join(__dirname, '../js_automations/core/types'),
     notifyStatusUpdate: () => events.push('status'),
@@ -206,22 +209,36 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(rejected.text, /write_card/);
   });
 
-  await t.test('write_card replaces the block, validates syntax and warns about a missing @card tag', async () => {
+  await t.test('write_card stores the card as a file, moves an old block out and validates', async () => {
     const next = 'class Other extends HTMLElement {}\ncustomElements.define("other-card", Other);';
+    const cardFile = (name) => path.join(scriptsDir, 'cards', name + '.js');
     const ok = await call('write_card', { filename: 'carded.ts', source: next });
     assert.equal(ok.isError, false, ok.text);
+    assert.equal(readFileSync(cardFile('carded-card'), 'utf8'), next);
     const after = readFileSync(file('carded.ts'), 'utf8');
-    assert.ok(after.includes(Buffer.from(next).toString('base64')));
-    assert.ok(!after.includes(Buffer.from(CARD_SRC).toString('base64')));
-    assert.equal((after.match(/__JSA_CARD__/g) || []).length, 1);
+    assert.ok(!after.includes('__JSA_CARD__'), 'the old embedded block left the script');
     assert.doesNotMatch(ok.text, /no "@card" tag/);
+    assert.match(
+      git('show', '--stat', '--format=', 'HEAD'),
+      /cards\/carded-card\.js/,
+      'the card file is in the commit'
+    );
 
     const noTag = await call('write_card', { filename: 'demo.ts', source: next });
     assert.match(noTag.text, /no "@card" tag/);
-    assert.match(readFileSync(file('demo.ts'), 'utf8'), /__JSA_CARD_END__/);
+    assert.ok(existsSync(cardFile('demo-card')));
+    assert.ok(!readFileSync(file('demo.ts'), 'utf8').includes('__JSA_CARD'));
+
+    const further = await call('write_card', { filename: 'demo.ts', source: next, card: 'demo-day-card' });
+    assert.equal(further.isError, false, further.text);
+    assert.match(further.text, /not installed yet/);
+    assert.ok(existsSync(cardFile('demo-day-card')));
+    assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: 'other-card' })).isError, true);
+    assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: '../x' })).isError, true);
 
     const bad = await call('write_card', { filename: 'carded.ts', source: 'class {' });
     assert.equal(bad.isError, true);
+    assert.equal(readFileSync(cardFile('carded-card'), 'utf8'), next, 'a rejected card leaves the file alone');
     assert.equal((await call('write_card', { filename: 'nope.ts', source: next })).isError, true);
     assert.equal((await call('write_card', { filename: 'carded.ts', source: '   ' })).isError, true);
   });
@@ -250,6 +267,33 @@ test('write tools check, write, commit and delete safely', async (t) => {
     const r = await call('write_script', { filename: 'demo.ts', content: `/** @name Demo */\nha.log('again');\n` });
     assert.match(r.text, /running with the previous version — call restart_script/);
     workers.clear();
+  });
+
+  await t.test('notes are saved, kept out of Git on their own and committed with the script', async () => {
+    const before = subjects();
+    const saved = await call('save_script_notes', { filename: 'typed.ts', content: '# Typed\n- quirk A' });
+    assert.equal(saved.isError, false, saved.text);
+    const noteFile = path.join(scriptsDir, 'notes', 'typed.md');
+    assert.ok(existsSync(noteFile));
+    assert.deepEqual(subjects(), before, 'saving notes makes no commit of its own');
+
+    await call('save_script_notes', { filename: 'typed.ts', content: '- quirk B' });
+    assert.match(readFileSync(noteFile, 'utf8'), /quirk A[\s\S]*quirk B/, 'append keeps the earlier text');
+
+    const secret = await call('save_script_notes', {
+      filename: 'typed.ts',
+      content: "const apiKey = 'abcd1234secretvalue'",
+    });
+    assert.equal(secret.isError, true);
+
+    const src = readFileSync(file('typed.ts'), 'utf8');
+    await call('write_script', { filename: 'typed.ts', content: src + '// touched\n', message: 'x'.repeat(300) });
+    assert.ok(subjects()[0].length <= 'mcp: '.length + 120, 'a long message is cut, not rejected');
+    assert.match(
+      git('log', '-2', '--stat', '--format='),
+      /notes\/typed\.md/,
+      'notes ride along with the commits of their script'
+    );
   });
 
   await t.test('delete_script stops, removes, cleans up and commits the deletion', async () => {

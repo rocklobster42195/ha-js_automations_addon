@@ -57,7 +57,7 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
   };
 
   const startAndReport = async (fullPath: string, name: string): Promise<McpToolResult> => {
-    const meta = ScriptHeaderParser.parse(fullPath) as { dependencies?: string[] };
+    const meta = ScriptHeaderParser.parse(fullPath) as { dependencies?: string[]; card?: boolean | string | null };
     if (meta.dependencies?.length) await depManager.install(meta.dependencies);
     const started = workerManager.startScript(fullPath);
     if (started) stateManager.saveScriptStarted(name);
@@ -78,7 +78,10 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
     const running = workerManager.workers.has(name);
     return text(
       running
-        ? `"${name}" is running. Use get_logs / get_script_errors to watch it.`
+        ? `"${name}" is running. Use get_logs / get_script_errors to watch it.` +
+            (meta.card && meta.card !== 'dev'
+              ? ' Frontend: an open dashboard shows a changed or new card only after a hard reload of the browser tab (Ctrl+F5).'
+              : '')
         : `"${name}" was started but is no longer running. Use get_script_errors to see why.`
     );
   };

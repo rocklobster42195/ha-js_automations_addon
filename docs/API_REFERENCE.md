@@ -1162,7 +1162,7 @@ ha.action('set-team', async ({ teamId }) => {
 
 ### `ha.frontend.installCard(options?)`
 
-Installs the card embedded in the script's `__JSA_CARD__` block to `config/www/jsa-cards/` and registers it as a Lovelace resource. Skips the write if the card source hash is unchanged. In `@card dev` mode, the file write and Lovelace registration are skipped — the preview panel receives the live card source instead.
+Installs the script's main card (the file `cards/<script>-card.js`; old scripts may still carry it as an embedded `__JSA_CARD__` block) to `config/www/jsa-cards/` and registers it as a Lovelace resource. Skips the write if the card source hash is unchanged. In `@card dev` mode, the file write and Lovelace registration are skipped — the preview panel receives the live card source instead.
 
 ```javascript
 await ha.frontend.installCard();

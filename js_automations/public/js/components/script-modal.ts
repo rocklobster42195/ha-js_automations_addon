@@ -606,6 +606,7 @@ export class ScriptModal extends LitElement {
 
   @state() private _originalFilename: string | null = null;
   @state() private _duplicateCode: string | null = null;
+  @state() private _duplicateOf: string | null = null;
   @state() private _duplicateJsCode: string | null = null;
   @state() private _duplicateAsJs = false;
 
@@ -654,6 +655,7 @@ export class ScriptModal extends LitElement {
     this._busy = false;
     this._originalFilename = null;
     this._duplicateCode = null;
+    this._duplicateOf = null;
     this._duplicateJsCode = null;
     this._duplicateAsJs = false;
 
@@ -708,6 +710,7 @@ export class ScriptModal extends LitElement {
 
       if (mode === 'duplicate') {
         this._duplicateCode = data.code ?? null;
+        this._duplicateOf = data.filename ?? null;
         // Only offer the checkbox when duplicating a .blocks script AND a compiled version
         // actually exists (app-sidebar.ts's _duplicateScript() leaves jsCode null if nothing's
         // been compiled yet, e.g. a script that was never saved).
@@ -1184,6 +1187,8 @@ export class ScriptModal extends LitElement {
       payload.code = this._duplicateJsCode;
     } else if (this._mode === 'duplicate' && this._duplicateCode) {
       payload.code = this._duplicateCode;
+      // Lets the backend rename the cards that come with the code to the copy's name.
+      payload.duplicateOf = this._duplicateOf;
     } else if (this._extension === '.blocks') {
       // Let the backend write its own minimal empty-workspace default.
       payload.code = '';

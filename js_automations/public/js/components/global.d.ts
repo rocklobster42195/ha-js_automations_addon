@@ -40,6 +40,7 @@ export interface JsaScript {
   capabilities?: JsaScriptCapabilities;
   card?: string | boolean;
   cardInstalled?: boolean;
+  hasNotes?: boolean;
   entity_conflicts?: JsaEntityConflict[];
   ram_usage?: number;
   last_started?: string | number;

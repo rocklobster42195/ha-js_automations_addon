@@ -620,6 +620,11 @@ export class ScriptRow extends LitElement {
     return nothing;
   }
 
+  private _renderNotesBadge() {
+    if (!this.script.hasNotes) return nothing;
+    return html`<i class="mdi mdi-notebook-outline cap-badge" title=${this._t('script_notes_badge_title')}></i>`;
+  }
+
   private _renderConflictBadge() {
     const conflicts = this.script.entity_conflicts;
     if (!conflicts || conflicts.length === 0) return nothing;
@@ -646,7 +651,7 @@ export class ScriptRow extends LitElement {
           <div class="script-name">${this._renderConflictBadge()}${s.name}</div>
           <div class="script-lower-row">
             <span class="script-badges">
-              ${unsafeHTML(langBadge)}${this._renderCardBadge()}${this._renderCapBadges()}
+              ${unsafeHTML(langBadge)}${this._renderCardBadge()}${this._renderNotesBadge()}${this._renderCapBadges()}
             </span>
             <div class="row-actions">
               ${

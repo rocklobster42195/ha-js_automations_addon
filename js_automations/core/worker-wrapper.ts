@@ -1178,7 +1178,7 @@ const ha: any = {
   // Frontend / Lovelace
   frontend: {
     /**
-     * Installs the card embedded in this script's __JSA_CARD__ block to
+     * Installs this script's main card (cards/<script>-card.js) to
      * config/www/jsa-cards/ and registers it as a Lovelace resource.
      * Skips the write if the card source has not changed (hash-based).
      *

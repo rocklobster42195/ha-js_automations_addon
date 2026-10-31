@@ -10,6 +10,8 @@ import { isValidScriptName, missingScriptMessage, resolveScript, type ScriptDirs
 import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
 import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
 import ScriptHeaderParser from './script-header-parser';
+import { cardBase, cardFilePath, hasBlock, mainCardName, stripBlocks, writeCardFile } from './card-files';
+import { appendNotes, MAX_NOTES_CHARS, readNotes, writeNotes } from './script-notes';
 import type { WorkerManagerInstance } from './script-list';
 import type CardManager from './card-manager';
 import type DependencyManager from './dependency-manager';
@@ -22,6 +24,10 @@ export interface McpWriteToolDeps extends ScriptDirs {
   depManager: DependencyManager;
   gitManager: GitManager;
   storeManager: StoreManager;
+  /** Directory of the per-script notes (see script-notes.ts). */
+  notesDir: string;
+  /** Directory of the card source files (see card-files.ts). */
+  cardsDir: string;
   /** STORAGE_DIR (ha-api.d.ts and the generated entity/service typings live here). */
   storageDir: string;
   typesDir: string;
@@ -35,6 +41,15 @@ const CARD_BLOCK = /\/\* __JSA_CARD__[\s\S]*?__JSA_CARD_END__ \*\//;
 // Placeholder read_script leaves where the Base64 card block was; must not be written back.
 const CARD_PLACEHOLDER = /^\/\* card source: see the "Card source" section below \*\/\r?\n?/m;
 const NEW_FILE_NAME = /^[a-z0-9_]+\.(js|ts)$/;
+
+const CARD_RELOAD_HINT =
+  'Frontend: the card is installed or updated when the script runs (restart_script). Dashboards that are already open ' +
+  'keep the old card until the browser tab is hard-reloaded (Ctrl+F5); a brand-new card is unknown to Lovelace until then.';
+const MAX_COMMIT_SUBJECT = 120;
+const COMMIT_MESSAGE_HINT = `Short description for the Git commit (up to ${MAX_COMMIT_SUBJECT} characters; longer text is cut)`;
+// Cut instead of rejecting: a validation error would only surface after the whole source was sent.
+const commitSubject = (message: unknown, fallback: string): string =>
+  `mcp: ${(message ? String(message) : fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_COMMIT_SUBJECT)}`;
 
 const text = (content: string): McpToolResult => ({ content });
 const fail = (message: string): McpToolResult => ({ content: message, isError: true });
@@ -129,7 +144,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       filename: z.string().describe('e.g. "garage_watch.ts" or "libraries/helpers.ts"'),
       content: z.string().describe('The complete file content, starting with the JSDoc header'),
       kind: z.enum(['script', 'library']).optional().describe('Only for new files; default "script"'),
-      message: z.string().max(120).optional().describe('Short description for the Git commit'),
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
     },
     handler: (args) =>
       serialized(async () => {
@@ -192,7 +207,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         }
 
         const verb = existing ? 'update' : 'create';
-        const commitMessage = `mcp: ${args.message ? String(args.message) : `${verb} ${name}`}`;
+        const commitMessage = commitSubject(args.message, `${verb} ${name}`);
         const notes: string[] = [];
         if (existing) {
           const snap = await snapshotNote(fullPath, `mcp: snapshot before changing ${name}`);
@@ -224,6 +239,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           );
         }
         lines.push(notes.join('; '));
+        lines.push(
+          'If this change involved decisions, device quirks or open points that the source does not show, record them with save_script_notes (if available).'
+        );
         const text_ = lines.join('\n') + runningNote(name);
         return text(text_ + (isLibrary ? '\nScripts that @include this library need a restart to pick it up.' : ''));
       }),
@@ -233,13 +251,19 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     name: 'write_card',
     title: 'Write card',
     description:
-      'Sets the Lovelace card of an existing script (a plain Web Component, see the "cards" topic of get_api_reference). ' +
-      'Pass the card as plain JavaScript; JSA encodes and embeds it. The script header needs "@card" (or "@card dev") for ' +
-      'the card to be installed. Committed to Git like write_script.',
+      'Sets a Lovelace card of an existing script (a plain Web Component, see the "cards" topic of get_api_reference). ' +
+      'Pass the card as plain JavaScript; it is stored as its own file cards/<script>-card.js. Without "card" the main ' +
+      'card is written; "card" names a further card of the script and must start with "<script>-" (e.g. ' +
+      '"garmin-day-card" for garmin.ts) — only the main card is installed for now, further ones are just stored. The ' +
+      'script header needs "@card" (or "@card dev") for the card to be installed. Committed to Git like write_script.',
     inputSchema: {
       filename: z.string().describe('The script that owns the card, e.g. "smart_watering.ts"'),
       source: z.string().describe('Card source as plain JavaScript'),
-      message: z.string().max(120).optional().describe('Short description for the Git commit'),
+      card: z
+        .string()
+        .optional()
+        .describe('Name of a further card, e.g. "garmin-day-card"; omit for the main card of the script'),
+      message: z.string().optional().describe(COMMIT_MESSAGE_HINT),
     },
     handler: (args) =>
       serialized(async () => {
@@ -259,30 +283,84 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         if (syntax.length) return fail(`Not written — syntax errors in the card:\n${formatIssues(syntax)}`);
 
         const name = path.basename(found.fullPath);
-        const script = fs.readFileSync(found.fullPath, 'utf8');
-        const block = `/* __JSA_CARD__\n${Buffer.from(source, 'utf8').toString('base64')}\n__JSA_CARD_END__ */`;
-        const next = CARD_BLOCK.test(script)
-          ? script.replace(CARD_BLOCK, () => block)
-          : `${script.trimEnd()}\n\n${block}\n`;
+        const base = cardBase(name);
+        const card = args.card ? String(args.card) : undefined;
+        const isMain = !card || card === mainCardName(base);
+        if (!cardFilePath(deps.cardsDir, base, card)) {
+          return fail(
+            `Invalid card name "${card}". Use lowercase letters, digits, underscores and hyphens, starting with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
+          );
+        }
 
         const notes: string[] = [];
         const snap = await snapshotNote(found.fullPath, `mcp: snapshot before changing card of ${name}`);
         if (snap) notes.push(snap);
-        writeAtomic(found.fullPath, next);
-        notes.push(
-          await commitFile(found.fullPath, `mcp: ${args.message ? String(args.message) : `update card of ${name}`}`)
-        );
+        writeCardFile(deps.cardsDir, base, card, source);
+        // An old embedded block moves out of the script with the first card save (the card file wins anyway).
+        const script = fs.readFileSync(found.fullPath, 'utf8');
+        if (isMain && hasBlock(script)) writeAtomic(found.fullPath, `${stripBlocks(script).trimEnd()}\n`);
+        notes.push(await commitFile(found.fullPath, commitSubject(args.message, `update card of ${name}`)));
         deps.notifyStatusUpdate();
         deps.notifyContentChanged(name);
 
         const meta = ScriptHeaderParser.parse(found.fullPath) as { card?: boolean | string | null };
-        const lines = [`Card of "${name}" updated.`];
-        if (!meta.card)
+        const lines = [`Card "${card ?? mainCardName(base)}" of "${name}" saved (${source.length} characters).`];
+        if (!isMain)
+          lines.push(
+            'This is not the main card: it is stored but not installed yet (only the main card is installed).'
+          );
+        else if (!meta.card)
           lines.push('Note: the header has no "@card" tag yet — add it with write_script so the card gets installed.');
         else if (meta.card === 'dev')
           lines.push('The header says "@card dev": the card is preview-only until you switch it to plain "@card".');
         lines.push(notes.join('; '));
+        lines.push(CARD_RELOAD_HINT);
         return text(lines.join('\n') + runningNote(name));
+      }),
+  });
+
+  protocol.registerTool({
+    name: 'save_script_notes',
+    title: 'Save script notes',
+    description:
+      'Saves notes about a script or library so a later session (or a new chat) can pick up where this one stopped. Write what ' +
+      'is not obvious from the source: decisions and their reasons, entity/device quirks, what was tested live and what not, ' +
+      'open points. Short Markdown, no source code copies, never credentials. mode "append" (default) adds a section; ' +
+      '"replace" rewrites everything (read get_script_notes first and keep what is still true); empty content with "replace" ' +
+      'deletes the notes. Notes are included in backups.',
+    inputSchema: {
+      filename: z.string().describe('File name as shown by list_scripts, e.g. "smart_watering.ts"'),
+      content: z.string().describe('The notes (Markdown)'),
+      mode: z.enum(['append', 'replace']).optional().describe('Default "append"'),
+    },
+    handler: (args) =>
+      serialized(async () => {
+        const filename = String(args.filename ?? '');
+        const content = String(args.content ?? '');
+        const replace = args.mode === 'replace';
+        const found = resolveScript(deps, filename);
+        if (!found) return fail(missingScriptMessage(filename, `No script or library named "${filename}".`));
+        if (!replace && !content.trim()) return fail('The note is empty.');
+        if (maskSecrets(content).masked) {
+          return fail('Not saved — the text contains values that look like credentials. Remove them and save again.');
+        }
+        const name = path.basename(found.fullPath);
+        const current = readNotes(deps.notesDir, found.fullPath, found.isLibrary) ?? '';
+        const total = replace ? content.trim().length : current.length + content.trim().length;
+        if (total > MAX_NOTES_CHARS) {
+          return fail(
+            `Not saved — the notes would exceed ${MAX_NOTES_CHARS} characters. Use mode "replace" with a condensed version.`
+          );
+        }
+        const deleting = replace && !content.trim();
+        if (replace) writeNotes(deps.notesDir, found.fullPath, found.isLibrary, content);
+        else appendNotes(deps.notesDir, found.fullPath, found.isLibrary, content);
+        deps.notifyStatusUpdate();
+        return text(
+          deleting
+            ? `Notes of "${name}" deleted.`
+            : `Notes of "${name}" ${replace ? 'replaced' : 'extended'} (${total} characters).`
+        );
       }),
   });
 
