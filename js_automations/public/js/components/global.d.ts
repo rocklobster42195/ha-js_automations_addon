@@ -213,6 +213,10 @@ export interface JsaTab {
   /** Card tabs only — the parent script's filename (card tab's own filename is
    * `${parentScript}[card]`). */
   parentScript?: string;
+  /** Card tabs only — the card shown in the tab: a further card of the script (`garmin-day-card`); unset = the main card. */
+  card?: string;
+  /** Card tabs only — all cards of the script, main card first (filled when the tab opens). */
+  cards?: string[];
   /** Only present on `type: 'blockly'` tabs — see openBlocklyTab() in tab-manager.js. */
   jsa?: Record<string, unknown>;
   blocksState?: { blocks: unknown; variables: unknown };
@@ -232,7 +236,9 @@ export interface JsaTab {
 export interface JsaCardPreviewBridge {
   open(scriptFilename: string): void;
   close(): void;
-  toggle(scriptFilename: string | null | undefined): void;
+  toggle(scriptFilename: string | null | undefined, card?: string): void;
+  /** Shows another card of the same script and reloads the preview. */
+  setCard(card?: string): void;
   reload(): void;
   isOpen(): boolean;
 }
@@ -440,6 +446,8 @@ declare global {
     BASE_PATH?: string;
     /** Set by tab-manager.js's switchToTab() — the script whose card the preview toggle button controls. */
     _activeCardParentScript?: string | null;
+    /** The further card shown in the active card tab (unset = main card); read by the preview toggle. */
+    _activeCardName?: string;
     _toggleCardPreview?: () => void;
   }
 }

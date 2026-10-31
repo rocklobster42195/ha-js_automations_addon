@@ -243,7 +243,7 @@ test('write tools check, write, commit and delete safely', async (t) => {
 
     const further = await call('write_card', { filename: 'demo.ts', source: next, card: 'demo-day-card' });
     assert.equal(further.isError, false, further.text);
-    assert.match(further.text, /not installed yet/);
+    assert.match(further.text, /installCard\(\{ card: "demo-day-card" \}\)/);
     assert.ok(existsSync(cardFile('demo-day-card')));
     assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: 'other-card' })).isError, true);
     assert.equal((await call('write_card', { filename: 'demo.ts', source: next, card: '../x' })).isError, true);

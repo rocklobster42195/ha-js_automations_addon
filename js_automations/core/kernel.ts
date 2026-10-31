@@ -627,16 +627,8 @@ class Kernel extends EventEmitter {
       // their full 15s timeout) during the busiest window of the boot, when the
       // event loop is also handling the initial state flood and MQTT discovery.
       setTimeout(() => {
-        const knownCardNames = this.workerManager
-          .getScripts()
-          .map((p) => {
-            const meta: any = ScriptHeaderParser.parse(p);
-            if (!meta.card) return null;
-            return path.basename(p, path.extname(p)) + '-card';
-          })
-          .filter((name): name is string => Boolean(name));
         this.cardManager
-          .performStartupCleanup(knownCardNames)
+          .performStartupCleanup(this.cardManager.knownCardNames(this.workerManager.getScripts()))
           .catch((e) => console.warn('[Kernel] Card startup cleanup failed:', e.message));
       }, 10000);
     } catch (err) {

@@ -423,6 +423,8 @@ export class CardPreview extends LitElement {
   @state() private _excludedEntities: Set<string> = new Set();
 
   private _currentScript: string | null = null;
+  /** A further card of the script (unset = the main card). */
+  private _currentCard: string | undefined;
   private _cardConfig: Record<string, unknown> = {};
   private _discoveryPromise: Promise<void> = Promise.resolve();
   private _freeWidthPx = DEFAULT_FREE_WIDTH;
@@ -439,7 +441,7 @@ export class CardPreview extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.CardPreview = this;
-    window._toggleCardPreview = () => this.toggle(window._activeCardParentScript);
+    window._toggleCardPreview = () => this.toggle(window._activeCardParentScript, window._activeCardName);
     window.addEventListener('message', this._onIframeMessage);
     window.addEventListener('resize', this._onWindowResize);
     this._waitForSocket();
@@ -510,9 +512,9 @@ export class CardPreview extends LitElement {
 
   // ── Public API (window.CardPreview bridge) ────────────────────────────
 
-  open(scriptFilename: string): void {
+  open(scriptFilename: string, card?: string): void {
     if (!scriptFilename) return;
-    this._loadScript(scriptFilename);
+    this._loadScript(scriptFilename, card);
     this.visible = true;
     this._restorePosition();
     this._syncPreviewBtn(true);
@@ -523,15 +525,21 @@ export class CardPreview extends LitElement {
     this._syncPreviewBtn(false);
   }
 
-  toggle(scriptFilename: string | null | undefined): void {
+  toggle(scriptFilename: string | null | undefined, card?: string): void {
     if (!scriptFilename) return;
     if (!this.visible) {
-      this.open(scriptFilename);
-    } else if (this._currentScript !== scriptFilename) {
-      this._loadScript(scriptFilename);
+      this.open(scriptFilename, card);
+    } else if (this._currentScript !== scriptFilename || this._currentCard !== card) {
+      this._loadScript(scriptFilename, card);
     } else {
       this.close();
     }
+  }
+
+  /** The editor switched to another card of the script: show that one (the preview reloads if it is open). */
+  setCard(card?: string): void {
+    this._currentCard = card;
+    if (this.visible) this.reload();
   }
 
   reload(): void {
@@ -557,11 +565,13 @@ export class CardPreview extends LitElement {
 
   private _previewUrl(filename: string): string {
     const base = window.BASE_PATH ?? '/';
-    return `${base}api/scripts/${filename}/card/preview-html?t=${Date.now()}`;
+    const card = this._currentCard ? `&card=${encodeURIComponent(this._currentCard)}` : '';
+    return `${base}api/scripts/${filename}/card/preview-html?t=${Date.now()}${card}`;
   }
 
-  private _loadScript(filename: string): void {
+  private _loadScript(filename: string, card?: string): void {
     this._currentScript = filename;
+    this._currentCard = card;
     this._title = filename.replace(/\.[^.]+$/, '') + ' — card';
     this._clearErrors();
 

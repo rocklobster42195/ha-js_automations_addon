@@ -289,7 +289,9 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     const meta = ScriptHeaderParser.parse(found.fullPath) as { card?: boolean | string | null };
     const lines = [`Card "${card ?? mainCardName(base)}" of "${name}" saved (${source.length} characters).`];
     if (!isMain)
-      lines.push('This is not the main card: it is stored but not installed yet (only the main card is installed).');
+      lines.push(
+        `This is a further card: it is installed when the script calls ha.frontend.installCard({ card: "${card}" }) (name, description and config are optional there).`
+      );
     else if (!meta.card)
       lines.push('Note: the header has no "@card" tag yet — add it with write_script so the card gets installed.');
     else if (meta.card === 'dev')
@@ -306,7 +308,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       'Sets a Lovelace card of an existing script (a plain Web Component, see the "cards" topic of get_api_reference). ' +
       'Pass the card as plain JavaScript; it is stored as its own file cards/<script>-card.js. Without "card" the main ' +
       'card is written; "card" names a further card of the script and must start with "<script>-" (e.g. ' +
-      '"garmin-day-card" for garmin.ts) — only the main card is installed for now, further ones are just stored. The ' +
+      '"garmin-day-card" for garmin.ts); the script installs it with ha.frontend.installCard({ card: "garmin-day-card" }), the ' +
+      'main card with ha.frontend.installCard(). The ' +
       'script header needs "@card" (or "@card dev") for the card to be installed. Committed to Git like write_script.',
     inputSchema: {
       filename: z.string().describe('The script that owns the card, e.g. "smart_watering.ts"'),

@@ -113,6 +113,23 @@ The script list shows a dashboard icon (`mdi:view-dashboard-outline`) next to an
 
 Switch from `@card dev` to plain `@card` (and restart the script, or click the install action) once you're happy with the preview and want it live on your dashboard.
 
+## Several cards in one script
+
+A script can ship more than one card (for example a Garmin script with `custom:garmin-card` and `custom:garmin-day-card`). Each card is its own file in `cards/`, named after the script: `garmin-card.js` is the main card, every further one is `garmin-<name>-card.js`. In the script, install each card with its own call:
+
+```javascript
+await ha.frontend.installCard(); // the main card
+await ha.frontend.installCard({ card: 'garmin-day-card', name: 'Garmin Day', description: 'Today at a glance' });
+```
+
+- **One file and one Lovelace resource per card**, each with its own hash: changing one card reloads only that card.
+- **Picker entry:** JS Automations adds the "Add Card" entry for you (with `preview: true`, so the picker renders the card). `name` and `description` are optional; by default a further card is called "<script name> – <card name>" and uses the script description. `config` is the stub config of that one card.
+- If an old card still pushes its own `window.customCards` entry, it is not added a second time for the same `type`.
+- **`@card dev`** applies to every card of the script: nothing is installed, the preview shows the card selected in the editor.
+- **Editor:** when a script has more than one card, the card tab shows a selector at the top; the live preview follows the selected card.
+- **MCP:** `write_card` and `edit_card` take `card` to change a further card; `list_scripts` shows all cards of a script.
+- A card that was installed once and whose file you delete is removed from `www` and from Lovelace at the next cleanup.
+
 ## Caching external assets
 
 Cards that show external images — team logos, album art, weather icons — shouldn't hotlink the source URL directly: a hotlinked image depends on that source staying up and fast, which matters a lot more on a flaky kiosk dashboard tablet than in a normal browser. `ha.frontend.cacheAsset(url)` downloads and caches it once under `config/www/`, returning a stable local URL to store on the entity instead:
@@ -130,7 +147,7 @@ See the [API Reference](../API_REFERENCE.md#frontend--card-assets-hafrontend) fo
 - **Sharing:** the download of a script packs its card files into the one file (the card follows as a `/* __JSA_CARD__ ... __JSA_CARD_END__ */` block, Base64-encoded; further cards as `/* __JSA_CARD__ <name>`). Uploading or importing such a file unpacks the blocks into `cards/` again, so a pack is still a single file to hand around. Duplicating a script copies its cards too.
 - **Older scripts** that still carry the block inside the script keep working. The card file wins when both exist; the block moves out of the script the next time you save the card.
 - **Git and backup:** card files are committed together with their script (the script's Commit button also takes its notes and cards along) and are part of the backups. Renaming a script renames its card files; the tag names inside the card code stay, so dashboards using `custom:garmin-card` keep working. Deleting a script deletes its cards (they stay in the Git history and come back with _Aus Repo_).
-- Only the main card (`<script>-card.js`) is installed into Lovelace for now.
+- **Installing:** `ha.frontend.installCard()` installs the main card (`<script>-card.js`). A further card is installed with `ha.frontend.installCard({ card: 'garmin-day-card' })`; each card gets its own file in `www`, its own Lovelace resource and its own cache-busting hash, so changing one card reloads only that card. See [Several cards in one script](#several-cards-in-one-script).
 
 ## Under the hood
 

@@ -266,6 +266,8 @@ try {
 } catch (_) {}
 ```
 
+A script can have several cards (see [Script Packs](./card-packs.md#several-cards-in-one-script)): `ha.frontend.installCard()` installs the main card, `ha.frontend.installCard({ card: '<script>-<name>-card' })` a further one.
+
 **Where the card lives:** the card source is a plain JavaScript file `cards/<script>-card.js` (for `counter.ts`: `cards/counter-card.js`). Write it with the card editor tab or the `write_card` MCP tool; never put it inside the script. (Older scripts may still carry it as a Base64 `__JSA_CARD__` block at the end of the script; that block is only the single-file form used for sharing, and it moves into the card file the next time the card is saved.) See `examples/counter_card.ts` for the complete script that goes with the card above.
 
 Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `--primary-text-color`, ...) so the card follows the user's theme, use a Shadow DOM, avoid framework dependencies, and keep first-time defaults sensible via `getStubConfig()` / `installCard({ config })`.

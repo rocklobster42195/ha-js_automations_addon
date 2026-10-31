@@ -255,7 +255,8 @@ export = (
     const fullPath = getFilePath(filename);
     if (!fullPath) return res.status(404).send('<h1>Script not found</h1>');
 
-    const cardSource = cardManager ? cardManager.getCardSource(fullPath) : null;
+    const card = typeof req.query.card === 'string' ? req.query.card : undefined;
+    const cardSource = cardManager ? cardManager.getCardSource(fullPath, card) : null;
     if (!cardSource) return res.status(404).send('<h1>This script has no card</h1>');
 
     const scriptName = filename.replace(/\.[^.]+$/, '');
@@ -616,6 +617,13 @@ export = (
   </script>
 </body>
 </html>`);
+  });
+
+  // GET the cards of a script (main card first): feeds the card selector of the editor
+  router.get('/:filename/cards', (req, res) => {
+    const fullPath = getFilePath(req.params.filename);
+    if (!fullPath) return res.status(404).json({ error: 'File not found' });
+    res.json({ cards: cardManager ? cardManager.listCards(fullPath) : [] });
   });
 
   // GET Card Source: the card file, or (old scripts) the decoded __JSA_CARD__ block

@@ -1117,7 +1117,7 @@ class WorkerManager extends EventEmitter {
             .installCard(fullPath, { ...msg.options, devMode })
             .then((url) => {
               if (!devMode) {
-                const cardName = `${path.basename(fullPath, path.extname(fullPath))}-card`;
+                const cardName = msg.options?.card || `${path.basename(fullPath, path.extname(fullPath))}-card`;
                 const staticUrl = `/local/jsa-cards/${cardName}.js`;
                 this.emit('log', {
                   source: path.basename(fullPath, path.extname(fullPath)),
@@ -1130,14 +1130,9 @@ class WorkerManager extends EventEmitter {
                 });
                 // Fire-and-forget: clean up orphaned resources after each install
                 // so dev iterations don't accumulate stale Lovelace entries.
-                const knownCardNames = this.getScripts()
-                  .map((p) => {
-                    const meta: any = ScriptHeaderParser.parse(p);
-                    if (!meta.card) return null;
-                    return path.basename(p, path.extname(p)) + '-card';
-                  })
-                  .filter(Boolean) as string[];
-                this.cardManager!.performStartupCleanup(knownCardNames).catch(() => {});
+                this.cardManager!.performStartupCleanup(this.cardManager!.knownCardNames(this.getScripts())).catch(
+                  () => {}
+                );
               }
               worker.postMessage({ type: 'install_card_response', callId: msg.callId, url });
             })

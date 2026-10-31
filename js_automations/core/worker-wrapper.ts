@@ -1237,6 +1237,9 @@ const ha: any = {
      * In @card dev mode the file write and Lovelace registration are skipped;
      * the preview panel is updated live instead.
      *
+     * @param options.card - A further card of the script (cards/<script>-<x>-card.js, name without .js); default: the main card
+     * @param options.name - Name in the "Add Card" picker (default: script name, a further card: plus the card name)
+     * @param options.description - Description in the picker (default: the script description)
      * @param options.config - Config object passed to setConfig() on first connect
      * @param options.force - Force reinstall even if hash matches
      * @returns Installed resource URL

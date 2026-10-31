@@ -1172,6 +1172,27 @@ await ha.frontend.installCard({
 });
 ```
 
+| Option        | Type      | Description                                                                                                                                                                                                                                        |
+| ------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `card`        | `string`  | A **further card** of the script: the name of its file in `cards/` without `.js`, e.g. `garmin-day-card` for the script `garmin` (it must start with the script name and a hyphen). Omit it for the main card. Rejects if the file does not exist. |
+| `name`        | `string`  | Name in the "Add Card" picker. Default: the script name; a further card: the script name plus the card name (`Garmin – Day`).                                                                                                                      |
+| `description` | `string`  | Description in the picker. Default: the script description.                                                                                                                                                                                        |
+| `config`      | `object`  | Default config the picker pre-fills (`getStubConfig()`), for **this** card only.                                                                                                                                                                   |
+| `force`       | `boolean` | Reinstall even if the source is unchanged.                                                                                                                                                                                                         |
+
+**Several cards in one script:** call `installCard` once per card. Each card gets its own file in `config/www/jsa-cards/`, its own Lovelace resource and its own cache-busting hash, so changing one card reloads only that card. The picker entry (`window.customCards`) is added for you with `preview: true`; an entry of the same `type` that the card pushes itself is not added twice.
+
+```javascript
+// cards/garmin-card.js and cards/garmin-day-card.js belong to the script garmin.ts
+await ha.frontend.installCard();
+await ha.frontend.installCard({
+  card: 'garmin-day-card',
+  name: 'Garmin Tag',
+  description: 'Today at a glance',
+  config: { days: 1 },
+});
+```
+
 ### `ha.frontend.cacheAsset(url, options?)`
 
 Downloads an external URL **once** and caches it under `config/www/jsa-cards/assets/<script>/`, returning a stable `/local/...` URL — reachable from **any device on the HA instance**, not routed through the add-on's own ingress. Use this instead of hotlinking third-party images/assets directly into a card config or entity attribute (team logos, album art, avatars, ...).

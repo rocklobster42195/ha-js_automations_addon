@@ -26,6 +26,7 @@ interface DependencyManagerLike {
 
 interface CardManagerLike {
   performStartupCleanup(knownCardNames: string[]): Promise<void>;
+  knownCardNames(scriptPaths: string[]): string[];
 }
 
 interface ScriptWatcherLike {
@@ -301,16 +302,7 @@ class RestoreManager {
    * when their worker starts (already covered by restartAllWorkers), this just removes orphaned
    * Lovelace resources/card files for scripts that no longer exist or no longer carry @card. */
   private async rebuildCards(): Promise<void> {
-    const knownCardNames = this.workerManager
-      .getScripts()
-      .map((p) => {
-        const meta: any = ScriptHeaderParser.parse(p);
-        if (!meta.card) return null;
-        return path.basename(p, path.extname(p)) + '-card';
-      })
-      .filter((name): name is string => Boolean(name));
-
-    await this.cardManager.performStartupCleanup(knownCardNames);
+    await this.cardManager.performStartupCleanup(this.cardManager.knownCardNames(this.workerManager.getScripts()));
   }
 
   /** Reuses BackupManager's zip-write logic, writing into its dedicated pre-restore bucket

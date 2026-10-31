@@ -679,6 +679,7 @@
   "cap_preview_undeclared_list": "Nicht deklariert:",
   "cap_preview_confirm": "Import bestätigen",
   "script_notes_badge_title": "Notizen vorhanden",
+  "card_select_title": "Karte dieses Skripts",
   "cap_tip_network": "Netzwerkzugriff (deklariert)",
   "cap_tip_fs_read": "Lesezugriff auf Dateien (deklariert)",
   "cap_tip_fs_write": "Schreibzugriff auf Dateien (deklariert)",

@@ -679,6 +679,7 @@
   "cap_preview_undeclared_list": "Undeclared:",
   "cap_preview_confirm": "Confirm Import",
   "script_notes_badge_title": "Has notes",
+  "card_select_title": "Card of this script",
   "cap_tip_network": "Network access (declared)",
   "cap_tip_fs_read": "File read access (declared)",
   "cap_tip_fs_write": "File write access (declared)",

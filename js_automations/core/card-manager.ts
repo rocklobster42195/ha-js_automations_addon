@@ -10,7 +10,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import ScriptHeaderParser from './script-header-parser';
-import { cardBase, readCardFile, removeCardFiles } from './card-files';
+import {
+  cardBase,
+  cardFilePath as cardSourcePath,
+  listCardNames,
+  mainCardName,
+  readCardFile,
+  removeCardFiles,
+} from './card-files';
 import type HAConnector from './ha-connection';
 
 const CARD_START = '__JSA_CARD__';
@@ -308,6 +315,12 @@ interface AssetFailure {
 interface InstallCardOptions {
   force?: boolean;
   devMode?: boolean;
+  /** A further card of the script (file cards/<script>-<x>-card.js); omitted = the main card. */
+  card?: string;
+  /** Name shown in the "Add Card" picker; default: the script name (further cards: plus the name of the card). */
+  name?: string;
+  /** Description shown in the picker; default: the script description. */
+  description?: string;
   /**
    * Default config Lovelace should pre-fill when a user adds this card via the "Add Card"
    * picker. Implemented as an injected `getStubConfig()` static — HA's own card-picker
@@ -379,11 +392,24 @@ class CardManager {
    * @returns Resource URL, e.g. /local/jsa-cards/openligadb-card.js?v=a3f8c21b
    */
   async installCard(scriptFilePath: string, options: InstallCardOptions = {}): Promise<string> {
-    const cardCode = this._extractCardBlock(scriptFilePath);
-    if (!cardCode) throw new Error('No __JSA_CARD__ block found in script.');
-
     const scriptName = path.basename(scriptFilePath, path.extname(scriptFilePath));
-    const cardName = `${scriptName}-card`;
+    const mainName = mainCardName(scriptName);
+    const card = options.card && options.card !== mainName ? options.card : undefined;
+    const cardName = card ?? mainName;
+    if (card && !(this.cardsDir && cardSourcePath(this.cardsDir, scriptName, card))) {
+      throw new Error(
+        `Invalid card name "${card}": it must start with "${scriptName}-" and match a file cards/${scriptName}-<name>-card.js.`
+      );
+    }
+    const cardCode =
+      card && this.cardsDir ? readCardFile(this.cardsDir, scriptName, card) : this._extractCardBlock(scriptFilePath);
+    if (!cardCode) {
+      throw new Error(
+        card
+          ? `Card "${card}" not found: expected the file cards/${card}.js.`
+          : `No card found for this script: expected the file cards/${mainName}.js.`
+      );
+    }
 
     if (options.devMode) {
       // Dev mode: no file write, no Lovelace registration — preview uses live card code,
@@ -407,10 +433,15 @@ class CardManager {
     // never upgrades to the real component, leaving the "Add Card" preview stuck spinning.
     const definedTagMatch = cardCode.match(/customElements\.define\(\s*['"]([a-z0-9-]+)['"]/i);
     const pickerType = definedTagMatch ? definedTagMatch[1] : cardName;
+    const baseTitle = metaName || scriptName;
+    const pickerName = options.name || (card ? `${baseTitle} – ${this._cardTitle(scriptName, cardName)}` : baseTitle);
+    const pickerDescription = options.description ?? metaDescription ?? '';
+    // Skipped when an entry of this type exists already (a card that still pushes its own entry by hand).
     const pickerEntry =
       `window.customCards = window.customCards || [];\n` +
-      `window.customCards.push({ type: '${pickerType}', name: ${JSON.stringify(metaName || scriptName)}, ` +
-      `description: ${JSON.stringify(metaDescription || '')}, preview: true });\n\n`;
+      `if (!window.customCards.some(function (c) { return c.type === '${pickerType}'; })) {\n` +
+      `  window.customCards.push({ type: '${pickerType}', name: ${JSON.stringify(pickerName)}, ` +
+      `description: ${JSON.stringify(pickerDescription)}, preview: true });\n}\n\n`;
 
     // Suggest a default config for the "Add Card" picker's YAML editor, if the script provided
     // one via ha.frontend.installCard({ config }). Only sets it when the card doesn't already
@@ -434,7 +465,9 @@ class CardManager {
     const shortHash = hash.slice(0, 8);
     const resourceUrl = `/local/jsa-cards/${cardName}.js?v=${shortHash}`;
 
-    const existing = this.registry[scriptName];
+    // The main card keeps its entry under the script name; further cards are registered under their own name.
+    const registryKey = card ? cardName : scriptName;
+    const existing = this.registry[registryKey];
     const cardFilePath = path.join(this.wwwCardsDir, `${cardName}.js`);
     if (!options.force && existing?.hash === hash && existing?.resourceId && fs.existsSync(cardFilePath)) {
       return existing.resourceUrl;
@@ -459,7 +492,7 @@ class CardManager {
     }
 
     // Persist to registry
-    this.registry[scriptName] = { hash, resourceUrl, resourceId, cardName };
+    this.registry[registryKey] = { hash, resourceUrl, resourceId, cardName };
     this._saveRegistry();
 
     return resourceUrl;
@@ -479,7 +512,14 @@ class CardManager {
     // The card source files go with their script (Git history keeps them).
     if (this.cardsDir) removeCardFiles(this.cardsDir, scriptName);
 
-    const entry = this.registry[scriptName];
+    // The main card and every further card of the script (registered as <script>-<x>-card).
+    const keys = Object.keys(this.registry).filter((k) => k === scriptName || k.startsWith(`${scriptName}-`));
+    for (const key of keys) this._removeInstalled(key);
+  }
+
+  /** Removes one installed card: its file in www, its Lovelace resource and its registry entry. */
+  private _removeInstalled(registryKey: string): void {
+    const entry = this.registry[registryKey];
     if (!entry) return;
 
     // Delete the card file if it exists
@@ -516,7 +556,7 @@ class CardManager {
       }
     }
 
-    delete this.registry[scriptName];
+    delete this.registry[registryKey];
     this._saveRegistry();
   }
 
@@ -600,8 +640,41 @@ class CardManager {
    * legacy embedded block; `card` selects a further card of the script (file only).
    */
   getCardSource(scriptFilePath: string, card?: string): string | null {
-    if (card) return this.cardsDir ? readCardFile(this.cardsDir, cardBase(scriptFilePath), card) : null;
+    if (card && card !== mainCardName(cardBase(scriptFilePath))) {
+      return this.cardsDir ? readCardFile(this.cardsDir, cardBase(scriptFilePath), card) : null;
+    }
     return this._extractCardBlock(scriptFilePath);
+  }
+
+  /** The cards of a script, main card first: its card files, plus an old main card that is still embedded. */
+  listCards(scriptFilePath: string): { name: string; embedded?: true }[] {
+    const base = cardBase(scriptFilePath);
+    const main = mainCardName(base);
+    const cards: { name: string; embedded?: true }[] = this.cardsDir
+      ? listCardNames(this.cardsDir, base).map((name) => ({ name }))
+      : [];
+    if (!cards.some((c) => c.name === main) && this._extractCardBlock(scriptFilePath) !== null) {
+      cards.unshift({ name: main, embedded: true });
+    }
+    return cards;
+  }
+
+  /** Card names that belong to the given scripts (those with an @card header): the main card and every card file. */
+  knownCardNames(scriptPaths: string[]): string[] {
+    const names: string[] = [];
+    for (const p of scriptPaths) {
+      const meta: any = ScriptHeaderParser.parse(p);
+      if (!meta.card) continue;
+      const base = cardBase(p);
+      names.push(mainCardName(base), ...(this.cardsDir ? listCardNames(this.cardsDir, base) : []));
+    }
+    return [...new Set(names)];
+  }
+
+  /** "Day" for garmin-day-card of the script garmin: the part that tells the cards of one script apart. */
+  private _cardTitle(scriptName: string, cardName: string): string {
+    const part = cardName.slice(scriptName.length + 1).replace(/-card$/, '');
+    return (part || cardName).replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   /** True when the script has a card file or a legacy embedded block. */
