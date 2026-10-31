@@ -13,6 +13,8 @@ export interface McpToolResult {
   isError?: boolean;
   /** Extra text for the MCP tab's activity view (e.g. the code a snippet ran); never sent to the model. */
   activityDetail?: string;
+  /** Short error text for the activity view of a failed call, instead of the whole text sent to the model. */
+  activityError?: string;
 }
 
 export interface McpToolDefinition {
@@ -210,7 +212,7 @@ export class McpProtocol {
       ok = !result.isError;
       detail = result.activityDetail ?? null;
       text = typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2);
-      if (!ok) error = text;
+      if (!ok) error = result.activityError ?? text;
     } catch (e) {
       ok = false;
       error = (e as Error).message;

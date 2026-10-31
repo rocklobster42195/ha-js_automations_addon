@@ -245,6 +245,9 @@ test('run_snippet runs the code in the restricted mode and reports what it print
     assert.match(r.text, /Error: boom/);
     assert.doesNotMatch(r.text, /at line 2/, 'the stack is not sent');
     assert.doesNotMatch(r.text, /abcd1234secretvalue/);
+    const entry = activity.list().find((e) => e.tool === 'run_snippet');
+    assert.equal(entry.error, 'boom', 'the MCP tab gets the short error, not the whole text for the model');
+    assert.doesNotMatch(entry.detail, /Error:/, 'the error is not repeated in the detail');
   });
 
   await t.test('a timeout is reported as an error, silence is explained', async () => {

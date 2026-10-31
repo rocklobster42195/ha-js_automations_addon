@@ -203,7 +203,8 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
           content: SNIPPET_NOTICE + maskWithNotice(body),
           isError: !!error,
           // what the MCP tab shows: the code that ran, and the beginning of what it printed
-          activityDetail: code + NL + NL + '--- output ---' + NL + shown.slice(0, 1500) + errorLine,
+          activityDetail: code + NL + NL + '--- output ---' + NL + shown.slice(0, 1500),
+          ...(error ? { activityError: error } : {}),
         };
       } finally {
         snippetRunning = false;
