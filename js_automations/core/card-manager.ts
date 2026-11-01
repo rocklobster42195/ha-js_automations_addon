@@ -18,6 +18,7 @@ import {
   readCardFile,
   removeCardFiles,
 } from './card-files';
+import { CARD_EDIT_RUNTIME_SOURCE } from './card-edit-runtime';
 import type HAConnector from './ha-connection';
 
 const CARD_START = '__JSA_CARD__';
@@ -31,9 +32,14 @@ const ASSET_FAILURE_COOLDOWN_MAX_MS = 15 * 60 * 1000; // cap for a server-provid
 
 // Injected before the card code at install time.
 // Provides __jsa__.callAction() → HA Event Bus transport back to the addon.
-// {{SCRIPT_ID}} is replaced with the script's base filename at install time.
-const JSA_PREAMBLE = `/* __jsa__ v6 — injected by JS Automations */
+// {{SCRIPT_ID}} is replaced with the script's base filename at install time,
+// {{EDIT_META}} with the JSON { name, icon } shown in the edit-mode placeholder.
+// The edit runtime (core/card-edit-runtime.ts) keeps self-hiding cards visible in the
+// dashboard edit mode / picker preview; its define() hook is released after this card file ran.
+const JSA_PREAMBLE = `/* __jsa__ v7 — injected by JS Automations */
 let __jsa_hass__ = null;
+const __jsaEdit__ = (${CARD_EDIT_RUNTIME_SOURCE})(window, {{EDIT_META}});
+__jsaEdit__.installDefineHook();
 const __jsa__ = (() => {
   let _conn = null;
   let _hass = null;
@@ -61,8 +67,13 @@ const __jsa__ = (() => {
     connect(hass) {
       const conn = hass.connection;
       if (_conn !== conn) { _conn = conn; _hass = hass; __jsa_hass__ = hass; }
+      __jsaEdit__.setHass(hass);
       _startHeartbeat();
     },
+    // True while the dashboard is in edit mode or the card is shown in the card picker preview.
+    isEditing(hostEl) { return __jsaEdit__.isEditing(hostEl); },
+    // True only inside the card picker / editor preview.
+    isPreview(hostEl) { return __jsaEdit__.isPreview(hostEl); },
     updateConfig(config) {
       const prev = _cardCfg.instanceId;
       _cardCfg = config || {};
@@ -418,14 +429,12 @@ class CardManager {
       return `/local/jsa-cards/${cardName}.js?v=${devHash}`;
     }
 
-    // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
-    const preamble = JSA_PREAMBLE.replace('{{SCRIPT_ID}}', scriptName);
-
-    const wrappedCode = cardCode;
-
     const scriptMeta = ScriptHeaderParser.parse(scriptFilePath);
     const metaName = 'name' in scriptMeta ? scriptMeta.name : undefined;
     const metaDescription = 'description' in scriptMeta ? scriptMeta.description : undefined;
+    const metaIcon = 'icon' in scriptMeta ? scriptMeta.icon : undefined;
+
+    const wrappedCode = cardCode;
     // The picker's advertised type must match whatever tag the card actually registers via
     // customElements.define() — cardName (derived from the script filename, underscores intact)
     // is only a naming convention for the file/resourceUrl and can differ from it (e.g. authors
@@ -436,6 +445,13 @@ class CardManager {
     const baseTitle = metaName || scriptName;
     const pickerName = options.name || (card ? `${baseTitle} – ${this._cardTitle(scriptName, cardName)}` : baseTitle);
     const pickerDescription = options.description ?? metaDescription ?? '';
+
+    // Prepend __jsa__ preamble ({{SCRIPT_ID}} → scriptName)
+    const editMeta = JSON.stringify({ name: pickerName, icon: metaIcon || 'mdi:eye-off-outline' });
+    const preamble = JSA_PREAMBLE.replaceAll('{{SCRIPT_ID}}', () => scriptName).replace(
+      '{{EDIT_META}}',
+      () => editMeta
+    );
     // Skipped when an entry of this type exists already (a card that still pushes its own entry by hand).
     const pickerEntry =
       `window.customCards = window.customCards || [];\n` +

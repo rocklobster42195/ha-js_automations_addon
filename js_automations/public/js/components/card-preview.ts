@@ -124,6 +124,9 @@ export class CardPreview extends LitElement {
       color: var(--text-primary, #e0e0e0);
       background: #333;
     }
+    .preview-action-btn.active {
+      color: var(--accent, #03a9f4);
+    }
 
     .preview-width-bar {
       display: flex;
@@ -411,6 +414,7 @@ export class CardPreview extends LitElement {
   @state() private _entitySource: EntitySource = 'guessed';
   @state() private _errors: PreviewError[] = [];
   @state() private _width: WidthPreset = '380';
+  @state() private _editMode = false;
   @state() private _newEntityId = '';
   @state() private _newEntityState = '';
   @state() private _editingAttrsFor: string | null = null;
@@ -815,6 +819,11 @@ export class CardPreview extends LitElement {
     win.postMessage({ type: 'jsa-set-config', config: { _stub: true, ...this._cardConfig } }, '*');
   }
 
+  /** Simulates the dashboard edit mode inside the preview (self-hiding cards show their placeholder). */
+  private _pushEditModeToIframe(): void {
+    this._iframe()?.contentWindow?.postMessage({ type: 'jsa-set-edit', editMode: this._editMode }, '*');
+  }
+
   private _pushHassToIframe(): void {
     const win = this._iframe()?.contentWindow;
     if (!win) return;
@@ -853,6 +862,7 @@ export class CardPreview extends LitElement {
     if (e.data.type === 'jsa-card-loaded') {
       // Push stored config immediately so the card uses the right entityId from the start.
       this._pushConfigToIframe();
+      this._pushEditModeToIframe();
       // Push whatever mockStates we already have (from localStorage) so the card renders
       // immediately rather than waiting for discovery (which requires a socket round-trip).
       this._pushHassToIframe();
@@ -1115,6 +1125,16 @@ export class CardPreview extends LitElement {
             @click=${() => this._iframe()?.contentWindow?.postMessage({ type: 'jsa-open-editor' }, '*')}
           >
             <i class="mdi mdi-cog-outline"></i>
+          </button>
+          <button
+            class="preview-action-btn ${this._editMode ? 'active' : ''}"
+            title=${this._t('preview.edit_mode', 'Simulate dashboard edit mode')}
+            @click=${() => {
+              this._editMode = !this._editMode;
+              this._pushEditModeToIframe();
+            }}
+          >
+            <i class="mdi mdi-pencil-outline"></i>
           </button>
           <button class="preview-action-btn" title="Reload preview" @click=${() => this.reload()}>
             <i class="mdi mdi-refresh"></i>

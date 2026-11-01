@@ -990,7 +990,21 @@ The resource URL has the format `/local/jsa-cards/<scriptName>-card.js?v=<shortH
 - Provides a mock `hass` object with `states`, `callService`, `connection`, etc.
 - Injects the decoded card source directly (no file write, no Lovelace required)
 - Injects a mock `__jsa__` object that forwards `callAction()` via `fetch()` to the JSA HTTP API (instead of the HA Event Bus) — so Script Pack actions work in the preview without an active HA WebSocket connection
+- Embeds the edit-mode runtime (see [Edit-Mode Runtime](#edit-mode-runtime)); the mock `__jsa__` provides `isEditing()`/`isPreview()`, and a `jsa-set-edit` `postMessage` switches the simulated dashboard edit mode
 - Receives state injection via `postMessage` — the IDE preview panel sends real HA entity states using `postMessage({ type: 'jsa-set-hass', states: {...} })`, which the preview page merges into the mock `hass.states` object and re-renders the card (added in v2.51.3)
+
+### Edit-Mode Runtime
+
+`core/card-edit-runtime.ts` exports `createCardEditRuntime(win, meta)`. Its source (`Function.prototype.toString()`) is embedded into `JSA_PREAMBLE` as `(<source>)(window, {{EDIT_META}})`; `meta` is `{ name, icon }` (picker name and `@icon` of the script). The factory is self-contained and takes the window as a parameter, so unit tests drive it with a fake window.
+
+- **Hook:** `installDefineHook()` wraps `customElements.define` so the card class is patched (`connectedCallback`, `disconnectedCallback`, `hass` setter) before registration — lifecycle callbacks are read at define time, patching afterwards would be ignored. The wrapper deactivates itself and restores `define` in a microtask, i.e. after the card file ran, even if that threw.
+- **Detection fallback chain:** ancestors through shadow roots/slots (`hui-card-preview` / `hui-card-picker` → preview; `hui-card-options` / `hui-card-edit-mode` (unless `editMode === false`) / `hui-card` with `preview === true` / any ancestor with `lovelace.editMode` → edit); an ancestor exposing `lovelace` is authoritative; `?edit=1` only if none was seen. Exposed as `__jsa__.isEditing(host)` / `isPreview(host)`.
+- **Hidden check:** `hidden` attribute, computed `display:none` / `visibility:collapse`, or all client rects zero-sized (only once the card rendered something; no rects at all means an ancestor is hidden and is ignored).
+- **Placeholder:** a `<style>` (`:host{display:block!important}`) and a box, both tagged `data-jsa-edit`, appended to the shadow root. While measuring, the own nodes are disabled so they never influence the result. A `MutationObserver` on the shadow root (own nodes filtered, records dropped after each run) re-evaluates synchronously before paint; a second one watches `hidden`/`style`/`class` of the host. `location-changed` and `popstate` on the window re-evaluate immediately, on the next frame and after 300 ms (HA updates its wrappers a moment after the URL changes). Window listeners exist only while at least one card is attached.
+- **`getPreview()`:** a static method of the card class; returns an HTML string or Node, shown instead of the generic box; errors fall back to the generic box.
+- **Limits:** closed shadow roots; a `hass` accessor that is only created later (Lit `static properties`) is not wrapped, the observers cover that case. The editor preview (`/card/preview-html`) embeds the same runtime; its mock `__jsa__` delegates `isEditing`/`isPreview` to it and simulates the edit mode by setting `lovelace.editMode` on `#card-container` (`jsa-set-edit` message, toggled by the pencil button of the preview panel).
+
+Tests: `test/card-edit-runtime.test.js` (logic with fakes), `js_automations/public/js/components/card-edit-runtime.test.ts` (real Chromium). Manual checklist: `docs/internal/card-edit-mode-test-plan.md`.
 
 ---
 

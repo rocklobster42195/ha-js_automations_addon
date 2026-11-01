@@ -1,6 +1,6 @@
 <!-- NEXT -->
 
-feat: MCP server for AI assistants, script notes, cards as files and several cards per script
+feat: MCP server for AI assistants, script notes, cards as files, several cards per script and cards that stay visible in edit mode
 
 ### With A Little Help From My Friends
 
@@ -25,6 +25,8 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - **Cards are their own files**: a script's card lives in `cards/<script>-card.js` instead of a Base64 block inside the script, so card edits make readable Git diffs and an assistant can read or change the card on its own. Downloading a script packs its cards into the usual single file; uploading, importing or duplicating unpacks them. Old scripts keep working and move their card out of the script the next time it is saved. Cards are committed with their script, follow a rename and are removed with the script (and come back with *From repo*)
 - **Several cards per script**: `ha.frontend.installCard({ card: 'garmin-day-card', name, description, config })` installs a further card (`cards/<script>-<name>-card.js`) next to the main one. Each card gets its own file in `www`, its own Lovelace resource and its own hash, so changing one reloads only that card. The "Add Card" picker entry is created for you (with a live preview and sensible default texts), and an entry a card still adds by hand is not doubled
 - The editor's card tab has a **card selector** when a script has several cards; the live preview follows the selected card
+- **Cards that hide themselves stay visible while you edit the dashboard**: a card that shows nothing when there is nothing to show (a trash reminder without a pickup) used to vanish in Home Assistant's edit mode, so it could not be moved or edited, and its "Add Card" preview was empty. Now a dashed placeholder with the script's icon and name takes its place in edit mode and in the picker; nothing changes in normal operation. A card can define `static getPreview()` to show its own richer preview instead. Cards can ask `__jsa__.isEditing(this)` / `__jsa__.isPreview(this)`. Works in Masonry, Sections and Panel views and follows the edit mode without a reload
+- The card preview in the editor has a **pencil button that simulates the dashboard edit mode**
 
 **Documentation**
 
@@ -45,6 +47,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 **Fixes**
 
+- Errors thrown inside an installed card are reported to the script's log again (the card's error handler never recognised its own script, so nothing was forwarded)
 - `@card dev` is honoured again by `ha.frontend.installCard()`: the card is no longer written to `www` and registered as a Lovelace resource while the script is still in preview mode
 - The card preview reloads after the card was changed from outside the editor
 - Duplicating a script keeps its `@card` and `@permission` tags; before, the copy lost them and its card was cleaned up as orphaned

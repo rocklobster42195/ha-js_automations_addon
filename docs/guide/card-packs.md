@@ -81,7 +81,29 @@ customElements.define('my-card', MyCard);
 - **`__jsa__.connect(hass)`** subscribes to the HA WebSocket connection once and listens for the script's action results.
 - **`__jsa__.callAction(name, payload)`** fires a `jsa_action` event on the HA event bus. Your script receives it through `ha.action(name, handler)` (see the [API Reference](../API_REFERENCE.md)); the handler's return value flows back as the resolved value of the `callAction()` promise. Requests time out after **20 seconds** if the script never responds.
 
+- **`__jsa__.isEditing(hostEl)`** is `true` while the dashboard is in edit mode or the card is shown in the "Add Card" picker preview. **`__jsa__.isPreview(hostEl)`** is `true` only in the picker / editor preview. Pass the card element (`this`). Don't use `hass.editMode` — it is not part of the Home Assistant API and is always undefined.
+
 Use `ha.action()` for this targeted card → script round trip. For a fire-and-forget broadcast to any number of listeners with no return value, use `ha.fireEvent()`/`ha.onEvent()` instead.
+
+### Cards that hide themselves
+
+A card that renders `:host{display:none}` when there is nothing to show (a trash reminder without a pickup, a warning card without a warning) disappears in Home Assistant's edit mode — it can't be moved or edited — and the picker preview is empty. JSA handles this for every card, no change to your code needed:
+
+- Only in edit mode or the picker preview, and only if the card is hidden (`hidden` attribute, computed `display:none` or zero size), JSA shows a dashed placeholder with the script's `@icon` and `@name` and the text "Currently hidden: nothing to show" (German with a German profile), at about 60 % opacity.
+- Your card's own rendering is never touched, and nothing changes in normal operation. The placeholder follows the card: it disappears as soon as the card shows real content and returns when it hides again.
+- **Richer preview (optional):** define a `static getPreview()` on the card class and return an HTML string or a DOM node. JSA shows that instead of the generic placeholder; it is rendered inside the card's shadow root, so you can include a `<style>` element. If it throws or returns nothing, the generic placeholder is used.
+
+```javascript
+class MyCard extends HTMLElement {
+  static getPreview() {
+    return '<style>.x{opacity:.4}</style><div class="x">Gelbe Tonne · Heute</div>';
+  }
+}
+```
+
+In the editor preview (also with `@card dev`) the pencil button in the preview toolbar simulates the dashboard edit mode, so you can see the placeholder or your `getPreview()` without installing the card.
+
+Cards that use a closed shadow root can't be observed and keep their old behaviour.
 
 ## Adding it to a dashboard
 

@@ -745,6 +745,7 @@
     "mcp_details": "Show or hide details"
   },
   "preview": {
+    "edit_mode": "Simulate dashboard edit mode",
     "card_config": "Card Config",
     "entity_states": "Preview Data",
     "errors": "Errors",

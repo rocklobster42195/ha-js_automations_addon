@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Server as SocketIOServer } from 'socket.io';
 import ScriptHeaderParser from '../core/script-header-parser';
+import { CARD_EDIT_RUNTIME_SOURCE } from '../core/card-edit-runtime';
 import CapabilityAnalyzer from '../core/capability-analyzer';
 import { buildScriptList } from '../core/script-list';
 import { moveNotes, removeNotes } from '../core/script-notes';
@@ -271,6 +272,11 @@ export = (
     const defaultDomain =
       exposeMeta.expose === 'button' ? 'button' : exposeMeta.expose === 'switch' ? 'switch' : 'sensor';
     const safeDefaultDomain = JSON.stringify(defaultDomain);
+    // Same placeholder data as the installed card gets; `<` escaped so a name can't close the script tag.
+    const safeEditMeta = JSON.stringify({
+      name: exposeMeta.name || scriptName,
+      icon: exposeMeta.icon || 'mdi:eye-off-outline',
+    }).replace(/</g, '\u003c');
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -369,6 +375,12 @@ export = (
       if (!_registeredTag) _registeredTag = name; // first definition = the card
       _origDefine(name, cls, opts);
     };
+
+    // ── Edit-mode runtime (same code as in the installed card; hooks the define() of the card below) ──
+    const __jsaEdit__ = (${CARD_EDIT_RUNTIME_SOURCE})(window, ${safeEditMeta});
+    __jsaEdit__.installDefineHook();
+    // The preview simulates the dashboard edit mode through this container (see jsa-set-edit).
+    document.getElementById('card-container').lovelace = { editMode: false };
 
     // ── Mock hass ───────────────────────────────────────────────────────────
     let _mockStates = {};
@@ -470,13 +482,19 @@ export = (
         }
       }
       if (e.data?.type === 'jsa-open-editor') _openEditorModal();
+      if (e.data?.type === 'jsa-set-edit') {
+        document.getElementById('card-container').lovelace = { editMode: !!e.data.editMode };
+        window.dispatchEvent(new Event('location-changed'));
+      }
     });
 
     // ── Mock __jsa__ (preview: routes callAction via JSA HTTP API, no HA event bus needed) ──
     const _jsaApiBase = window.location.pathname.split('/api/scripts')[0] + '/';
     const __jsa__ = {
       scriptId: ${safeScriptName},
-      connect(hass) { /* preview: no-op */ },
+      connect(hass) { __jsaEdit__.setHass(hass); },
+      isEditing(hostEl) { return __jsaEdit__.isEditing(hostEl); },
+      isPreview(hostEl) { return __jsaEdit__.isPreview(hostEl); },
       updateConfig(config) { /* preview: no-op */ },
       ready() { return Promise.resolve(); },
       wizard(hostEl, opts) {
