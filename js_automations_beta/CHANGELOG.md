@@ -1,3 +1,9 @@
+## [3.2.0-beta.7] - 2026-11-01
+
+- feat: keep self-hiding cards visible in dashboard edit mode and picker preview
+
+---
+
 ## [3.2.0-beta.6] - 2026-10-31
 
 - docs: curate the changelog entry of the MCP release
