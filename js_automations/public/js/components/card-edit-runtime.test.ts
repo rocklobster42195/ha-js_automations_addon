@@ -214,6 +214,278 @@ describe('card-edit-runtime (real browser)', () => {
     }
   });
 
+  describe('visibility report to Home Assistant', () => {
+    /** Records every card-visibility-changed event that bubbles up from a card. */
+    function record(): boolean[] {
+      const values: boolean[] = [];
+      document.body.addEventListener('card-visibility-changed', (e) => values.push((e as CustomEvent).detail.value));
+      return values;
+    }
+
+    it('hides the host and reports once when the card hides itself', async () => {
+      const events = record();
+      const { tag } = defineCard();
+      const { card } = mount(tag);
+      await settle();
+      expect(card.hidden).to.be.true;
+      expect(card.style.display).to.equal('none');
+      expect(events).to.deep.equal([false]);
+    });
+
+    it('never reports for a card that is visible', async () => {
+      const events = record();
+      const { tag } = defineCard({ hidden: false });
+      const { card } = mount(tag);
+      await settle();
+      expect(events).to.deep.equal([]);
+      expect(card.hidden).to.be.false;
+    });
+
+    it('reports transitions only, not every evaluation (no feedback loop)', async () => {
+      const events = record();
+      const { tag } = defineCard();
+      const { card } = mount(tag);
+      await settle();
+      for (let i = 0; i < 5; i++) {
+        window.dispatchEvent(new Event('location-changed'));
+        (card as any).hass = {};
+        card.render();
+      }
+      await settle();
+      expect(events).to.deep.equal([false]);
+    });
+
+    it('reports visible when the card shows content again and restores the host', async () => {
+      const events = record();
+      const { tag } = defineCard();
+      const { card } = mount(tag);
+      await settle();
+      card.hidden_ = false;
+      card.render();
+      await settle();
+      expect(events).to.deep.equal([false, true]);
+      expect(card.hidden).to.be.false;
+      expect(card.style.display).to.equal('');
+      expect(getComputedStyle(card).display).to.equal('block');
+    });
+
+    it('counts the placeholder as visible in edit mode and hides again when leaving it', async () => {
+      const events = record();
+      const { tag } = defineCard();
+      const { card } = mount(tag);
+      await settle();
+      expect(events).to.deep.equal([false]);
+
+      history.replaceState(null, '', `${location.pathname}?edit=1`);
+      window.dispatchEvent(new Event('location-changed'));
+      await settle();
+      expect(card.hidden).to.be.false;
+      expect(placeholder(card)).to.exist;
+      expect(events).to.deep.equal([false, true]);
+
+      history.replaceState(null, '', location.pathname);
+      window.dispatchEvent(new Event('location-changed'));
+      await settle();
+      expect(card.hidden).to.be.true;
+      expect(placeholder(card)).to.be.null;
+      expect(events).to.deep.equal([false, true, false]);
+    });
+
+    it('does not read its own hidden attribute as "card hides itself"', async () => {
+      const { tag } = defineCard({ hidden: false });
+      const { card } = mount(tag);
+      await settle();
+      // The card shows content; a stray hidden attribute set by JSA earlier must not stick.
+      card.hidden_ = true;
+      card.render();
+      await settle();
+      expect(card.hidden).to.be.true;
+      card.hidden_ = false;
+      card.render();
+      await settle();
+      expect(card.hidden).to.be.false;
+      expect(placeholder(card)).to.be.null;
+    });
+
+    it('does not double-report for a card that hides itself and fires the event', async () => {
+      const events = record();
+      const rt = createCardEditRuntime(window, META);
+      const tag = `jsa-test-card-${++counter}`;
+      class SelfReporting extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' }).innerHTML = '<style>:host{display:none}</style>';
+        }
+        connectedCallback() {
+          this.hidden = true;
+          this.style.display = 'none';
+          this.dispatchEvent(
+            new CustomEvent('card-visibility-changed', { detail: { value: false }, bubbles: true, composed: true })
+          );
+        }
+      }
+      rt.installDefineHook();
+      customElements.define(tag, SelfReporting);
+      const { card } = mount(tag);
+      await settle();
+      expect(events).to.deep.equal([false]);
+      expect(card.hidden).to.be.true;
+    });
+
+    it('still reports a card that only sets the hidden attribute', async () => {
+      const events = record();
+      const rt = createCardEditRuntime(window, META);
+      const tag = `jsa-test-card-${++counter}`;
+      class AttrOnly extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' }).innerHTML = '';
+        }
+        connectedCallback() {
+          this.hidden = true;
+        }
+      }
+      rt.installDefineHook();
+      customElements.define(tag, AttrOnly);
+      mount(tag);
+      await settle();
+      expect(events).to.deep.equal([false]);
+    });
+
+    it('shows the placeholder for a card that hides itself via the hidden attribute in edit mode', async () => {
+      const events = record();
+      const rt = createCardEditRuntime(window, META);
+      const tag = `jsa-test-card-${++counter}`;
+      class AttrOnly extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' }).innerHTML = '<div style="height:20px">x</div>';
+        }
+        connectedCallback() {
+          this.hidden = true;
+        }
+      }
+      rt.installDefineHook();
+      customElements.define(tag, AttrOnly);
+      const { card } = mount(tag, 'hui-card-options');
+      await settle();
+      expect(placeholder(card)).to.exist;
+      expect(getComputedStyle(card).display).to.equal('block');
+      // HA was never told "hidden", so there is nothing to take back.
+      expect(events).to.deep.equal([]);
+    });
+
+    it('lets go of a removed card at the next navigation', async () => {
+      const { tag } = defineCard();
+      const { card, root } = mount(tag);
+      await settle();
+      expect(card.hidden).to.be.true;
+      root.remove();
+      // Dormant: still marked hidden so that a hui-card does not re-add it.
+      expect(card.hidden).to.be.true;
+      window.dispatchEvent(new Event('location-changed'));
+      await settle();
+      expect(card.hidden).to.be.false;
+      expect(card.style.display).to.equal('');
+    });
+
+    /** Mimics hui-card: hides itself on the card's report, removes hidden cards, re-checks on hass updates. */
+    class FakeHuiCard extends HTMLElement {
+      toggles = 0;
+      fired: boolean[] = [];
+      child!: HTMLElement;
+      adopt(child: HTMLElement) {
+        this.child = child;
+        child.addEventListener('card-visibility-changed', (e) => {
+          e.stopPropagation();
+          this.fired.push((e as CustomEvent).detail.value);
+          this.setVisible((e as CustomEvent).detail.value);
+        });
+        this.appendChild(child);
+      }
+      setVisible(visible: boolean) {
+        if (this.hidden !== !visible) {
+          this.style.display = visible ? '' : 'none';
+          this.toggleAttribute('hidden', !visible);
+          this.toggles++;
+        }
+        if (!visible && this.child.parentElement) this.removeChild(this.child);
+        else if (visible && !this.child.parentElement) this.appendChild(this.child);
+      }
+      /** hui-card._updateVisibility on every hass update */
+      tick() {
+        this.setVisible(!this.child.hidden);
+      }
+    }
+    customElements.define('jsa-fake-hui-card', FakeHuiCard);
+
+    function mountInFakeHuiCard(tag: string) {
+      const hui = document.createElement('jsa-fake-hui-card') as FakeHuiCard;
+      const card = document.createElement(tag) as HTMLElement & { render(): void; hidden_: boolean };
+      document.body.appendChild(hui);
+      hui.adopt(card);
+      return { hui, card };
+    }
+
+    it('does not flap when the frame removes the hidden card and keeps updating it', async () => {
+      const { tag } = defineCard();
+      const { hui, card } = mountInFakeHuiCard(tag);
+      await settle();
+      expect(card.isConnected).to.be.false;
+      expect(hui.hidden).to.be.true;
+      for (let i = 0; i < 20; i++) {
+        hui.tick();
+        (card as any).hass = {};
+      }
+      await settle();
+      expect(card.isConnected).to.be.false;
+      expect(hui.toggles).to.equal(1);
+      expect(hui.fired).to.deep.equal([false]);
+    });
+
+    it('brings a removed card back when it has something to show', async () => {
+      const { tag } = defineCard();
+      const { hui, card } = mountInFakeHuiCard(tag);
+      await settle();
+      card.hidden_ = false;
+      card.render();
+      await settle();
+      expect(card.isConnected).to.be.true;
+      expect(hui.hidden).to.be.false;
+      expect(card.hidden).to.be.false;
+      expect(hui.fired).to.deep.equal([false, true]);
+    });
+
+    it('wakes a removed card when the edit mode is switched by replaceState (no event), then hides it again', async function () {
+      this.timeout(6000);
+      const { tag } = defineCard();
+      const { hui, card } = mountInFakeHuiCard(tag);
+      await settle();
+      expect(card.isConnected).to.be.false;
+
+      history.replaceState(null, '', `${location.pathname}?edit=1`);
+      await aTimeout(1200);
+      expect(card.isConnected).to.be.true;
+      expect(hui.hidden).to.be.false;
+      expect(placeholder(card)).to.exist;
+
+      history.replaceState(null, '', location.pathname);
+      await aTimeout(1200);
+      expect(card.isConnected).to.be.false;
+      expect(hui.hidden).to.be.true;
+    });
+
+    it('does not wake a removed card for another reason than content or navigation', async () => {
+      const { tag } = defineCard();
+      const { hui, card } = mountInFakeHuiCard(tag);
+      await settle();
+      for (let i = 0; i < 10; i++) (card as any).hass = { n: i };
+      hui.tick();
+      await settle();
+      expect(hui.fired).to.deep.equal([false]);
+    });
+  });
+
   it('releases customElements.define after the card file ran', async () => {
     const original = customElements.define;
     defineCard();

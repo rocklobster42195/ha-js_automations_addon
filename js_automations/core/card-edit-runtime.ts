@@ -23,6 +23,12 @@
  *      (panel cards, wrappers that do not expose it).
  * `hass.editMode` is not part of the HA API and is deliberately not used.
  *
+ * Visibility report: a card that hides itself also gets the hidden attribute / inline
+ * display:none on its host and a `card-visibility-changed` event (what hui-card listens to),
+ * so HA collapses the card's frame instead of leaving an empty gap. Only transitions are
+ * reported; while a placeholder is shown the card counts as visible. Cards that already hide
+ * themselves and fire the event are respected (no duplicate event).
+ *
  * Re-evaluation triggers: connect/disconnect, `hass` setter, mutations of the card's shadow
  * tree, attribute changes of the host, and `location-changed` / `popstate` on the window
  * (HA navigates to `?edit=1` when the mode is toggled, no reload needed).
@@ -51,6 +57,8 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
   const decorated = new WeakSet<object>();
   let lastHass: any = null;
   let listening = false;
+  let urlTimer: any = null;
+  let lastSearch = '';
 
   // --- detection -------------------------------------------------------------
 
@@ -212,6 +220,7 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
     box.setAttribute(OWN_ATTR, '');
     root.append(style, box);
     inst.shownLang = lang;
+    startPolling();
   }
 
   function removePlaceholder(inst: any): void {
@@ -222,16 +231,28 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
 
   // --- evaluation ------------------------------------------------------------
 
-  /** Measures the card without our own nodes influencing the result. */
+  /**
+   * Measures whether the card hides itself, without our own changes (placeholder nodes,
+   * the hidden attribute / inline display we set on the host) influencing the result.
+   */
   function measureHidden(inst: any): boolean {
+    const host = inst.host;
     const own = ownNodes(inst.root);
     for (const n of own) {
       if (n.localName === 'style') n.disabled = true;
       else n.hidden = true;
     }
+    if (inst.ownHidden) {
+      host.removeAttribute('hidden');
+      host.style.display = inst.prevDisplay;
+    }
     try {
-      return isHidden(inst.host);
+      return isHidden(host);
     } finally {
+      if (inst.ownHidden) {
+        host.hidden = true;
+        host.style.display = 'none';
+      }
       for (const n of own) {
         if (n.localName === 'style') n.disabled = false;
         else n.hidden = false;
@@ -239,20 +260,64 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
     }
   }
 
+  /**
+   * Tells Home Assistant's hui-card about a visibility change so that it hides its own frame
+   * (and with it the frame's margins) too. Only transitions are reported.
+   */
+  function report(inst: any, visible: boolean): void {
+    if (inst.reported === visible) return;
+    inst.reported = visible;
+    inst.firing = true;
+    try {
+      inst.host.dispatchEvent(
+        new win.CustomEvent('card-visibility-changed', { detail: { value: visible }, bubbles: true, composed: true })
+      );
+    } finally {
+      inst.firing = false;
+    }
+  }
+
+  /**
+   * Mirrors the visibility onto the host and reports it. A host the card has already hidden
+   * itself (hidden attribute / inline display:none) is left alone, only the report is added.
+   */
+  function applyVisibility(inst: any, visible: boolean): void {
+    const host = inst.host;
+    if (visible) {
+      if (inst.ownHidden) {
+        host.removeAttribute('hidden');
+        host.style.display = inst.prevDisplay;
+        inst.ownHidden = false;
+      }
+    } else if (!inst.ownHidden && !host.hidden && host.style.display !== 'none') {
+      inst.prevDisplay = host.style.display;
+      host.hidden = true;
+      host.style.display = 'none';
+      inst.ownHidden = true;
+    }
+    report(inst, visible);
+  }
+
   function evaluate(inst: any): void {
-    if (!inst.attached) return;
+    if (!inst.attached) {
+      if (inst.ownHidden) wake(inst);
+      return;
+    }
     const root = inst.host.shadowRoot;
     if (!root) return;
     if (inst.root !== root) {
       observeRoot(inst, root);
     }
-    if (!detect(inst.host).editing || !measureHidden(inst)) {
-      removePlaceholder(inst);
-    } else {
-      showPlaceholder(inst);
-    }
-    // Drop the records of our own changes so they cannot retrigger the observer.
+    const selfHidden = measureHidden(inst);
+    // In edit mode / picker a hidden card is shown as placeholder and must count as visible,
+    // otherwise Home Assistant collapses its frame and the card can neither be moved nor edited.
+    const showPlaceholderNow = selfHidden && detect(inst.host).editing;
+    if (showPlaceholderNow) showPlaceholder(inst);
+    else removePlaceholder(inst);
+    applyVisibility(inst, !selfHidden || showPlaceholderNow);
+    // Drop the records of our own changes so they cannot retrigger the observers.
     if (inst.mo) inst.mo.takeRecords();
+    if (inst.ho) inst.ho.takeRecords();
   }
 
   function schedule(inst: any): void {
@@ -293,12 +358,41 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
 
   // --- lifecycle -------------------------------------------------------------
 
-  function attach(host: any): void {
+  /** Creates the per-card state; listens for the card's own visibility reports from the start. */
+  function track(host: any): any {
     let inst = host.__jsaEdit;
     if (!inst) {
-      inst = { host, attached: false, root: null, mo: null, ho: null, queued: false, shownLang: null };
+      inst = {
+        host,
+        attached: false,
+        root: null,
+        mo: null,
+        ho: null,
+        queued: false,
+        shownLang: null,
+        // visibility state: what we set on the host, what Home Assistant was told last
+        ownHidden: false,
+        prevDisplay: '',
+        reported: true,
+        firing: false,
+        listening: false,
+        onVisibility: null,
+      };
+      // Reports of the card itself (cards that already fire the event) count as "told".
+      inst.onVisibility = (ev: any) => {
+        if (!inst.firing && ev.detail && typeof ev.detail.value === 'boolean') inst.reported = ev.detail.value;
+      };
       host.__jsaEdit = inst;
     }
+    if (!inst.listening) {
+      inst.listening = true;
+      host.addEventListener('card-visibility-changed', inst.onVisibility);
+    }
+    return inst;
+  }
+
+  function attach(host: any): void {
+    const inst = track(host);
     if (inst.attached) return;
     inst.attached = true;
     instances.add(inst);
@@ -307,28 +401,98 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
       win.addEventListener('location-changed', onNavigation);
       win.addEventListener('popstate', onNavigation);
     }
+    if (inst.ho) inst.ho.disconnect();
     inst.ho = new win.MutationObserver(() => schedule(inst));
     inst.ho.observe(host, { attributes: true, attributeFilter: ['hidden', 'style', 'class'] });
     if (host.shadowRoot) observeRoot(inst, host.shadowRoot);
     schedule(inst);
   }
 
-  function detach(host: any): void {
-    const inst = host.__jsaEdit;
-    if (!inst || !inst.attached) return;
-    inst.attached = false;
+  /**
+   * HA toggles the edit mode with history.replaceState, which fires no event. Cards that are not
+   * in the DOM (dormant) get no re-render, and a card showing its placeholder has to notice when
+   * the edit mode ends, so the URL is polled while at least one of them exists.
+   */
+  function needsPolling(inst: any): boolean {
+    return !inst.attached || inst.shownLang !== null;
+  }
+
+  function pollUrl(): void {
+    const search = win.location.search;
+    if (search !== lastSearch) {
+      lastSearch = search;
+      onNavigation();
+    }
+    stopPollingIfIdle();
+  }
+
+  function startPolling(): void {
+    if (urlTimer) return;
+    lastSearch = win.location.search;
+    urlTimer = win.setInterval(pollUrl, 400);
+  }
+
+  function stopPollingIfIdle(): void {
+    if (urlTimer && ![...instances].some(needsPolling)) {
+      win.clearInterval(urlTimer);
+      urlTimer = null;
+    }
+  }
+
+  /** Releases everything a tracked card holds (observers, listeners, host changes). */
+  function release(inst: any): void {
+    const host = inst.host;
     if (inst.mo) inst.mo.disconnect();
     if (inst.ho) inst.ho.disconnect();
     inst.mo = null;
     inst.ho = null;
     removePlaceholder(inst);
+    host.removeEventListener('card-visibility-changed', inst.onVisibility);
+    inst.listening = false;
+    if (inst.ownHidden) {
+      host.removeAttribute('hidden');
+      host.style.display = inst.prevDisplay;
+      inst.ownHidden = false;
+    }
+    inst.reported = true;
     inst.root = null;
     instances.delete(inst);
+    stopPollingIfIdle();
     if (listening && instances.size === 0) {
       listening = false;
       win.removeEventListener('location-changed', onNavigation);
       win.removeEventListener('popstate', onNavigation);
     }
+  }
+
+  function detach(host: any): void {
+    const inst = host.__jsaEdit;
+    if (!inst || !inst.attached) return;
+    inst.attached = false;
+    removePlaceholder(inst);
+    // hui-card removes a card reported as hidden from the DOM and keeps passing it `hass`. Such a
+    // card stays armed ("dormant", hidden state kept): resetting it would make hui-card re-add the
+    // card on the next hass update, which hides again, and so on. Dormant cards are woken only by
+    // changes of their own content or by a navigation (see wake()).
+    if (!inst.ownHidden) {
+      release(inst);
+    } else {
+      startPolling();
+    }
+  }
+
+  /**
+   * A dormant card (detached while hidden by us) may have something to show now, or the dashboard
+   * switched to edit mode. Layout can't be measured while detached, so show it again: hui-card
+   * re-attaches a visible card, our attach() then measures and hides it again if it still has
+   * nothing to show. All of that happens before the next paint. Without a re-attach (the card is
+   * gone for good) the tracking ends here.
+   */
+  function wake(inst: any): void {
+    applyVisibility(inst, true);
+    if (inst.mo) inst.mo.takeRecords();
+    if (inst.ho) inst.ho.takeRecords();
+    if (!inst.attached) release(inst);
   }
 
   /** Hooks a card class so that every instance is managed. Must run before define(). */
@@ -339,6 +503,8 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
     const connected = proto.connectedCallback;
     const disconnected = proto.disconnectedCallback;
     proto.connectedCallback = function (this: any, ...args: any[]) {
+      // The listener must exist before the card runs its own connectedCallback (it may report there).
+      track(this);
       const result = connected ? connected.apply(this, args) : undefined;
       attach(this);
       return result;
@@ -361,7 +527,8 @@ export function createCardEditRuntime(win: any, meta: CardEditMeta) {
         set(this: any, value: any) {
           origSet.call(this, value);
           if (value) lastHass = value;
-          if (this.__jsaEdit) schedule(this.__jsaEdit);
+          // Not for dormant cards: every hass update would wake them for nothing.
+          if (this.__jsaEdit && this.__jsaEdit.attached) schedule(this.__jsaEdit);
         },
       });
     }

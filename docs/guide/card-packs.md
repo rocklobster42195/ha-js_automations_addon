@@ -87,11 +87,14 @@ Use `ha.action()` for this targeted card → script round trip. For a fire-and-f
 
 ### Cards that hide themselves
 
-A card that renders `:host{display:none}` when there is nothing to show (a trash reminder without a pickup, a warning card without a warning) disappears in Home Assistant's edit mode — it can't be moved or edited — and the picker preview is empty. JSA handles this for every card, no change to your code needed:
+A card that renders `:host{display:none}` when there is nothing to show (a trash reminder without a pickup, a warning card without a warning) causes two problems in Home Assistant, and JSA solves both for every card without any change to your code:
 
-- Only in edit mode or the picker preview, and only if the card is hidden (`hidden` attribute, computed `display:none` or zero size), JSA shows a dashed placeholder with the script's `@icon` and `@name` and the text "Currently hidden: nothing to show" (German with a German profile), at about 60 % opacity.
-- Your card's own rendering is never touched, and nothing changes in normal operation. The placeholder follows the card: it disappears as soon as the card shows real content and returns when it hides again.
-- **Richer preview (optional):** define a `static getPreview()` on the card class and return an HTML string or a DOM node. JSA shows that instead of the generic placeholder; it is rendered inside the card's shadow root, so you can include a `<style>` element. If it throws or returns nothing, the generic placeholder is used.
+- **A gap on the dashboard.** Hiding only the inside of the card leaves Home Assistant's empty outer frame behind, and its margins add up with those of the neighbouring cards. JSA therefore also hides the card element itself (`hidden` attribute) and sends the `card-visibility-changed` event that Home Assistant listens to, so the frame disappears with the card and shows up again as soon as the card has something to show. The report is only sent when the state changes. A card that already hides itself and fires that event is left alone (no second event). A card that is hidden this way is removed from the page by Home Assistant until it renders something again.
+- **No card in edit mode.** Home Assistant shows cards in edit mode so they can be moved and edited, but a self-hiding card stays invisible. Only in edit mode or the picker preview, and only if the card hides itself (`hidden` attribute, computed `display:none` or zero size), JSA shows a dashed placeholder with the script's `@icon` and `@name` and the text "Currently hidden: nothing to show" (German with a German profile), at about 60 % opacity. While the placeholder is shown the card counts as visible for Home Assistant; when edit mode ends it is reported as hidden again if it still shows nothing.
+
+Your card's own rendering is never touched, and nothing changes in normal operation for a card that shows something. The placeholder follows the card: it disappears as soon as the card shows real content and returns when it hides again.
+
+**Richer preview (optional):** define a `static getPreview()` on the card class and return an HTML string or a DOM node. JSA shows that instead of the generic placeholder; it is rendered inside the card's shadow root, so you can include a `<style>` element. If it throws or returns nothing, the generic placeholder is used.
 
 ```javascript
 class MyCard extends HTMLElement {
@@ -101,7 +104,7 @@ class MyCard extends HTMLElement {
 }
 ```
 
-In the editor preview (also with `@card dev`) the pencil button in the preview toolbar simulates the dashboard edit mode, so you can see the placeholder or your `getPreview()` without installing the card.
+You don't need to set `hidden` or fire `card-visibility-changed` yourself any more; if an older card does, it keeps working. In the editor preview (also with `@card dev`) the pencil button in the preview toolbar simulates the dashboard edit mode, so you can see the placeholder or your `getPreview()` without installing the card.
 
 Cards that use a closed shadow root can't be observed and keep their old behaviour.
 
