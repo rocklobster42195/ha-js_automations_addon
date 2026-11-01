@@ -1,3 +1,9 @@
+## [3.2.0-beta.8] - 2026-11-01
+
+- feat: report hidden cards to Home Assistant so their frame collapses
+
+---
+
 ## [3.2.0-beta.7] - 2026-11-01
 
 - feat: keep self-hiding cards visible in dashboard edit mode and picker preview
