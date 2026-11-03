@@ -243,11 +243,18 @@ class HAConnector {
         const msg = JSON.parse(data.toString());
         if (msg.id === id) {
           this.ws!.removeListener('message', handler);
+          if (msg.success === false) {
+            console.warn(`[HAConnector] config/entity_registry/list failed: ${msg.error?.code || ''} ${msg.error?.message || ''}`);
+          }
           resolve(msg.result || []);
         }
       };
       this.ws!.on('message', handler);
       setTimeout(() => {
+        // Only warn if the response never arrived (handler still attached)
+        if (this.ws!.listeners('message').includes(handler)) {
+          console.warn('[HAConnector] config/entity_registry/list timed out after 5s.');
+        }
         this.ws!.removeListener('message', handler);
         resolve([]);
       }, 5000);
@@ -269,11 +276,18 @@ class HAConnector {
         const msg = JSON.parse(data.toString());
         if (msg.id === id) {
           this.ws!.removeListener('message', handler);
+          if (msg.success === false) {
+            console.warn(`[HAConnector] config/device_registry/list failed: ${msg.error?.code || ''} ${msg.error?.message || ''}`);
+          }
           resolve(msg.result || []);
         }
       };
       this.ws!.on('message', handler);
       setTimeout(() => {
+        // Only warn if the response never arrived (handler still attached)
+        if (this.ws!.listeners('message').includes(handler)) {
+          console.warn('[HAConnector] config/device_registry/list timed out after 5s.');
+        }
         this.ws!.removeListener('message', handler);
         resolve([]);
       }, 5000);
@@ -293,11 +307,18 @@ class HAConnector {
         const msg = JSON.parse(data.toString());
         if (msg.id === id) {
           this.ws!.removeListener('message', handler);
+          if (msg.success === false) {
+            console.warn(`[HAConnector] config/config_entries/list failed: ${msg.error?.code || ''} ${msg.error?.message || ''}`);
+          }
           resolve(msg.result || []);
         }
       };
       this.ws!.on('message', handler);
       setTimeout(() => {
+        // Only warn if the response never arrived (handler still attached)
+        if (this.ws!.listeners('message').includes(handler)) {
+          console.warn('[HAConnector] config/config_entries/list timed out after 5s.');
+        }
         this.ws!.removeListener('message', handler);
         resolve([]);
       }, 5000);
