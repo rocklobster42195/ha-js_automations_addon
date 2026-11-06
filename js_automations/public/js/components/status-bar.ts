@@ -114,7 +114,8 @@ export class StatusBar extends LitElement {
       font-size: 0.85rem;
     }
 
-    #integration-status-item {
+    #integration-status-item,
+    #git-status-item {
       cursor: pointer;
     }
 
@@ -182,6 +183,7 @@ export class StatusBar extends LitElement {
     dirty: boolean;
     lastPushError: string | null;
   } | null = null;
+  @state() private _gitPushing = false;
   @state() private _slots: [SlotConfig, SlotConfig, SlotConfig] = [
     { ...DEFAULT_SLOT },
     { ...DEFAULT_SLOT },
@@ -204,6 +206,9 @@ export class StatusBar extends LitElement {
    * paired the branch icon with a redundant check/alert glyph per state). */
   private _gitIconInfo(): { color: string; title: string } {
     const s = this._gitStatus;
+    if (this._gitPushing) {
+      return { color: 'var(--warn)', title: this._t('settings.versioning.pushing', 'Pushing...') };
+    }
     if (s?.lastPushError) {
       return {
         color: 'var(--danger)',
@@ -290,6 +295,43 @@ export class StatusBar extends LitElement {
       }
     );
   };
+
+  /** Pending commits or a failed last push: push right away. Otherwise jump to the push button
+   * in Settings (settings-view falls back to the enable switch while Git is off). */
+  private async _onGitIconClick(): Promise<void> {
+    if (this._gitPushing) return;
+    const s = this._gitStatus;
+    if (s?.hasRepo && s.hasRemote && (s.ahead > 0 || s.lastPushError)) {
+      this._gitPushing = true;
+      try {
+        const res = await window.apiFetch!('api/git/push', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+          window.alertToast?.show(this._t('settings.versioning.push_success', 'Pushed successfully.'), {
+            variant: 'success',
+          });
+        } else {
+          window.alertToast?.show(this._t('settings.versioning.push_error', 'Push failed', { error: result.error }), {
+            variant: 'error',
+          });
+        }
+      } catch (e) {
+        window.alertToast?.show(
+          this._t('settings.versioning.push_error', 'Push failed', {
+            error: e instanceof Error ? e.message : String(e),
+          }),
+          { variant: 'error' }
+        );
+      } finally {
+        this._gitPushing = false;
+        this._refreshGitStatus();
+      }
+      return;
+    }
+    const target = 'versioning:git_push';
+    if (window.appSidebar) window.appSidebar.openSettings(target);
+    else window.openSettingsTab?.(target);
+  }
 
   private _refreshGitStatus = async (): Promise<void> => {
     try {
@@ -646,9 +688,12 @@ export class StatusBar extends LitElement {
           id="git-status-item"
           class="stat-item"
           title=${this._gitIconInfo().title}
-          @click=${() => (window.appSidebar ? window.appSidebar.openSettings('versioning') : window.openSettingsTab?.('versioning'))}
+          @click=${() => this._onGitIconClick()}
         >
-          <i class="mdi mdi-source-branch integration-icon" style="color: ${this._gitIconInfo().color}"></i>
+          <i
+            class="mdi ${this._gitPushing ? 'mdi-loading mdi-spin' : 'mdi-source-branch'} integration-icon"
+            style="color: ${this._gitIconInfo().color}"
+          ></i>
         </div>
       </div>
       <div class=${slotsClass}>

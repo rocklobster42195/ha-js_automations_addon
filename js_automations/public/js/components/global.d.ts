@@ -381,7 +381,7 @@ declare global {
     switchToTab?: (filename: string) => void;
     updateToolbarUI?: (filename: string, icon: string, isDirty: boolean) => void;
     closeTab?: (filename: string) => Promise<void>;
-    openCardTab?: (scriptFilename: string) => Promise<void>;
+    openCardTab?: (scriptFilename: string, focus?: boolean) => Promise<void>;
     toggleCardTab?: () => Promise<void>;
     openDiffTab?: (subjectFilename: string, hash: string, shortHash: string, message?: string) => Promise<void>;
     saveActiveTab?: () => Promise<void>;

@@ -664,7 +664,7 @@ export class EditorViewElement extends LitElement {
       if (/^\s*\*\s*@card\b/m.test(data.content)) {
         const cardTabName = filename + CARD_TAB_SUFFIX;
         if (!this._openTabs.find((t) => t.filename === cardTabName)) {
-          await this.openCardTab(filename);
+          await this.openCardTab(filename, false);
         }
       }
     } catch (e) {
@@ -709,17 +709,18 @@ export class EditorViewElement extends LitElement {
   };
 
   /** Opens a virtual card tab for a Script Pack script — fetches the decoded __JSA_CARD__
-   * source and opens it in a Monaco model. */
-  openCardTab = async (scriptFilename: string): Promise<void> => {
+   * source and opens it in a Monaco model. With `focus` false the tab opens in the background
+   * and the currently active tab (the script) keeps the focus. */
+  openCardTab = async (scriptFilename: string, focus = true): Promise<void> => {
     if (!window.monacoEditor?.isReady()) {
-      setTimeout(() => this.openCardTab(scriptFilename), 500);
+      setTimeout(() => this.openCardTab(scriptFilename, focus), 500);
       return;
     }
 
     const cardTabName = scriptFilename + CARD_TAB_SUFFIX;
     const existingTab = this._openTabs.find((t) => t.filename === cardTabName);
     if (existingTab) {
-      this.switchToTab(cardTabName);
+      if (focus) this.switchToTab(cardTabName);
       return;
     }
 
@@ -778,6 +779,10 @@ export class EditorViewElement extends LitElement {
         this._openTabs.push(newTab);
       }
 
+      if (!focus) {
+        this._renderTabs();
+        return;
+      }
       this.switchToTab(cardTabName);
 
       // A brand-new card starts as a blank file with no scaffold at all - pre-fill it with the

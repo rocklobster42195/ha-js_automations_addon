@@ -28,6 +28,11 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - **Cards that hide themselves stay visible while you edit the dashboard**: a card that shows nothing when there is nothing to show (a trash reminder without a pickup) used to vanish in Home Assistant's edit mode, so it could not be moved or edited, and its "Add Card" preview was empty. Now a dashed placeholder with the script's icon and name takes its place in edit mode and in the picker; nothing changes in normal operation. A card can define `static getPreview()` to show its own richer preview instead. Cards can ask `__jsa__.isEditing(this)` / `__jsa__.isPreview(this)`. Works in Masonry, Sections and Panel views and follows the edit mode without a reload
 - **No more gap for hidden cards**: a card that hides only its inside left Home Assistant's empty outer frame behind, and its margins opened a gap between the neighbouring cards. JSA now also tells Home Assistant that the card is hidden (and visible again), so the frame disappears with it. Cards no longer need to do this themselves
 - The card preview in the editor has a **pencil button that simulates the dashboard edit mode**
+- Opening a script that has a card now keeps the focus on the **script**; the card tab opens next to it in the background
+
+**Script versioning**
+
+- The Git icon in the status bar is now a shortcut: with unpushed commits (yellow) or a failed push (red) one click **pushes right away** (spinner, then a notice with the result); otherwise it opens Settings and scrolls to the **Push button** and highlights it (or to the *Git* switch while versioning is off). Pushing stays manual
 
 **Documentation**
 

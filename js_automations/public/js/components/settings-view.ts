@@ -201,6 +201,20 @@ export class SettingsView extends LitElement {
     :host([mobile]) .settings-content {
       padding: 16px 15px 40px 15px;
     }
+    .settings-item-wrapper.flash {
+      animation: settings-item-flash 2s ease-out;
+    }
+    @keyframes settings-item-flash {
+      0%,
+      40% {
+        background: color-mix(in srgb, var(--warn, #f5a623) 30%, transparent);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn, #f5a623) 30%, transparent);
+      }
+      100% {
+        background: transparent;
+        box-shadow: 0 0 0 6px transparent;
+      }
+    }
     .settings-section {
       scroll-margin-top: 20px;
       margin-bottom: 50px;
@@ -533,6 +547,23 @@ export class SettingsView extends LitElement {
 
   private _scrollToSection(id: string): void {
     const root = this.renderRoot;
+    // "<category>:<key>" targets a single item (e.g. "versioning:git_push") and flashes it.
+    if (id.includes(':')) {
+      const [catId, key] = id.split(':');
+      // The push button is hidden while Git is disabled — point at the enable switch instead.
+      const item =
+        root.querySelector<HTMLElement>(`#settings-item-${catId}-${key}`) ??
+        (key === 'git_push' ? root.querySelector<HTMLElement>(`#settings-item-${catId}-git_enabled`) : null);
+      if (item) {
+        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        item.classList.remove('flash');
+        void item.offsetWidth;
+        item.classList.add('flash');
+        setTimeout(() => item.classList.remove('flash'), 2000);
+        return;
+      }
+      id = catId;
+    }
     let element = root.querySelector(`#settings-section-${id}`);
     if (id === 'integration' || id === 'installer') {
       element = root.querySelector('#settings-installer-anchor') || root.querySelector('#settings-section-system');
@@ -1062,7 +1093,10 @@ export class SettingsView extends LitElement {
       item.indent || (item.condition && (item.condition.key === 'slot1' || item.condition.key === 'slot2'));
 
     return html`
-      <div class="settings-item-wrapper ${indent ? 'indent' : ''} ${item.active === false ? 'disabled' : ''}">
+      <div
+        id="settings-item-${catId}-${item.key}"
+        class="settings-item-wrapper ${indent ? 'indent' : ''} ${item.active === false ? 'disabled' : ''}"
+      >
         ${item.label !== null ? html`<label class="settings-item-label">${this._t(item.label)}</label>` : ''}
         ${item.description ? html`<div class="settings-item-desc">${this._t(item.description)}</div>` : ''}
         ${this._renderItemInput(catId, item)}

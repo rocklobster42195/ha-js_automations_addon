@@ -11,6 +11,7 @@ yarn-error.log
 .env.nginxrp
 .env.proxmox
 .env.unifi
+.env.ccu
 
 # --- Laufzeit-Daten & Status ---
 # Der Merkzettel, welche Skripte gerade laufen
