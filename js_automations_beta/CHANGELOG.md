@@ -1,3 +1,9 @@
+## [3.2.0-beta.9] - 2026-11-06
+
+- feat: keep script focused when opening a pack script, git status icon pushes or jumps to the push button
+
+---
+
 ## [3.2.0-beta.8] - 2026-11-01
 
 - feat: report hidden cards to Home Assistant so their frame collapses
