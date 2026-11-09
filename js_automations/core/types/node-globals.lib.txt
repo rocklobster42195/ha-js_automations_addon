@@ -1,0 +1,133 @@
+// Compact Node.js typings for the script editor (served as node-globals.d.ts by GET /api/scripts/typings).
+// Covers what scripts commonly use without installing @types/node: process, Buffer, require/module and the
+// small built-in modules crypto, path, os, util, events. If a real @types/node is installed next to the
+// scripts (via @npm @types/node), this file is not served.
+// Stored as .txt on purpose: the backend build compiles every .d.ts under core/ against the real @types/node.
+
+declare var process: {
+  env: Record<string, string | undefined>;
+  argv: string[];
+  platform: string;
+  pid: number;
+  version: string;
+  versions: Record<string, string>;
+  uptime(): number;
+  cwd(): string;
+  exit(code?: number): never;
+  nextTick(callback: (...args: any[]) => void, ...args: any[]): void;
+  hrtime: { (time?: [number, number]): [number, number]; bigint(): bigint };
+  memoryUsage(): { rss: number; heapTotal: number; heapUsed: number; external: number; arrayBuffers: number };
+  on(event: string, listener: (...args: any[]) => void): typeof process;
+};
+
+declare class Buffer extends Uint8Array {
+  static from(data: string | ArrayBuffer | ArrayLike<number> | Uint8Array, encodingOrOffset?: string | number, length?: number): Buffer;
+  static alloc(size: number, fill?: string | number, encoding?: string): Buffer;
+  static allocUnsafe(size: number): Buffer;
+  static concat(list: readonly Uint8Array[], totalLength?: number): Buffer;
+  static isBuffer(obj: any): obj is Buffer;
+  static byteLength(string: string, encoding?: string): number;
+  toString(encoding?: string, start?: number, end?: number): string;
+  toJSON(): { type: 'Buffer'; data: number[] };
+  equals(other: Uint8Array): boolean;
+  slice(start?: number, end?: number): Buffer;
+  subarray(start?: number, end?: number): Buffer;
+  write(string: string, offset?: number, length?: number, encoding?: string): number;
+  readUInt8(offset?: number): number;
+  readUInt16BE(offset?: number): number;
+  readUInt32BE(offset?: number): number;
+  writeUInt8(value: number, offset?: number): number;
+}
+
+declare var require: {
+  (id: string): any;
+  resolve(id: string): string;
+};
+declare var module: { exports: any };
+declare var exports: any;
+declare var __dirname: string;
+declare var __filename: string;
+
+declare module 'crypto' {
+  interface Hash { update(data: string | Uint8Array, inputEncoding?: string): Hash; digest(): Buffer; digest(encoding: 'hex' | 'base64' | 'base64url' | 'latin1'): string }
+  interface Hmac { update(data: string | Uint8Array, inputEncoding?: string): Hmac; digest(): Buffer; digest(encoding: 'hex' | 'base64' | 'base64url' | 'latin1'): string }
+  function createHash(algorithm: string): Hash;
+  function createHmac(algorithm: string, key: string | Uint8Array): Hmac;
+  function randomBytes(size: number): Buffer;
+  function randomUUID(): string;
+  function randomInt(max: number): number;
+  function randomInt(min: number, max: number): number;
+  function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean;
+  const webcrypto: any;
+}
+declare module 'node:crypto' {
+  export * from 'crypto';
+}
+
+declare module 'path' {
+  interface PlatformPath {
+    sep: string;
+    delimiter: string;
+    join(...paths: string[]): string;
+    resolve(...paths: string[]): string;
+    normalize(p: string): string;
+    relative(from: string, to: string): string;
+    dirname(p: string): string;
+    basename(p: string, ext?: string): string;
+    extname(p: string): string;
+    isAbsolute(p: string): boolean;
+    parse(p: string): { root: string; dir: string; base: string; ext: string; name: string };
+  }
+  const path: PlatformPath & { posix: PlatformPath; win32: PlatformPath };
+  export = path;
+}
+declare module 'node:path' {
+  import path = require('path');
+  export = path;
+}
+
+declare module 'os' {
+  const os: {
+    EOL: string;
+    hostname(): string;
+    platform(): string;
+    arch(): string;
+    tmpdir(): string;
+    homedir(): string;
+    uptime(): number;
+    totalmem(): number;
+    freemem(): number;
+    cpus(): { model: string; speed: number }[];
+  };
+  export = os;
+}
+declare module 'node:os' {
+  import os = require('os');
+  export = os;
+}
+
+declare module 'util' {
+  function promisify(fn: (...args: any[]) => any): (...args: any[]) => Promise<any>;
+  function format(format: any, ...args: any[]): string;
+  function inspect(object: any, options?: any): string;
+  const types: Record<string, (value: unknown) => boolean>;
+}
+declare module 'node:util' {
+  export * from 'util';
+}
+
+declare module 'events' {
+  class EventEmitter {
+    on(event: string | symbol, listener: (...args: any[]) => void): this;
+    once(event: string | symbol, listener: (...args: any[]) => void): this;
+    off(event: string | symbol, listener: (...args: any[]) => void): this;
+    emit(event: string | symbol, ...args: any[]): boolean;
+    removeAllListeners(event?: string | symbol): this;
+    listenerCount(event: string | symbol): number;
+  }
+  export = EventEmitter;
+}
+declare module 'node:events' {
+  import EventEmitter = require('events');
+  export = EventEmitter;
+}

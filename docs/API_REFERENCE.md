@@ -1451,7 +1451,7 @@ ha.onWebhook('github-push', async (req, res) => {
 | --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `method`  | `string`                 | HTTP method (matches the registered `method`)                                                                                   |
 | `headers` | `Record<string, string>` | Request headers                                                                                                                 |
-| `body`    | `any`                    | Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`.                                                         |
+| `body`    | `any`                    | Parsed JSON; an object for form posts (`application/x-www-form-urlencoded`, repeated keys as arrays); else the raw string. Empty for `GET`. |
 | `rawBody` | `string`                 | Exact unparsed request body — use this, not `body`, with `ha.verifyWebhookSignature()`                                          |
 | `query`   | `Record<string, string>` | URL query parameters                                                                                                            |
 | `ip`      | `string`                 | Caller IP. Only reflects the real client IP if **Settings → Webhooks → Trust Reverse Proxy** is enabled behind a trusted proxy. |
@@ -1600,6 +1600,8 @@ Scripts can declare which sensitive capabilities they use via `@permission` in t
 | `fs:write` | `ha.fs.write`, `.append`, `.delete`, `.move`, `.rotate` | ✓                                      |
 | `fs`       | Alias for `fs:read` + `fs:write`                        | ✓                                      |
 | `exec`     | `child_process` (`exec`, `spawn`, …)                    | ✓                                      |
+
+`ha.mqtt.*` and `ha.onWebhook()` need no `network` permission; a webhook script only declares `webhook`.
 
 ### Auto-Detection
 

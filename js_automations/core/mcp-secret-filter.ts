@@ -33,11 +33,16 @@ const TOKEN_PATTERNS: RegExp[] = [
 // Long hex strings in quotes (webhook secrets, API keys) — not bare, to spare hashes in prose.
 const QUOTED_HEX = /(["'`])[0-9a-fA-F]{32,}\1/g;
 
+// Obvious placeholders (YOUR_TOKEN_HERE, <your token>, xxxx, an already masked ***) are documentation, not secrets.
+const PLACEHOLDER = /^(?:your[\w .-]*|<[^<>]+>|x{3,}|\*{3,}|change[_-]?me|todo|replace[\w .-]*)$/i;
+
 // A named value is not a credential when it is an interpolated template (`Bearer ${token}` references one
-// instead of containing it), a bare auth scheme prefix (`'Basic ' + x`) or a plain URL such as an OAuth token endpoint.
+// instead of containing it), a bare auth scheme prefix (`'Basic ' + x`), a placeholder or a plain URL such as an
+// OAuth token endpoint.
 function isCodeOrPlainUrl(quote: string, value: string): boolean {
   if (quote === '`' && value.includes('${')) return true;
   if (/^(?:Basic|Bearer|Token)\s*$/i.test(value)) return true;
+  if (PLACEHOLDER.test(value.trim())) return true;
   return /^https?:\/\/[^\s@]+$/i.test(value);
 }
 

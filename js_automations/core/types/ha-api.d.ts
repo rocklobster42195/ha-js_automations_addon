@@ -1455,7 +1455,7 @@ interface WebhookRequest {
   method: string;
   /** Request headers. */
   headers: Record<string, string>;
-  /** Parsed JSON body, or the raw string if not valid JSON. Empty for `GET`. */
+  /** Parsed JSON body; an object for `application/x-www-form-urlencoded` (repeated keys become arrays, values stay strings); otherwise the raw string. Empty for `GET`. */
   body: any;
   /**
    * The exact, unparsed request body as received. Use this — not `body` — when

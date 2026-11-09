@@ -927,7 +927,7 @@ const ha: any = {
 
   // Commands
   callService: (domain: string, service: string, data: unknown) =>
-    pp.postMessage({ type: 'call_service', domain, service, data }),
+    pp.postMessage({ type: 'call_service', domain, service, data: toPlain(data) }),
   updateState: (entityId: string, state: unknown, attributes: Record<string, unknown> = {}) =>
     pp.postMessage({ type: 'update_state', entityId, state, attributes }),
 
@@ -976,7 +976,7 @@ const ha: any = {
           reject(err);
         },
       });
-      pp.postMessage({ type: 'call_service', domain, service, data, callId, returnResponse: true });
+      pp.postMessage({ type: 'call_service', domain, service, data: toPlain(data), callId, returnResponse: true });
 
       setTimeout(() => {
         const pending = pendingServiceCalls.get(callId);
@@ -1147,6 +1147,8 @@ const ha: any = {
       attributes = { ...arg2 }; // Clone to avoid mutation of user object
     }
 
+    attributes = toPlain(attributes);
+
     // ALIAS: name -> friendly_name (for consistency with ha.register)
     if (attributes && attributes.name && !attributes.friendly_name) {
       attributes = { ...attributes, friendly_name: attributes.name };
@@ -1191,6 +1193,7 @@ const ha: any = {
    * @param config - Configuration (name, icon, type, unit_of_measurement, etc.)
    */
   register: (entityId: string, config: Record<string, any> = {}) => {
+    config = toPlain(config);
     // Optimistic Update for registered entities
     if (!states[entityId]) {
       states[entityId] = {
@@ -1429,7 +1432,7 @@ const ha: any = {
   },
 
   fireEvent: (eventType: string, eventData: Record<string, unknown> = {}) => {
-    pp.postMessage({ type: 'fire_event', eventType, eventData });
+    pp.postMessage({ type: 'fire_event', eventType, eventData: toPlain(eventData) });
   },
 
   /**
@@ -1735,7 +1738,7 @@ let _mqttSubCounter = 0;
      * Publishes a message to an MQTT topic. Objects are JSON-serialized automatically.
      */
     publish(topic: string, payload: unknown, options: Record<string, unknown> = {}) {
-      pp.postMessage({ type: 'mqtt_publish', topic, payload, options });
+      pp.postMessage({ type: 'mqtt_publish', topic, payload: toPlain(payload), options });
     },
   };
 }
@@ -1810,6 +1813,25 @@ const _webhookHandlers = new Map<string, (req: any, res: any) => any>(); // id -
  * @param target The object to wrap.
  * @param onSave The callback to execute on change.
  */
+/**
+ * Returns a plain, structured-clonable deep copy of a value. ha.persistent() hands out Proxies, and
+ * a Proxy cannot be posted to the main process ("DataCloneError: [object Array] could not be
+ * cloned"), so attributes/config that contain store data are unwrapped here. Falls back to JSON for
+ * values structuredClone rejects (functions, Proxies); anything JSON cannot represent is returned as-is.
+ */
+function toPlain<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  try {
+    return structuredClone(value);
+  } catch {
+    try {
+      return JSON.parse(JSON.stringify(value)) as T;
+    } catch {
+      return value;
+    }
+  }
+}
+
 function createDeepProxy<T extends object>(target: T, onSave: () => void): T {
   const proxyCache = new WeakMap<object, unknown>();
 

@@ -77,6 +77,18 @@ interface LogManagerLike {
   add(level: string, source: string, message: string): void;
 }
 
+/** Parses an application/x-www-form-urlencoded body into a plain object (repeated keys -> array). */
+function parseFormBody(raw: string): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = Object.create(null);
+  for (const [key, value] of new URLSearchParams(raw)) {
+    const existing = out[key];
+    if (existing === undefined) out[key] = value;
+    else if (Array.isArray(existing)) existing.push(value);
+    else out[key] = [existing, value];
+  }
+  return { ...out };
+}
+
 /**
  * WebhookManager runs a dedicated Express server that lets user scripts receive
  * HTTP webhooks from external services (ha.onWebhook()) with a real bidirectional
@@ -409,10 +421,18 @@ class WebhookManager extends EventEmitter {
     let body: unknown;
     const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
     if (rawBody) {
-      try {
-        body = JSON.parse(rawBody);
-      } catch {
-        body = rawBody;
+      const contentType = String(req.get('Content-Type') || '').toLowerCase();
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        // Services such as Ko-fi post form data; hand it over as an object (rawBody stays untouched
+        // for signature checks). Repeated keys become arrays; values stay strings, so a JSON string
+        // inside a field (Ko-fi's `data`) still needs JSON.parse in the handler.
+        body = parseFormBody(rawBody);
+      } else {
+        try {
+          body = JSON.parse(rawBody);
+        } catch {
+          body = rawBody;
+        }
       }
     } else {
       body = req.method === 'GET' ? undefined : null;

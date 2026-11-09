@@ -100,3 +100,16 @@ test('event buffer: newest first, filters by type, entity and age, bounded size'
   for (let i = 0; i < 400; i++) buf.push({ event_type: 'n', data: {} });
   assert.equal(buf.query({ limit: 1000 }).length, 300);
 });
+
+test('obvious placeholders are not treated as credentials, real values next to them still are', () => {
+  const input = [
+    `// {"config": {"verification_token": "YOUR_TOKEN_HERE"}}`,
+    `const apiKey = '<your api key>';`,
+    `const secret = 'xxxxxxxx';`,
+    `const password = 'hunter2hunter2';`,
+  ].join('\n');
+  const { text, masked } = maskSecrets(input);
+  assert.equal(masked, 1);
+  assert.ok(text.includes('YOUR_TOKEN_HERE') && text.includes('<your api key>'));
+  assert.ok(!text.includes('hunter2'));
+});

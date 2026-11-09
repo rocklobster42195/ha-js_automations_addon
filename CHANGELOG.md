@@ -64,6 +64,10 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - Typings: `ha.states[id]` accepts an entity ID held in a variable or `CONFIG` (it was a type error), and service fields declared as text by Home Assistant accept numbers (for example `number.set_value`)
 - `ha.persistent('key', false)` is typed as `boolean` instead of the literal `false`, so assigning `true` no longer fails the type check
 - Documentation: how a native entity receives commands from Home Assistant (`'ON'` / `'OFF'` through `ha.on()`), all `ha.on` filter operators with and without a threshold
+- Webhooks: `application/x-www-form-urlencoded` bodies (Ko-fi and others) arrive as an object in `req.body` (repeated keys as arrays); `req.rawBody` stays exact for signature checks
+- Scripts: `ha.update()`, `ha.register()`, `ha.call()`, `ha.fire()` and `ha.mqtt.publish()` accept data taken from `ha.persistent()`; before, such a value crashed the script with `DataCloneError: [object Array] could not be cloned`
+- Editor: `.ts` scripts no longer show "Cannot find module 'crypto'" or "Cannot find name 'Buffer'" — compact typings for `process`, `Buffer`, `require` and the `crypto`, `path`, `os`, `util` and `events` modules are included (a real `@types/node` installed with `@npm` replaces them). A script that declared `process` itself (`declare const process`) can drop that line
+- MCP: obvious placeholders such as `YOUR_TOKEN_HERE` or `<your token>` no longer trigger the "looks like credentials" warning
 
 
 ---

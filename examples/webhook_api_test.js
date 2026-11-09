@@ -33,7 +33,7 @@ ha.onWebhook('status', { method: 'GET' }, async (req, res) => {
 // ---------------------------------------------------------------------------
 // 3. Public endpoint (noAuth: true) — no X-Webhook-Secret check, script verifies itself.
 //    The externally-issued token is read from ha.store (flagged as Secret), never
-//    hardcoded in the script — same pattern as examples/kofi_integration.ts.
+//    hardcoded in the script — same pattern as scripts/kofi_integration.ts.
 //    Set it once via Store Explorer: key "open_webhook_config", value (Object)
 //    { "verification_token": "test-secret" }, "Secret" checkbox on.
 //    Test: POST http://<host>:<webhook_port>/webhook/open

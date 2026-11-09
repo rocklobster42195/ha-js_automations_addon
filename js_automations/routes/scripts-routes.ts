@@ -154,6 +154,18 @@ export = (
       });
     }
 
+    // 3b. Compact Node typings (process, Buffer, crypto, path, ...) so .ts scripts do not show
+    // "Cannot find module 'crypto'" / "Cannot find name 'Buffer'". A real @types/node installed
+    // via @npm takes precedence — serving both would produce duplicate-declaration errors.
+    const nodeGlobalsPath = path.join(__dirname, '../core/types/node-globals.lib.txt');
+    const hasRealNodeTypes = fs.existsSync(path.join(STORAGE_DIR, 'node_modules/@types/node'));
+    if (!hasRealNodeTypes && fs.existsSync(nodeGlobalsPath)) {
+      typings.push({
+        filename: 'node-globals.d.ts',
+        content: fs.readFileSync(nodeGlobalsPath, 'utf8'),
+      });
+    }
+
     // 4. NPM @types (axios, lodash, etc.)
     const typesDir = path.join(STORAGE_DIR, 'node_modules/@types');
     if (fs.existsSync(typesDir)) {

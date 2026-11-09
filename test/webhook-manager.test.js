@@ -81,3 +81,34 @@ test('webhook auth, allowlist, rate limit and backoff behave as documented', asy
     assert.equal((await call('rate')).status, 429);
   });
 });
+
+test('webhook body parsing: JSON, form data (objects, repeated keys) and rawBody', async (t) => {
+  if (!(await portIsFree(PORT))) return t.skip(`port ${PORT} is in use`);
+  const { manager } = makeManager(t);
+  const seen = [];
+  manager.removeAllListeners('request');
+  manager.on('request', (ev) => {
+    seen.push(ev.req);
+    manager.resolveResponse(ev.correlationId, { isJson: true, body: { ok: true } });
+  });
+  manager.register('body', { scriptFilename: 'a.js', noAuth: true });
+  const post = (contentType, body) =>
+    fetch(`http://127.0.0.1:${PORT}/webhook/body`, { method: 'POST', headers: { Connection: 'close', 'Content-Type': contentType }, body });
+
+  await t.test('JSON body is parsed', async () => {
+    await post('application/json', '{"a":1}');
+    assert.deepEqual(seen.at(-1).body, { a: 1 });
+  });
+
+  await t.test('form body becomes an object, repeated keys an array, rawBody is untouched', async () => {
+    const raw = 'data=%7B%22x%22%3A1%7D&tag=a&tag=b';
+    await post('application/x-www-form-urlencoded', raw);
+    assert.deepEqual(seen.at(-1).body, { data: '{"x":1}', tag: ['a', 'b'] });
+    assert.equal(seen.at(-1).rawBody, raw);
+  });
+
+  await t.test('unparsable JSON stays a string', async () => {
+    await post('text/plain', 'hello');
+    assert.equal(seen.at(-1).body, 'hello');
+  });
+});
