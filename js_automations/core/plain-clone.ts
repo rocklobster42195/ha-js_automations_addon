@@ -60,7 +60,8 @@ function clone(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (obj instanceof Error) {
     for (const key of ['name', 'message', 'stack'] as const) {
       const v = (obj as unknown as Record<string, unknown>)[key];
-      if (typeof v === 'string') Object.defineProperty(out, key, { value: v, enumerable: true, writable: true, configurable: true });
+      if (typeof v === 'string')
+        Object.defineProperty(out, key, { value: v, enumerable: true, writable: true, configurable: true });
     }
   }
   return out;

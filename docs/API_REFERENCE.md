@@ -1447,14 +1447,14 @@ ha.onWebhook('github-push', async (req, res) => {
 
 **`req` object**
 
-| Field     | Type                     | Description                                                                                                                     |
-| --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `method`  | `string`                 | HTTP method (matches the registered `method`)                                                                                   |
-| `headers` | `Record<string, string>` | Request headers                                                                                                                 |
+| Field     | Type                     | Description                                                                                                                                 |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `method`  | `string`                 | HTTP method (matches the registered `method`)                                                                                               |
+| `headers` | `Record<string, string>` | Request headers                                                                                                                             |
 | `body`    | `any`                    | Parsed JSON; an object for form posts (`application/x-www-form-urlencoded`, repeated keys as arrays); else the raw string. Empty for `GET`. |
-| `rawBody` | `string`                 | Exact unparsed request body — use this, not `body`, with `ha.verifyWebhookSignature()`                                          |
-| `query`   | `Record<string, string>` | URL query parameters                                                                                                            |
-| `ip`      | `string`                 | Caller IP. Only reflects the real client IP if **Settings → Webhooks → Trust Reverse Proxy** is enabled behind a trusted proxy. |
+| `rawBody` | `string`                 | Exact unparsed request body — use this, not `body`, with `ha.verifyWebhookSignature()`                                                      |
+| `query`   | `Record<string, string>` | URL query parameters                                                                                                                        |
+| `ip`      | `string`                 | Caller IP. Only reflects the real client IP if **Settings → Webhooks → Trust Reverse Proxy** is enabled behind a trusted proxy.             |
 
 **`res` object**
 

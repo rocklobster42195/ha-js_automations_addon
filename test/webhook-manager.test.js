@@ -93,7 +93,11 @@ test('webhook body parsing: JSON, form data (objects, repeated keys) and rawBody
   });
   manager.register('body', { scriptFilename: 'a.js', noAuth: true });
   const post = (contentType, body) =>
-    fetch(`http://127.0.0.1:${PORT}/webhook/body`, { method: 'POST', headers: { Connection: 'close', 'Content-Type': contentType }, body });
+    fetch(`http://127.0.0.1:${PORT}/webhook/body`, {
+      method: 'POST',
+      headers: { Connection: 'close', 'Content-Type': contentType },
+      body,
+    });
 
   await t.test('JSON body is parsed', async () => {
     await post('application/json', '{"a":1}');

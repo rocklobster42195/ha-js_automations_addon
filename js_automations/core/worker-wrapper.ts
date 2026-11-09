@@ -1635,7 +1635,13 @@ const ha: any = {
       // The listener is unref'd, so this does not keep the worker alive.
       ensureMessageListener();
       storeValues[key] = value;
-      pp.postMessage({ type: 'store_set', key, value: toPlain(value), isSecret: opts.secret, sharedWith: (opts as any).sharedWith });
+      pp.postMessage({
+        type: 'store_set',
+        key,
+        value: toPlain(value),
+        isSecret: opts.secret,
+        sharedWith: (opts as any).sharedWith,
+      });
     },
     get: (key: string) => {
       // Without a listener the worker never processes store_update, so reads would be a stale

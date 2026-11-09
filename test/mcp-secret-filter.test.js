@@ -111,5 +111,11 @@ test('obvious placeholders are not treated as credentials, real values next to t
   const { text, masked } = maskSecrets(input);
   assert.equal(masked, 1);
   assert.ok(text.includes('YOUR_TOKEN_HERE') && text.includes('<your api key>'));
-  assert.ok(!text.includes('hunter2') && !text.includes('yourDogName') && !text.includes('replaceMe9f') && !text.includes('a1B2c3D4') && !text.includes('9f8a'));
+  assert.ok(
+    !text.includes('hunter2') &&
+      !text.includes('yourDogName') &&
+      !text.includes('replaceMe9f') &&
+      !text.includes('a1B2c3D4') &&
+      !text.includes('9f8a')
+  );
 });
