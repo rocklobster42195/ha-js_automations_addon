@@ -16,6 +16,16 @@
  *   npm run release
  */
 
+/**
+ * Wraps bare @words (e.g. "@include", "@card") in backticks. GitHub reads them in release notes
+ * and commit text as user mentions: it lists that user as a contributor and notifies them.
+ * @param {string} line
+ * @returns {string}
+ */
+function escapeMentions(line) {
+  return line.replace(/(^|[^`\w/@.-])@([A-Za-z][\w-]*)/g, '$1`@$2`');
+}
+
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -95,7 +105,7 @@ if (isBeta) {
       if (log) {
         body = log
           .split('\n')
-          .map((l) => l.replace(/^[a-f0-9]+ /, ''))
+          .map((l) => escapeMentions(l.replace(/^[a-f0-9]+ /, '')))
           .filter((l) => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(l)) // skip version bump commits
           .map((l) => `- ${l}`)
           .join('\n');
@@ -212,7 +222,7 @@ if (fs.existsSync(changelogPath)) {
         if (log) {
           const lines = log
             .split('\n')
-            .map((l) => l.replace(/^[a-f0-9]+ /, ''))
+            .map((l) => escapeMentions(l.replace(/^[a-f0-9]+ /, '')))
             .filter((l) => !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(l)) // skip version bump commits (incl. beta)
             .map((l) => `- ${l}`);
           if (lines.length > 0) body = lines.join('\n');
