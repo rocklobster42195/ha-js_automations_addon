@@ -1,3 +1,14 @@
+## [3.2.0-beta.10] - 2026-11-09
+
+- style: prettier formatting
+- fix: review round 2 - proxy-safe action/webhook/inspect/watch data, Errors survive cloning, safer form detection and placeholder filter
+- fix: review findings - proxy-safe deep clone module, stricter placeholder filter, JSON-in-form bodies, cached node typings
+- fix: node typings in editor, form webhook bodies, store data in ha.* calls, placeholder credential warning
+- build(deps): bump the minor-and-patch group with 6 updates (#40)
+- build(deps): bump the minor-and-patch group across 1 directory with 4 updates (#39)
+
+---
+
 ## [3.2.0-beta.9] - 2026-11-06
 
 - feat: keep script focused when opening a pack script, git status icon pushes or jumps to the push button
