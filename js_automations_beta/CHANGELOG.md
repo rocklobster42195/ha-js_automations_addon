@@ -1,11 +1,10 @@
 ## [3.2.0-beta.10] - 2026-11-09
 
-- style: prettier formatting
-- fix: review round 2 - proxy-safe action/webhook/inspect/watch data, Errors survive cloning, safer form detection and placeholder filter
-- fix: review findings - proxy-safe deep clone module, stricter placeholder filter, JSON-in-form bodies, cached node typings
-- fix: node typings in editor, form webhook bodies, store data in ha.* calls, placeholder credential warning
-- build(deps): bump the minor-and-patch group with 6 updates (#40)
-- build(deps): bump the minor-and-patch group across 1 directory with 4 updates (#39)
+- Editor: `.ts` scripts no longer show "Cannot find module 'crypto'" / "Cannot find name 'Buffer'"; compact typings for `process`, `Buffer`, `require`, `crypto`, `path`, `os`, `util` and `events` are included (a real `@types/node` installed with `@npm` takes over). A script that declares `process`, `Buffer` or `require` itself shows a "cannot redeclare" hint in the editor now: delete that line, the script runs as before
+- Scripts: data taken from `ha.persistent()` can be passed to `ha.update()`, `ha.register()`, `ha.call()`, `ha.fire()`, `ha.mqtt.publish()`, `ha.store.set()`, `ha.action()` results, webhook responses and `ha.inspect()` / `ha.watch()` / `ha.breakpoint()` again; before, it crashed the script with `DataCloneError: [object Array] could not be cloned`
+- Webhooks: form posts (`application/x-www-form-urlencoded`, e.g. Ko-fi) arrive as an object in `req.body`; `req.rawBody` stays exact. A script that handled the form string itself should use `req.rawBody`. JSON bodies are unaffected
+- MCP: placeholders such as `YOUR_TOKEN_HERE` no longer trigger the "looks like credentials" warning
+- Dependencies: minor and patch updates
 
 ---
 
