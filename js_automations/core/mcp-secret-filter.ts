@@ -35,7 +35,7 @@ const QUOTED_HEX = /(["'`])[0-9a-fA-F]{32,}\1/g;
 
 // Obvious placeholders (YOUR_TOKEN_HERE, <your token>, xxxx, an already masked ***) are documentation, not secrets.
 // Deliberately strict: 'yourDogName123' or 'replaceMe9f8a' must still count as secrets.
-const PLACEHOLDER = /^(?:your[_\s-][\w\s-]*(?:here|key|token|secret|password|id)|<[^<>]+>|x{3,}|\*{3,}|change[_-]?me|replace[_\s-](?:me|with[\w\s-]*))$/i;
+const PLACEHOLDER = /^(?:your[_\s-][a-z_\s-]*(?:here|key|token|secret|password|id)|<[a-z][a-z _-]*>|x{3,}|\*{3,}|change[_-]?me|replace[_\s-](?:me|with[\w\s-]*))$/i;
 
 // A named value is not a credential when it is an interpolated template (`Bearer ${token}` references one
 // instead of containing it), a bare auth scheme prefix (`'Basic ' + x`), a placeholder or a plain URL such as an

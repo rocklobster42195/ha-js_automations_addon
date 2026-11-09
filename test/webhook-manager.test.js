@@ -129,4 +129,22 @@ test('webhook body parsing: JSON sent with a form content type is still parsed a
     body: '{"a":1}',
   });
   assert.deepEqual(seen.at(-1).body, { a: 1 });
+
+  const post = (body) =>
+    fetch(`http://127.0.0.1:${PORT}/webhook/mislabel`, {
+      method: 'POST',
+      headers: { Connection: 'close', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+  await post('[0]=a&[1]=b'); // keys that look like JSON brackets: still a form
+  assert.deepEqual(seen.at(-1).body, { '[0]': 'a', '[1]': 'b' });
+  await post('{x}=1');
+  assert.deepEqual(seen.at(-1).body, { '{x}': '1' });
+  await post('123'); // no key=value: earlier behaviour (JSON scalar)
+  assert.equal(seen.at(-1).body, 123);
+  await post('plain text');
+  assert.equal(seen.at(-1).body, 'plain text');
+  await post('__proto__=x&a=1'); // a "__proto__" key stays a plain key
+  assert.equal(Object.getPrototypeOf(seen.at(-1).body), Object.prototype);
+  assert.equal(seen.at(-1).body.a, '1');
 });

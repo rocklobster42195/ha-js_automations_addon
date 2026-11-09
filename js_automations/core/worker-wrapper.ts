@@ -602,7 +602,7 @@ function ensureMessageListener(): void {
             const serialized = JSON.stringify(value);
             if (serialized !== watcher.lastSerialized) {
               watcher.lastSerialized = serialized;
-              pp.postMessage({ type: 'watch_update', label, value, script: wd.filename });
+              pp.postMessage({ type: 'watch_update', label, value: toPlain(value), script: wd.filename });
             }
           } catch (e) {
             /* entity might not exist yet or value not serializable */
@@ -719,7 +719,7 @@ function ensureMessageListener(): void {
       }
       try {
         const result = await handler(msg.payload ?? {});
-        pp.postMessage({ type: 'action_response', callId: msg.callId, result: result ?? null });
+        pp.postMessage({ type: 'action_response', callId: msg.callId, result: toPlain(result) ?? null });
       } catch (e: any) {
         ha.error(`ha.action('${msg.action}') error: ${e.message}\n${e.stack}`, { blockId: e.blockId });
         pp.postMessage({ type: 'action_response', callId: msg.callId, error: e.message });
@@ -778,7 +778,7 @@ function ensureMessageListener(): void {
         pp.postMessage({
           type: 'webhook_response',
           correlationId: msg.correlationId,
-          response: { status: statusCode, body, isJson },
+          response: { status: statusCode, body: toPlain(body), isJson },
         });
       };
       const res = {
@@ -883,7 +883,7 @@ const ha: any = {
     const sab = new SharedArrayBuffer(4);
     const flag = new Int32Array(sab);
     sendLog('info', `⏸ Breakpoint: "${label}"`);
-    pp.postMessage({ type: 'breakpoint', label, vars, sab });
+    pp.postMessage({ type: 'breakpoint', label, vars: toPlain(vars), sab });
     Atomics.wait(flag, 0, 0, 60000);
     sendLog('debug', `▶ Continued from breakpoint: "${label}"`);
   },
@@ -899,7 +899,7 @@ const ha: any = {
       sendLog('info', `🔍 ha.inspect("${label}") skipped — set log level to 'debug' to enable inspect snapshots`);
       return;
     }
-    pp.postMessage({ type: 'inspect', label, vars, script: wd.filename });
+    pp.postMessage({ type: 'inspect', label, vars: toPlain(vars), script: wd.filename });
   },
 
   /**
@@ -923,7 +923,7 @@ const ha: any = {
       }
     })();
     _watchers.set(label, { fn, lastSerialized: JSON.stringify(initial) });
-    pp.postMessage({ type: 'watch_update', label, value: initial, script: wd.filename });
+    pp.postMessage({ type: 'watch_update', label, value: toPlain(initial), script: wd.filename });
   },
 
   // Commands

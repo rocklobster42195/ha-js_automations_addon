@@ -55,3 +55,23 @@ test('primitives and null pass through; the input is not mutated', () => {
   out.a.push(3);
   assert.deepEqual(src.a, [1, 2]);
 });
+
+test('Errors keep message and stack, shared Dates stay shared, an own __proto__ key stays a data key', () => {
+  const err = new Error('boom');
+  const plainErr = toPlain({ e: err }).e;
+  assert.ok(plainErr instanceof Error);
+  assert.equal(plainErr.message, 'boom');
+  assert.equal(plainErr.stack, err.stack);
+
+  const proxiedErr = toPlain(deepProxy({ e: err })).e; // a Proxy over an Error is rejected by structuredClone
+  assert.equal(proxiedErr.message, 'boom');
+
+  const when = new Date(0);
+  const shared = toPlain({ a: when, b: when });
+  assert.equal(shared.a, shared.b);
+
+  const parsed = JSON.parse('{"__proto__": {"x": 1}, "y": 2}');
+  const plain = toPlain(parsed);
+  assert.equal(Object.getPrototypeOf(plain), Object.prototype);
+  assert.deepEqual(Object.keys(plain), ['__proto__', 'y']);
+});

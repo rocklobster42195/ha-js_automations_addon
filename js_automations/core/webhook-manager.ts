@@ -79,6 +79,8 @@ interface LogManagerLike {
 
 /** Parses an application/x-www-form-urlencoded body into a plain object (repeated keys -> array). */
 function parseFormBody(raw: string): Record<string, string | string[]> {
+  // Null prototype while collecting, so a key named "__proto__" is just a key; the spread then gives
+  // handlers an ordinary object (hasOwnProperty etc. keep working).
   const out: Record<string, string | string[]> = Object.create(null);
   for (const [key, value] of new URLSearchParams(raw)) {
     const existing = out[key];
@@ -422,18 +424,25 @@ class WebhookManager extends EventEmitter {
     const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
     if (rawBody) {
       const contentType = String(req.get('Content-Type') || '').toLowerCase();
-      // A body that is clearly JSON stays JSON even when the client mislabelled it as a form post.
-      if (contentType.includes('application/x-www-form-urlencoded') && !/^\s*[[{]/.test(rawBody)) {
-        // Services such as Ko-fi post form data; hand it over as an object (rawBody stays untouched
-        // for signature checks). Repeated keys become arrays; values stay strings, so a JSON string
-        // inside a field (Ko-fi's `data`) still needs JSON.parse in the handler.
+      let json: unknown;
+      let isJson = false;
+      try {
+        json = JSON.parse(rawBody);
+        isJson = true;
+      } catch {
+        /* not JSON */
+      }
+      // Services such as Ko-fi post form data; hand it over as an object (rawBody stays untouched
+      // for signature checks). Repeated keys become arrays; values stay strings, so a JSON string
+      // inside a field (Ko-fi's `data`) still needs JSON.parse in the handler. Only real key=value
+      // bodies are parsed this way: a JSON object/array wins even under a form content type (mislabelled
+      // clients), and anything else keeps the earlier behaviour (JSON scalar or the raw string).
+      const isForm = contentType.includes('application/x-www-form-urlencoded');
+      const jsonContainer = isJson && json !== null && typeof json === 'object';
+      if (isForm && !jsonContainer && rawBody.includes('=')) {
         body = parseFormBody(rawBody);
       } else {
-        try {
-          body = JSON.parse(rawBody);
-        } catch {
-          body = rawBody;
-        }
+        body = isJson ? json : rawBody;
       }
     } else {
       body = req.method === 'GET' ? undefined : null;
