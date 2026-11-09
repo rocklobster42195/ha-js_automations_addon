@@ -28,6 +28,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 // itself, so the type has to be derived from the module's export value.
 type WorkerManagerInstance = typeof import('../core/worker-manager');
 
+// Compact Node typings are static: read once (undefined = not read yet, null = file missing).
+let nodeGlobalsTyping: string | null | undefined;
+
 export = (
   workerManager: WorkerManagerInstance,
   depManager: DependencyManager,
@@ -157,13 +160,13 @@ export = (
     // 3b. Compact Node typings (process, Buffer, crypto, path, ...) so .ts scripts do not show
     // "Cannot find module 'crypto'" / "Cannot find name 'Buffer'". A real @types/node installed
     // via @npm takes precedence — serving both would produce duplicate-declaration errors.
-    const nodeGlobalsPath = path.join(__dirname, '../core/types/node-globals.lib.txt');
     const hasRealNodeTypes = fs.existsSync(path.join(STORAGE_DIR, 'node_modules/@types/node'));
-    if (!hasRealNodeTypes && fs.existsSync(nodeGlobalsPath)) {
-      typings.push({
-        filename: 'node-globals.d.ts',
-        content: fs.readFileSync(nodeGlobalsPath, 'utf8'),
-      });
+    if (!hasRealNodeTypes) {
+      if (nodeGlobalsTyping === undefined) {
+        const nodeGlobalsPath = path.join(__dirname, '../core/types/node-globals.lib.txt');
+        nodeGlobalsTyping = fs.existsSync(nodeGlobalsPath) ? fs.readFileSync(nodeGlobalsPath, 'utf8') : null;
+      }
+      if (nodeGlobalsTyping) typings.push({ filename: 'node-globals.d.ts', content: nodeGlobalsTyping });
     }
 
     // 4. NPM @types (axios, lodash, etc.)

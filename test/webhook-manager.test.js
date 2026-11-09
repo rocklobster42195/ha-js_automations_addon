@@ -112,3 +112,21 @@ test('webhook body parsing: JSON, form data (objects, repeated keys) and rawBody
     assert.equal(seen.at(-1).body, 'hello');
   });
 });
+
+test('webhook body parsing: JSON sent with a form content type is still parsed as JSON', async (t) => {
+  if (!(await portIsFree(PORT))) return t.skip(`port ${PORT} is in use`);
+  const { manager } = makeManager(t);
+  const seen = [];
+  manager.removeAllListeners('request');
+  manager.on('request', (ev) => {
+    seen.push(ev.req);
+    manager.resolveResponse(ev.correlationId, { isJson: true, body: { ok: true } });
+  });
+  manager.register('mislabel', { scriptFilename: 'a.js', noAuth: true });
+  await fetch(`http://127.0.0.1:${PORT}/webhook/mislabel`, {
+    method: 'POST',
+    headers: { Connection: 'close', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: '{"a":1}',
+  });
+  assert.deepEqual(seen.at(-1).body, { a: 1 });
+});

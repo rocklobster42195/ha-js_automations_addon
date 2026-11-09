@@ -422,7 +422,8 @@ class WebhookManager extends EventEmitter {
     const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
     if (rawBody) {
       const contentType = String(req.get('Content-Type') || '').toLowerCase();
-      if (contentType.includes('application/x-www-form-urlencoded')) {
+      // A body that is clearly JSON stays JSON even when the client mislabelled it as a form post.
+      if (contentType.includes('application/x-www-form-urlencoded') && !/^\s*[[{]/.test(rawBody)) {
         // Services such as Ko-fi post form data; hand it over as an object (rawBody stays untouched
         // for signature checks). Repeated keys become arrays; values stay strings, so a JSON string
         // inside a field (Ko-fi's `data`) still needs JSON.parse in the handler.

@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as vm from 'vm';
 import * as crypto from 'crypto';
 import historyHelpers from './ha-history-helpers';
+import { toPlain } from './plain-clone';
 // Plain require(), not `import * as Module` - the capability-enforcement block below
 // mutates Module._load, and TS's __importStar interop wrapper makes imported
 // properties getter-only, which breaks that assignment at runtime.
@@ -929,7 +930,7 @@ const ha: any = {
   callService: (domain: string, service: string, data: unknown) =>
     pp.postMessage({ type: 'call_service', domain, service, data: toPlain(data) }),
   updateState: (entityId: string, state: unknown, attributes: Record<string, unknown> = {}) =>
-    pp.postMessage({ type: 'update_state', entityId, state, attributes }),
+    pp.postMessage({ type: 'update_state', entityId, state: toPlain(state), attributes: toPlain(attributes) }),
 
   /**
    * Global helper function for Home Assistant service calls.
@@ -1634,7 +1635,7 @@ const ha: any = {
       // The listener is unref'd, so this does not keep the worker alive.
       ensureMessageListener();
       storeValues[key] = value;
-      pp.postMessage({ type: 'store_set', key, value, isSecret: opts.secret, sharedWith: (opts as any).sharedWith });
+      pp.postMessage({ type: 'store_set', key, value: toPlain(value), isSecret: opts.secret, sharedWith: (opts as any).sharedWith });
     },
     get: (key: string) => {
       // Without a listener the worker never processes store_update, so reads would be a stale
@@ -1813,25 +1814,6 @@ const _webhookHandlers = new Map<string, (req: any, res: any) => any>(); // id -
  * @param target The object to wrap.
  * @param onSave The callback to execute on change.
  */
-/**
- * Returns a plain, structured-clonable deep copy of a value. ha.persistent() hands out Proxies, and
- * a Proxy cannot be posted to the main process ("DataCloneError: [object Array] could not be
- * cloned"), so attributes/config that contain store data are unwrapped here. Falls back to JSON for
- * values structuredClone rejects (functions, Proxies); anything JSON cannot represent is returned as-is.
- */
-function toPlain<T>(value: T): T {
-  if (value === null || typeof value !== 'object') return value;
-  try {
-    return structuredClone(value);
-  } catch {
-    try {
-      return JSON.parse(JSON.stringify(value)) as T;
-    } catch {
-      return value;
-    }
-  }
-}
-
 function createDeepProxy<T extends object>(target: T, onSave: () => void): T {
   const proxyCache = new WeakMap<object, unknown>();
 
