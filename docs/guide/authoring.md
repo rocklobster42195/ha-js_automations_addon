@@ -136,7 +136,7 @@ At most two keys per script: `<script>_state` (runtime state) and `<script>_conf
 
 ### Credentials
 
-Credentials (API keys, passwords, tokens) are never written into the script. Instead the script **creates the place for them on its first start**, leaves it empty and asks the user to fill it in:
+Credentials (API keys, passwords, tokens) are never written into the script. Instead the script **creates the place for them on its first start**, leaves it empty and asks the user to fill it in. This holds for assistants, too: an MCP assistant can read the store but cannot create or change entries, and a script must never rely on an entry someone created by hand, because it would not exist on another installation.
 
 ```typescript
 interface WeatherConfig {

@@ -79,6 +79,7 @@ test('prompts, resources and server instructions reach the client', async (t) =>
     assert.match(text, /never one store key per value/);
     assert.match(text, /EMPTY field of the persisted config/);
     assert.match(text, /get_store shows an empty credential field as empty/);
+    assert.match(text, /You cannot create or change store entries yourself/);
     assert.match(text, /persistent notification/);
     assert.match(text, /Store Explorer/);
   });

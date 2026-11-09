@@ -343,7 +343,12 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.ok(!all.includes('real-key-123456'));
     assert.ok(!all.includes('abcdefgh12'), 'sensitive text inside a plain value is masked as well');
     assert.match((await call('get_store', { key: 'guest_mode' })).text, /^guest_mode/);
-    assert.equal((await call('get_store', { search: 'zzz' })).text, 'No matching store entries.');
+    const none = (await call('get_store', { search: 'zzz' })).text;
+    assert.match(none, /^No matching store entries\./);
+    assert.match(none, /assistants cannot create store entries/, 'the empty answer teaches the rule');
+    assert.match(none, /ha\.persistent\(key, DEFAULT\)/);
+    const tool = (await client.listTools()).tools.find((x) => x.name === 'get_store');
+    assert.match(tool.description, /cannot create or change store entries/);
     delete settings.mcp.tool_get_store;
   });
 

@@ -410,7 +410,9 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
     title: 'Get store',
     description:
       'Lists the values in the shared ha.store (used by scripts for config and state). Values stored as secrets are never ' +
-      'returned, and values under key names that look like credentials (token, password, secret, api key…) are masked.',
+      'returned, and values under key names that look like credentials (token, password, secret, api key…) are masked. ' +
+      'Read-only: an assistant cannot create or change store entries. A script creates its own (empty) config with ha.persistent() on its ' +
+      'first start and the user fills in credentials in the Store Explorer.',
     inputSchema: {
       key: z.string().optional().describe('Exact key to read'),
       search: z.string().optional().describe('Case-insensitive text the key must contain'),
@@ -421,7 +423,13 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       const entries = Object.entries(storeManager.getAllPublic()).filter(
         ([key]) => (!args.key || key === args.key) && (!needle || key.toLowerCase().includes(needle))
       );
-      if (!entries.length) return text('No matching store entries.');
+      if (!entries.length) {
+        return text(
+          'No matching store entries. If a script needs one: assistants cannot create store entries. The script must create its own ' +
+            '(empty) config with ha.persistent(key, DEFAULT) on its first start; for credentials it warns until the user has filled them in ' +
+            'with the Store Explorer. Never rely on an entry created by hand.'
+        );
+      }
       const lines = entries.slice(0, 200).map(([key, e]) => {
         let value: string;
         if (e.isSecret) value = '(secret, value withheld)';
