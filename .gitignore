@@ -88,6 +88,7 @@ js_automations/core/mcp-manager.js
 js_automations/core/mcp-activity-log.js
 js_automations/core/mcp-protocol.js
 js_automations/core/mcp-proposals.js
+js_automations/core/mcp-change-summary.js
 js_automations/core/mcp-tool-catalog.js
 js_automations/core/mcp-secret-filter.js
 js_automations/core/mcp-event-buffer.js

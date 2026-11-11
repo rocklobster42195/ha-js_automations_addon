@@ -130,6 +130,8 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.match(description, /const CONFIG/);
     assert.match(description, /ONE ha.persistent object per script/);
     assert.match(description, /credentials never go into the source/);
+    const hint = tools.find((t) => t.name === 'write_script').inputSchema.properties.message.description;
+    assert.match(hint, /ALWAYS pass this: one line saying WHAT changed and WHY/);
   });
 
   await t.test('maintainer mode never puts instructions into the write result', async () => {
@@ -163,7 +165,7 @@ test('write tools check, write, commit and delete safely', async (t) => {
     const r = await call('write_script', { filename: 'demo.ts', content: `/** @name Demo */\nha.log('from ai');\n` });
     assert.match(r.text, /Updated script "demo\.ts"/);
     const log = subjects();
-    assert.equal(log[0], 'mcp: update demo.ts');
+    assert.equal(log[0], 'mcp: update demo.ts: +1/-2 lines', 'without a message the subject summarizes the change');
     assert.equal(log[1], 'mcp: snapshot before changing demo.ts');
     assert.match(git('show', 'HEAD~1:demo.ts'), /typed by the user/);
   });

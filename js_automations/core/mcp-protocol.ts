@@ -57,6 +57,7 @@ const SERVER_INSTRUCTIONS = [
   'Before writing or changing a script, call get_api_reference with topic "authoring" and follow it: scripts have a JSDoc header,',
   'a typed config block and native entities via ha.register(). Use list_scripts and read_script to see existing conventions,',
   'write_script to save (it is syntax-checked and committed to Git), then restart_script and get_script_errors / get_logs to verify.',
+  'Always pass a meaningful `message` to write_script, edit_script, write_card and edit_card: one line saying what changed and why; it becomes the Git commit the user reads later.',
   'Never put credentials into script source: keep them in the store (an empty field of the persisted ha.persistent() config, or an ha.store secret),',
   'warn while they are empty and tell the user where to fill them in.',
   'You cannot create or change store entries: the script creates its own (empty) config with ha.persistent() on its first start,',

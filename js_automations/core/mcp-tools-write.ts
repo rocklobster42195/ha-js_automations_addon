@@ -7,6 +7,7 @@ import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { hashText, type McpProposalStore, type Proposal } from './mcp-proposals';
+import { describeChange } from './mcp-change-summary';
 import { isValidScriptName, missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
 import { checkScript, checkSyntax, formatIssues, type CheckIssue } from './mcp-script-check';
 import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
@@ -60,7 +61,7 @@ const CARD_RELOAD_HINT =
   'Frontend: the card is installed or updated when the script runs (restart_script). Dashboards that are already open ' +
   'keep the old card until the browser tab is hard-reloaded (Ctrl+F5); a brand-new card is unknown to Lovelace until then.';
 const MAX_COMMIT_SUBJECT = 120;
-const COMMIT_MESSAGE_HINT = `Short description for the Git commit (up to ${MAX_COMMIT_SUBJECT} characters; longer text is cut)`;
+const COMMIT_MESSAGE_HINT = `ALWAYS pass this: one line saying WHAT changed and WHY, e.g. "heating: stop pre-heating while a window is open" (up to ${MAX_COMMIT_SUBJECT} characters; longer text is cut). Without it the Git history only gets an automatic summary of the changed lines.`;
 // Cut instead of rejecting: a validation error would only surface after the whole source was sent.
 const commitSubject = (message: unknown, fallback: string): string =>
   `mcp: ${(message ? String(message) : fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_COMMIT_SUBJECT)}`;
@@ -226,7 +227,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         args: { ...args },
         content,
         baseHash: previous === null ? null : hashText(previous),
-        message: commitSubject(args.message, `${existing ? 'update' : 'create'} ${name}`),
+        message: commitSubject(
+          args.message,
+          describeChange(name, previous === null ? null : previous.replace(CARD_BLOCK, ''), content)
+        ),
         warnings: check.typeIssues.length ? formatIssues(check.typeIssues).split('\n') : [],
       });
       return proposalReply(proposal, typeIssueLines(check.typeIssues, name));
@@ -237,8 +241,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       if (card) content = `${content.trimEnd()}\n\n${card[0]}\n`;
     }
 
-    const verb = existing ? 'update' : 'create';
-    const commitMessage = commitSubject(args.message, `${verb} ${name}`);
+    const commitMessage = commitSubject(
+      args.message,
+      describeChange(name, previous === null ? null : previous.replace(CARD_BLOCK, ''), content.replace(CARD_BLOCK, ''))
+    );
     const notes: string[] = [];
     if (existing) {
       const snap = await snapshotNote(fullPath, `mcp: snapshot before changing ${name}`);
@@ -326,9 +332,11 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       );
     }
 
+    const current = cardManager.getCardSource(found.fullPath, isMain ? undefined : card);
+    const has = current !== null && current !== undefined;
+    const cardSubject = commitSubject(args.message, describeChange(`card of ${name}`, has ? current : null, source));
+
     if (!direct && deps.isProposeMode()) {
-      const current = cardManager.getCardSource(found.fullPath, isMain ? undefined : card);
-      const has = current !== null && current !== undefined;
       const proposal = deps.proposals.propose({
         kind: 'card',
         filename: name,
@@ -337,7 +345,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         args: { ...args },
         content: source,
         baseHash: has ? hashText(current) : null,
-        message: commitSubject(args.message, `update card of ${name}`),
+        message: cardSubject,
         warnings: [],
       });
       return proposalReply(proposal, []);
@@ -350,7 +358,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     // An old embedded block moves out of the script with the first card save (the card file wins anyway).
     const script = fs.readFileSync(found.fullPath, 'utf8');
     if (isMain && hasBlock(script)) writeAtomic(found.fullPath, `${stripBlocks(script).trimEnd()}\n`);
-    notes.push(await commitFile(found.fullPath, commitSubject(args.message, `update card of ${name}`)));
+    notes.push(await commitFile(found.fullPath, cardSubject));
     deps.notifyStatusUpdate();
     deps.notifyContentChanged(name);
 

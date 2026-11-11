@@ -223,6 +223,11 @@ test('in propose mode the write tools leave proposals and touch no file', async 
       const p = proposals.findOpen('script', 'demo.ts');
       assert.equal(p.isNew, false);
       assert.equal(p.baseHash, hashText(before));
+      assert.equal(
+        p.message,
+        'mcp: update demo.ts: +1/-0 lines',
+        'no message given: the proposal still has a real subject'
+      );
       assert.equal(tools.proposalBefore(p), before, 'the diff view shows the file as it is now');
 
       writeFileSync(file('demo.ts'), before + '// the user edited it meanwhile\n');

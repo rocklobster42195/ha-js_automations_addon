@@ -27,7 +27,8 @@ const WRITING_RULES = `Rules for every JSA script you write:
 - Credentials never go into the source, and no placeholder values like 'YOUR_KEY_HERE'. Declare each one as an EMPTY field of the persisted config (e.g. apiKey: '' in DEFAULT_CONFIG via ha.persistent), or for a single value ha.persistent('my_script_api_key', ''), so the key exists in the store after the first start. You cannot create or change store entries yourself, and a script must never rely on an entry someone created by hand: it creates its own empty config on its first start. While a required credential is empty: log a warning, raise a persistent notification (ha.notify with persistent: true) that names the store key and tells the user to fill it in with the Store Explorer, and do not start the feature that needs it. get_store shows an empty credential field as empty and a filled one as ***, so you can check whether the user has filled it in without seeing the value. For especially sensitive values a ha.store secret (ha.store.set(key, '', true)) is encrypted and masked in the UI.
 - User-visible text that depends on language goes through ha.localize(). Code comments are English.
 - Put external calls behind timeouts and error handling; log with ha.log / ha.warn / ha.error.
-- Only use ha.* functions that exist in the reference. If unsure, look it up with get_api_reference instead of guessing.`;
+- Only use ha.* functions that exist in the reference. If unsure, look it up with get_api_reference instead of guessing.
+- Every write_script / edit_script / write_card / edit_card call gets a "message" argument: one line saying WHAT changed and WHY ("heating: stop pre-heating while a window is open"), not "update". It becomes the Git commit the user reads later.`;
 
 const VERIFY_LOOP = `After writing:
 1. Read the write_script result: fix syntax errors, and look at type warnings (they can occasionally be false positives).
