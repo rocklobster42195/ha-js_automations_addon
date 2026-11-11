@@ -1,6 +1,6 @@
 # Migrating from ioBroker
 
-This guide helps you turn scripts from the ioBroker JavaScript adapter into JS Automations (JSA) scripts — by hand or with an AI assistant connected through the [MCP server](./mcp.md) (the prompt **Convert an ioBroker script** follows exactly this guide).
+This guide helps you turn scripts from the ioBroker JavaScript adapter into JS Automations (JSA) scripts — by hand or with an AI assistant connected through the [MCP server](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md) (the prompt **Convert an ioBroker script** follows exactly this guide).
 
 The code translates easily. What takes thought is the **data model**:
 
@@ -22,7 +22,7 @@ List every ioBroker ID the script touches (in `on()`, `getState()`, `setState()`
 - A group's scene button (`…group_2.scene_0`) may exist as a `scene.*` entity; if not, Zigbee2MQTT can recall it by MQTT (`ha.mqtt.publish('zigbee2mqtt/<group>/set', { scene_recall: 0 })`, needs `@permission mqtt` — check the Zigbee2MQTT documentation).
 - Datapoints of `0_userdata.0.*` that scripts used as a message bus between each other become `ha.fireEvent()` / `ha.onEvent()` or `ha.store`.
 
-Put **all mapped entity IDs, thresholds, times and texts into one typed `CONFIG` constant** at the top of the script (see [Authoring Scripts](./authoring.md#where-configuration-lives)) — a plain constant, **not** the store: the mapping is installation-specific and usually needs correcting at first, a wrong ID in the code is a one-line change that is versioned in Git, while a persisted one could only be fixed in the Store Explorer. Keep `ha.persistent()` for state that must survive restarts (for example "reminder already sent") — and if there are several such values, in **one** object per script (`<script>_state`) instead of one store key each; ioBroker scripts often kept many separate `0_userdata` states, and those should not become dozens of store keys. Check at start that every configured entity exists (`ha.entityExists()`) and log the missing ones.
+Put **all mapped entity IDs, thresholds, times and texts into one typed `CONFIG` constant** at the top of the script (see [Authoring Scripts](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/authoring.md#where-configuration-lives)) — a plain constant, **not** the store: the mapping is installation-specific and usually needs correcting at first, a wrong ID in the code is a one-line change that is versioned in Git, while a persisted one could only be fixed in the Store Explorer. Keep `ha.persistent()` for state that must survive restarts (for example "reminder already sent") — and if there are several such values, in **one** object per script (`<script>_state`) instead of one store key each; ioBroker scripts often kept many separate `0_userdata` states, and those should not become dozens of store keys. Check at start that every configured entity exists (`ha.entityExists()`) and log the missing ones.
 
 ## Step 2: Translate the API
 
@@ -63,7 +63,7 @@ Put **all mapped entity IDs, thresholds, times and texts into one typed `CONFIG`
 | `require('module')`                                  | `@npm module` in the header                                                                                                                    |
 | `log(msg, 'info' \| 'warn' \| 'error' \| 'debug')`   | `ha.log` / `ha.warn` / `ha.error` / `ha.debug`; a `DEBUG` flag becomes `@loglevel debug`                                                       |
 
-Everything is documented in the [API Reference](../API_REFERENCE.md).
+Everything is documented in the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md).
 
 ### Things without a one-to-one equivalent
 
