@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 
 const GitManager = require('../js_automations/core/git-manager.js');
 
-function setup(t) {
+function setup(t, logs = []) {
   const dir = mkdtempSync(path.join(tmpdir(), 'jsa-git-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const scriptsDir = path.join(dir, 'scripts');
@@ -17,7 +17,7 @@ function setup(t) {
 
   const settings = { versioning: { git_enabled: true, git_repo_url: remoteDir } };
   const settingsManager = { getSettings: () => settings };
-  const logManager = { add: () => {} };
+  const logManager = { add: (level, source, message) => logs.push({ level, source, message }) };
   return { scriptsDir, git: new GitManager(settingsManager, logManager, scriptsDir) };
 }
 
@@ -39,6 +39,20 @@ test('ahead counts unpushed commits and resets after push', async (t) => {
   writeFileSync(path.join(scriptsDir, 'a.ts'), '// a changed');
   await git.commit('third', { paths: ['a.ts'] });
   assert.equal((await git.getStatus()).ahead, 1);
+});
+
+test('progress lines use the System source, so the global log level hides them (source "Git" would bypass it)', async (t) => {
+  const logs = [];
+  const { scriptsDir, git } = setup(t, logs);
+  writeFileSync(path.join(scriptsDir, 'a.ts'), '// a');
+  await git.commit('first', { paths: ['a.ts'] });
+  await git.push();
+  const progress = logs.filter((l) => /Committed|Pushed to/.test(l.message));
+  assert.equal(progress.length, 2);
+  for (const l of progress) {
+    assert.equal(l.level, 'debug');
+    assert.equal(l.source, 'System');
+  }
 });
 
 test('a script whose deletion was committed can still be restored', async (t) => {

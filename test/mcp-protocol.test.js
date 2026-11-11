@@ -148,16 +148,19 @@ test('MCP client can list and call tools; switches and auth are enforced', async
     assert.ok(res.error || res.isError, 'call must fail');
   });
 
-  await t.test('a connecting client is noted in the system log, with its name and address', () => {
-    const line = logs.find((l) => /Client connected: test 1.0.0 from /.test(l.message));
-    assert.ok(line, JSON.stringify(logs));
-    assert.equal(line.level, 'info');
+  await t.test('a connecting client is noted in the activity view, not in the system log', () => {
+    assert.ok(!logs.some((l) => /Client connected/.test(l.message)), 'no system log line per connection');
+    const entry = activity.list().find((e) => e.tool === 'connect');
+    assert.ok(entry, JSON.stringify(activity.list()));
+    assert.equal(entry.detail, 'Client connected: test 1.0.0');
+    assert.ok(entry.ip);
+    assert.equal(activity.list().filter((e) => e.tool === 'connect').length, 1, 'repeated connects are not repeated');
   });
 
   await t.test('every call lands in the activity log (newest first)', () => {
     const entries = activity.list();
     assert.deepEqual(
-      entries.map((e) => [e.tool, e.ok]),
+      entries.filter((e) => e.tool !== 'connect').map((e) => [e.tool, e.ok]),
       [
         ['get_logs', false],
         ['read_script', true],

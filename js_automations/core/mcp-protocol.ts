@@ -48,6 +48,9 @@ export interface McpResourceDefinition {
   read: () => string;
 }
 
+const CONNECT_NOTE_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_REMEMBERED_CLIENTS = 50;
+
 // Sent to every client on initialize: the few things a model must know before touching JSA.
 const SERVER_INSTRUCTIONS = [
   'JS Automations (JSA) runs JavaScript/TypeScript automation scripts for Home Assistant.',
@@ -92,6 +95,8 @@ export class McpProtocol {
   private _tools = new Map<string, McpToolDefinition>();
   private _prompts = new Map<string, McpPromptDefinition>();
   private _resources = new Map<string, McpResourceDefinition>();
+  /** client name + address -> when its connection was last noted (see _logConnection). */
+  private _recentClients = new Map<string, number>();
 
   constructor(
     private readonly _settingsManager: SettingsManagerLike,
@@ -192,14 +197,39 @@ export class McpProtocol {
     await transport.handleRequest(req, res, req.body);
   }
 
-  /** Notes new client connections in the system log, so "does my AI client reach JSA at all?" can be answered. */
+  /**
+   * Notes new client connections in the MCP activity view (not the system log, where one line per
+   * connection drowned everything else), so "does my AI client reach JSA at all?" can still be answered.
+   * The same client from the same address is noted only once per CONNECT_NOTE_INTERVAL_MS, so a client that
+   * opens a session per request does not push the real tool calls out of the activity buffer.
+   */
   private _logConnection(body: unknown, ip: string): void {
     for (const message of Array.isArray(body) ? body : [body]) {
       if (!message || typeof message !== 'object' || (message as { method?: string }).method !== 'initialize') continue;
       const info = (message as { params?: { clientInfo?: { name?: unknown; version?: unknown } } }).params?.clientInfo;
       const name = typeof info?.name === 'string' ? info.name.slice(0, 60) : 'unknown client';
       const version = typeof info?.version === 'string' ? ` ${info.version.slice(0, 20)}` : '';
-      this._logManager.add('info', 'System', `[MCP] Client connected: ${name}${version} from ${ip}`);
+
+      const key = `${name}|${ip}`;
+      const now = Date.now();
+      const last = this._recentClients.get(key);
+      if (last !== undefined && now - last < CONNECT_NOTE_INTERVAL_MS) continue;
+      this._recentClients.delete(key);
+      this._recentClients.set(key, now);
+      if (this._recentClients.size > MAX_REMEMBERED_CLIENTS) {
+        this._recentClients.delete(this._recentClients.keys().next().value as string);
+      }
+
+      this._activity.add({
+        ts: now,
+        tool: 'connect',
+        target: null,
+        ip,
+        ok: true,
+        error: null,
+        detail: `Client connected: ${name}${version}`,
+        durationMs: 0,
+      });
     }
   }
 

@@ -113,7 +113,7 @@ class GitManager extends EventEmitter {
 
     await this.git.init();
     await this.applyAuthorConfig();
-    this.logManager.add('debug', 'Git', '[Git] Initialized local repository in SCRIPTS_DIR.');
+    this.logManager.add('debug', 'System', '[Git] Initialized local repository in SCRIPTS_DIR.');
   }
 
   /** Commits currently staged-worthy changes (new + modified, deletions only if opted in via the
@@ -149,7 +149,7 @@ class GitManager extends EventEmitter {
     // already sitting staged in the index for any reason, only toStage's paths end up in this
     // commit. Belt-and-suspenders on top of the add() above already only staging that scope.
     const result = await this.git.commit(message, toStage);
-    this.logManager.add('debug', 'Git', `[Git] Committed ${toStage.length} file(s): ${result.commit}.`);
+    this.logManager.add('debug', 'System', `[Git] Committed ${toStage.length} file(s): ${result.commit}.`);
     this.emit('git_status_changed');
     return { hash: result.commit || null, filesChanged: toStage.length };
   }
@@ -428,7 +428,7 @@ class GitManager extends EventEmitter {
       await remote.push([settings.git_repo_url, `HEAD:refs/heads/${branch}`]);
       await this.git.raw(['update-ref', PUSHED_REF, 'HEAD']);
       this.lastPushError = null;
-      this.logManager.add('debug', 'Git', `[Git] Pushed to ${settings.git_repo_url}.`);
+      this.logManager.add('debug', 'System', `[Git] Pushed to ${settings.git_repo_url}.`);
       this.emit('git_status_changed');
       return { success: true };
     } catch (e) {
