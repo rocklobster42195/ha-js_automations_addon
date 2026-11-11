@@ -96,12 +96,16 @@ Long chats get slow. Instead of dragging the history along, an assistant can kee
 
 ### Prompts and documentation
 
-Assistants that support prompt templates offer four:
+Assistants that support prompt templates offer eight:
 
 - **New JSA script** — writes a script following the project conventions (see [Authoring Scripts](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/authoring.md)).
 - **Convert an ioBroker script** — paste a script from the ioBroker JavaScript adapter; the assistant maps the ioBroker IDs to your Home Assistant entities (asking about every guess, never inventing IDs), converts it following the [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) and lists what could not be converted.
 - **Save notes for a script** — summarizes what the chat learned about a script into its notes, so a new chat can continue.
 - **Plan a JSA script (interview)** — the assistant asks you questions one at a time (trigger, entities, edge cases, settings, notifications) and writes the script only after you confirm the specification.
+- **Review a JSA script** — checks an existing script against the conventions (correctness, error handling, secrets, permissions) and lists findings by importance; it changes nothing until you pick which fixes to apply.
+- **Explain a JSA script** — describes in plain language what a script does, which devices are behind its entity IDs and which settings it has.
+- **Diagnose a JSA script** — starts from the script's errors and logs, names one hypothesis with its evidence and proposes a fix; it does not restart the script or call services on its own.
+- **Convert a Home Assistant automation** — paste a YAML automation or blueprint; the assistant maps its entities and devices to real entity IDs (never inventing them), translates triggers, conditions and actions, and tells you to disable the original only after the script ran correctly.
 
 **If your client does not show prompts:** not every client lists MCP prompts (Claude Desktop on Windows did not show them in October 2026, neither under "+" → Connectors nor under "/"). The same instructions work as plain text. Paste one of these into a new chat:
 
