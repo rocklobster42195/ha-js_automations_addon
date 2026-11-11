@@ -73,6 +73,25 @@ ha.log('Garage Watch started.');
 
 A mapping of entity IDs that is still being corrected belongs in `CONFIG`: once it is persisted, a wrong ID can only be fixed in the Store Explorer, and the code change would have no effect. Pass the type explicitly for objects (`ha.persistent<MyConfig>(...)`) so the stored shape wins over inference.
 
+### Entity, store or script constant?
+
+Decide per value, asking in this order:
+
+1. **Should Home Assistant or the user see it, use it or react to it?** (dashboard, automation trigger, history, voice, a switch to flip) → **entity** (`ha.register`). Examples: the heating mode (`select`), "window open" (`binary_sensor`), the next run (`sensor`), an enable switch. The entity is the script's interface to the outside.
+2. **Must only the script remember it across restarts?** → **store**, bundled into **one JSON object per script**: `<script>_state` for runtime state, `<script>_config` for values and credentials the user may change while it runs. Never one store key per value; the store is shared by all scripts and becomes unreadable. A value that is also shown as an entity keeps its truth here and is published from here (store = memory, entity = view and input).
+3. **Does it stay the same until the code changes?** (entity IDs, thresholds, times, texts, cron expressions) → **`CONFIG` constant** in the script, which keeps it in Git.
+
+| Value                                                            | Where                          |
+| ---------------------------------------------------------------- | ------------------------------ |
+| Mode, switch, level, status the user sees or sets                | Entity (truth in `_state`)     |
+| "Reminder already sent", counters, timestamps, queues, last runs | `<script>_state` (one object)  |
+| Thresholds that a card or the user adjusts at runtime            | `<script>_config` (one object) |
+| Credentials, tokens (also several: one `_config` JSON)           | `<script>_config` or a secret  |
+| Entity IDs, fixed thresholds, schedules, texts                   | `CONFIG` constant              |
+| Anything another script needs                                    | Entity, or a shared store key  |
+
+Do not copy the same value into two of these places. If a script finds several single store keys of its own (`heating_mode`, `heating_comfort_until`, …), fold them into `<script>_state` and migrate the old values once.
+
 ## Header tags
 
 The header is the first `/** ... */` block in the file. One tag per line. `.blocks` (Blockly) files keep the same fields in their `jsa` JSON key instead.
@@ -276,6 +295,7 @@ Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `
 
 - [ ] Header first; only needed tags; `@permission` for network / fs / exec / webhook / mqtt
 - [ ] Order: header → types → config → logic
+- [ ] Each value has exactly one home: entity (seen or set from HA), store (memory, bundled as JSON), or `CONFIG` (fixed) — see [Entity, store or script constant?](#entity-store-or-script-constant)
 - [ ] Restart-proof values live in **one** `<script>_state` object (a lone flag may be a plain key), not in many single keys
 - [ ] One typed `CONFIG` constant (entity IDs, thresholds, times, texts); only runtime state and runtime-tunable values persisted; credentials are **empty** fields of the persisted config (or `ha.store` secrets), never in source, with a warning + persistent notification while they are empty
 - [ ] Entities created with `ha.register()`; IDs predictable (no `device` option if the exact ID matters)
