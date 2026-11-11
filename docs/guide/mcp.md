@@ -44,7 +44,7 @@ Clients without header support can use the `mcp-remote` snippet from the panel. 
 
 What an assistant may do is set under **Settings → MCP Server**:
 
-- **Access level:** _Read only_, _Read + control_ (default: also start, stop and restart scripts), _Read + control + write_ (also write scripts and cards) or _Custom_, which shows a switch for every tool. Each level includes the ones before it.
+- **Access level:** _Read only_, _Read + control_ (default: also start, stop and restart scripts), _Read + control + propose_ (scripts and cards are only changed as proposals that you review, see [Proposals](#proposals-access-level-propose)), _Read + control + write_ (also write scripts and cards directly) or _Custom_, which shows a switch for every tool. Each level includes the ones before it.
 - **Switched on separately** (off by default, whatever the level is): `get_store`, `call_service`, `run_snippet` and `delete_script`.
 
 Claude Desktop additionally lets you decide per tool whether it may run without asking (_Settings → Extensions_). That is a second layer on the client side; it does not replace the settings in JS Automations, which also protect the server against other clients and a leaked token.
@@ -80,6 +80,18 @@ Blockly scripts are not visible to assistants.
 - The **Lovelace card** is its own file (`cards/<script>-card.js`), so rewriting a script never touches it; `write_card` changes it (and commits it with the script). `list_scripts` shows a script's cards, `read_script` reads them separately.
 - A script is **never started or restarted** by writing. The assistant calls `restart_script` separately; if the script is running, the result says so.
 - If you have the file open in the editor, a clean tab reloads automatically. With unsaved edits, your text is kept, you get a warning, and saving asks before overwriting the assistant's version.
+
+### Proposals (access level "Propose")
+
+If you want to see every change before it happens, choose the level **Read + control + propose**. The assistant has the same tools as with _write_, but `write_script`, `edit_script`, `write_card` and `edit_card` do not touch any file: they leave a **proposal** and tell the assistant that nothing is applied yet.
+
+- **Checked like a write:** a script with syntax errors is rejected at once, type problems are reported, exactly as when writing.
+- **You review it as a diff:** open **Settings → MCP Server** and click **Review** next to a proposal. It opens in the editor, the file as it is now on the left, the proposed version on the right. **Apply** writes it through the normal path (including the Git snapshot and commit with the assistant's message), **Apply & restart** also restarts the script if it is running, **Reject** closes it, with an optional reason that the assistant can read. A toast tells you when a new proposal arrives.
+- **One proposal per file:** a further change to the same file updates the open proposal, and `edit_script` / `edit_card` build on the proposed text. A script and each of its cards are separate proposals.
+- **Outdated proposals are not applied:** if the file changed after the proposal was made (you edited it, or a restore ran), it is marked _outdated_ and cannot be applied. Ask the assistant to make the change again. Nothing of your work is lost.
+- **What the assistant sees:** `read_script` shows the proposed text with a note, and afterwards whether it was applied or rejected (with your reason); `list_scripts` lists the open proposals.
+- **Kept in memory only:** at most 20 open proposals, and everything disappears after 24 hours or an add-on restart. `save_script_notes` works directly, and `delete_script` keeps its own switch.
+- **The log stays quiet:** proposals, applying and rejecting show up in the dev-tools **MCP** tab, not in the main log.
 
 ### Run a snippet
 

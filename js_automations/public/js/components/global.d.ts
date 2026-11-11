@@ -228,6 +228,10 @@ export interface JsaTab {
   diffHash?: string;
   diffShortHash?: string;
   diffMessage?: string;
+  /** Diff tabs of an AI proposal (access level "propose") only: the proposal and its last known status. */
+  diffProposalId?: number;
+  diffProposalStatus?: string;
+  diffProposalReason?: string | null;
   /** Diff tabs only — live Monaco ITextModel instances, typed unknown like `model`. */
   diffOriginalModel?: unknown;
   diffModifiedModel?: unknown;
@@ -384,6 +388,7 @@ declare global {
     openCardTab?: (scriptFilename: string, focus?: boolean) => Promise<void>;
     toggleCardTab?: () => Promise<void>;
     openDiffTab?: (subjectFilename: string, hash: string, shortHash: string, message?: string) => Promise<void>;
+    openProposalTab?: (id: number) => Promise<void>;
     saveActiveTab?: () => Promise<void>;
     closeAllTabs?: () => Promise<void>;
     toggleActiveScript?: () => Promise<void>;

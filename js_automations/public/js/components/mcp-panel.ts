@@ -13,6 +13,16 @@ interface McpStatus {
   rotated: string | null;
 }
 
+interface ProposalRow {
+  id: number;
+  kind: 'script' | 'card';
+  filename: string;
+  card: string | null;
+  isNew: boolean;
+  status: string;
+  updatedAt: number;
+}
+
 const TOKEN_PLACEHOLDER = '••••••••••••••••••••';
 
 /**
@@ -116,6 +126,25 @@ export class McpPanel extends LitElement {
     .snippet-btn:hover {
       background: #222;
     }
+    .proposal-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .proposal-name {
+      font-family: monospace;
+      color: #ccc;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge-closed {
+      background: #222;
+      color: #999;
+    }
     .hint {
       color: #888;
       font-size: 0.78rem;
@@ -127,6 +156,7 @@ export class McpPanel extends LitElement {
   @state() private _status: McpStatus | null = null;
   @state() private _token: string | null = null;
   @state() private _copied = '';
+  @state() private _proposals: ProposalRow[] = [];
 
   private _copiedTimer?: ReturnType<typeof setTimeout>;
 
@@ -151,6 +181,9 @@ export class McpPanel extends LitElement {
     window.socket.on('mcp_status_changed', (status: McpStatus) => {
       this._status = status;
     });
+    window.socket.on('mcp_proposals_changed', (list: ProposalRow[]) => {
+      this._proposals = Array.isArray(list) ? list : [];
+    });
     // Missed events while the socket was down: re-sync on every (re)connect.
     window.socket.on('connect', () => void this._load());
   };
@@ -158,10 +191,51 @@ export class McpPanel extends LitElement {
   private async _load(): Promise<void> {
     try {
       this._status = await window.apiFetch!('api/mcp').then((r) => r.json());
+      const proposals = await window.apiFetch!('api/mcp/proposals').then((r) => r.json());
+      this._proposals = Array.isArray(proposals) ? proposals : [];
       this._token = null; // never keep a revealed token across a resync
     } catch (e) {
       console.error('Failed to load MCP status:', e);
     }
+  }
+
+  /** Proposals of the access level "propose": open ones first; a click opens the diff in the editor. */
+  private _renderProposals() {
+    if (!this._proposals.length) return nothing;
+    const rows = [...this._proposals].sort(
+      (a, b) => Number(b.status === 'open') - Number(a.status === 'open') || b.updatedAt - a.updatedAt
+    );
+    return html`
+      <div class="proposals">
+        <div class="row">
+          <span class="label">${this._t('settings.mcp_panel.proposals', 'Proposals')}</span>
+        </div>
+        ${rows.map(
+          (p) => html`
+            <div class="proposal-row">
+              <span class="proposal-name" title=${p.filename}>
+                ${p.kind === 'card' ? '🎴 ' : ''}${p.filename}${p.card ? ` (${p.card})` : ''}${p.isNew ? ' — new' : ''}
+              </span>
+              ${
+                p.status === 'open'
+                  ? html`<button class="snippet-btn" @click=${() => void window.openProposalTab?.(p.id)}>
+                      ${this._t('settings.mcp_panel.proposal_review', 'Review')}
+                    </button>`
+                  : html`<span class="badge badge-closed"
+                      >${this._t('settings.mcp_panel.proposal_' + p.status, p.status)}</span
+                    >`
+              }
+            </div>
+          `
+        )}
+        <div class="hint">
+          ${this._t(
+            'settings.mcp_panel.proposals_hint',
+            'The assistant only proposes changes (access level "Propose"). Nothing is written until you apply a proposal; proposals are kept in memory and disappear after an add-on restart or 24 hours.'
+          )}
+        </div>
+      </div>
+    `;
   }
 
   private get _endpoint(): string {
@@ -265,6 +339,7 @@ export class McpPanel extends LitElement {
                 >`
           }
         </div>
+        ${this._renderProposals()}
         <div class="row">
           <span class="label">${this._t('settings.mcp_panel.endpoint', 'Endpoint')}</span>
           <span class="value wrap">${this._endpoint}</span>

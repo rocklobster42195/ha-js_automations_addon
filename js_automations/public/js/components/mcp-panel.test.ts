@@ -33,10 +33,11 @@ describe('mcp-panel', () => {
   let api: sinon.SinonStub;
   let clipboard: sinon.SinonStub;
 
-  const mount = async (status: Partial<typeof STATUS> = {}) => {
+  const mount = async (status: Partial<typeof STATUS> = {}, proposals: unknown[] = []) => {
     api = sinon.stub().callsFake(async (url: string) => {
       const body: Record<string, unknown> = {
         'api/mcp': { ...STATUS, ...status },
+        'api/mcp/proposals': proposals,
         'api/mcp/token': { token: 'jsamcp_secret123' },
         'api/mcp/rotate': { token: 'jsamcp_rotated456' },
       };
@@ -164,6 +165,50 @@ describe('mcp-panel', () => {
       const el = await mount({ running: false });
       socket.handlers['mcp_status_changed']({ ...STATUS, running: true });
       await el.updateComplete;
+      expect(text(el)).to.contain('running on port 3002');
+    });
+  });
+  describe('proposals (access level "propose")', () => {
+    const ROW = { kind: 'script', card: null, isNew: false, updatedAt: 1 };
+
+    it('shows nothing while there are no proposals', async () => {
+      const el = await mount();
+      expect(el.shadowRoot!.querySelector('.proposals')).to.equal(null);
+    });
+
+    it('lists open proposals with a Review button, closed ones with their status', async () => {
+      const el = await mount({}, [
+        { ...ROW, id: 1, filename: 'a.ts', status: 'open' },
+        { ...ROW, id: 2, filename: 'b.ts', status: 'rejected' },
+        { ...ROW, id: 3, kind: 'card', filename: 'a.ts', card: 'a-day-card', status: 'open' },
+      ]);
+      const rows = [...el.shadowRoot!.querySelectorAll('.proposal-row')];
+      expect(rows.length).to.equal(3);
+      expect(rows[0].textContent).to.contain('a.ts');
+      expect(rows.filter((r) => r.querySelector('button')).length).to.equal(2);
+      expect(rows.find((r) => r.textContent!.includes('b.ts'))!.textContent).to.contain('rejected');
+      expect(text(el)).to.contain('a-day-card');
+    });
+
+    it('opens the diff tab of a proposal when Review is clicked', async () => {
+      const open = sinon.stub().resolves();
+      window.openProposalTab = open as never;
+      const el = await mount({}, [{ ...ROW, id: 7, filename: 'a.ts', status: 'open' }]);
+      (el.shadowRoot!.querySelector('.proposal-row button') as HTMLButtonElement).click();
+      expect(open.calledOnceWithExactly(7)).to.equal(true);
+      delete window.openProposalTab;
+    });
+
+    it('follows proposals pushed by the server', async () => {
+      const el = await mount();
+      socket.handlers['mcp_proposals_changed']([{ ...ROW, id: 9, filename: 'live.ts', status: 'open' }]);
+      await el.updateComplete;
+      expect(text(el)).to.contain('live.ts');
+    });
+
+    it('ignores an unexpected answer instead of breaking the panel', async () => {
+      const el = await mount({}, {} as never);
+      expect(el.shadowRoot!.querySelector('.proposals')).to.equal(null);
       expect(text(el)).to.contain('running on port 3002');
     });
   });

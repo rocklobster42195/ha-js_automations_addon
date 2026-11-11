@@ -393,6 +393,7 @@ export class EditorViewElement extends LitElement {
     window.openOrSwitchToTab = this.openOrSwitchToTab;
     window.openCardTab = this.openCardTab;
     window.openDiffTab = this.openDiffTab;
+    window.openProposalTab = this.openProposalTab;
     window.toggleCardTab = this.toggleCardTab;
     window.switchToTab = this.switchToTab;
     window.closeTab = this.closeTab;
@@ -445,10 +446,140 @@ export class EditorViewElement extends LitElement {
   private _bindContentChangeSocket(attempt = 0): void {
     if (window.socket) {
       window.socket.on('script_content_changed', this._onScriptContentChanged);
+      window.socket.on('mcp_proposals_changed', this._onProposalsChanged);
+      void this._primeProposals();
     } else if (attempt < 20) {
       setTimeout(() => this._bindContentChangeSocket(attempt + 1), 500);
     }
   }
+
+  private _knownProposals = new Set<number>();
+
+  /** Remembers the proposals that already exist, so only new ones announce themselves with a toast. */
+  private async _primeProposals(): Promise<void> {
+    try {
+      const list: Array<{ id: number }> = await window.apiFetch!('api/mcp/proposals').then((r) => r.json());
+      for (const p of list) this._knownProposals.add(p.id);
+    } catch {
+      /* MCP not available: no proposals */
+    }
+  }
+
+  /** An AI assistant proposed, or the user closed, a change: toast for new ones, keep open proposal tabs current. */
+  private _onProposalsChanged = (
+    list: Array<{ id: number; status: string; filename: string; reason?: string | null }>
+  ): void => {
+    for (const p of list) {
+      if (p.status === 'open' && !this._knownProposals.has(p.id)) {
+        window.alertToast?.show(
+          this._t(
+            'proposal_new_toast',
+            'An AI assistant proposed a change to {{filename}}. Review it under Settings → MCP Server.',
+            {
+              filename: p.filename,
+            }
+          ),
+          { variant: 'info', duration: 8000 }
+        );
+      }
+      this._knownProposals.add(p.id);
+      const tab = this._openTabs.find((t) => t.diffProposalId === p.id);
+      if (tab && (tab.diffProposalStatus !== p.status || tab.diffProposalReason !== (p.reason ?? null))) {
+        tab.diffProposalStatus = p.status;
+        tab.diffProposalReason = p.reason ?? null;
+        this.requestUpdate();
+      }
+    }
+  };
+
+  /** Opens an AI proposal (access level "propose") as a diff tab: the file as it is now against the proposed text. */
+  openProposalTab = async (id: number): Promise<void> => {
+    // Unlike a history diff, a proposal can be opened with no editor tab open yet (e.g. from the MCP settings).
+    document.getElementById('editor-section')?.classList.remove('hidden');
+    const tabFilename = `System: Proposal #${id}`;
+    if (this._openTabs.some((t) => t.filename === tabFilename)) {
+      this.switchToTab(tabFilename);
+      return;
+    }
+    try {
+      const res = await window.apiFetch!(`api/mcp/proposals/${id}`);
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      const p = await res.json();
+      const language = p.kind === 'script' && String(p.filename).endsWith('.ts') ? 'typescript' : 'javascript';
+      const label = p.kind === 'card' ? `${p.filename} ‹card${p.card ? `: ${p.card}` : ''}›` : p.filename;
+      const newTab: JsaTab = {
+        filename: tabFilename,
+        icon: 'file-compare',
+        type: 'diff',
+        isDirty: false,
+        model: null,
+        diffSubjectFilename: label,
+        diffMessage: p.message,
+        diffProposalId: id,
+        diffProposalStatus: p.status,
+        diffProposalReason: p.reason ?? null,
+        diffOriginalModel: window.monaco!.editor.createModel(p.before ?? '', language),
+        diffModifiedModel: window.monaco!.editor.createModel(p.after ?? '', language),
+      };
+      this._openTabs.push(newTab);
+      this.switchToTab(tabFilename);
+    } catch (e) {
+      window.alertToast?.show(
+        this._t('proposal_load_error', 'Could not load the proposal: {{error}}', {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+        { variant: 'error' }
+      );
+    }
+  };
+
+  private _applyProposal = async (tab: JsaTab, restart: boolean): Promise<void> => {
+    const id = tab.diffProposalId!;
+    try {
+      const res = await window.apiFetch!(`api/mcp/proposals/${id}/apply`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alertToast?.show(String(data.message ?? data.error ?? res.status), {
+          variant: 'error',
+          duration: 10000,
+        });
+        const fresh = await window.apiFetch!(`api/mcp/proposals/${id}`)
+          .then((r) => r.json())
+          .catch(() => null);
+        if (fresh) tab.diffProposalStatus = fresh.status;
+        this.requestUpdate();
+        return;
+      }
+      tab.diffProposalStatus = 'applied';
+      window.alertToast?.show(this._t('proposal_applied_toast', 'Proposal applied.'), { variant: 'success' });
+      const name = String(tab.diffSubjectFilename ?? '').split(' ')[0];
+      if (restart && window.allScripts?.find((s) => s.filename === name)?.running) await window.restartScript?.(name);
+      this.requestUpdate();
+    } catch (e) {
+      window.alertToast?.show(e instanceof Error ? e.message : String(e), { variant: 'error' });
+    }
+  };
+
+  private _rejectProposal = async (tab: JsaTab): Promise<void> => {
+    const reason = window.prompt(
+      this._t('proposal_reject_prompt', 'Reason for rejecting (optional, the assistant can read it):'),
+      ''
+    );
+    if (reason === null) return;
+    try {
+      const res = await window.apiFetch!(`api/mcp/proposals/${tab.diffProposalId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+      tab.diffProposalStatus = 'rejected';
+      tab.diffProposalReason = reason.trim() || null;
+      this.requestUpdate();
+    } catch (e) {
+      window.alertToast?.show(e instanceof Error ? e.message : String(e), { variant: 'error' });
+    }
+  };
 
   /** A file was rewritten behind the editor's back (an AI assistant over MCP): refresh open tabs. */
   private _onScriptContentChanged = async ({
@@ -1317,6 +1448,12 @@ export class EditorViewElement extends LitElement {
       const part = tab.card ? tab.card.slice(base.length + 1).replace(/-card$/, '') : '';
       return `${base} ‹card${part ? `: ${part}` : ''}›`;
     }
+    if (tab.type === 'diff' && tab.diffProposalId !== undefined) {
+      return this._t('proposal_tab_title', 'Proposal #{{id}}: {{filename}}', {
+        id: tab.diffProposalId,
+        filename: tab.diffSubjectFilename ?? '',
+      });
+    }
     if (tab.type === 'diff') {
       return this._t('history_diff_tab_title', 'Diff: {{filename}} @ {{hash}}', {
         filename: tab.diffSubjectFilename ?? '',
@@ -1473,6 +1610,47 @@ export class EditorViewElement extends LitElement {
           <button @click=${() => this._loadExternalVersion(activeTab)}>
             ${this._t('external_update_load_theirs', 'Discard my edits and load it')}
           </button>
+        </div>
+      `;
+    }
+    if (activeTab.type === 'diff' && activeTab.diffProposalId !== undefined) {
+      const status = activeTab.diffProposalStatus ?? 'open';
+      const subject = String(activeTab.diffSubjectFilename ?? '').split(' ')[0];
+      const running = !!window.allScripts?.find((s) => s.filename === subject)?.running;
+      return html`
+        <div class="mode-banner conflict">
+          <span>
+            <i class="mdi mdi-robot-outline"></i>
+            ${
+              status === 'open'
+                ? this._t(
+                    'proposal_banner_open',
+                    'Proposal of an AI assistant: left is the file as it is now, right the proposed version. Nothing changes until you apply it.'
+                  )
+                : this._t('proposal_banner_closed_' + status, 'This proposal is {{status}}.', { status })
+            }
+            ${activeTab.diffProposalReason ? html`<em> — ${activeTab.diffProposalReason}</em>` : nothing}
+            ${activeTab.diffMessage ? html`<span class="mono"> (${activeTab.diffMessage})</span>` : nothing}
+          </span>
+          ${
+            status === 'open'
+              ? html`
+                  <button @click=${() => void this._applyProposal(activeTab, false)}>
+                    ${this._t('proposal_apply', 'Apply')}
+                  </button>
+                  ${
+                    running
+                      ? html`<button @click=${() => void this._applyProposal(activeTab, true)}>
+                          ${this._t('proposal_apply_restart', 'Apply & restart')}
+                        </button>`
+                      : nothing
+                  }
+                  <button @click=${() => void this._rejectProposal(activeTab)}>
+                    ${this._t('proposal_reject', 'Reject')}
+                  </button>
+                `
+              : nothing
+          }
         </div>
       `;
     }
