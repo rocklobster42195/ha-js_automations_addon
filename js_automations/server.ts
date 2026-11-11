@@ -199,6 +199,11 @@ function startApp(): void {
       isMaintainerMode: () =>
         (kernel.settingsManager.getSettings() as { general?: { maintainer_mode?: boolean } }).general
           ?.maintainer_mode === true,
+    },
+    {
+      store: kernel.mcpProposals,
+      apply: (id) => kernel.mcpWriteTools.applyProposal(id),
+      before: (p) => kernel.mcpWriteTools.proposalBefore(p),
     }
   );
   const backupRouter = backupRouteFactory(kernel.backupManager);

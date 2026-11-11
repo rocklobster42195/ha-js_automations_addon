@@ -11,6 +11,7 @@ const PORT = 20000 + Math.floor(Math.random() * 20000);
 process.env.JSA_MCP_PORT = String(PORT);
 const McpManager = require('../js_automations/core/mcp-manager.js');
 const { McpProtocol } = require('../js_automations/core/mcp-protocol.js');
+const { McpProposalStore } = require('../js_automations/core/mcp-proposals.js');
 const { McpActivityLog } = require('../js_automations/core/mcp-activity-log.js');
 const { McpEventBuffer } = require('../js_automations/core/mcp-event-buffer.js');
 const { registerReadTools } = require('../js_automations/core/mcp-tools-read.js');
@@ -153,6 +154,7 @@ function setup(t) {
       },
     }),
   };
+  const proposals = new McpProposalStore();
   const eventBuffer = new McpEventBuffer();
   eventBuffer.push({
     event_type: 'state_changed',
@@ -173,6 +175,7 @@ function setup(t) {
     haConnector,
     cardManager,
     eventBuffer,
+    proposals,
     scriptsDir,
     librariesDir,
     notesDir: path.join(scriptsDir, 'notes'),
@@ -186,7 +189,7 @@ function setup(t) {
     manager.stop();
     rmSync(dir, { recursive: true, force: true });
   });
-  return { manager, settings };
+  return { manager, settings, proposals };
 }
 
 async function connect(manager) {
@@ -200,7 +203,7 @@ async function connect(manager) {
 }
 
 test('read tools expose scripts, logs, events, entities and docs', async (t) => {
-  const { manager, settings } = setup(t);
+  const { manager, settings, proposals } = setup(t);
   await new Promise((r) => (manager.server.listening ? r() : manager.server.once('listening', r)));
   const client = await connect(manager);
   t.after(() => client.close());
@@ -239,6 +242,41 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
       { name: 'carded-day-card', bytes: Buffer.byteLength(DAY_CARD_SOURCE) },
     ]);
     assert.equal(scripts.find((s) => s.filename === 'hello.js').cards, undefined);
+  });
+
+  await t.test('read_script and list_scripts show proposals of the access level "propose"', async () => {
+    const base = { kind: 'script', card: null, isNew: false, args: {}, baseHash: 'x', message: 'm', warnings: [] };
+    const p = proposals.propose({ ...base, filename: 'hello.js', content: "ha.log('PROPOSED');" });
+    const read = await call('read_script', { filename: 'hello.js' });
+    assert.match(read.text, /PROPOSED text — proposal #\d+, NOT applied yet/);
+    assert.ok(read.text.includes("ha.log('PROPOSED');"));
+    assert.ok(!read.text.includes('API_KEY'), 'the proposed text replaces the file text in the result');
+
+    const listed = JSON.parse((await call('list_scripts')).text);
+    assert.deepEqual(listed.openProposals, [{ id: p.id, file: 'hello.js' }]);
+
+    const card = proposals.propose({ ...base, kind: 'card', filename: 'carded.ts', content: 'class X {}' });
+    const cardRead = await call('read_script', { filename: 'carded.ts', part: 'card' });
+    assert.ok(cardRead.text.includes('class X {}'));
+    assert.match(cardRead.text, /NOT applied yet/);
+
+    const fresh = proposals.propose({
+      ...base,
+      filename: 'brand_new.ts',
+      isNew: true,
+      baseHash: null,
+      content: 'ha.log(1);',
+    });
+    const newRead = await call('read_script', { filename: 'brand_new.ts' });
+    assert.ok(newRead.text.includes('ha.log(1);'), 'a file that exists only as a proposal can be read');
+
+    proposals.close(p.id, 'rejected', 'wrong entity');
+    const after = await call('read_script', { filename: 'hello.js' });
+    assert.ok(after.text.includes("const API_KEY = '***'"), 'rejected: the file on disk is shown again');
+    assert.match(after.text, /Your earlier proposal #\d+ for this file was rejected: wrong entity/);
+    proposals.close(card.id, 'expired');
+    proposals.close(fresh.id, 'expired');
+    assert.equal(JSON.parse((await call('list_scripts')).text).openProposals, undefined);
   });
 
   await t.test('read_script: masks secrets, appends plain card source, rejects bad names', async () => {

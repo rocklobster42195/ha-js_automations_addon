@@ -15,6 +15,7 @@ const GitManager = require('../js_automations/core/git-manager.js');
 const { McpProtocol } = require('../js_automations/core/mcp-protocol.js');
 const { McpActivityLog } = require('../js_automations/core/mcp-activity-log.js');
 const { registerWriteTools } = require('../js_automations/core/mcp-tools-write.js');
+const { McpProposalStore } = require('../js_automations/core/mcp-proposals.js');
 const cardFiles = require('../js_automations/core/card-files.js');
 
 const CARD_SRC = 'class DemoCard extends HTMLElement {}\ncustomElements.define("demo-card", DemoCard);';
@@ -94,6 +95,8 @@ function setup(t) {
     typesDir: path.join(__dirname, '../js_automations/core/types'),
     notifyStatusUpdate: () => events.push('status'),
     notifyContentChanged: (f) => events.push(`changed:${f}`),
+    proposals: new McpProposalStore(),
+    isProposeMode: () => settings.mcp.access_level === 'propose',
   });
   manager.init();
   t.after(() => {

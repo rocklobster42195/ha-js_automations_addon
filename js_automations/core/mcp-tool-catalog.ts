@@ -19,13 +19,15 @@ export const MCP_TOOL_GROUPS: McpToolGroup[] = ['read', 'control', 'write'];
  * Settings → MCP Server → Access level: each level includes the ones before it. "custom" ignores the levels and
  * uses the switch of every single tool.
  */
-export type McpAccessLevel = 'read' | 'control' | 'write' | 'custom';
+export type McpAccessLevel = 'read' | 'control' | 'propose' | 'write' | 'custom';
 
-export const MCP_ACCESS_LEVELS: McpAccessLevel[] = ['read', 'control', 'write', 'custom'];
+export const MCP_ACCESS_LEVELS: McpAccessLevel[] = ['read', 'control', 'propose', 'write', 'custom'];
 
 const LEVEL_GROUPS: Record<Exclude<McpAccessLevel, 'custom'>, McpToolGroup[]> = {
   read: ['read'],
   control: ['read', 'control'],
+  // Same tools as 'write'; the difference is that their changes become proposals (see mcp-proposals.ts).
+  propose: ['read', 'control', 'write'],
   write: ['read', 'control', 'write'],
 };
 

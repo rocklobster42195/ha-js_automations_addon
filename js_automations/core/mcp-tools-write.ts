@@ -6,8 +6,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
+import { hashText, type McpProposalStore, type Proposal } from './mcp-proposals';
 import { isValidScriptName, missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
-import { checkScript, checkSyntax, formatIssues } from './mcp-script-check';
+import { checkScript, checkSyntax, formatIssues, type CheckIssue } from './mcp-script-check';
 import { isSensitiveName, maskSecrets } from './mcp-secret-filter';
 import { applyEdits, type TextEdit } from './mcp-edits';
 import ScriptHeaderParser from './script-header-parser';
@@ -35,6 +36,17 @@ export interface McpWriteToolDeps extends ScriptDirs {
   notifyStatusUpdate: () => void;
   /** Tells open editors that a file changed on disk behind their back. */
   notifyContentChanged: (filename: string) => void;
+  /** Where proposals are kept while the access level is "propose" (see mcp-proposals.ts). */
+  proposals: McpProposalStore;
+  /** True while the access level is "propose": script and card changes become proposals instead of being written. */
+  isProposeMode: () => boolean;
+}
+
+export interface McpWriteTools {
+  /** Applies an open proposal through the normal write path. Fails (and marks it stale) when the file changed since. */
+  applyProposal(id: number): Promise<{ ok: boolean; message: string }>;
+  /** The text the proposal would replace (empty for a new file), for the diff view. */
+  proposalBefore(p: Proposal): string;
 }
 
 const MAX_SOURCE_CHARS = 512_000;
@@ -56,7 +68,7 @@ const commitSubject = (message: unknown, fallback: string): string =>
 const text = (content: string): McpToolResult => ({ content });
 const fail = (message: string): McpToolResult => ({ content: message, isError: true });
 
-export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps): void {
+export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps): McpWriteTools {
   const { workerManager, cardManager, depManager, gitManager, storeManager } = deps;
 
   /**
@@ -96,6 +108,27 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
 
   const rel = (fullPath: string): string => path.relative(deps.scriptsDir, fullPath).split(path.sep).join('/');
 
+  /** What the assistant is told when its change became a proposal instead of a write. */
+  const proposalReply = (p: Proposal, extra: string[]): McpToolResult => {
+    const what = p.kind === 'card' ? `card of "${p.filename}"` : `"${p.filename}"`;
+    return text(
+      [
+        `${p.isNew ? 'New file' : 'Change'} for ${what} saved as proposal #${p.id}. It is NOT applied: the user reviews it as a diff in JSA (MCP panel → proposals) and applies or rejects it.`,
+        'Do not restart the script and do not assume the change exists. Tell the user a proposal is waiting. A further write_script/edit_script/write_card/edit_card for the same file updates this proposal (edit_* builds on the proposed text). read_script shows the proposed text and, later, whether it was applied or rejected.',
+        ...extra,
+      ].join('\n')
+    );
+  };
+
+  const typeIssueLines = (issues: CheckIssue[], name: string): string[] =>
+    issues.length
+      ? [
+          `Type warnings (${issues.length}):\n${formatIssues(issues)}\nFix every one that points to a real mistake with a further call for the same file before you report it as done.`,
+        ]
+      : name.endsWith('.ts')
+        ? ['Type check: no problems found.']
+        : [];
+
   const NO_COMMIT = 'git: nothing to commit';
 
   /**
@@ -130,7 +163,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       : '';
 
   /** Shared by write_script and edit_script: checks, snapshot, atomic write, commit, warnings. */
-  const writeScriptCore = async (args: Record<string, unknown>): Promise<McpToolResult> => {
+  const writeScriptCore = async (args: Record<string, unknown>, direct = false): Promise<McpToolResult> => {
     const filename = String(args.filename ?? '');
     let content = String(args.content ?? '');
     if (!isValidScriptName(filename)) {
@@ -182,8 +215,24 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
 
     // Keep the existing card: read_script strips the Base64 block, so the new source has none.
     let previous: string | null = null;
-    if (existing) {
-      previous = fs.readFileSync(fullPath, 'utf8');
+    if (existing) previous = fs.readFileSync(fullPath, 'utf8');
+
+    if (!direct && deps.isProposeMode()) {
+      const proposal = deps.proposals.propose({
+        kind: 'script',
+        filename: isLibrary ? `libraries/${name}` : name,
+        card: null,
+        isNew: !existing,
+        args: { ...args },
+        content,
+        baseHash: previous === null ? null : hashText(previous),
+        message: commitSubject(args.message, `${existing ? 'update' : 'create'} ${name}`),
+        warnings: check.typeIssues.length ? formatIssues(check.typeIssues).split('\n') : [],
+      });
+      return proposalReply(proposal, typeIssueLines(check.typeIssues, name));
+    }
+
+    if (previous !== null) {
       const card = CARD_BLOCK.exec(previous);
       if (card) content = `${content.trimEnd()}\n\n${card[0]}\n`;
     }
@@ -251,7 +300,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
   });
 
   /** Shared by write_card and edit_card. */
-  const writeCardCore = async (args: Record<string, unknown>): Promise<McpToolResult> => {
+  const writeCardCore = async (args: Record<string, unknown>, direct = false): Promise<McpToolResult> => {
     const filename = String(args.filename ?? '');
     const source = String(args.source ?? '');
     const found = resolveScript(deps, filename);
@@ -275,6 +324,23 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           ? `Invalid card name "${card}". Use lowercase letters, digits, underscores and hyphens, starting with "${base}-" (e.g. "${base}-day-card"); omit "card" for the main card.`
           : `The script name "${base}" cannot have card files: card files are named after the script, which may only contain lowercase letters, digits and underscores. Rename the script first.`
       );
+    }
+
+    if (!direct && deps.isProposeMode()) {
+      const current = cardManager.getCardSource(found.fullPath, isMain ? undefined : card);
+      const has = current !== null && current !== undefined;
+      const proposal = deps.proposals.propose({
+        kind: 'card',
+        filename: name,
+        card: isMain ? null : (card as string),
+        isNew: !has,
+        args: { ...args },
+        content: source,
+        baseHash: has ? hashText(current) : null,
+        message: commitSubject(args.message, `update card of ${name}`),
+        warnings: [],
+      });
+      return proposalReply(proposal, []);
     }
 
     const notes: string[] = [];
@@ -364,6 +430,17 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const filename = String(args.filename ?? '');
         const found = resolveScript(deps, filename);
         if (!found) {
+          // A file that exists only as a proposal can still be edited: the edits build on the proposed text.
+          const pendingNew =
+            deps.isProposeMode() && isValidScriptName(filename)
+              ? deps.proposals.findOpen('script', filename)
+              : undefined;
+          if (pendingNew) {
+            const edited = applyEdits(pendingNew.content, args.edits as TextEdit[]);
+            if (!edited.ok) return fail(`Not changed — ${edited.error}`);
+            const proposed = await writeScriptCore({ ...pendingNew.args, content: edited.text, message: args.message });
+            return withEditNote(proposed, edited);
+          }
           return fail(
             missingScriptMessage(
               filename,
@@ -372,7 +449,14 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           );
         }
         // An old embedded card block is not part of the text being edited; writeScriptCore keeps it.
-        const current = fs.readFileSync(found.fullPath, 'utf8').replace(CARD_BLOCK, '');
+        // A pending proposal is the newest state the assistant knows (read_script shows it), so edits build on it.
+        const pending = deps.isProposeMode()
+          ? deps.proposals.findOpen(
+              'script',
+              found.isLibrary ? `libraries/${path.basename(found.fullPath)}` : path.basename(found.fullPath)
+            )
+          : undefined;
+        const current = pending ? pending.content : fs.readFileSync(found.fullPath, 'utf8').replace(CARD_BLOCK, '');
         const result = applyEdits(current, args.edits as TextEdit[]);
         if (!result.ok) return fail(`Not changed — ${result.error}`);
         const written = await writeScriptCore({
@@ -417,7 +501,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
               : `The script name "${base}" cannot have card files (lowercase letters, digits and underscores only). Rename the script first.`
           );
         }
-        const current = cardManager.getCardSource(found.fullPath, card);
+        const pendingCard = deps.isProposeMode()
+          ? deps.proposals.findOpen('card', path.basename(found.fullPath), card ?? null)
+          : undefined;
+        const current = pendingCard ? pendingCard.content : cardManager.getCardSource(found.fullPath, card);
         if (current === null || current === undefined) {
           return fail(
             `"${filename}" has no ${card ? `card "${card}"` : 'card'} yet. Create it with write_card first (list_scripts shows the existing cards).`
@@ -514,4 +601,48 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         );
       }),
   });
+
+  const applyProposal = (id: number): Promise<{ ok: boolean; message: string }> =>
+    serialized(async () => {
+      const p = deps.proposals.get(id);
+      if (!p)
+        return {
+          ok: false,
+          message: 'No such proposal (proposals are kept in memory only and expire after 24 hours).',
+        };
+      if (p.status !== 'open') return { ok: false, message: `Proposal #${id} is already ${p.status}.` };
+
+      // Stale check: the proposal was made against one version of the file.
+      const found = resolveScript(deps, p.filename);
+      let currentHash: string | null = null;
+      if (found) {
+        const text_ =
+          p.kind === 'script'
+            ? fs.readFileSync(found.fullPath, 'utf8')
+            : cardManager.getCardSource(found.fullPath, p.card ?? undefined);
+        currentHash = text_ === null || text_ === undefined ? null : hashText(text_);
+      }
+      if (currentHash !== p.baseHash) {
+        deps.proposals.close(id, 'stale');
+        return {
+          ok: false,
+          message:
+            'The file changed after this proposal was made, so it was not applied. Ask the assistant to make the change again.',
+        };
+      }
+
+      const result = await (p.kind === 'script' ? writeScriptCore(p.args, true) : writeCardCore(p.args, true));
+      if (result.isError) return { ok: false, message: String(result.content) };
+      deps.proposals.close(id, 'applied');
+      return { ok: true, message: String(result.content) };
+    });
+
+  const proposalBefore = (p: Proposal): string => {
+    const found = resolveScript(deps, p.filename);
+    if (!found) return '';
+    if (p.kind === 'script') return fs.readFileSync(found.fullPath, 'utf8').replace(CARD_BLOCK, '');
+    return cardManager.getCardSource(found.fullPath, p.card ?? undefined) ?? '';
+  };
+
+  return { applyProposal, proposalBefore };
 }

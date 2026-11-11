@@ -3,6 +3,7 @@ import type McpManager from '../core/mcp-manager';
 import type { McpActivityLog } from '../core/mcp-activity-log';
 import { buildMcpb, isBetaVersion } from '../core/mcpb-builder';
 import type { McpFeedbackStore } from '../core/mcp-feedback-store';
+import { summarize, type McpProposalStore, type Proposal } from '../core/mcp-proposals';
 
 interface McpRouteBuildInfo {
   /** Add-on version, becomes the extension version. */
@@ -30,7 +31,19 @@ interface McpFeedbackAccess {
   isMaintainerMode: () => boolean;
 }
 
-export = (mcpManager: McpManager, activity: McpActivityLog, build: McpRouteBuildInfo, feedback: McpFeedbackAccess) => {
+interface McpProposalAccess {
+  store: McpProposalStore;
+  apply: (id: number) => Promise<{ ok: boolean; message: string }>;
+  before: (p: Proposal) => string;
+}
+
+export = (
+  mcpManager: McpManager,
+  activity: McpActivityLog,
+  build: McpRouteBuildInfo,
+  feedback: McpFeedbackAccess,
+  proposals: McpProposalAccess
+) => {
   const router = express.Router();
 
   router.get('/', (req, res) => {
@@ -39,6 +52,35 @@ export = (mcpManager: McpManager, activity: McpActivityLog, build: McpRouteBuild
 
   router.get('/activity', (req, res) => {
     res.json(activity.list());
+  });
+
+  // Proposals of the access level "propose": the user reviews the diff and applies or rejects (see mcp-proposals.ts).
+  router.get('/proposals', (req, res) => {
+    res.json(proposals.store.list().map(summarize));
+  });
+
+  router.get('/proposals/:id', (req, res) => {
+    const p = proposals.store.get(Number(req.params.id));
+    if (!p) return res.status(404).json({ error: 'Unknown proposal' });
+    res.json({ ...summarize(p), before: proposals.before(p), after: p.content });
+  });
+
+  router.post('/proposals/:id/apply', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!proposals.store.get(id)) return res.status(404).json({ error: 'Unknown proposal' });
+    try {
+      const result = await proposals.apply(id);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (e) {
+      res.status(500).json({ ok: false, message: (e as Error).message });
+    }
+  });
+
+  router.post('/proposals/:id/reject', (req, res) => {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    const closed = proposals.store.close(Number(req.params.id), 'rejected', reason || null);
+    if (!closed) return res.status(404).json({ error: 'Unknown or already closed proposal' });
+    res.json({ ok: true });
   });
 
   router.get('/feedback', (req, res) => {

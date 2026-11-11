@@ -36,7 +36,8 @@ import { McpProtocol } from './mcp-protocol';
 import { McpEventBuffer } from './mcp-event-buffer';
 import { registerReadTools } from './mcp-tools-read';
 import { registerControlTools } from './mcp-tools-control';
-import { registerWriteTools } from './mcp-tools-write';
+import { registerWriteTools, type McpWriteTools } from './mcp-tools-write';
+import { McpProposalStore, summarize as summarizeProposal } from './mcp-proposals';
 import { registerPrompts } from './mcp-prompts';
 import { McpFeedbackStore } from './mcp-feedback-store';
 import { registerFeedbackTool } from './mcp-tools-feedback';
@@ -126,6 +127,8 @@ class Kernel extends EventEmitter {
   mcpProtocol!: McpProtocol;
   mcpEvents!: McpEventBuffer;
   mcpFeedback!: McpFeedbackStore;
+  mcpProposals!: McpProposalStore;
+  mcpWriteTools!: McpWriteTools;
   compilerManager!: CompilerManager;
   blocklyCompiler!: BlocklyCompiler;
   cardManager!: CardManager;
@@ -200,6 +203,7 @@ class Kernel extends EventEmitter {
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.mcpManager = new McpManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.mcpActivity = new McpActivityLog();
+      this.mcpProposals = new McpProposalStore();
       this.mcpProtocol = new McpProtocol(this.settingsManager, this.logManager, this.mcpActivity, config.VERSION);
       this.mcpManager.setHandler((req, res) => this.mcpProtocol.handle(req, res));
       this.backupManager = new BackupManager(this.settingsManager, this.logManager, config);
@@ -226,6 +230,7 @@ class Kernel extends EventEmitter {
         haConnector: this.haConnector,
         cardManager: this.cardManager,
         eventBuffer: this.mcpEvents,
+        proposals: this.mcpProposals,
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
         notesDir: config.NOTES_DIR,
@@ -249,7 +254,7 @@ class Kernel extends EventEmitter {
         docsDir: path.resolve(__dirname, '../../docs'),
         typesDir: path.join(__dirname, 'types'),
       });
-      registerWriteTools(this.mcpProtocol, {
+      this.mcpWriteTools = registerWriteTools(this.mcpProtocol, {
         workerManager: this.workerManager,
         cardManager: this.cardManager,
         depManager: this.depManager,
@@ -263,6 +268,9 @@ class Kernel extends EventEmitter {
         typesDir: path.join(__dirname, 'types'),
         notifyStatusUpdate: () => this.io?.emit('status_update'),
         notifyContentChanged: (filename) => this.io?.emit('script_content_changed', { filename, source: 'mcp' }),
+        proposals: this.mcpProposals,
+        isProposeMode: () =>
+          (this.settingsManager.getSettings() as { mcp?: { access_level?: string } }).mcp?.access_level === 'propose',
       });
 
       // Create SystemService before EntityManager so we can pass it
@@ -431,6 +439,28 @@ class Kernel extends EventEmitter {
     this.webhookManager.on('config_changed', (webhookConfig: unknown) => {
       if (this.io) this.io.emit('webhook_config_changed', webhookConfig);
     });
+
+    // Proposals of the access level "propose": refresh open UIs and note what happens in the MCP activity view
+    // (deliberately not in the main log).
+    this.mcpProposals.on('changed', () => {
+      if (this.io) this.io.emit('mcp_proposals_changed', this.mcpProposals.list().map(summarizeProposal));
+    });
+    const noteProposal = (
+      verb: string,
+      p: { id: number; kind: string; filename: string; card: string | null; status: string }
+    ) =>
+      this.mcpActivity.add({
+        ts: Date.now(),
+        tool: 'proposal',
+        target: p.filename,
+        ip: '-',
+        ok: p.status !== 'stale',
+        error: null,
+        detail: `Proposal #${p.id} (${p.kind}${p.card ? ` ${p.card}` : ''}) ${verb}`,
+        durationMs: 0,
+      });
+    this.mcpProposals.on('proposed', (p) => noteProposal('proposed', p));
+    this.mcpProposals.on('closed', (p) => noteProposal(p.status, p));
 
     // Forward MCP status changes to the UI (MCP tab)
     this.mcpManager.on('status_changed', (status: unknown) => {

@@ -16,6 +16,7 @@ import type LogManager from './log-manager';
 import type StoreManager from './store-manager';
 import type HAConnector from './ha-connection';
 import type { McpEventBuffer } from './mcp-event-buffer';
+import type { McpProposalStore, Proposal } from './mcp-proposals';
 
 export interface McpReadToolDeps {
   workerManager: WorkerManagerInstance;
@@ -24,6 +25,8 @@ export interface McpReadToolDeps {
   haConnector: HAConnector;
   cardManager: CardManager;
   eventBuffer: McpEventBuffer;
+  /** Proposals of the access level "propose"; read_script shows the proposed state and what became of them. */
+  proposals?: McpProposalStore;
   scriptsDir: string;
   librariesDir: string;
   /** Directory of the per-script notes (see script-notes.ts). */
@@ -37,6 +40,12 @@ export interface McpReadToolDeps {
   /** Storage directory with the generated services.d.ts of this Home Assistant instance. */
   storageDir: string;
 }
+
+const proposalNotice = (p: Proposal): string =>
+  `[PROPOSED text — proposal #${p.id}, NOT applied yet. The file on disk stays as it is until the user applies it in JSA.]\n`;
+
+const closedNotice = (p: Proposal): string =>
+  `\n\n[Your earlier proposal #${p.id} for this ${p.kind === 'card' ? 'card' : 'file'} was ${p.status}${p.reason ? `: ${p.reason}` : ''}.]`;
 
 const LOG_SEVERITY: Record<string, number> = { error: 0, warn: 1, info: 2, debug: 3 };
 const MAX_ENTITY_ATTRIBUTE_CHARS = 8000;
@@ -143,7 +152,26 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
           entityConflicts: m.entity_conflicts || undefined,
           hasNotes: m.hasNotes || undefined,
         }));
-      return { content: { count: scripts.length, scripts } };
+      const proposals = (deps.proposals?.list() ?? [])
+        .filter((p) => p.status === 'open')
+        .map((p) => ({
+          id: p.id,
+          file: p.filename,
+          ...(p.kind === 'card' ? { card: p.card ?? 'main' } : {}),
+          new: p.isNew || undefined,
+        }));
+      return {
+        content: {
+          count: scripts.length,
+          scripts,
+          ...(proposals.length
+            ? {
+                openProposals: proposals,
+                note: 'Open proposals wait for the user to apply or reject them; read_script shows the proposed text of such a file.',
+              }
+            : {}),
+        },
+      };
     },
   });
 
@@ -166,13 +194,18 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
     handler: (args) => {
       const filename = String(args.filename ?? '');
       const found = resolveScript(deps, filename);
-      if (!found)
+      if (!found) {
+        const proposedNew = deps.proposals?.findOpen('script', filename);
+        if (proposedNew) {
+          return text(UNTRUSTED_NOTICE + proposalNotice(proposedNew) + maskWithNotice(proposedNew.content));
+        }
         return fail(
           missingScriptMessage(
             filename,
             `No script or library named "${filename}". Use list_scripts to see the available files.`
           )
         );
+      }
 
       const part = args.part === 'card' || args.part === 'all' ? args.part : 'script';
       let source = fs.readFileSync(found.fullPath, 'utf8');
@@ -180,9 +213,25 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         CARD_BLOCK,
         '/* card source: not included here, read it with read_script part "card" (or "all") */'
       );
+      // Access level "propose": what the assistant proposed is the newest state it knows about.
+      const scriptKey = found.isLibrary ? `libraries/${path.basename(found.fullPath)}` : path.basename(found.fullPath);
+      const openScript = deps.proposals?.findOpen('script', scriptKey);
+      const closedScript = openScript ? undefined : deps.proposals?.latestClosed('script', scriptKey);
+      if (openScript) source = openScript.content;
       const cardName = args.card ? String(args.card) : undefined;
       // The card text is only read when it is asked for; the list of cards below needs sizes only.
-      const card = (part !== 'script' && !found.isLibrary && cardManager.getCardSource(found.fullPath, cardName)) || '';
+      const openCard = !found.isLibrary
+        ? deps.proposals?.findOpen('card', path.basename(found.fullPath), cardName ?? null)
+        : undefined;
+      const closedCard =
+        !found.isLibrary && !openCard
+          ? deps.proposals?.latestClosed('card', path.basename(found.fullPath), cardName ?? null)
+          : undefined;
+      const card =
+        (part !== 'script' &&
+          !found.isLibrary &&
+          (openCard ? openCard.content : cardManager.getCardSource(found.fullPath, cardName))) ||
+        '';
       const cards = found.isLibrary ? [] : cardsOf(found.fullPath);
 
       if (part === 'card' && !card) {
@@ -209,7 +258,14 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         const list = cards.map((c) => `${c.name} (${c.bytes} bytes)`).join(', ');
         output += `\n\n[This script has Lovelace card(s) that are not included: ${list}. Read one with part "card" (add "card" for a further card).]`;
       }
-      return text(UNTRUSTED_NOTICE + maskWithNotice(output));
+      const shown = part === 'card' ? openCard : part === 'script' ? openScript : (openScript ?? openCard);
+      const closed = part === 'card' ? closedCard : closedScript;
+      return text(
+        UNTRUSTED_NOTICE +
+          (shown ? proposalNotice(shown) : '') +
+          maskWithNotice(output) +
+          (closed ? closedNotice(closed) : '')
+      );
     },
   });
 
