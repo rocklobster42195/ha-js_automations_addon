@@ -2,7 +2,7 @@
 
 This document describes the technical architecture of the addon — how the subsystems interact, why certain design decisions were made, and what happens internally when a script starts, an entity is created, or a Home Assistant event is received.
 
-It is intended as a contributor-level deep-dive, not a quick-start guide. For API usage examples see [API_REFERENCE.md](./API_REFERENCE.md).
+It is intended as a contributor-level deep-dive, not a quick-start guide. For API usage examples see [API_REFERENCE.md](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md).
 
 **A note on scope:** this document covers backend runtime architecture — how the pieces above actually behave, not how the codebase is built or how the UI is put together. Two things worth knowing as a contributor that don't otherwise show up here: the backend (`core/`, `routes/`, `services/`, `server.js`) is written in TypeScript and compiled via `tsc` to plain `.js` in place before running (mirrors the frontend's esbuild bundle step — see `nodemon.json`/`package.json`'s `build:backend`); the UI is built with [LIT](https://lit.dev/) web components (`public/js/components/*.ts`), one custom element per major panel, communicating with not-yet-migrated legacy files via a small set of `window.<component>` bridge objects. Full migration history and conventions: `docs/internal/RFC_FRONTEND_MODERNIZATION.md`.
 
@@ -539,7 +539,7 @@ For a `ha.register('sensor.freifunk_clients', { name: 'Freifunk Clients' })` cal
 }
 ```
 
-**Two-level availability**: not a flat `availability_topic`/`payload_available`/`payload_not_available` triple — `availability` is a list of two topics with `availability_mode: 'all'`, so the entity is only `available` when _both_ report online: the global `jsa/status` (the whole addon) and `jsa/script/<scriptSlug>/status` (this specific script). When a script stops, its own status topic flips to offline and the entity goes unavailable, independent of the addon's own status. Setting `stale_ok: true` (see [Native Entities](./guide/native-entities.md)) drops the per-script topic from the list, leaving only the global one — the entity then stays available across that script stopping.
+**Two-level availability**: not a flat `availability_topic`/`payload_available`/`payload_not_available` triple — `availability` is a list of two topics with `availability_mode: 'all'`, so the entity is only `available` when _both_ report online: the global `jsa/status` (the whole addon) and `jsa/script/<scriptSlug>/status` (this specific script). When a script stops, its own status topic flips to offline and the entity goes unavailable, independent of the addon's own status. Setting `stale_ok: true` (see [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md)) drops the per-script topic from the list, leaving only the global one — the entity then stays available across that script stopping.
 
 **`default_entity_id`** (HA 2025.10+, mandatory from HA 2026.4):
 This field provides the desired entity ID including domain (e.g., `"sensor.freifunk_clients"`). It is the direct successor to the deprecated `object_id` field. Without this field, HA from version 2026.4 onward would slugify the `name` field to derive the entity ID — so `name: 'Anzahl Freifunk Clients'` would become `sensor.anzahl_freifunk_clients` instead of `sensor.freifunk_clients`.
@@ -1038,7 +1038,7 @@ The card is a plain file in `cards/`; only the packed single-file form (download
 
 ## 20. MCP Server
 
-The MCP server lets an external AI client (Claude Desktop, …) inspect and control JSA. It is a second, separate Express server — not part of the Ingress app and not part of the webhook server. User-facing description: [MCP guide](./guide/mcp.md). Design notes: `docs/internal/ai_concept.md`.
+The MCP server lets an external AI client (Claude Desktop, …) inspect and control JSA. It is a second, separate Express server — not part of the Ingress app and not part of the webhook server. User-facing description: [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md). Design notes: `docs/internal/ai_concept.md`.
 
 ### Why a separate port
 
@@ -1110,7 +1110,7 @@ Claude Desktop runs local stdio servers only. `bridge.js` is a dependency-free N
 2. Implement it in the matching `mcp-tools-*.ts` with `protocol.registerTool`; validate input with zod; return `{ content, isError? }`. Secrets must pass `mcp-secret-filter`; file names must pass `mcp-script-files`.
 3. Add `settings.mcp.tools.<name>` and `<name>_desc` to both locale files (the `check:i18n` script enforces parity). The tool joins the access level of its group; add it to `MCP_SEPARATE_SWITCH_TOOLS` instead if it should never be part of a level.
 4. Add a test next to `test/mcp-tools-*.test.js` using the SDK client against a real `McpManager` (pick a random port via `JSA_MCP_PORT` before requiring the module).
-5. Document the tool in [the MCP guide](./guide/mcp.md).
+5. Document the tool in [the MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md).
 
 ### Built files
 

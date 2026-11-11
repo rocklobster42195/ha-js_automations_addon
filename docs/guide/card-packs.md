@@ -2,7 +2,7 @@
 
 A **Script Pack** is a script together with its Lovelace card. On your own system the two are separate files; to share them they are packed into a single `.js`/`.ts` file. It bundles two things that normally live in separate worlds:
 
-1. **Backend logic** — a regular JSA script (`ha.on()`, `ha.register()`, `ha.action()`, NPM packages, TypeScript types, persistent state — everything covered in [Native Entities](./native-entities.md)).
+1. **Backend logic** — a regular JSA script (`ha.on()`, `ha.register()`, `ha.action()`, NPM packages, TypeScript types, persistent state — everything covered in [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md)).
 2. **A Lovelace card** — a plain Web Component (no framework required), stored as `cards/<script>-card.js` next to your scripts.
 
 The add-on extracts the card on install, writes it to `config/www/jsa-cards/`, and registers it as a Lovelace resource automatically — no HACS, no manual resource management, no separate repo for the card half of a mini-integration.
@@ -79,7 +79,7 @@ customElements.define('my-card', MyCard);
 ```
 
 - **`__jsa__.connect(hass)`** subscribes to the HA WebSocket connection once and listens for the script's action results.
-- **`__jsa__.callAction(name, payload)`** fires a `jsa_action` event on the HA event bus. Your script receives it through `ha.action(name, handler)` (see the [API Reference](../API_REFERENCE.md)); the handler's return value flows back as the resolved value of the `callAction()` promise. Requests time out after **20 seconds** if the script never responds.
+- **`__jsa__.callAction(name, payload)`** fires a `jsa_action` event on the HA event bus. Your script receives it through `ha.action(name, handler)` (see the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md)); the handler's return value flows back as the resolved value of the `callAction()` promise. Requests time out after **20 seconds** if the script never responds.
 
 - **`__jsa__.isEditing(hostEl)`** is `true` while the dashboard is in edit mode or the card is shown in the "Add Card" picker preview. **`__jsa__.isPreview(hostEl)`** is `true` only in the picker / editor preview. Pass the card element (`this`). Don't use `hass.editMode` — it is not part of the Home Assistant API and is always undefined.
 
@@ -164,7 +164,7 @@ const localUrl = await ha.frontend.cacheAsset(team.teamIconUrl);
 ha.update('sensor.bundesliga_score', 'scheduled', { team_icon: localUrl });
 ```
 
-See the [API Reference](../API_REFERENCE.md#frontend--card-assets-hafrontend) for `installCard()`/`cacheAsset()` options (force refresh, TTL, max size).
+See the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md#frontend--card-assets-hafrontend) for `installCard()`/`cacheAsset()` options (force refresh, TTL, max size).
 
 ## Card files, sharing and Git
 
@@ -176,4 +176,4 @@ See the [API Reference](../API_REFERENCE.md#frontend--card-assets-hafrontend) fo
 
 ## Under the hood
 
-If you're debugging a Script Pack or curious how installation actually works — hashing, the Lovelace resource lifecycle, the preview endpoint's mock `hass` — see [TECH-README §18, Card Manager](../TECH-README.md#18-card-manager-script-pack-system).
+If you're debugging a Script Pack or curious how installation actually works — hashing, the Lovelace resource lifecycle, the preview endpoint's mock `hass` — see [TECH-README §18, Card Manager](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/TECH-README.md#18-card-manager-script-pack-system).

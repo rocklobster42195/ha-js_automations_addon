@@ -1,11 +1,11 @@
 # Authoring Scripts
 
-How a well-formed JS Automations (JSA) script looks and why. This page is the one place that ties the conventions together — header tags, script structure, native entities, config, cards — so a human or an AI assistant writes scripts that feel like the rest of the project. Details for each topic live in the linked guides and the [API Reference](../API_REFERENCE.md).
+How a well-formed JS Automations (JSA) script looks and why. This page is the one place that ties the conventions together — header tags, script structure, native entities, config, cards — so a human or an AI assistant writes scripts that feel like the rest of the project. Details for each topic live in the linked guides and the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md).
 
 ## The philosophy in five rules
 
 1. **A script is one file.** Metadata (header), logic, and optionally a Lovelace card all live together. No YAML, no separate repos.
-2. **Make things real HA entities.** Use `ha.register()` / `@expose` so state shows up natively in Home Assistant (dashboards, history, automations) instead of hiding in script variables. See [Native Entities](./native-entities.md).
+2. **Make things real HA entities.** Use `ha.register()` / `@expose` so state shows up natively in Home Assistant (dashboards, history, automations) instead of hiding in script variables. See [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md).
 3. **Config is one typed block.** Everything installation-specific or tunable — entity IDs, thresholds, times, texts — sits in one typed `CONFIG` constant at the top, not scattered as magic numbers. Only runtime state, values the user must change while the script runs, and credentials live in the store (see [Where configuration lives](#where-configuration-lives)).
 4. **Declare what you use.** Sensitive capabilities are declared with `@permission`; credentials live in the store (see [Credentials](#credentials)), never in source.
 5. **Fail loudly and clean up.** Log with `ha.log/warn/error`, handle errors, and let Mark-and-Sweep remove entities you no longer register.
@@ -103,7 +103,7 @@ Rules:
 ### Entities
 
 - Create your own entities with `ha.register()` (domains: `sensor`, `binary_sensor`, `switch`, `select`, `number`, `text`, `button`); update with `ha.update()`.
-- Commands from HA (a user switches your `switch`) arrive through `ha.on(entityId, cb)` with `e.state` as the raw payload — `'ON'` / `'OFF'` in upper case — and the entity only changes once you confirm with `ha.update()`. Details in [Native Entities](./native-entities.md#reacting-to-commands-from-home-assistant).
+- Commands from HA (a user switches your `switch`) arrive through `ha.on(entityId, cb)` with `e.state` as the raw payload — `'ON'` / `'OFF'` in upper case — and the entity only changes once you confirm with `ha.update()`. Details in [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md#reacting-to-commands-from-home-assistant).
 - With a `device_class` (e.g. `temperature`, `humidity`), leave out `icon`: Home Assistant shows the device class's own icon and ignores a custom one, and JSA logs a warning.
 - Group related entities into one device with the `device` option. Remember: with `device` set, HA derives the entity ID from device + entity name slugs.
 - Entities a script stops registering are removed on its next run (Mark-and-Sweep). For dynamic sets, call `ha.unregister()` immediately.
@@ -188,7 +188,7 @@ if (config.apiKey) {
 
 - Fire-and-forget: `ha.notify(message, { title, target, persistent })`.
 - Actionable: `await ha.ask(message, { actions, timeout, defaultAction })`.
-- Details: [Notifications](./notifications.md).
+- Details: [Notifications](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/notifications.md).
 
 ### Errors and logging
 
@@ -203,7 +203,7 @@ A card is a plain Web Component shipped inside the script file. The pieces:
 2. **Script side:** register the entities the card shows, keep them updated, and expose each button as `ha.action(name, handler)`. Call `ha.frontend.installCard()` (optionally with a `config` that pre-fills the "Add Card" picker). With `@card dev` in the header the call installs nothing and only logs a warning (preview only); with a plain `@card` it writes the card to the HA `www` folder and registers it as a Lovelace resource — start with `@card dev` while iterating.
 3. **Card side:** a Web Component. Home Assistant pushes `hass` into it; read entities from `hass.states[...]`. Call `__jsa__.connect(hass)` once and trigger actions with `await __jsa__.callAction(name, payload)`. The `__jsa__` object is injected by JSA — don't define it.
 
-The two directions are separate one-way channels: **script → card** happens through normal HA entities, **card → script** through `callAction` ↔ `ha.action`. They never call each other directly. Full explanation: [Script Packs](./card-packs.md).
+The two directions are separate one-way channels: **script → card** happens through normal HA entities, **card → script** through `callAction` ↔ `ha.action`. They never call each other directly. Full explanation: [Script Packs](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md).
 
 ### Card source in plain form
 
@@ -266,7 +266,7 @@ try {
 } catch (_) {}
 ```
 
-A script can have several cards (see [Script Packs](./card-packs.md#several-cards-in-one-script)): `ha.frontend.installCard()` installs the main card, `ha.frontend.installCard({ card: '<script>-<name>-card' })` a further one.
+A script can have several cards (see [Script Packs](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md#several-cards-in-one-script)): `ha.frontend.installCard()` installs the main card, `ha.frontend.installCard({ card: '<script>-<name>-card' })` a further one.
 
 **Where the card lives:** the card source is a plain JavaScript file `cards/<script>-card.js` (for `counter.ts`: `cards/counter-card.js`). Write it with the card editor tab or the `write_card` MCP tool; never put it inside the script. (Older scripts may still carry it as a Base64 `__JSA_CARD__` block at the end of the script; that block is only the single-file form used for sharing, and it moves into the card file the next time the card is saved.) See `examples/counter_card.ts` for the complete script that goes with the card above.
 
@@ -285,6 +285,6 @@ Style guidance for cards: use Home Assistant CSS variables (`--primary-color`, `
 
 ## See also
 
-- [API Reference](../API_REFERENCE.md) — every `ha.*` function
-- [Native Entities](./native-entities.md), [Script Packs](./card-packs.md), [Notifications](./notifications.md), [Creation Wizard](./creation-wizard.md), [Script Versioning](./script-versioning.md)
+- [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md) — every `ha.*` function
+- [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md), [Script Packs](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md), [Notifications](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/notifications.md), [Creation Wizard](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/creation-wizard.md), [Script Versioning](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/script-versioning.md)
 - `examples/` — runnable reference scripts (`hello_world.js` is the smallest)

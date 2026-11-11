@@ -272,7 +272,7 @@ ha.update('sensor.energy_total', { icon: 'mdi:flash-alert' });
 ha.unregister('sensor.energy_total');
 ```
 
-By default, an entity goes `unavailable` the instant its script stops. Pass `stale_ok: true` in `ha.register()` to keep it available (showing its last value) across script stop/restart — tied only to the addon's global status instead of the per-script one. See the [README](README.md#staying-available-while-stopped) for details.
+By default, an entity goes `unavailable` the instant its script stops. Pass `stale_ok: true` in `ha.register()` to keep it available (showing its last value) across script stop/restart — tied only to the addon's global status instead of the per-script one. See the [Native Entities guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md#staying-available-while-stopped) for details.
 
 ### 9. Calling Services (`ha.call`)
 
@@ -1569,7 +1569,7 @@ ha.onStop(() => stop());
 
 ## Script Header Tags
 
-A script's metadata lives in the first `/** ... */` block of the file, one tag per line. For how headers fit into a well-formed script (structure, conventions, cards), see [Authoring Scripts](./guide/authoring.md).
+A script's metadata lives in the first `/** ... */` block of the file, one tag per line. For how headers fit into a well-formed script (structure, conventions, cards), see [Authoring Scripts](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/authoring.md).
 
 | Tag            | Value                                                             | Purpose                                                                                                            |
 | -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -1583,7 +1583,7 @@ A script's metadata lives in the first `/** ... */` block of the file, one tag p
 | `@include`     | library file names (comma/space separated)                        | Shared global libraries made available to the script                                                               |
 | `@expose`      | `switch` (default) \| `button`                                    | Exposes the script itself as an entity (`switch`: on while running; `button`: press (re)starts it)                 |
 | `@permission`  | `network`, `fs:read`, `fs:write`, `fs`, `exec`, `webhook`, `mqtt` | Declares capabilities (see [Capability & Permission System](#capability--permission-system))                       |
-| `@card`        | _(none)_ \| `dev`                                                 | Marks the file as a Script Pack with a Lovelace card; `dev` = preview only ([Script Packs](./guide/card-packs.md)) |
+| `@card`        | _(none)_ \| `dev`                                                 | Marks the file as a Script Pack with a Lovelace card; `dev` = preview only ([Script Packs](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md)) |
 
 ---
 

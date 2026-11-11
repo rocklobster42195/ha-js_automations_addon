@@ -21,7 +21,7 @@ The **History** panel next to the Commit button lists every commit for the curre
 - **Revert a commit** to undo exactly what it changed. This creates a new commit, so nothing in the history is lost.
 - **Restore a deleted script** — deleted scripts stay in the history and can be brought back. Whether a deletion is committed automatically is controlled by the commit-on-delete checkbox.
 
-For disaster recovery of the whole add-on (not just one file) see [Backup & Restore](./backup-restore.md).
+For disaster recovery of the whole add-on (not just one file) see [Backup & Restore](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/backup-restore.md).
 
 ## Pushing to a remote (optional)
 
@@ -39,4 +39,4 @@ The token is injected into the push URL per request and never written to the rep
 
 ## Changes made by an AI assistant (MCP)
 
-When an AI assistant writes or deletes a script through the [MCP server](./mcp.md), JS Automations commits it automatically — you do not have to press **Commit**. First your current state of the file is saved as `mcp: snapshot before changing <file>`, then the change as `mcp: <description>`. If the scripts folder has no Git repository yet, one is created on the first such change. Use the History panel to compare an assistant's version with yours or to restore either one.
+When an AI assistant writes or deletes a script through the [MCP server](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md), JS Automations commits it automatically — you do not have to press **Commit**. First your current state of the file is saved as `mcp: snapshot before changing <file>`, then the change as `mcp: <description>`. If the scripts folder has no Git repository yet, one is created on the first such change. Use the History panel to compare an assistant's version with yours or to restore either one.

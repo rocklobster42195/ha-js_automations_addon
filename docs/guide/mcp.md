@@ -76,7 +76,7 @@ Blockly scripts are not visible to assistants.
 
 - The source is **syntax-checked first**; a script with syntax errors is rejected and the file stays untouched.
 - TypeScript is also **type-checked** against your real entities and services. Type problems are returned as warnings (the file is still written), because a type check can occasionally be wrong.
-- Before overwriting, JS Automations commits your current state of the file ("snapshot"), then the change itself, so **nothing is ever lost**. If the scripts folder has no Git repository yet, one is created on the first change. Commit messages start with `mcp:`; see [Script Versioning](./script-versioning.md) to browse, compare or restore.
+- Before overwriting, JS Automations commits your current state of the file ("snapshot"), then the change itself, so **nothing is ever lost**. If the scripts folder has no Git repository yet, one is created on the first change. Commit messages start with `mcp:`; see [Script Versioning](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/script-versioning.md) to browse, compare or restore.
 - The **Lovelace card** is its own file (`cards/<script>-card.js`), so rewriting a script never touches it; `write_card` changes it (and commits it with the script). `list_scripts` shows a script's cards, `read_script` reads them separately.
 - A script is **never started or restarted** by writing. The assistant calls `restart_script` separately; if the script is running, the result says so.
 - If you have the file open in the editor, a clean tab reloads automatically. With unsaved edits, your text is kept, you get a warning, and saving asks before overwriting the assistant's version.
@@ -98,8 +98,8 @@ Long chats get slow. Instead of dragging the history along, an assistant can kee
 
 Assistants that support prompt templates offer four:
 
-- **New JSA script** — writes a script following the project conventions (see [Authoring Scripts](./authoring.md)).
-- **Convert an ioBroker script** — paste a script from the ioBroker JavaScript adapter; the assistant maps the ioBroker IDs to your Home Assistant entities (asking about every guess, never inventing IDs), converts it following the [migration guide](./iobroker-migration.md) and lists what could not be converted.
+- **New JSA script** — writes a script following the project conventions (see [Authoring Scripts](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/authoring.md)).
+- **Convert an ioBroker script** — paste a script from the ioBroker JavaScript adapter; the assistant maps the ioBroker IDs to your Home Assistant entities (asking about every guess, never inventing IDs), converts it following the [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) and lists what could not be converted.
 - **Save notes for a script** — summarizes what the chat learned about a script into its notes, so a new chat can continue.
 - **Plan a JSA script (interview)** — the assistant asks you questions one at a time (trigger, entities, edge cases, settings, notifications) and writes the script only after you confirm the specification.
 

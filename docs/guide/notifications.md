@@ -68,4 +68,4 @@ const message = ha.localize({
 ha.notify(message);
 ```
 
-See the [API Reference](../API_REFERENCE.md#91-sending-notifications-hanotify) for the full option list of both functions.
+See the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md#91-sending-notifications-hanotify) for the full option list of both functions.

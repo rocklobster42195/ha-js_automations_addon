@@ -7,11 +7,7 @@ yarn-error.log
 # --- Sicherheit / Secrets ---
 # WICHTIG: Enthält URL und Token -> NIEMALS committen!
 .env
-.env.portainer-admin
-.env.nginxrp
-.env.proxmox
-.env.unifi
-.env.ccu
+.env.*
 
 # --- Laufzeit-Daten & Status ---
 # Der Merkzettel, welche Skripte gerade laufen

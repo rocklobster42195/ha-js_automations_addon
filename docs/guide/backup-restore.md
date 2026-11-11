@@ -1,6 +1,6 @@
 # Backup & Restore
 
-JS Automations can back up your scripts and data as zip snapshots, on a schedule or on demand, and restore them after a disaster. For getting a single file back, the [History panel](./script-versioning.md) is the quicker tool.
+JS Automations can back up your scripts and data as zip snapshots, on a schedule or on demand, and restore them after a disaster. For getting a single file back, the [History panel](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/script-versioning.md) is the quicker tool.
 
 ## Backing up
 
@@ -13,7 +13,7 @@ Configure it under **Settings → Backup**:
 
 A backup contains your scripts and the add-on's data folder. Files that are regenerated on every start (generated type definitions, caches) are left out on purpose.
 
-> **Encryption key.** If you use [encrypted store secrets](../API_REFERENCE.md), the key is not part of a backup and never leaves the machine. Encrypted secrets from a backup can only be read on the installation that created them.
+> **Encryption key.** If you use [encrypted store secrets](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md), the key is not part of a backup and never leaves the machine. Encrypted secrets from a backup can only be read on the installation that created them.
 >
 > The key is also per add-on: the stable and the beta add-on each have their own (`/data/store.key`), so encrypted secrets do not carry over when you switch between them. Switch the encryption off before switching, or copy `store.key` into the other add-on's data folder. Uninstalling an add-on deletes its key for good.
 

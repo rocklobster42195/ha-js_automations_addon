@@ -68,7 +68,7 @@ Combine with `expire_after` if a stale value should still eventually be flagged 
 
 ## Reacting to commands from Home Assistant
 
-An interactive entity (`switch`, `number`, `select`, `text`, `button`) receives its commands through the normal [`ha.on()`](../API_REFERENCE.md#5-reactive-triggers-haon) trigger on its own entity ID. The value HA sends arrives as `e.state`:
+An interactive entity (`switch`, `number`, `select`, `text`, `button`) receives its commands through the normal [`ha.on()`](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md#5-reactive-triggers-haon) trigger on its own entity ID. The value HA sends arrives as `e.state`:
 
 ```typescript
 ha.register('switch.garage_light', { name: 'Garage light' });
@@ -100,4 +100,4 @@ This tears down the entity's MQTT Discovery config and clears its retained state
 
 ## Reading state back
 
-Alongside `ha.register()`/`ha.update()`, the usual read APIs work on any entity — yours or HA's own: `ha.states`, `ha.getState()`, `ha.getAttr()`, `ha.getStateValue()`, `ha.entityExists()`. See the [API Reference](../API_REFERENCE.md) for the full list, and [`ha.entity()`](../API_REFERENCE.md#10-haentity--fluent-entity-api) for a typed, chainable way to call services on one entity at a time.
+Alongside `ha.register()`/`ha.update()`, the usual read APIs work on any entity — yours or HA's own: `ha.states`, `ha.getState()`, `ha.getAttr()`, `ha.getStateValue()`, `ha.entityExists()`. See the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md) for the full list, and [`ha.entity()`](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md#10-haentity--fluent-entity-api) for a typed, chainable way to call services on one entity at a time.

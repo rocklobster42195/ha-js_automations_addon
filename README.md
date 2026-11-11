@@ -16,7 +16,7 @@
 > **Actively evolving:** JS Automations is stable enough for daily/production use, but it's still a young project under active development. New features and improvements land regularly, so expect more frequent updates than a fully mature add-on — check the [releases](https://github.com/rocklobster42195/ha-js_automations_addon/releases) for what's new. Feedback and bug reports are always welcome!
 
 > [!TIP]
-> **Try the 3.2 beta — let an AI assistant work with your scripts.** The beta adds an **MCP server**: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run and — only if you allow it — write and restart scripts. It is off by default and every tool has its own switch. Look for **"JS Automations (Beta)"** in the Add-on Store; [how stable and beta coexist](./js_automations_beta/README.md) (stop the stable add-on first). Feedback is very welcome: [open an issue](https://github.com/rocklobster42195/ha-js_automations_addon/issues).
+> **Try the 3.2 beta — let an AI assistant work with your scripts.** The beta adds an **MCP server**: Claude Desktop (or any MCP client) can read your scripts and logs, find out why something does not run and — only if you allow it — write and restart scripts. It is off by default and every tool has its own switch. Look for **"JS Automations (Beta)"** in the Add-on Store; [how stable and beta coexist](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/js_automations_beta/README.md) (stop the stable add-on first). Feedback is very welcome: [open an issue](https://github.com/rocklobster42195/ha-js_automations_addon/issues).
 
 > [!TIP]
 > **API Reference:** Complete reference for all `ha` methods → [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md)
@@ -30,11 +30,11 @@
 ## Key Features
 
 - **TypeScript-native with live IntelliSense** — Full autocomplete for your actual HA entities, services (including field types), and custom store keys, updated automatically as your home changes.
-- **Visual Scripting (Blockly)** — Build automations by dragging blocks instead of writing code. A "Show Code" panel reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file. See the [Blockly guide](./docs/guide/blockly.md).
-- **NEW: Script Versioning (Git)** — Commit, browse history, compare versions and restore any file from a local Git repository — no account needed. Optionally push to GitHub, GitLab, Gitea or any HTTPS Git host. See the [Versioning guide](./docs/guide/script-versioning.md).
-- **NEW: Backup & Restore** — Scheduled zip backups with retention, optional WebDAV upload, and a disaster-recovery restore with selective diff and an automatic safety snapshot. See the [Backup guide](./docs/guide/backup-restore.md).
+- **Visual Scripting (Blockly)** — Build automations by dragging blocks instead of writing code. A "Show Code" panel reveals the generated JavaScript live, and any block script can be duplicated as an editable `.js` file. See the [Blockly guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/blockly.md).
+- **NEW: Script Versioning (Git)** — Commit, browse history, compare versions and restore any file from a local Git repository — no account needed. Optionally push to GitHub, GitLab, Gitea or any HTTPS Git host. See the [Versioning guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/script-versioning.md).
+- **NEW: Backup & Restore** — Scheduled zip backups with retention, optional WebDAV upload, and a disaster-recovery restore with selective diff and an automatic safety snapshot. See the [Backup guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/backup-restore.md).
 - **Thread Isolation** — Every script runs in its own Worker Thread. Crashes are fully contained and never affect Home Assistant or other scripts.
-- **Native HA Entities** — Register entities via MQTT Discovery with `ha.register()`; state is retained across reboots, and entities can be grouped under a named HA device. See the [Native Entities guide](./docs/guide/native-entities.md).
+- **Native HA Entities** — Register entities via MQTT Discovery with `ha.register()`; state is retained across reboots, and entities can be grouped under a named HA device. See the [Native Entities guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md).
 - **Smart Triggers & Fluent API** — `ha.on()` supports wildcards, arrays, and RegExp; `ha.waitFor()` and `ha.waitUntil()` pause until a state or a multi-entity condition is reached; `await ha.entity('light.kitchen').turn_on({ brightness: 200 })` keeps sequential logic readable.
 - **Integrated Web IDE** — Monaco editor with syntax highlighting, live logs, a real-time status bar, and a smart snippet system.
 - **Persistent Store & Secrets** — Share data between scripts or survive reboots with `ha.store` and `ha.persistent()`. Values can be marked as secrets, shared per script, and optionally encrypted at rest.
@@ -46,8 +46,8 @@
 - **History & Computed Helpers (`ha.history`)** — Raw state history and long-term statistics, plus `trend()`, `derivative()`, `integral()`, `stats()`, `timeSince()` and `timeInState()` on HA entities or any data array.
 - **Global Libraries & Auto-NPM** — Write shared code once and `@include` it anywhere. npm packages listed in the script header are installed automatically.
 - **Capability Transparency** — Scripts declare `@permission network`, `@permission fs:write`, etc. in their header. The script list shows capability badges, warns about undeclared usage, and can enforce permissions at runtime.
-- **NEW: MCP Server (AI assistants)** — Let Claude Desktop (or any MCP client) list and read your scripts, check logs and errors, and — if you allow it — write and restart scripts. One-click install for Claude Desktop, a switch for every tool, writing off by default, every change saved as a Git commit. See the [MCP guide](./docs/guide/mcp.md).
-- **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()`. See the [Script Packs guide](./docs/guide/card-packs.md).
+- **NEW: MCP Server (AI assistants)** — Let Claude Desktop (or any MCP client) list and read your scripts, check logs and errors, and — if you allow it — write and restart scripts. One-click install for Claude Desktop, a switch for every tool, writing off by default, every change saved as a Git commit. See the [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md).
+- **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()`. See the [Script Packs guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md).
 
 ---
 
@@ -115,12 +115,12 @@ ha.on(SOURCE, greet);
 ha.log('Hello World script started.');
 ```
 
-- **`@name`/`@icon`/`@description`/`@label`** — shown in the sidebar; `@label` groups scripts and, if a matching HA Label exists, inherits its icon and color (see [Creation Wizard](./docs/guide/creation-wizard.md#what-label-and-area-actually-do)).
+- **`@name`/`@icon`/`@description`/`@label`** — shown in the sidebar; `@label` groups scripts and, if a matching HA Label exists, inherits its icon and color (see [Creation Wizard](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/creation-wizard.md#what-label-and-area-actually-do)).
 - **`@expose switch`** — exposes the _script itself_ as a toggle entity (`On` = running, `Off` = stopped). Use `@expose button` instead for a one-off action that (re)starts the script on press.
-- **`ha.register()`** — creates a real HA entity via MQTT Discovery; see [Native Entities](./docs/guide/native-entities.md).
+- **`ha.register()`** — creates a real HA entity via MQTT Discovery; see [Native Entities](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md).
 - **`ha.on()`** — reacts to a state change; combine with `ha.update()`/`ha.entity()` to act on it.
 
-The full header tag reference (`@npm`, `@include`, `@area`, `@permission`, `@card`, ...) and the complete `ha` API are in the [API Reference](./docs/API_REFERENCE.md). The example itself lives at [`examples/hello_world.js`](./examples/hello_world.js).
+The full header tag reference (`@npm`, `@include`, `@area`, `@permission`, `@card`, ...) and the complete `ha` API are in the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md). The example itself lives at [`examples/hello_world.js`](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/examples/hello_world.js).
 
 ---
 
@@ -153,16 +153,16 @@ ha.log(weather.temp); // TypeScript knows this is a number
 
 The topics below have grown too deep for a README section — each has its own guide with worked examples and (where a picture beats a paragraph) screenshots:
 
-- **[Migrating from ioBroker](./docs/guide/iobroker-migration.md)** — ID mapping, API translation table and a worked example; also drives the AI prompt that converts ioBroker scripts.
-- **[MCP Server (AI assistants)](./docs/guide/mcp.md)** — connect Claude Desktop or another MCP client, tool permissions, security and privacy, maintainer mode.
-- **[Authoring Scripts](./docs/guide/authoring.md)** — script structure, header tags, conventions and cards in one place; the best starting point for writing (or prompting an AI to write) a JSA script.
-- **[Native Entities (`ha.register`)](./docs/guide/native-entities.md)** — MQTT Discovery entities, device grouping, staying available while stopped, `ha.unregister()`.
-- **[Notifications (`ha.notify` & `ha.ask`)](./docs/guide/notifications.md)** — simple, persistent, and actionable (button-response) notifications.
-- **[Creation Wizard](./docs/guide/creation-wizard.md)** — the **+** button's New / Upload / Import modes.
-- **[Script Packs (JSA Card Packs)](./docs/guide/card-packs.md)** — bundling a Lovelace card and its backend logic in one file, the `__jsa__` bridge, and the [Script Library](https://rocklobster42195.github.io/ha-jsa-library/).
-- **[Visual Scripting (Blockly)](./docs/guide/blockly.md)** — the block palette, Show Code, and how block errors trace back to the exact block.
-- **[Script Versioning (Git)](./docs/guide/script-versioning.md)** — commits, history, diffs, restore and optional remote push.
-- **[Backup & Restore](./docs/guide/backup-restore.md)** — scheduled zip backups, WebDAV upload, disaster-recovery restore.
+- **[Migrating from ioBroker](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md)** — ID mapping, API translation table and a worked example; also drives the AI prompt that converts ioBroker scripts.
+- **[MCP Server (AI assistants)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md)** — connect Claude Desktop or another MCP client, tool permissions, security and privacy, maintainer mode.
+- **[Authoring Scripts](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/authoring.md)** — script structure, header tags, conventions and cards in one place; the best starting point for writing (or prompting an AI to write) a JSA script.
+- **[Native Entities (`ha.register`)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/native-entities.md)** — MQTT Discovery entities, device grouping, staying available while stopped, `ha.unregister()`.
+- **[Notifications (`ha.notify` & `ha.ask`)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/notifications.md)** — simple, persistent, and actionable (button-response) notifications.
+- **[Creation Wizard](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/creation-wizard.md)** — the **+** button's New / Upload / Import modes.
+- **[Script Packs (JSA Card Packs)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md)** — bundling a Lovelace card and its backend logic in one file, the `__jsa__` bridge, and the [Script Library](https://rocklobster42195.github.io/ha-jsa-library/).
+- **[Visual Scripting (Blockly)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/blockly.md)** — the block palette, Show Code, and how block errors trace back to the exact block.
+- **[Script Versioning (Git)](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/script-versioning.md)** — commits, history, diffs, restore and optional remote push.
+- **[Backup & Restore](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/backup-restore.md)** — scheduled zip backups, WebDAV upload, disaster-recovery restore.
 
 Global Libraries (write once with `@include`, share across scripts — passive, no Start/Stop) are covered above under Key Features.
 

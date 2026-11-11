@@ -7,10 +7,10 @@ The **+** button in the sidebar opens the creation wizard — the single entry p
 3. **Import** — paste a raw file URL (a GitHub file or Gist) and the wizard fetches the code for you.
 
 <p align="center">
-  <img src="./images/creation-wizard.png" width="500" alt="New Script wizard modal with Name, Icon, Description, Language (JS/TS/BLK), Script Type, Label and Area fields">
+  <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/guide/images/creation-wizard.png" width="500" alt="New Script wizard modal with Name, Icon, Description, Language (JS/TS/BLK), Script Type, Label and Area fields">
 </p>
 
-Import is also how [Script Packs](./card-packs.md) are typically shared and installed: paste the URL, and the add-on handles NPM dependencies, TypeScript compilation, entity registration, and (if the file has a `__JSA_CARD__` block) card installation automatically — no manual setup steps.
+Import is also how [Script Packs](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md) are typically shared and installed: paste the URL, and the add-on handles NPM dependencies, TypeScript compilation, entity registration, and (if the file has a `__JSA_CARD__` block) card installation automatically — no manual setup steps.
 
 > 💡 **Script Library:** browse and import ready-to-use scripts at [ha-jsa-library](https://rocklobster42195.github.io/ha-jsa-library/) — its "Add to JSA" button opens this same import wizard with the URL already filled in.
 

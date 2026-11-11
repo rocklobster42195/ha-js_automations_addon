@@ -4,10 +4,10 @@ Blockly lets you build an automation by dragging blocks instead of typing JavaSc
 
 ## Creating a Blockly script
 
-Open the **+** creation wizard (see [Creation Wizard](./creation-wizard.md)) and pick the Blockly/visual option instead of JavaScript or TypeScript. This opens the block editor with an empty workspace and the block palette on the side.
+Open the **+** creation wizard (see [Creation Wizard](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/creation-wizard.md)) and pick the Blockly/visual option instead of JavaScript or TypeScript. This opens the block editor with an empty workspace and the block palette on the side.
 
 <p align="center">
-  <img src="./images/blockly-editor.png" width="800" alt="Blockly editor showing a trigger block chain with a service call and notify block, and the category toolbox on the left">
+  <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/guide/images/blockly-editor.png" width="800" alt="Blockly editor showing a trigger block chain with a service call and notify block, and the category toolbox on the left">
 </p>
 
 ## The block palette
@@ -43,4 +43,4 @@ Free-form JS/TS scripts self-declare what they need via the `@permission` header
 
 ## Under the hood
 
-For the compiler internals — how a `.blocks` file becomes `dist/<name>.js`, how permissions are derived and written back, and how block-level error tagging is implemented — see [TECH-README §15, Blockly: Visual Scripting Compilation](../TECH-README.md#15-blockly-visual-scripting-compilation).
+For the compiler internals — how a `.blocks` file becomes `dist/<name>.js`, how permissions are derived and written back, and how block-level error tagging is implemented — see [TECH-README §15, Blockly: Visual Scripting Compilation](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/TECH-README.md#15-blockly-visual-scripting-compilation).
