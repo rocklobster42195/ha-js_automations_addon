@@ -131,7 +131,7 @@ class BackupManager extends EventEmitter {
         this.logManager.add('error', 'Backup', `[Backup] Scheduled backup failed: ${(e as Error).message}`);
       });
     });
-    this.logManager.add('debug', 'Backup', `[Backup] Scheduled: "${cronExpr}".`);
+    this.logManager.add('debug', 'System', `[Backup] Scheduled: "${cronExpr}".`);
   }
 
   /** Streams SCRIPTS_DIR into a ZIP at destPath, same glob/ignore pattern as the manual download route. */
@@ -182,7 +182,7 @@ class BackupManager extends EventEmitter {
     const filePath = path.join(this.backupDir, filename);
 
     await this.writeZipTo(filePath);
-    this.logManager.add('debug', 'Backup', `[Backup] Created ${filename} (${reason}).`);
+    this.logManager.add('debug', 'System', `[Backup] Created ${filename} (${reason}).`);
     this.emit('backup_created', { filename, reason });
 
     await this.applyRetention();
@@ -310,7 +310,7 @@ class BackupManager extends EventEmitter {
       });
       const data = fs.readFileSync(filePath);
       await client.putFileContents(path.basename(filePath), data, { overwrite: true });
-      this.logManager.add('debug', 'Backup', `[Backup] Uploaded ${path.basename(filePath)} to WebDAV.`);
+      this.logManager.add('debug', 'System', `[Backup] Uploaded ${path.basename(filePath)} to WebDAV.`);
       return { success: true };
     } catch (e) {
       return { success: false, error: (e as Error).message };
