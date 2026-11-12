@@ -1,21 +1,11 @@
 ## [3.2.0-beta.11] - 2026-11-12
 
-- docs: troubleshooting and security guides, README comparison and feature order, changelog for proposals and prompts
-- fix(mcp): proposals in the mobile list have no review button; load them again once i18n is ready
-- style: format docs and tests with prettier
-- feat(mcp): show proposals in the script list, detect outdated ones early, clear closed ones
-- feat(mcp): ask for meaningful commit messages and summarize the change when none is given
-- docs(authoring): decide per value between entity, store and CONFIG constant
-- feat(mcp): review proposals as a diff in the editor, list them in the MCP panel
-- feat(mcp): access level "propose" - write tools leave proposals the user applies or rejects
-- feat(mcp): prompts to review, explain and diagnose a script and to convert a HA automation
-- docs: absolute links in the ioBroker migration guide
-- docs: absolute GitHub links so they work inside the add-on; ignore all .env.* files
-- fix(log): backup progress lines use the System source so the log level applies
-- fix(log): keep MCP connects and Git progress out of the main log
-- fix(release): wrap `@words` in auto-collected release notes in backticks
-- docs(mcp): assistants cannot create store entries - scripts create their own empty config
-- docs: hand-written beta.10 changelog entry
+- MCP: new access level **Read + control + propose**. The assistant cannot change anything itself; `write_script`, `edit_script`, `write_card` and `edit_card` leave a **proposal**. A new file shows up greyed out in a block **Proposals** at the top of the script list, a change marks the row of the script. **Review** opens the diff (red = as it is now, green = proposed), **Apply** asks first and shows what changes, **Reject** takes a reason the assistant can read. A proposal that no longer fits because the file changed meanwhile is marked outdated at once. Proposals are kept in memory only (at most 20, 24 hours). See [Proposals](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md#proposals-access-level-propose)
+- MCP: assistants are asked to say what changed and why with every write; without a message the Git commit gets a summary of the change (`mcp: update garage.ts: +4/-1 lines, touches CONFIG`) instead of just "update"
+- MCP: new prompts **Review a script**, **Explain a script**, **Diagnose a script** and **Convert a Home Assistant automation** (YAML or blueprint to a JSA script)
+- MCP: `list_scripts` takes `search` and `compact`; a file that exists only as a proposal is reported as such instead of "not found"
+- Log: MCP connections no longer fill the main log (they appear in the MCP tab), and Git and backup progress lines follow the log level filter
+- Docs: new [Troubleshooting & FAQ](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/troubleshooting.md) and [Security model](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/security.md); README with a comparison to YAML, Node-RED and AppDaemon; authoring guide: entity, store or `CONFIG` constant; links in the documentation work inside the add-on
 
 ---
 
