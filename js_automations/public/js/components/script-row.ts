@@ -214,6 +214,9 @@ export class ScriptRow extends LitElement {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .proposal-line .btn-row[hidden] {
+      display: none;
+    }
     .proposal-line .btn-row {
       width: 24px;
       height: 24px;
@@ -682,6 +685,7 @@ export class ScriptRow extends LitElement {
         <span class="row-actions">
           <button
             class="btn-row p-review"
+            ?hidden=${this.mobile}
             @click=${(e: Event) => this._emitProposal('review', p.id, e)}
             title=${this._t('proposal_row_review', 'Review')}
           >

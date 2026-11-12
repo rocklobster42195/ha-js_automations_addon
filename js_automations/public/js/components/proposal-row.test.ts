@@ -49,6 +49,16 @@ describe('proposal-row (new file that exists only as a proposal)', () => {
     expect(e.detail.id).to.equal(3);
   });
 
+  it('on mobile there is no review (no editor), the click does nothing and apply stays', async () => {
+    const el = await fixture<ProposalRow>(html`<proposal-row mobile .proposal=${proposal()}></proposal-row>`);
+    expect((el.shadowRoot!.querySelector('.review') as HTMLButtonElement).hidden).to.equal(true);
+    expect((el.shadowRoot!.querySelector('.apply') as HTMLButtonElement).hidden).to.equal(false);
+    let reviewed = false;
+    el.addEventListener('jsa-proposal-review', () => (reviewed = true));
+    (el.shadowRoot!.querySelector('.proposal') as HTMLElement).click();
+    expect(reviewed).to.equal(false);
+  });
+
   it('an outdated proposal says so and cannot be applied', async () => {
     const el = await fixture<ProposalRow>(html`<proposal-row .proposal=${proposal({ stale: true })}></proposal-row>`);
     expect(el.shadowRoot!.querySelector('.note')!.textContent).to.contain('Outdated');
@@ -76,6 +86,14 @@ describe('script-row with a proposed change', () => {
     setTimeout(() => (el.shadowRoot!.querySelector('.p-apply') as HTMLElement).click());
     const e = (await oneEvent(el, 'jsa-proposal-apply')) as CustomEvent<{ id: number }>;
     expect(e.detail.id).to.equal(3);
+  });
+
+  it('on mobile the marker line has no review button', async () => {
+    const el = await fixture<ScriptRow>(
+      html`<script-row mobile .script=${script} .proposals=${[proposal({ isNew: false })]}></script-row>`
+    );
+    expect((el.shadowRoot!.querySelector('.p-review') as HTMLButtonElement).hidden).to.equal(true);
+    expect((el.shadowRoot!.querySelector('.p-apply') as HTMLButtonElement).hidden).to.equal(false);
   });
 
   it('names a card proposal and counts further ones', async () => {

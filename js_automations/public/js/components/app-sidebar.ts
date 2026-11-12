@@ -336,6 +336,8 @@ export class AppSidebar extends LitElement {
     if (this._proposalSocketBound) return;
     if (window.socket) {
       this._proposalSocketBound = true;
+      // The socket comes up after i18n is ready: load again so the rows are not stuck on fallback texts.
+      void this._loadProposals();
       window.socket.on('mcp_proposals_changed', (list: unknown) => this._setProposals(list));
       // A file changed on disk: an open proposal may have become outdated.
       window.socket.on('script_content_changed', () => void this._loadProposals());
@@ -924,7 +926,7 @@ export class AppSidebar extends LitElement {
                         ${repeat(
                           newProposals,
                           (p) => p.id,
-                          (p) => html`<proposal-row .proposal=${p}></proposal-row>`
+                          (p) => html`<proposal-row .proposal=${p} ?mobile=${this.mobile}></proposal-row>`
                         )}`
                     : nothing
                 }

@@ -87,6 +87,9 @@ export class ProposalRow extends LitElement {
       color: #fff;
       background: #333;
     }
+    button[hidden] {
+      display: none;
+    }
     button:disabled {
       opacity: 0.35;
       cursor: default;
@@ -94,6 +97,8 @@ export class ProposalRow extends LitElement {
   `;
 
   @property({ type: Object }) proposal!: JsaProposal;
+  /** Mobile has no editor, so there is no diff to open: the confirmation shows the summary instead. */
+  @property({ type: Boolean, reflect: true }) mobile = false;
 
   private _t(key: string, fallback?: string): string {
     return window.i18next?.t(key, { defaultValue: fallback }) ?? fallback ?? key;
@@ -115,7 +120,7 @@ export class ProposalRow extends LitElement {
         class="proposal ${stale ? 'stale' : ''}"
         title=${p.message}
         data-proposal-id=${p.id}
-        @click=${() => this._emit('review')}
+        @click=${() => !this.mobile && this._emit('review')}
       >
         <div class="icon"><i class="mdi mdi-file-plus-outline"></i></div>
         <div class="info">
@@ -131,6 +136,7 @@ export class ProposalRow extends LitElement {
         <div class="actions">
           <button
             class="review"
+            ?hidden=${this.mobile}
             @click=${(e: Event) => this._emit('review', e)}
             title=${this._t('proposal_row_review', 'Review')}
           >
