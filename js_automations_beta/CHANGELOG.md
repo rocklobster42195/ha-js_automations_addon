@@ -1,3 +1,24 @@
+## [3.2.0-beta.11] - 2026-11-12
+
+- docs: troubleshooting and security guides, README comparison and feature order, changelog for proposals and prompts
+- fix(mcp): proposals in the mobile list have no review button; load them again once i18n is ready
+- style: format docs and tests with prettier
+- feat(mcp): show proposals in the script list, detect outdated ones early, clear closed ones
+- feat(mcp): ask for meaningful commit messages and summarize the change when none is given
+- docs(authoring): decide per value between entity, store and CONFIG constant
+- feat(mcp): review proposals as a diff in the editor, list them in the MCP panel
+- feat(mcp): access level "propose" - write tools leave proposals the user applies or rejects
+- feat(mcp): prompts to review, explain and diagnose a script and to convert a HA automation
+- docs: absolute links in the ioBroker migration guide
+- docs: absolute GitHub links so they work inside the add-on; ignore all .env.* files
+- fix(log): backup progress lines use the System source so the log level applies
+- fix(log): keep MCP connects and Git progress out of the main log
+- fix(release): wrap `@words` in auto-collected release notes in backticks
+- docs(mcp): assistants cannot create store entries - scripts create their own empty config
+- docs: hand-written beta.10 changelog entry
+
+---
+
 ## [3.2.0-beta.10] - 2026-11-09
 
 - Editor: `.ts` scripts no longer show "Cannot find module 'crypto'" / "Cannot find name 'Buffer'"; compact typings for `process`, `Buffer`, `require`, `crypto`, `path`, `os`, `util` and `events` are included (a real `@types/node` installed with `@npm` takes over). A script that declares `process`, `Buffer` or `require` itself shows a "cannot redeclare" hint in the editor now: delete that line, the script runs as before
