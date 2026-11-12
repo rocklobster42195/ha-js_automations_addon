@@ -62,7 +62,10 @@ test('store: clearClosed forgets closed proposals and keeps the open ones', () =
   let changed = 0;
   store.on('changed', () => changed++);
   assert.equal(store.clearClosed(), 2);
-  assert.deepEqual(store.list().map((p) => p.id), [open.id]);
+  assert.deepEqual(
+    store.list().map((p) => p.id),
+    [open.id]
+  );
   assert.equal(changed, 1);
   assert.equal(store.clearClosed(), 0);
   assert.equal(changed, 1, 'nothing removed, nothing announced');

@@ -281,7 +281,10 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
 
   await t.test('list_scripts: search filters, compact keeps only the overview fields', async () => {
     const found = JSON.parse((await call('list_scripts', { search: 'BROKEN' })).text);
-    assert.deepEqual(found.scripts.map((x) => x.filename), ['broken.js']);
+    assert.deepEqual(
+      found.scripts.map((x) => x.filename),
+      ['broken.js']
+    );
     assert.equal(found.count, 1);
 
     const compact = JSON.parse((await call('list_scripts', { compact: true })).text);
@@ -307,7 +310,10 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match(unknown.text, /No script or library named/);
     assert.equal((await call('get_logs', { script: 'unknown.ts' })).text, 'No matching log entries.');
     proposals.close(p.id, 'expired');
-    assert.match((await call('get_script_errors', { filename: 'only_proposed.ts' })).text, /No script or library named/);
+    assert.match(
+      (await call('get_script_errors', { filename: 'only_proposed.ts' })).text,
+      /No script or library named/
+    );
   });
 
   await t.test('read_script: masks secrets, appends plain card source, rejects bad names', async () => {
