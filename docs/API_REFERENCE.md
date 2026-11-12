@@ -493,7 +493,7 @@ ha.store.delete('temp_variable');
 
 #### Secrets (credentials, tokens)
 
-Pass `true` as the third argument to store a value as a **secret**. Secrets are encrypted on disk, masked in the Store Explorer, and never included in backups in readable form.
+Pass `true` as the third argument to store a value as a **secret**. Secrets are masked in the Store Explorer and can be encrypted on disk (**Settings → Danger Zone → Encrypt ha.store Secrets**, off by default; the key stays in the add-on's private data and is not part of backups).
 
 ```javascript
 // Only this script can read it (default)

@@ -10,7 +10,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 - New server on port **3002** (separate from the webhook port), switched on under **Settings → MCP Server**; access token with show / copy / create-new, optional IP allowlist and reverse-proxy settings
 - **One-click install for Claude Desktop**: download a `.mcpb` extension with endpoint and token filled in, or copy a ready config. Works with other MCP clients too (Streamable HTTP + bearer token)
-- 21 tools behind three **access levels** (read, read + control, read + control + write); `get_store`, `call_service`, `run_snippet` and `delete_script` have their own switches. Writing and those four are **off by default**; "Custom" offers a switch per tool
+- 21 tools behind four **access levels** (read, read + control, read + control + **propose**, read + control + write); `get_store`, `call_service`, `run_snippet` and `delete_script` have their own switches. Writing and those four are **off by default**; "Custom" offers a switch per tool
 - **Safe writes**: every change is syntax-checked first and type-checked (warnings), saved atomically and committed to Git together with a snapshot of your previous state; nothing is restarted automatically
 - **Small changes instead of resending everything**: `edit_script` and `edit_card` change a few places by search and replace (the text must match exactly once, all edits apply or none). `read_script` returns only the script by default; `part`, `card` and `offset`/`limit` read a card or a slice. A commit message that is too long is cut instead of rejected
 - **Notes that survive a new chat**: `save_script_notes` / `get_script_notes` keep decisions, device quirks and open points per script (`notes/<script>.md`, committed with the script, removed with it). `list_scripts` marks scripts that have notes, the script list shows a notebook icon, and the prompt **Save notes for a script** writes them from the current chat
@@ -18,7 +18,10 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - Open editor tabs reload when an assistant changes the file (a card preview too); unsaved edits are kept, a lasting banner points out the conflict and saving asks before overwriting; a script an assistant deletes closes its tab
 - Credentials are masked in everything an assistant reads and in the MCP tab; `ha.store` secrets are never returned. Script source, log text and snippet output are marked as untrusted data. Assistants keep credentials out of script source: they are empty fields of the persisted config, with a warning and a persistent notification until the user fills them in. Assistants cannot create or change store entries (there is no write tool, on purpose): a script creates its own empty config on its first start, and `get_store` explains this when a key is missing
 - `get_api_reference` can search the documentation and return just the matching passages; the new topic `services` serves the typed Home Assistant services of your instance (for example the `media` payload of `media_player.play_media`)
-- Prompts **New JSA script**, **Plan a JSA script (interview)**, **Convert an ioBroker script** and **Save notes for a script**, plus the documentation as resources
+- **Propose instead of write**: with the level **Read + control + propose** the assistant cannot change anything by itself. `write_script`, `edit_script`, `write_card` and `edit_card` leave a **proposal** that you review and apply. A new file appears greyed out in a block **Proposals** at the top of the script list; a change to an existing script marks its row ("Change proposed"). Each has **Review** (opens the diff: red lines as it is now, green lines as proposed), **Apply** (asks first and shows what changes, optionally restarts a running script) and **Reject** (with a reason the assistant can read). One proposal per file; further edits build on it. A proposal that no longer fits because the file changed meanwhile is marked **outdated** at once and cannot be applied. Proposals live in memory only (at most 20, 24 hours); **Remove closed** in Settings → MCP Server tidies the overview. The assistant is told clearly when a file exists only as a proposal. See [Proposals](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md#proposals-access-level-propose)
+- **Meaningful commit messages**: assistants are asked to say what changed and why in every write; when they do not, the commit gets a summary of the change (for example `mcp: update garage.ts: +4/-1 lines, touches CONFIG`) instead of just "update"
+- Prompts **New JSA script**, **Plan a JSA script (interview)**, **Convert an ioBroker script**, **Save notes for a script**, and new **Review a script**, **Explain a script**, **Diagnose a script** (starts with errors and logs) and **Convert a Home Assistant automation** (YAML or blueprint to a JSA script), plus the documentation as resources
+- `list_scripts` takes `search` and `compact` for installations with many scripts
 
 **Lovelace cards**
 
@@ -39,6 +42,9 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - New [MCP guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md), **Authoring Scripts** guide (script structure, header tags, conventions, cards) and a header tag reference in the API Reference
 - New [migration guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/iobroker-migration.md) for moving ioBroker scripts to JS Automations (ID mapping, API translation table, worked example)
 - The card guide describes card files, several cards per script, sharing and Git
+- New [Troubleshooting & FAQ](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/troubleshooting.md) (MQTT, ports and conflicts, Nabu Casa, restart protection, Safe Mode, Stable vs. Beta) and [Security model](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/security.md) (what a script may do, `@permission` and its limits, secrets, webhooks, AI assistants)
+- README: a comparison with YAML automations, Node-RED and AppDaemon, and the features sorted by importance
+- Authoring guide: how to decide per value between an entity, the store and a constant in `CONFIG`
 
 **Developer tools (Expert Mode)**
 
@@ -53,6 +59,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 **Fixes**
 
+- The main log no longer fills up with MCP connections and Git or backup progress lines: connections are noted in the MCP tab (at most every 10 minutes per client), and the progress lines follow the log level filter
 - Errors thrown inside an installed card are reported to the script's log again (the card's error handler never recognised its own script, so nothing was forwarded)
 - `@card dev` is honoured again by `ha.frontend.installCard()`: the card is no longer written to `www` and registered as a Lovelace resource while the script is still in preview mode
 - The card preview reloads after the card was changed from outside the editor
