@@ -145,6 +145,35 @@ with list_scripts and read_script, use real entity IDs from list_entities, and k
 
 The documentation is also exposed as resources. On connecting, every client is told to read the authoring guide before writing a script and never to put credentials into source code.
 
+## Try it: a dashboard card from one prompt
+
+A good first test is a script with a Lovelace card, because it shows the whole chain: the assistant reads the guide, writes the script and the card, checks that it runs, and you put the card on a dashboard. This prompt produced the card below with Claude Desktop (written in German in the original, it works in any language):
+
+```text
+Write a JSA script. It should create a Lovelace card with a "Cocktail of the Day". An image on the left, the name of the
+cocktail shown. An animated chevron that expands the card with the recipe. Use the API of https://www.thecocktaildb.com.
+Build in a safeguard so the API is spared. Show me a mockup of the card first.
+```
+
+<p align="center">
+  <img src="https://github.com/rocklobster42195/ha-js_automations_addon/raw/main/docs/guide/images/mcp-cocktail-card.png" width="420" alt="The Cocktail of the Day card: closed with picture, name and chevron, and expanded with ingredients and instructions">
+</p>
+
+What the assistant built from it:
+
+- **The script** asks TheCocktailDB for a cocktail, caches the picture locally, keeps the result in a persisted state object and publishes it as a native entity. It draws a new cocktail shortly after midnight and, after a restart, only asks the API if the stored cocktail is not from today. The recipe is in German when the API has a German text.
+- **The card** is a plain Web Component in a card file next to the script: picture on the left, name and glass, and a chevron that opens the recipe (ingredients with amounts, instructions) with a smooth transition. It follows the dashboard theme and shows a short notice under the name when the API is not reachable.
+- **API protection:** a minimum gap between two requests, a daily budget, a growing wait after errors (and the `Retry-After` header, if the API sends one), one shared request when several dashboards ask at once, and the last cocktail stays visible when the API fails.
+
+The first answer did not contain a reload and the API protection above; both were asked for in follow-up messages in the same chat, for example: _"A tap on the picture should draw a new cocktail. Protect the API: a minimum interval, a daily budget and a back-off after errors."_ Small corrections like this are the normal way to work with an assistant, and with the level **Read + control + propose** every round shows up in the script list, where you review it before it is applied (see [Proposals](#proposals-access-level-propose)).
+
+Tips for prompts like this:
+
+- **Say what you want, not only that you want a safeguard.** "At most one request per day, a pause after errors, keep showing the last result" gives a more predictable result than "protect the API".
+- **Ask for a mockup first and tell the assistant to wait for your answer** if you want to approve the look before any code is written.
+- **Describe an animation in words** ("the chevron bobs gently while the card is closed and turns when it opens"); "animated" alone leaves the choice to the assistant.
+- **Ask the assistant to start the script and check the log and errors itself**, and to tell you what to do on the dashboard (open **Edit dashboard → Add card** and look for the card by its name).
+
 ## Network and security
 
 - The server listens on **port 3002** (fixed, listed under the add-on's **Network** settings; the host port can be changed there). Stable and Beta add-ons share it and the token, so only one of them runs at a time.
