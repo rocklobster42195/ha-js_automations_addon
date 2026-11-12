@@ -752,7 +752,8 @@ class EntityManager {
   }
 
   /**
-   * Logs a warning if an entity might have its icon ignored by Home Assistant due to device_class.
+   * Notes (once per entity, at info level) that Home Assistant may ignore the icon because of the device_class.
+   * Not a warning: nothing is wrong, and a script with many such entities would otherwise fill the log on every start.
    * @param entityId - The entity ID.
    * @param deviceClass - The device class of the entity.
    */
@@ -761,8 +762,8 @@ class EntityManager {
       this.warnedEntities.add(entityId);
       this.workerManager.emit('log', {
         source: 'System',
-        message: `⚠️ Warning: Entity '${entityId}' uses device_class '${deviceClass}'. Home Assistant often ignores custom icons for these classes in favor of class-specific defaults.`,
-        level: 'warn',
+        message: `Entity '${entityId}' uses device_class '${deviceClass}'. Home Assistant often ignores custom icons for these classes in favor of class-specific defaults.`,
+        level: 'info',
       });
     }
   }

@@ -59,6 +59,7 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 
 **Fixes**
 
+- The note that Home Assistant may ignore a custom icon because of an entity's `device_class` is an info line now, not a warning: it appeared for every such entity on every start of a healthy script
 - The main log no longer fills up with MCP connections and Git or backup progress lines: connections are noted in the MCP tab (at most every 10 minutes per client), and the progress lines follow the log level filter
 - Errors thrown inside an installed card are reported to the script's log again (the card's error handler never recognised its own script, so nothing was forwarded)
 - `@card dev` is honoured again by `ha.frontend.installCard()`: the card is no longer written to `www` and registered as a Lovelace resource while the script is still in preview mode
