@@ -45,23 +45,24 @@ Put **all mapped entity IDs, thresholds, times and texts into one typed `CONFIG`
 
 ### Reading and writing
 
-| ioBroker                                             | JSA                                                                                                                                            |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getState(id).val`                                   | `ha.getStateValue('entity_id')` (number/boolean converted: `'on'` → `true`) or raw `ha.states['entity_id'].state`                              |
-| attributes stored as separate states                 | `ha.getAttr('entity_id', 'brightness')`                                                                                                        |
-| `existsState(id)`                                    | `ha.entityExists(id)`                                                                                                                          |
-| `setState(deviceId, true/false)`                     | `ha.call('light.turn_on', { entity_id })`, `ha.call('switch.turn_off', …)`, `ha.call('scene.turn_on', …)`, or `ha.entity('light.x').turn_on()` |
-| `setState(id, value)` on your own state              | `ha.register('sensor.my_state', {...})` once, then `ha.update('sensor.my_state', value)` — the entity then shows up in Home Assistant          |
-| `createState()`, `0_userdata.0.*` for internal state | `ha.persistent('<script>_state', {...})` — one object for all restart-proof values — or a plain variable                                       |
-| `sendTo('telegram.0', …)`, pushover, email           | `ha.notify(message, { target: 'notify.xyz' })`; `ha.ask()` for actionable notifications                                                        |
-| TTS via a userdata state                             | `ha.call('tts.speak', { entity_id: 'tts.xyz', media_player_entity_id: 'media_player.xyz', message })`                                          |
-| `httpGet()` / `httpPost()`, `request`                | `ha.http.get()` / `ha.http.post()` with `@permission network`; `@npm axios` for more                                                           |
-| `exec()`                                             | `child_process` with `@permission exec`                                                                                                        |
-| `readFile()` / `writeFile()`                         | `ha.fs.*` with `@permission fs`                                                                                                                |
-| `getObject`, `getEnums`, rooms/functions             | Area, Label and Floor APIs                                                                                                                     |
-| history adapter via `sendTo`                         | `ha.history.get()`, `ha.history.statistics()`                                                                                                  |
-| `require('module')`                                  | `@npm module` in the header                                                                                                                    |
-| `log(msg, 'info' \| 'warn' \| 'error' \| 'debug')`   | `ha.log` / `ha.warn` / `ha.error` / `ha.debug`; a `DEBUG` flag becomes `@loglevel debug`                                                       |
+| ioBroker                                                       | JSA                                                                                                                                            |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getState(id).val`                                             | `ha.getStateValue('entity_id')` (number/boolean converted: `'on'` → `true`) or raw `ha.states['entity_id'].state`                              |
+| attributes stored as separate states                           | `ha.getAttr('entity_id', 'brightness')`                                                                                                        |
+| `existsState(id)`                                              | `ha.entityExists(id)`                                                                                                                          |
+| `setState(deviceId, true/false)`                               | `ha.call('light.turn_on', { entity_id })`, `ha.call('switch.turn_off', …)`, `ha.call('scene.turn_on', …)`, or `ha.entity('light.x').turn_on()` |
+| `setState(id, value)` on your own state                        | `ha.register('sensor.my_state', {...})` once, then `ha.update('sensor.my_state', value)` — the entity then shows up in Home Assistant          |
+| `createState()` (a state you create to see or use)             | `ha.register('sensor.my_state', {...})` once, then `ha.update(...)` — it becomes a real Home Assistant entity                                  |
+| `0_userdata.0.*` as internal storage, only the script needs it | `ha.persistent('<script>_state', {...})` — one object for all restart-proof values — or a plain variable                                       |
+| `sendTo('telegram.0', …)`, pushover, email                     | `ha.notify(message, { target: 'notify.xyz' })`; `ha.ask()` for actionable notifications                                                        |
+| TTS via a userdata state                                       | `ha.call('tts.speak', { entity_id: 'tts.xyz', media_player_entity_id: 'media_player.xyz', message })`                                          |
+| `httpGet()` / `httpPost()`, `request`                          | `ha.http.get()` / `ha.http.post()` with `@permission network`; `@npm axios` for more                                                           |
+| `exec()`                                                       | `child_process` with `@permission exec`                                                                                                        |
+| `readFile()` / `writeFile()`                                   | `ha.fs.*` with `@permission fs`                                                                                                                |
+| `getObject`, `getEnums`, rooms/functions                       | Area, Label and Floor APIs                                                                                                                     |
+| history adapter via `sendTo`                                   | `ha.history.get()`, `ha.history.statistics()`                                                                                                  |
+| `require('module')`                                            | `@npm module` in the header                                                                                                                    |
+| `log(msg, 'info' \| 'warn' \| 'error' \| 'debug')`             | `ha.log` / `ha.warn` / `ha.error` / `ha.debug`; a `DEBUG` flag becomes `@loglevel debug`                                                       |
 
 Everything is documented in the [API Reference](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/API_REFERENCE.md).
 
