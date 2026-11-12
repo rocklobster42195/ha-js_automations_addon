@@ -165,7 +165,15 @@ What the assistant built from it:
 - **The card** is a plain Web Component in a card file next to the script: picture on the left, name and glass, and a chevron that opens the recipe (ingredients with amounts, instructions) with a smooth transition. It follows the dashboard theme and shows a short notice under the name when the API is not reachable.
 - **API protection:** a minimum gap between two requests, a daily budget, a growing wait after errors (and the `Retry-After` header, if the API sends one), one shared request when several dashboards ask at once, and the last cocktail stays visible when the API fails.
 
-The first answer did not contain a reload and the API protection above; both were asked for in follow-up messages in the same chat, for example: _"A tap on the picture should draw a new cocktail. Protect the API: a minimum interval, a daily budget and a back-off after errors."_ Small corrections like this are the normal way to work with an assistant, and with the level **Read + control + propose** every round shows up in the script list, where you review it before it is applied (see [Proposals](#proposals-access-level-propose)).
+### How the card grew
+
+The card did not come out finished, and it does not have to. It grew in rounds, in the same chat:
+
+1. **The first prompt** (above) gave the card with the picture, the name, the chevron and the recipe.
+2. **Reload and API protection** were asked for afterwards, for example: _"A tap on the picture should draw a new cocktail. Protect the API: a minimum interval, a daily budget and a back-off after errors."_ The assistant extended the script and the card.
+3. **A setting on the card** came last: _"The card should be configurable. In the card's editor there is a checkbox 'Only non-alcoholic cocktails'. Two cards on a dashboard may be set differently, so the script has to keep both variants ready without asking the API much more often."_ The assistant kept a second cocktail of the day in a second entity (a non-alcoholic one, drawn from the API's own list of non-alcoholic drinks), added the checkbox to the card's visual editor (`non_alcoholic: true` in YAML) and let the reload and the daily refresh draw the matching variant. The API protection covers both.
+
+Small corrections like these are the normal way to work with an assistant. With the level **Read + control + propose** every round shows up in the script list, where you review it before it is applied (see [Proposals](#proposals-access-level-propose)). Each round is also a Git commit with a message that says what changed, so you can always go back.
 
 Tips for prompts like this:
 
@@ -173,6 +181,7 @@ Tips for prompts like this:
 - **Ask for a mockup first and tell the assistant to wait for your answer** if you want to approve the look before any code is written.
 - **Describe an animation in words** ("the chevron bobs gently while the card is closed and turns when it opens"); "animated" alone leaves the choice to the assistant.
 - **Ask the assistant to start the script and check the log and errors itself**, and to tell you what to do on the dashboard (open **Edit dashboard → Add card** and look for the card by its name).
+- **To make a card configurable, say where the setting lives and how it works:** "in the card's editor there is a checkbox …" leads to a visible option instead of a YAML hack, and "two cards may be set differently" makes the assistant keep the setting on the card and not in one global script setting.
 
 ## Network and security
 
