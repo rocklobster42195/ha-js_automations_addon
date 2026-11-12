@@ -247,6 +247,7 @@ class Kernel extends EventEmitter {
         scriptsDir: SCRIPTS_DIR,
         librariesDir: config.LIBRARIES_DIR,
         notifyStatusUpdate: () => this.io?.emit('status_update'),
+        proposals: this.mcpProposals,
       });
       this.mcpFeedback = new McpFeedbackStore(STORAGE_DIR);
       registerFeedbackTool(this.mcpProtocol, { store: this.mcpFeedback });
@@ -443,7 +444,13 @@ class Kernel extends EventEmitter {
     // Proposals of the access level "propose": refresh open UIs and note what happens in the MCP activity view
     // (deliberately not in the main log).
     this.mcpProposals.on('changed', () => {
-      if (this.io) this.io.emit('mcp_proposals_changed', this.mcpProposals.list().map(summarizeProposal));
+      if (!this.io) return;
+      this.io.emit(
+        'mcp_proposals_changed',
+        this.mcpProposals
+          .list()
+          .map((p) => ({ ...summarizeProposal(p), ...(p.status === 'open' ? this.mcpWriteTools.proposalInfo(p) : {}) }))
+      );
     });
     const noteProposal = (
       verb: string,

@@ -518,6 +518,7 @@ export class EditorViewElement extends LitElement {
         diffProposalId: id,
         diffProposalStatus: p.status,
         diffProposalReason: p.reason ?? null,
+        diffProposalNew: !!p.isNew,
         diffOriginalModel: window.monaco!.editor.createModel(p.before ?? '', language),
         diffModifiedModel: window.monaco!.editor.createModel(p.after ?? '', language),
       };
@@ -1623,10 +1624,15 @@ export class EditorViewElement extends LitElement {
             <i class="mdi mdi-robot-outline"></i>
             ${
               status === 'open'
-                ? this._t(
-                    'proposal_banner_open',
-                    'Proposal of an AI assistant: left is the file as it is now, right the proposed version. Nothing changes until you apply it.'
-                  )
+                ? activeTab.diffProposalNew
+                  ? this._t(
+                      'proposal_banner_open_new',
+                      'Proposal of an AI assistant for a new file: it does not exist yet, everything shown in green is what would be created. Nothing is created until you apply it.'
+                    )
+                  : this._t(
+                      'proposal_banner_open',
+                      'Proposal of an AI assistant: red lines are the file as it is now, green lines the proposed change. Nothing changes until you apply it.'
+                    )
                 : this._t('proposal_banner_closed_' + status, 'This proposal is {{status}}.', { status })
             }
             ${activeTab.diffProposalReason ? html`<em> — ${activeTab.diffProposalReason}</em>` : nothing}

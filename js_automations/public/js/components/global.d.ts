@@ -26,6 +26,24 @@ export interface JsaEntityConflict {
   actual: string;
 }
 
+/** An open (or closed) change proposed by an AI assistant over MCP (access level "propose"). */
+export interface JsaProposal {
+  id: number;
+  kind: 'script' | 'card';
+  filename: string;
+  card: string | null;
+  isNew: boolean;
+  message: string;
+  warnings: string[];
+  status: string;
+  reason: string | null;
+  updatedAt: number;
+  /** Open proposals only: the file changed since the proposal was made, so it cannot be applied. */
+  stale?: boolean;
+  /** Open proposals only: one-line summary of the change, e.g. "update x.ts: +4/-1 lines". */
+  change?: string;
+}
+
 export interface JsaScript {
   filename: string;
   name: string;
@@ -232,6 +250,8 @@ export interface JsaTab {
   diffProposalId?: number;
   diffProposalStatus?: string;
   diffProposalReason?: string | null;
+  /** The proposal creates a file (or card) that does not exist yet, so the left side of the diff is empty. */
+  diffProposalNew?: boolean;
   /** Diff tabs only — live Monaco ITextModel instances, typed unknown like `model`. */
   diffOriginalModel?: unknown;
   diffModifiedModel?: unknown;

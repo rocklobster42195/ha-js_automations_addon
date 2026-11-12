@@ -78,6 +78,7 @@ function setup(t) {
     scriptsDir,
     librariesDir,
     notifyStatusUpdate: () => statusUpdates++,
+    proposals: { findOpen: (kind, name) => (kind === 'script' && name === 'pending.ts' ? { id: 7 } : undefined) },
     settleMs: 0,
   });
   manager.init();
@@ -148,6 +149,15 @@ test('control tools start, stop and restart scripts and call services', async (t
     const r = await call('start_script', { filename: 'blocked.js' });
     assert.equal(r.isError, true);
     assert.match(r.text, /restart protection is active/);
+  });
+
+  await t.test('a script that is only proposed is reported as such, not as missing', async () => {
+    for (const tool of ['start_script', 'restart_script', 'stop_script']) {
+      const r = await call(tool, { filename: 'pending.ts' });
+      assert.equal(r.isError, true, tool);
+      assert.ok(r.text.includes('open proposal (#7)') && r.text.includes('not been applied yet'), tool);
+    }
+    assert.match((await call('start_script', { filename: 'nothing.ts' })).text, /No script named/);
   });
 
   await t.test('libraries, unknown names and path tricks are refused', async () => {

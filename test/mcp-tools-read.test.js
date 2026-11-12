@@ -279,6 +279,37 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.equal(JSON.parse((await call('list_scripts')).text).openProposals, undefined);
   });
 
+  await t.test('list_scripts: search filters, compact keeps only the overview fields', async () => {
+    const found = JSON.parse((await call('list_scripts', { search: 'BROKEN' })).text);
+    assert.deepEqual(found.scripts.map((x) => x.filename), ['broken.js']);
+    assert.equal(found.count, 1);
+
+    const compact = JSON.parse((await call('list_scripts', { compact: true })).text);
+    assert.equal(compact.count, 4);
+    const hello = compact.scripts.find((x) => x.filename === 'hello.js');
+    assert.deepEqual(Object.keys(hello).sort(), ['filename', 'kind', 'name', 'status']);
+    assert.equal(hello.status, 'running');
+  });
+
+  await t.test('a file that exists only as a proposal says so instead of "not found"', async () => {
+    const base = { kind: 'script', card: null, isNew: true, args: {}, baseHash: null, message: 'm', warnings: [] };
+    const p = proposals.propose({ ...base, filename: 'only_proposed.ts', content: 'ha.log(1);' });
+    const errors = await call('get_script_errors', { filename: 'only_proposed.ts' });
+    assert.equal(errors.isError, true);
+    assert.ok(errors.text.includes(`open proposal (#${p.id})`));
+    assert.match(errors.text, /not been applied yet/);
+    const notes = await call('get_script_notes', { filename: 'only_proposed.ts' });
+    assert.match(notes.text, /open proposal/);
+    const logs = await call('get_logs', { script: 'only_proposed.ts' });
+    assert.ok(logs.text.startsWith('No matching log entries. ') && logs.text.includes('open proposal'));
+
+    const unknown = await call('get_script_errors', { filename: 'unknown.ts' });
+    assert.match(unknown.text, /No script or library named/);
+    assert.equal((await call('get_logs', { script: 'unknown.ts' })).text, 'No matching log entries.');
+    proposals.close(p.id, 'expired');
+    assert.match((await call('get_script_errors', { filename: 'only_proposed.ts' })).text, /No script or library named/);
+  });
+
   await t.test('read_script: masks secrets, appends plain card source, rejects bad names', async () => {
     const hello = await call('read_script', { filename: 'hello.js' });
     assert.ok(hello.text.includes("const API_KEY = '***'"));

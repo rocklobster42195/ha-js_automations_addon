@@ -111,6 +111,15 @@ export class McpProposalStore extends EventEmitter {
     return this.list().find((p) => p.status !== 'open' && sameTarget(p, kind, filename, card));
   }
 
+  /** Forgets every closed proposal (applied, rejected, stale, expired); open ones stay. Returns how many were removed. */
+  clearClosed(): number {
+    const before = this._items.length;
+    this._items = this._items.filter((p) => p.status === 'open');
+    const removed = before - this._items.length;
+    if (removed) this.emit('changed');
+    return removed;
+  }
+
   openCount(): number {
     this._sweep();
     return this._items.filter((p) => p.status === 'open').length;

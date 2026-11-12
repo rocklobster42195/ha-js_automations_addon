@@ -4,7 +4,7 @@
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
-import { missingScriptMessage, resolveScript, type ScriptDirs } from './mcp-script-files';
+import { missingScriptMessage, resolveScript, type OpenProposalLookup, type ScriptDirs } from './mcp-script-files';
 import { maskSecrets, maskWithNotice } from './mcp-secret-filter';
 import type { WorkerManagerInstance } from './script-list';
 import ScriptHeaderParser from './script-header-parser';
@@ -19,6 +19,8 @@ export interface McpControlToolDeps extends ScriptDirs {
   haConnector: HAConnector;
   /** Tells the UI the script list changed. */
   notifyStatusUpdate: () => void;
+  /** Proposals of the access level "propose": a script that is only proposed gets a clear error instead of "not found". */
+  proposals?: OpenProposalLookup;
   /** How long to wait after a start before reporting the status, so an instant crash is visible. */
   settleMs?: number;
 }
@@ -52,7 +54,11 @@ export function registerControlTools(protocol: McpProtocol, deps: McpControlTool
     if (!found) {
       return {
         error: fail(
-          missingScriptMessage(filename, `No script named "${filename}". Use list_scripts to see the available files.`)
+          missingScriptMessage(
+            filename,
+            `No script named "${filename}". Use list_scripts to see the available files.`,
+            deps.proposals
+          )
         ),
       };
     }

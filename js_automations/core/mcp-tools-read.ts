@@ -6,7 +6,7 @@ import * as path from 'path';
 import { z } from 'zod';
 import type { McpProtocol, McpToolResult } from './mcp-protocol';
 import { isSensitiveName, maskDeep, maskWithNotice } from './mcp-secret-filter';
-import { missingScriptMessage, resolveScript } from './mcp-script-files';
+import { missingScriptMessage, pendingProposalMessage, resolveScript } from './mcp-script-files';
 import { buildScriptList, type WorkerManagerInstance } from './script-list';
 import { readNotes } from './script-notes';
 import { cardBase, listCardNames, mainCardName, readCardFile } from './card-files';
@@ -129,11 +129,29 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
     description:
       'Lists all JS Automations scripts and libraries with their header metadata (name, description, label, expose, ' +
       'permissions, card) and runtime status (running, stopped, error). "hasNotes" marks scripts with saved notes from earlier ' +
-      'sessions: read them with get_script_notes before changing such a script. Use this first to find the file names the other tools need.',
+      'sessions: read them with get_script_notes before changing such a script. Use this first to find the file names the other tools need. ' +
+      'With many scripts pass "search" (matches file name, name, description, label) and/or compact: true (only file name, name, kind and status per entry).',
+    inputSchema: {
+      search: z
+        .string()
+        .optional()
+        .describe(
+          'Case-insensitive text; only scripts whose file name, name, description or label contain it are listed'
+        ),
+      compact: z.boolean().optional().describe('Only filename, name, kind and status per entry, for a short overview'),
+    },
     readOnly: true,
-    handler: () => {
+    handler: (args) => {
+      const needle = typeof args.search === 'string' ? args.search.trim().toLowerCase() : '';
       const scripts = buildScriptList(workerManager, cardManager, deps.notesDir)
         .filter((m) => !String(m.filename).endsWith('.blocks'))
+        .filter(
+          (m) =>
+            !needle ||
+            [m.filename, m.name, m.description, m.label].some(
+              (v) => typeof v === 'string' && v.toLowerCase().includes(needle)
+            )
+        )
         .map((m) => ({
           filename: m.filename,
           name: m.name,
@@ -163,7 +181,9 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       return {
         content: {
           count: scripts.length,
-          scripts,
+          scripts: args.compact
+            ? scripts.map((m) => ({ filename: m.filename, name: m.name, kind: m.kind, status: m.status }))
+            : scripts,
           ...(proposals.length
             ? {
                 openProposals: proposals,
@@ -202,7 +222,8 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         return fail(
           missingScriptMessage(
             filename,
-            `No script or library named "${filename}". Use list_scripts to see the available files.`
+            `No script or library named "${filename}". Use list_scripts to see the available files.`,
+            deps.proposals
           )
         );
       }
@@ -284,7 +305,8 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         return fail(
           missingScriptMessage(
             filename,
-            `No script or library named "${filename}". Use list_scripts to see the available files.`
+            `No script or library named "${filename}". Use list_scripts to see the available files.`,
+            deps.proposals
           )
         );
       const notes = readNotes(deps.notesDir, found.fullPath, found.isLibrary);
@@ -322,7 +344,14 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         .slice(-limit)
         .map((e) => `${iso(e.ts)} [${e.level.toUpperCase()}] ${e.source}: ${e.message}`);
 
-      if (!lines.length) return text('No matching log entries.');
+      if (!lines.length) {
+        const pending = args.script ? deps.proposals?.findOpen('script', String(args.script)) : undefined;
+        return text(
+          pending
+            ? `No matching log entries. ${pendingProposalMessage(String(args.script), pending.id)}`
+            : 'No matching log entries.'
+        );
+      }
       return text(UNTRUSTED_NOTICE + maskWithNotice(lines.join('\n')));
     },
   });
@@ -342,7 +371,8 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
         return fail(
           missingScriptMessage(
             filename,
-            `No script or library named "${filename}". Use list_scripts to see the available files.`
+            `No script or library named "${filename}". Use list_scripts to see the available files.`,
+            deps.proposals
           )
         );
       const base = path.basename(filename);

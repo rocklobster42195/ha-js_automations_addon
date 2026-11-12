@@ -48,6 +48,8 @@ export interface McpWriteTools {
   applyProposal(id: number): Promise<{ ok: boolean; message: string }>;
   /** The text the proposal would replace (empty for a new file), for the diff view. */
   proposalBefore(p: Proposal): string;
+  /** What the list shows for an open proposal: whether the file changed since (stale) and a one-line change summary. */
+  proposalInfo(p: Proposal): { stale: boolean; change: string };
 }
 
 const MAX_SOURCE_CHARS = 512_000;
@@ -110,11 +112,11 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
   const rel = (fullPath: string): string => path.relative(deps.scriptsDir, fullPath).split(path.sep).join('/');
 
   /** What the assistant is told when its change became a proposal instead of a write. */
-  const proposalReply = (p: Proposal, extra: string[]): McpToolResult => {
+  const proposalReply = (p: Proposal, extra: string[], updated = false): McpToolResult => {
     const what = p.kind === 'card' ? `card of "${p.filename}"` : `"${p.filename}"`;
     return text(
       [
-        `${p.isNew ? 'New file' : 'Change'} for ${what} saved as proposal #${p.id}. It is NOT applied: the user reviews it as a diff in JSA (MCP panel → proposals) and applies or rejects it.`,
+        `${updated ? `Proposal #${p.id} for ${what} updated${p.isNew ? ' (still a new file)' : ''}.` : `${p.isNew ? 'New file' : 'Change'} for ${what} saved as proposal #${p.id}.`} It is NOT applied: the user reviews it as a diff in JSA (MCP panel → proposals) and applies or rejects it.`,
         'Do not restart the script and do not assume the change exists. Tell the user a proposal is waiting. A further write_script/edit_script/write_card/edit_card for the same file updates this proposal (edit_* builds on the proposed text). read_script shows the proposed text and, later, whether it was applied or rejected.',
         ...extra,
       ].join('\n')
@@ -219,6 +221,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     if (existing) previous = fs.readFileSync(fullPath, 'utf8');
 
     if (!direct && deps.isProposeMode()) {
+      const updating = !!deps.proposals.findOpen('script', isLibrary ? `libraries/${name}` : name);
       const proposal = deps.proposals.propose({
         kind: 'script',
         filename: isLibrary ? `libraries/${name}` : name,
@@ -233,7 +236,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         ),
         warnings: check.typeIssues.length ? formatIssues(check.typeIssues).split('\n') : [],
       });
-      return proposalReply(proposal, typeIssueLines(check.typeIssues, name));
+      return proposalReply(proposal, typeIssueLines(check.typeIssues, name), updating);
     }
 
     if (previous !== null) {
@@ -311,7 +314,13 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     const source = String(args.source ?? '');
     const found = resolveScript(deps, filename);
     if (!found)
-      return fail(missingScriptMessage(filename, `No script named "${filename}". Create it with write_script first.`));
+      return fail(
+        missingScriptMessage(
+          filename,
+          `No script named "${filename}". Create it with write_script first.`,
+          deps.proposals
+        )
+      );
     if (found.isLibrary) return fail('Libraries cannot have a card.');
     if (!source.trim()) return fail('The card source is empty.');
     if (source.includes('__JSA_CARD') || source.length > MAX_SOURCE_CHARS) {
@@ -337,6 +346,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     const cardSubject = commitSubject(args.message, describeChange(`card of ${name}`, has ? current : null, source));
 
     if (!direct && deps.isProposeMode()) {
+      const updating = !!deps.proposals.findOpen('card', name, isMain ? null : (card as string));
       const proposal = deps.proposals.propose({
         kind: 'card',
         filename: name,
@@ -348,7 +358,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         message: cardSubject,
         warnings: [],
       });
-      return proposalReply(proposal, []);
+      return proposalReply(proposal, [], updating);
     }
 
     const notes: string[] = [];
@@ -452,7 +462,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
           return fail(
             missingScriptMessage(
               filename,
-              `No script or library named "${filename}". Use write_script to create it, or list_scripts to see the files.`
+              `No script or library named "${filename}". Use write_script to create it, or list_scripts to see the files.`,
+              deps.proposals
             )
           );
         }
@@ -496,7 +507,11 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const found = resolveScript(deps, filename);
         if (!found) {
           return fail(
-            missingScriptMessage(filename, `No script named "${filename}". Use list_scripts to see the files.`)
+            missingScriptMessage(
+              filename,
+              `No script named "${filename}". Use list_scripts to see the files.`,
+              deps.proposals
+            )
           );
         }
         if (found.isLibrary) return fail('Libraries cannot have a card.');
@@ -550,7 +565,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
         const content = String(args.content ?? '');
         const replace = args.mode === 'replace';
         const found = resolveScript(deps, filename);
-        if (!found) return fail(missingScriptMessage(filename, `No script or library named "${filename}".`));
+        if (!found)
+          return fail(missingScriptMessage(filename, `No script or library named "${filename}".`, deps.proposals));
         if (!replace && !content.trim()) return fail('The note is empty.');
         if (maskSecrets(content).masked) {
           return fail('Not saved — the text contains values that look like credentials. Remove them and save again.');
@@ -587,7 +603,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       serialized(async () => {
         const filename = String(args.filename ?? '');
         const found = resolveScript(deps, filename);
-        if (!found) return fail(missingScriptMessage(filename, `No script or library named "${filename}".`));
+        if (!found)
+          return fail(missingScriptMessage(filename, `No script or library named "${filename}".`, deps.proposals));
         const name = path.basename(found.fullPath);
         const displayName = (ScriptHeaderParser.parse(found.fullPath) as { name?: string | null }).name || name;
 
@@ -610,6 +627,20 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       }),
   });
 
+  /** True when the file (or card) is no longer what the proposal was made against. */
+  const isStale = (p: Proposal): boolean => {
+    const found = resolveScript(deps, p.filename);
+    let currentHash: string | null = null;
+    if (found) {
+      const text_ =
+        p.kind === 'script'
+          ? fs.readFileSync(found.fullPath, 'utf8')
+          : cardManager.getCardSource(found.fullPath, p.card ?? undefined);
+      currentHash = text_ === null || text_ === undefined ? null : hashText(text_);
+    }
+    return currentHash !== p.baseHash;
+  };
+
   const applyProposal = (id: number): Promise<{ ok: boolean; message: string }> =>
     serialized(async () => {
       const p = deps.proposals.get(id);
@@ -621,16 +652,7 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
       if (p.status !== 'open') return { ok: false, message: `Proposal #${id} is already ${p.status}.` };
 
       // Stale check: the proposal was made against one version of the file.
-      const found = resolveScript(deps, p.filename);
-      let currentHash: string | null = null;
-      if (found) {
-        const text_ =
-          p.kind === 'script'
-            ? fs.readFileSync(found.fullPath, 'utf8')
-            : cardManager.getCardSource(found.fullPath, p.card ?? undefined);
-        currentHash = text_ === null || text_ === undefined ? null : hashText(text_);
-      }
-      if (currentHash !== p.baseHash) {
+      if (isStale(p)) {
         deps.proposals.close(id, 'stale');
         return {
           ok: false,
@@ -652,5 +674,10 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     return cardManager.getCardSource(found.fullPath, p.card ?? undefined) ?? '';
   };
 
-  return { applyProposal, proposalBefore };
+  const proposalInfo = (p: Proposal): { stale: boolean; change: string } => {
+    const label = p.kind === 'card' ? `card of ${p.filename}` : p.filename;
+    return { stale: isStale(p), change: describeChange(label, p.isNew ? null : proposalBefore(p), p.content) };
+  };
+
+  return { applyProposal, proposalBefore, proposalInfo };
 }

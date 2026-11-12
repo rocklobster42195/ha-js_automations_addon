@@ -3,7 +3,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mdiStylesheetLink } from './mdi';
 import './script-row';
-import type { JsaScript } from './global';
+import type { JsaScript, JsaProposal } from './global';
 
 /**
  * HA label colors arrive as theme-color slugs (e.g. "light-green"), not CSS
@@ -105,6 +105,8 @@ export class ScriptGroup extends LitElement {
   @property({ type: Boolean, attribute: 'is-lib' }) isLib = false;
   @property({ type: Boolean, attribute: 'is-none' }) isNone = false;
   @property({ type: Array }) scripts: JsaScript[] = [];
+  /** Open proposals by file name (libraries as "libraries/<name>"). */
+  @property({ attribute: false }) proposals: Map<string, JsaProposal[]> = new Map();
   @property({ type: Boolean, reflect: true }) collapsed = false;
   @property({ type: Boolean, attribute: 'mqtt-connected' }) mqttConnected = true;
   @property({ type: Boolean, attribute: 'search-active' }) searchActive = false;
@@ -162,6 +164,7 @@ export class ScriptGroup extends LitElement {
           (s) => html`
             <script-row
               .script=${s}
+              .proposals=${this.proposals.get(this.isLib ? `libraries/${s.filename}` : s.filename) ?? []}
               .isLib=${this.isLib}
               .mqttConnected=${this.mqttConnected}
               .active=${s.filename === this.activeFilename}

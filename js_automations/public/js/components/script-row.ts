@@ -2,7 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { mdiStylesheetLink } from './mdi';
-import type { JsaScript, JsaLogEntry, JsaWatchTile } from './global';
+import type { JsaScript, JsaLogEntry, JsaWatchTile, JsaProposal } from './global';
 
 const MAX_INLINE_LOG_LINES = 50;
 
@@ -197,6 +197,31 @@ export class ScriptRow extends LitElement {
       margin-right: 10px;
     }
 
+    .proposal-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 3px;
+      color: #f0a500;
+      font-size: 0.75rem;
+    }
+    .proposal-line.stale {
+      color: #777;
+    }
+    .proposal-line .proposal-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .proposal-line .btn-row {
+      width: 24px;
+      height: 24px;
+    }
+    .proposal-line .btn-row i {
+      font-size: 1.05rem;
+    }
+
     .script-details {
       padding: 4px 15px 12px 15px;
       background: #161616;
@@ -294,6 +319,8 @@ export class ScriptRow extends LitElement {
   `;
 
   @property({ type: Object }) script!: JsaScript;
+  /** Open proposals of an AI assistant for this script (its text and its cards). */
+  @property({ attribute: false }) proposals: JsaProposal[] = [];
   @property({ type: Boolean }) isLib = false;
   @property({ type: Boolean }) mqttConnected = true;
   @property({ type: Boolean, reflect: true }) active = false;
@@ -632,6 +659,54 @@ export class ScriptRow extends LitElement {
     return html`<i class="mdi mdi-alert-outline conflict-badge" title=${tip}></i>`;
   }
 
+  private _emitProposal(name: 'review' | 'apply' | 'reject', id: number, e: Event): void {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent(`jsa-proposal-${name}`, { detail: { id }, bubbles: true, composed: true }));
+  }
+
+  /** One line under the badges while the assistant has proposed a change for this (existing) script. */
+  private _renderProposalLine() {
+    const open = (this.proposals ?? []).filter((p) => p.status === 'open');
+    if (!open.length) return nothing;
+    const p = open[0];
+    const more = open.length > 1 ? ` (+${open.length - 1})` : '';
+    const stale = !!p.stale;
+    const label = stale
+      ? this._t('proposal_row_stale_short', 'Proposal outdated')
+      : p.kind === 'card'
+        ? this._t('proposal_row_card_change', 'Card change proposed')
+        : this._t('proposal_row_change', 'Change proposed');
+    return html`
+      <div class="proposal-line ${stale ? 'stale' : ''}" title=${p.change ?? p.message}>
+        <span class="proposal-text"><i class="mdi mdi-file-compare"></i> ${label}${more}</span>
+        <span class="row-actions">
+          <button
+            class="btn-row p-review"
+            @click=${(e: Event) => this._emitProposal('review', p.id, e)}
+            title=${this._t('proposal_row_review', 'Review')}
+          >
+            <i class="mdi mdi-file-compare"></i>
+          </button>
+          <button
+            class="btn-row p-apply"
+            ?disabled=${stale}
+            @click=${(e: Event) => this._emitProposal('apply', p.id, e)}
+            title=${this._t('proposal_apply', 'Apply')}
+          >
+            <i class="mdi mdi-check"></i>
+          </button>
+          <button
+            class="btn-row p-reject"
+            @click=${(e: Event) => this._emitProposal('reject', p.id, e)}
+            title=${this._t('proposal_reject', 'Reject')}
+          >
+            <i class="mdi mdi-close"></i>
+          </button>
+        </span>
+      </div>
+    `;
+  }
+
   render() {
     const s = this.script;
     const usesMqtt = !!s.expose || !!s.capabilities?.detected?.includes('mqtt');
@@ -718,6 +793,7 @@ export class ScriptRow extends LitElement {
               }
             </div>
           </div>
+          ${this._renderProposalLine()}
         </div>
       </div>
       ${this.mobile && this._detailsOpen ? this._renderDetails() : nothing}

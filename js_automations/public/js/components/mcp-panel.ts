@@ -21,6 +21,8 @@ interface ProposalRow {
   isNew: boolean;
   status: string;
   updatedAt: number;
+  /** Open proposals only: the file changed since the proposal was made. */
+  stale?: boolean;
 }
 
 const TOKEN_PLACEHOLDER = '••••••••••••••••••••';
@@ -199,6 +201,16 @@ export class McpPanel extends LitElement {
     }
   }
 
+  /** Forgets the closed proposals (applied, rejected, outdated, expired); the server then pushes the new list. */
+  private async _clearClosedProposals(): Promise<void> {
+    try {
+      await window.apiFetch!('api/mcp/proposals/closed', { method: 'DELETE' });
+      await this._load();
+    } catch (e) {
+      console.error('Failed to clear closed proposals:', e);
+    }
+  }
+
   /** Proposals of the access level "propose": open ones first; a click opens the diff in the editor. */
   private _renderProposals() {
     if (!this._proposals.length) return nothing;
@@ -209,6 +221,13 @@ export class McpPanel extends LitElement {
       <div class="proposals">
         <div class="row">
           <span class="label">${this._t('settings.mcp_panel.proposals', 'Proposals')}</span>
+          ${
+            rows.some((p) => p.status !== 'open')
+              ? html`<button class="snippet-btn proposals-clear" @click=${() => void this._clearClosedProposals()}>
+                  ${this._t('settings.mcp_panel.proposals_clear', 'Remove closed')}
+                </button>`
+              : nothing
+          }
         </div>
         ${rows.map(
           (p) => html`
@@ -218,9 +237,10 @@ export class McpPanel extends LitElement {
               </span>
               ${
                 p.status === 'open'
-                  ? html`<button class="snippet-btn" @click=${() => void window.openProposalTab?.(p.id)}>
-                      ${this._t('settings.mcp_panel.proposal_review', 'Review')}
-                    </button>`
+                  ? html`${p.stale ? html`<span class="badge badge-closed">${this._t('settings.mcp_panel.proposal_stale', 'outdated')}</span>` : nothing}
+                      <button class="snippet-btn" @click=${() => void window.openProposalTab?.(p.id)}>
+                        ${this._t('settings.mcp_panel.proposal_review', 'Review')}
+                      </button>`
                   : html`<span class="badge badge-closed"
                       >${this._t('settings.mcp_panel.proposal_' + p.status, p.status)}</span
                     >`

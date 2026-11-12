@@ -107,7 +107,7 @@ The header is the first `/** ... */` block in the file. One tag per line. `.bloc
 | `@npm`         | package names, comma/space separated                                               | npm packages installed automatically.                                                                                         |
 | `@include`     | library file names, comma/space separated                                          | Shared global libraries (`.js`/`.ts`) made available to this script.                                                          |
 | `@expose`      | `switch` (default) \| `button`                                                     | Exposes the script itself as an entity: `switch` = on while running; `button` = press (re)starts it.                          |
-| `@permission`  | `network`, `fs:read`, `fs:write`, `fs` (= read + write), `exec`, `webhook`, `mqtt` | Declares capabilities. Undeclared use is flagged in the script list; `network`, `fs:*` and `exec` can be enforced at runtime. |
+| `@permission`  | `network`, `fs:read`, `fs:write`, `fs` (= read + write), `exec`, `webhook`, `mqtt` | Declares capabilities. Only the ones listed here need it: a script that just uses `ha.log`, `ha.on`, `ha.call` or entities needs no `@permission`. Undeclared use is flagged in the script list; `network`, `fs:*` and `exec` can be enforced at runtime. |
 | `@card`        | _(none)_ \| `dev`                                                                  | Marks the file as a Script Pack with a Lovelace card. `dev` = preview only, nothing installed.                                |
 
 Rules:

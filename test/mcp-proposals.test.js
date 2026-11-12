@@ -52,6 +52,22 @@ test('store: close, latestClosed and what happens to a closed proposal', () => {
   assert.notEqual(next.id, p.id, 'after a close, a new proposal starts');
 });
 
+test('store: clearClosed forgets closed proposals and keeps the open ones', () => {
+  const store = new McpProposalStore();
+  const open = store.propose({ ...base, filename: 'open.ts', content: 'x' });
+  const rejected = store.propose({ ...base, filename: 'rejected.ts', content: 'x' });
+  const applied = store.propose({ ...base, filename: 'applied.ts', content: 'x' });
+  store.close(rejected.id, 'rejected');
+  store.close(applied.id, 'applied');
+  let changed = 0;
+  store.on('changed', () => changed++);
+  assert.equal(store.clearClosed(), 2);
+  assert.deepEqual(store.list().map((p) => p.id), [open.id]);
+  assert.equal(changed, 1);
+  assert.equal(store.clearClosed(), 0);
+  assert.equal(changed, 1, 'nothing removed, nothing announced');
+});
+
 test('store: at most 20 open proposals (the oldest expires) and everything expires after 24 hours', () => {
   let now = 1_000_000;
   const store = new McpProposalStore(() => now);
@@ -186,6 +202,8 @@ test('in propose mode the write tools leave proposals and touch no file', async 
     });
     assert.equal(r.isError, false, r.text);
     assert.match(r.text, /Applied 1 replacement/);
+    assert.match(r.text, /Proposal #1 for "demo\.ts" updated \(still a new file\)\. It is NOT applied/);
+    assert.ok(!r.text.includes('saved as proposal'), 'a follow-up does not claim to be a new file again');
     assert.equal(proposals.list().filter((p) => p.status === 'open').length, 1, 'still one proposal for the file');
     assert.ok(proposals.findOpen('script', 'demo.ts').content.includes('const x: number = 2;'));
     const second = await call('edit_script', {
@@ -248,6 +266,25 @@ test('in propose mode the write tools leave proposals and touch no file', async 
     writeFileSync(file('late.ts'), '// someone created it\n');
     assert.equal((await tools.applyProposal(p.id)).ok, false);
     assert.equal(proposals.get(p.id).status, 'stale');
+  });
+
+  await t.test('the list knows early whether a proposal is outdated and says what it changes', async () => {
+    await call('write_script', { filename: 'early.ts', content: V1 });
+    const created = proposals.findOpen('script', 'early.ts');
+    const infoNew = tools.proposalInfo(created);
+    assert.equal(infoNew.stale, false);
+    assert.match(infoNew.change, /^create early\.ts/);
+
+    assert.equal((await tools.applyProposal(created.id)).ok, true);
+    await call('write_script', { filename: 'early.ts', content: V1 + '// more\n' });
+    const change = proposals.findOpen('script', 'early.ts');
+    const infoChange = tools.proposalInfo(change);
+    assert.equal(infoChange.stale, false);
+    assert.match(infoChange.change, /^update early\.ts: \+1\/-0 lines/);
+
+    writeFileSync(file('early.ts'), V1 + '// changed behind the back\n');
+    assert.equal(tools.proposalInfo(change).stale, true, 'detected without trying to apply');
+    assert.equal(proposals.get(change.id).status, 'open', 'asking does not close it');
   });
 
   await t.test('card changes become proposals too and are applied to the card file', async () => {

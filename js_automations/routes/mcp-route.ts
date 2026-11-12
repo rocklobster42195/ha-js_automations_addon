@@ -35,6 +35,8 @@ interface McpProposalAccess {
   store: McpProposalStore;
   apply: (id: number) => Promise<{ ok: boolean; message: string }>;
   before: (p: Proposal) => string;
+  /** Stale flag and change summary of an open proposal. */
+  info: (p: Proposal) => { stale: boolean; change: string };
 }
 
 export = (
@@ -56,7 +58,14 @@ export = (
 
   // Proposals of the access level "propose": the user reviews the diff and applies or rejects (see mcp-proposals.ts).
   router.get('/proposals', (req, res) => {
-    res.json(proposals.store.list().map(summarize));
+    res.json(
+      proposals.store.list().map((p) => ({ ...summarize(p), ...(p.status === 'open' ? proposals.info(p) : {}) }))
+    );
+  });
+
+  // Forgets the closed proposals (applied, rejected, stale, expired) of the list.
+  router.delete('/proposals/closed', (req, res) => {
+    res.json({ removed: proposals.store.clearClosed() });
   });
 
   router.get('/proposals/:id', (req, res) => {

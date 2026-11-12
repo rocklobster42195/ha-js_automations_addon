@@ -19,8 +19,23 @@ export function isValidScriptName(name: string): boolean {
   return path.basename(clean) === clean && /^[\w.\- ]+\.(js|ts)$/.test(clean) && !clean.endsWith('.d.ts');
 }
 
-/** Error text for a name that did not resolve: tells an invalid name (path parts, odd extension) from a missing file. */
-export function missingScriptMessage(filename: string, fallback: string): string {
+/** The part of the proposal store the error texts need. */
+export interface OpenProposalLookup {
+  findOpen(kind: 'script', filename: string): { id: number } | undefined;
+}
+
+/** Text for a file that exists only as an open proposal (access level "propose"), so it is not on disk yet. */
+export function pendingProposalMessage(filename: string, proposalId: number): string {
+  return `"${filename}" exists only as an open proposal (#${proposalId}) and has not been applied yet, so it is not on disk and cannot run. The user has to apply the proposal in JSA first; read_script shows the proposed text.`;
+}
+
+/**
+ * Error text for a name that did not resolve: tells an invalid name (path parts, odd extension) from a missing file,
+ * and a file that is only proposed from one that does not exist at all.
+ */
+export function missingScriptMessage(filename: string, fallback: string, proposals?: OpenProposalLookup): string {
+  const pending = isValidScriptName(filename) ? proposals?.findOpen('script', filename) : undefined;
+  if (pending) return pendingProposalMessage(filename, pending.id);
   if (isValidScriptName(filename)) return fallback;
   return `Invalid file name "${filename}". Use a plain ".js" or ".ts" name without path parts, as shown by list_scripts (libraries: "libraries/name.ts").`;
 }

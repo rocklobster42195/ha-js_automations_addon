@@ -3,7 +3,8 @@ import { customElement, state, property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mdiStylesheetLink } from './mdi';
 import './script-group';
-import type { JsaScript, JsaSettings } from './global';
+import './proposal-row';
+import type { JsaScript, JsaSettings, JsaProposal } from './global';
 
 const NO_GROUP = '___none___';
 const LIB_GROUP = '___libraries___';
@@ -219,6 +220,18 @@ export class AppSidebar extends LitElement {
          (see status-bar.ts) — otherwise it overlaps the last row(s). */
       padding-bottom: 30px;
     }
+    .proposal-block-header {
+      padding: 8px 15px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #f0a500;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
     .script-list-empty {
       text-align: center;
       padding: 20px;
@@ -227,6 +240,9 @@ export class AppSidebar extends LitElement {
   `;
 
   @state() private _scripts: JsaScript[] = [];
+  /** Open change proposals of an AI assistant (access level "propose"), with stale flag and summary. */
+  @state() private _proposals: JsaProposal[] = [];
+  private _proposalSocketBound = false;
   @state() private _search = '';
   @state() private _codeMatchFilenames: Set<string> | null = null;
   private _searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -286,6 +302,9 @@ export class AppSidebar extends LitElement {
     this.addEventListener('jsa-delete-script', this._onDeleteScript as EventListener);
     this.addEventListener('jsa-dismiss-error', this._onDismissError as EventListener);
     this.addEventListener('jsa-toggle-group', this._onToggleGroup as EventListener);
+    this.addEventListener('jsa-proposal-review', this._onProposalReview as EventListener);
+    this.addEventListener('jsa-proposal-apply', this._onProposalApply as unknown as EventListener);
+    this.addEventListener('jsa-proposal-reject', this._onProposalReject as unknown as EventListener);
 
     this._mediaQuery.addEventListener('change', this._onMediaChange);
     window.addEventListener('settings-changed', this._onSettingsChanged);
@@ -293,6 +312,111 @@ export class AppSidebar extends LitElement {
 
     this._loadVersion();
     this.refreshBadges();
+    void this._loadProposals();
+    this._bindProposalSocket();
+  }
+
+  // ---- proposals of an AI assistant (access level "propose") ----
+
+  private _setProposals(list: unknown): void {
+    this._proposals = Array.isArray(list) ? (list as JsaProposal[]).filter((p) => p.status === 'open') : [];
+  }
+
+  private _loadProposals = async (): Promise<void> => {
+    try {
+      const res = await window.apiFetch!('api/mcp/proposals');
+      if (res.ok) this._setProposals(await res.json());
+    } catch {
+      /* MCP not available: no proposals */
+    }
+  };
+
+  /** The socket client may connect after this component; retry briefly instead of missing the event. */
+  private _bindProposalSocket(attempt = 0): void {
+    if (this._proposalSocketBound) return;
+    if (window.socket) {
+      this._proposalSocketBound = true;
+      window.socket.on('mcp_proposals_changed', (list: unknown) => this._setProposals(list));
+      // A file changed on disk: an open proposal may have become outdated.
+      window.socket.on('script_content_changed', () => void this._loadProposals());
+    } else if (attempt < 20) {
+      setTimeout(() => this._bindProposalSocket(attempt + 1), 500);
+    }
+  }
+
+  private _onProposalReview = (e: CustomEvent<{ id: number }>): void => {
+    void window.openProposalTab?.(e.detail.id);
+  };
+
+  private _onProposalApply = async (e: CustomEvent<{ id: number }>): Promise<void> => {
+    const p = this._proposals.find((x) => x.id === e.detail.id);
+    if (!p) return;
+    const script = this._scripts.find((s) => s.filename === p.filename);
+    const canRestart = !!script?.running && p.kind === 'script';
+    const message = `${this._t('proposal_row_apply_confirm', 'Apply this proposal?')}\n\n${p.change ?? p.message}`;
+    const label = this._t('proposal_apply', 'Apply');
+    let restart = false;
+    if (canRestart) {
+      const r = await window.confirmDialog!.confirmWithCheckbox(message, {
+        confirmLabel: label,
+        checkboxLabel: this._t('proposal_row_restart_after', 'Restart the script afterwards'),
+      });
+      if (!r.confirmed) return;
+      restart = r.checked;
+    } else if (!(await window.confirmDialog!.confirm(message, { confirmLabel: label }))) {
+      return;
+    }
+    try {
+      const res = await window.apiFetch!(`api/mcp/proposals/${p.id}/apply`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alertToast?.show(String(data.message ?? data.error ?? res.status), {
+          variant: 'error',
+          duration: 10000,
+        });
+        void this._loadProposals();
+        return;
+      }
+      window.alertToast?.show(this._t('proposal_applied_toast', 'Proposal applied.'), { variant: 'success' });
+      if (restart && script) await window.restartScript?.(script.filename);
+    } catch (err) {
+      window.alertToast?.show(err instanceof Error ? err.message : String(err), { variant: 'error' });
+    }
+  };
+
+  private _onProposalReject = async (e: CustomEvent<{ id: number }>): Promise<void> => {
+    const reason = window.prompt(
+      this._t('proposal_reject_prompt', 'Reason for rejecting (optional, the assistant can read it):'),
+      ''
+    );
+    if (reason === null) return;
+    try {
+      const res = await window.apiFetch!(`api/mcp/proposals/${e.detail.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Status ${res.status}`);
+    } catch (err) {
+      window.alertToast?.show(err instanceof Error ? err.message : String(err), { variant: 'error' });
+    }
+  };
+
+  /** Open proposals by the file they change (a library as "libraries/<name>"), for the rows of existing scripts. */
+  private _proposalsByFile(): Map<string, JsaProposal[]> {
+    const map = new Map<string, JsaProposal[]>();
+    for (const p of this._proposals) {
+      if (p.kind === 'script' && p.isNew) continue; // shown in the "Proposals" block instead
+      map.set(p.filename, [...(map.get(p.filename) ?? []), p]);
+    }
+    return map;
+  }
+
+  /** New files that exist only as a proposal, matching the current search. */
+  private _newFileProposals(filter: string): JsaProposal[] {
+    return this._proposals.filter(
+      (p) => p.kind === 'script' && p.isNew && (!filter || p.filename.toLowerCase().includes(filter))
+    );
   }
 
   disconnectedCallback() {
@@ -669,7 +793,10 @@ export class AppSidebar extends LitElement {
   }
 
   render() {
-    const { groups, isSearchActive, isEmpty } = this._visibleGroups();
+    const { groups, isSearchActive, isEmpty: noScripts } = this._visibleGroups();
+    const newProposals = this._newFileProposals(this._search.toLowerCase().trim());
+    const isEmpty = noScripts && newProposals.length === 0;
+    const proposalsByFile = this._proposalsByFile();
     // Collapse to header-only for any non-dashboard mobile screen (log OR settings) —
     // main-content takes over the rest in both cases, just showing different content.
     const isFullscreenContent = this.mobile && this._mobileScreen !== 'dashboard';
@@ -789,6 +916,19 @@ export class AppSidebar extends LitElement {
 
               <div class="script-list">
                 ${
+                  newProposals.length
+                    ? html`<div class="proposal-block-header">
+                          <i class="mdi mdi-file-compare"></i>${this._t('proposals_block_title', 'Proposals')}
+                          (${newProposals.length})
+                        </div>
+                        ${repeat(
+                          newProposals,
+                          (p) => p.id,
+                          (p) => html`<proposal-row .proposal=${p}></proposal-row>`
+                        )}`
+                    : nothing
+                }
+                ${
                   isEmpty
                     ? html`<div class="script-list-empty">
                         ${isSearchActive ? this._t('no_scripts_found_search') : this._t('no_scripts_found')}
@@ -803,6 +943,7 @@ export class AppSidebar extends LitElement {
                             ?is-lib=${g.isLib}
                             ?is-none=${g.isNone}
                             .scripts=${g.scripts}
+                            .proposals=${proposalsByFile}
                             ?collapsed=${g.collapsed}
                             ?mqtt-connected=${this._mqttConnected}
                             ?search-active=${isSearchActive}

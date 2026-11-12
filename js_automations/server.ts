@@ -204,6 +204,7 @@ function startApp(): void {
       store: kernel.mcpProposals,
       apply: (id) => kernel.mcpWriteTools.applyProposal(id),
       before: (p) => kernel.mcpWriteTools.proposalBefore(p),
+      info: (p) => kernel.mcpWriteTools.proposalInfo(p),
     }
   );
   const backupRouter = backupRouteFactory(kernel.backupManager);
