@@ -485,7 +485,7 @@ export function registerReadTools(protocol: McpProtocol, deps: McpReadToolDeps):
       const id = String(args.entity_id ?? '');
       const state = haConnector.getStates().find((s) => s.entity_id === id);
       if (!state) return fail(`Entity "${id}" not found. Use list_entities to search.`);
-      let json = JSON.stringify(state, null, 2);
+      let json = JSON.stringify(maskDeep(state), null, 2);
       if (json.length > MAX_ENTITY_ATTRIBUTE_CHARS) json = json.slice(0, MAX_ENTITY_ATTRIBUTE_CHARS) + '\n… truncated';
       return text(json);
     },

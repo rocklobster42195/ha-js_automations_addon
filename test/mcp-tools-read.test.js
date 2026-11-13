@@ -105,6 +105,11 @@ function setup(t) {
       { entity_id: 'light.kitchen', state: 'on', attributes: { friendly_name: 'Kitchen Light', brightness: 200 } },
       { entity_id: 'light.hall', state: 'off', attributes: { friendly_name: 'Hall' } },
       { entity_id: 'sensor.temp', state: '21.5', attributes: { friendly_name: 'Outside Temp' } },
+      {
+        entity_id: 'camera.door',
+        state: 'idle',
+        attributes: { friendly_name: 'Door', access_token: 'abc123def456ghi789' },
+      },
     ],
   };
   const storeManager = {
@@ -401,6 +406,9 @@ test('read tools expose scripts, logs, events, entities and docs', async (t) => 
     assert.match((await call('list_entities', { search: 'outside' })).text, /sensor\.temp/);
     assert.match((await call('get_entity', { entity_id: 'light.kitchen' })).text, /"brightness": 200/);
     assert.equal((await call('get_entity', { entity_id: 'light.nope' })).isError, true);
+    const camera = (await call('get_entity', { entity_id: 'camera.door' })).text;
+    assert.ok(!camera.includes('abc123def456ghi789'), 'credential-like attributes are masked');
+    assert.match(camera, /"access_token": "\*\*\*"/);
   });
 
   await t.test('get_store: off by default, never returns secrets, masks sensitive keys', async () => {
