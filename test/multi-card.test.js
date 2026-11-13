@@ -178,3 +178,18 @@ test('listCards names the main card first, also for an old embedded one', async 
   assert.equal(manager.getCardSource(script, 'garmin-card'), MAIN, 'the main card also by its own name');
   assert.equal(manager.getCardSource(script, 'garmin-day-card'), DAY);
 });
+
+test('deleting a script keeps the cards of another script whose name starts with the same prefix and a hyphen', async (t) => {
+  const { scriptsDir, cardsDir, www, script, manager } = setup(t);
+  const sibling = path.join(scriptsDir, 'garmin-run.ts');
+  writeFileSync(sibling, header);
+  cf.writeCardFile(cardsDir, 'garmin-run', undefined, MAIN);
+  await manager.installCard(script);
+  await manager.installCard(sibling);
+  rmSync(script);
+  manager.removeCard(script);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(readdirSync(www), ['garmin-run-card.js'], "the sibling's installed card stays");
+  assert.deepEqual(Object.keys(manager.registry), ['garmin-run']);
+  assert.deepEqual(cf.listCardNames(cardsDir, 'garmin-run'), ['garmin-run-card'], "the sibling's card file stays");
+});

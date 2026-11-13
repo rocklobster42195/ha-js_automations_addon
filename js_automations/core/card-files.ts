@@ -67,9 +67,10 @@ export function writeCardFile(cardsDir: string, base: string, card: string | und
 }
 
 /** Deletes all card files of a script; returns the removed paths. */
-export function removeCardFiles(cardsDir: string, base: string): string[] {
+export function removeCardFiles(cardsDir: string, base: string, skip?: (cardName: string) => boolean): string[] {
   const removed: string[] = [];
   for (const name of listCardNames(cardsDir, base)) {
+    if (skip?.(name)) continue;
     const file = path.join(cardsDir, `${name}.js`);
     fs.rmSync(file, { force: true });
     removed.push(file);

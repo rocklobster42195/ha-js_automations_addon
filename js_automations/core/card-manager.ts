@@ -526,10 +526,24 @@ class CardManager {
     // via ha.frontend.cacheAsset() without necessarily having a __JSA_CARD__ block.
     this.removeAssets(scriptName);
     // The card source files go with their script (Git history keeps them).
-    if (this.cardsDir) removeCardFiles(this.cardsDir, scriptName);
+    // A hyphenated script (garage-door.ts) can share the prefix of another one (garage.ts): its cards stay.
+    const dir = path.dirname(scriptFilePath);
+    const ownedByOther = (cardName: string): boolean => {
+      // Every longer prefix up to a hyphen (and the whole name, which is a main card's registry key) may be a script.
+      const ends = [...cardName.matchAll(/-/g)].map((m) => m.index as number).filter((i) => i > scriptName.length);
+      for (const end of [...ends, cardName.length]) {
+        const other = cardName.slice(0, end);
+        if (other === scriptName) continue;
+        if (fs.existsSync(path.join(dir, `${other}.js`)) || fs.existsSync(path.join(dir, `${other}.ts`))) return true;
+      }
+      return false;
+    };
+    if (this.cardsDir) removeCardFiles(this.cardsDir, scriptName, ownedByOther);
 
     // The main card and every further card of the script (registered as <script>-<x>-card).
-    const keys = Object.keys(this.registry).filter((k) => k === scriptName || k.startsWith(`${scriptName}-`));
+    const keys = Object.keys(this.registry).filter(
+      (k) => k === scriptName || (k.startsWith(`${scriptName}-`) && !ownedByOther(k))
+    );
     for (const key of keys) this._removeInstalled(key);
   }
 
