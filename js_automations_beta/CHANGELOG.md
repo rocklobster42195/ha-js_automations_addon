@@ -1,17 +1,13 @@
 ## [3.2.0-beta.12] - 2026-11-13
 
-- docs: changelog for the review fixes
-- fix(editor): card selector maps the main card by name, not by list position
-- fix(cards): deleting a script keeps the cards of a hyphenated sibling script
-- fix(cards): really escape '<' in the card preview metadata
-- fix(mcp): refuse masked write-backs and library overwrites, no delete_script at level propose
-- fix(mcp): mask credential-like attributes in get_entity
-- chore: ignore docs/internal/ideas* and notes/
-- docs(mcp): show how the cocktail card grew in rounds, with a configurable option
-- fix(entities): the device_class icon note is an info line, not a warning
-- docs(mcp): add a "dashboard card from one prompt" example with a screenshot
-- docs(iobroker): map createState to ha.register, keep 0_userdata as ha.persistent
-- docs: hand-written beta.11 changelog entry
+- MCP: `get_entity` masks credential-like attributes (for example a camera's `access_token`) like every other read tool
+- MCP: `write_script` and `write_card` refuse text that carries more masked `'***'` values than the file has, so an assistant cannot write masked credentials back over the real ones
+- MCP: a bare name such as `helpers.ts` no longer overwrites a library with `write_script`; use `libraries/helpers.ts`. At the access level **Read + control + propose**, `delete_script` is refused instead of deleting at once
+- Cards: deleting a script no longer removes the cards of another script whose name starts with the same prefix and a hyphen (`garage.ts` and `garage-door.ts`)
+- Cards: the `<` escape in the card preview metadata works now, so a script name or icon cannot break the preview page
+- Editor: the card selector no longer saves the main card when a script has only further cards
+- Entities: the note about a custom icon being ignored because of an entity's `device_class` is an info line, not a warning
+- Docs: dashboard card from one prompt (with screenshot), the cocktail card grown in rounds, ioBroker `createState` mapping
 
 ---
 
