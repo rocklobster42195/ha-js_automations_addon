@@ -125,7 +125,14 @@ function setup(t) {
     },
   };
   const settings = {
-    mcp: { enabled: true, external_url: '', trust_proxy: false, allowlist: '', access_level: 'propose' },
+    mcp: {
+      enabled: true,
+      external_url: '',
+      trust_proxy: false,
+      allowlist: '',
+      access_level: 'propose',
+      tool_delete_script: true,
+    },
     versioning: {},
   };
   const settingsManager = { on() {}, getSettings: () => settings };
@@ -325,5 +332,13 @@ test('in propose mode the write tools leave proposals and touch no file', async 
     assert.match(r.text, /Created script "direct\.ts"/);
     assert.ok(existsSync(file('direct.ts')));
     assert.equal(proposals.list().filter((p) => p.status === 'open').length, open);
+  });
+
+  await t.test('delete_script is refused at the level "propose" and the file stays', async () => {
+    settings.mcp.access_level = 'propose';
+    const r = await call('delete_script', { filename: 'demo.ts' });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /not available at the access level "Propose"/);
+    assert.ok(existsSync(file('demo.ts')));
   });
 });

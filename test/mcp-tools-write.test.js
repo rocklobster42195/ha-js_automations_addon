@@ -489,4 +489,38 @@ test('write tools check, write, commit and delete safely', async (t) => {
     assert.doesNotMatch(lib.text, /Store entries/, 'libraries own no store entries');
     assert.ok(!calls.some((c) => c[0] === 'removeCard'), 'libraries have no card');
   });
+
+  await t.test('write_script refuses text that writes masked credentials back', async () => {
+    const real = `/**
+ * @name Masked
+ */
+const apiKey = 'abcd1234efgh5678';
+ha.log(apiKey);
+`;
+    assert.equal((await call('write_script', { filename: 'masked.ts', content: real })).isError, false);
+    const masked = real.replace('abcd1234efgh5678', '***');
+    const r = await call('write_script', { filename: 'masked.ts', content: masked });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /masked as '\*\*\*'/);
+    assert.match(readFileSync(file('masked.ts'), 'utf8'), /abcd1234efgh5678/, 'the real value is untouched');
+    await call('delete_script', { filename: 'masked.ts' });
+  });
+
+  await t.test('a bare name never overwrites a library by accident', async () => {
+    const lib = await call('write_script', {
+      filename: 'libraries/shared.ts',
+      content: `export const a = 1;
+`,
+    });
+    assert.equal(lib.isError, false, lib.text);
+    const r = await call('write_script', {
+      filename: 'shared.ts',
+      content: `ha.log('x');
+`,
+    });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /is a library, not a script/);
+    assert.match(readFileSync(path.join(librariesDir, 'shared.ts'), 'utf8'), /export const a = 1/);
+    await call('delete_script', { filename: 'libraries/shared.ts' });
+  });
 });

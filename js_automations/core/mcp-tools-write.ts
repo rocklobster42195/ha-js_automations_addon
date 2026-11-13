@@ -71,6 +71,20 @@ const commitSubject = (message: unknown, fallback: string): string =>
 const text = (content: string): McpToolResult => ({ content });
 const fail = (message: string): McpToolResult => ({ content: message, isError: true });
 
+/** Quoted '***' values: what read_script/read_card show instead of a credential. */
+const MASKED_VALUE = /(["'`])\*\*\*\1/g;
+
+/** Writing back text with more masked values than the file has would replace real credentials with '***'. */
+function maskedWriteBack(previous: string | null | undefined, next: string): string | null {
+  const count = (t: string): number => (t.match(MASKED_VALUE) ?? []).length;
+  if (count(next) <= count(previous ?? '')) return null;
+  return (
+    "Not written — the source contains '***' values. read_script/read_card show credentials masked as '***'; writing them back " +
+    'would replace the real values. Use edit_script/edit_card for small changes, or leave those values out of the text you send and tell ' +
+    'the user which ones to fill in.'
+  );
+}
+
 export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps): McpWriteTools {
   const { workerManager, cardManager, depManager, gitManager, storeManager } = deps;
 
@@ -183,6 +197,12 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     const existing = resolveScript(deps, filename);
     let fullPath: string;
     let isLibrary: boolean;
+    if (existing && existing.isLibrary && !/^libraries[/\\]/.test(filename) && args.kind !== 'library') {
+      // A bare name only falls back to libraries/ for lookups; a write must not replace a library by accident.
+      return fail(
+        `"${filename}" is a library, not a script. To change the library write "libraries/${filename}" (or pass kind "library"); to create a script pick another name.`
+      );
+    }
     if (existing) {
       fullPath = existing.fullPath;
       isLibrary = existing.isLibrary;
@@ -219,6 +239,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     // Keep the existing card: read_script strips the Base64 block, so the new source has none.
     let previous: string | null = null;
     if (existing) previous = fs.readFileSync(fullPath, 'utf8');
+    const masked = maskedWriteBack(previous, content);
+    if (masked) return fail(masked);
 
     if (!direct && deps.isProposeMode()) {
       const updating = !!deps.proposals.findOpen('script', isLibrary ? `libraries/${name}` : name);
@@ -343,6 +365,8 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
 
     const current = cardManager.getCardSource(found.fullPath, isMain ? undefined : card);
     const has = current !== null && current !== undefined;
+    const maskedCard = maskedWriteBack(has ? current : null, source);
+    if (maskedCard) return fail(maskedCard);
     const cardSubject = commitSubject(args.message, describeChange(`card of ${name}`, has ? current : null, source));
 
     if (!direct && deps.isProposeMode()) {
@@ -601,6 +625,11 @@ export function registerWriteTools(protocol: McpProtocol, deps: McpWriteToolDeps
     inputSchema: { filename: z.string().describe('File name as shown by list_scripts') },
     handler: (args) =>
       serialized(async () => {
+        if (deps.isProposeMode()) {
+          return fail(
+            'delete_script is not available at the access level "Propose": nothing is changed without the user applying it. Tell the user which script should be deleted and let them do it in the UI.'
+          );
+        }
         const filename = String(args.filename ?? '');
         const found = resolveScript(deps, filename);
         if (!found)
