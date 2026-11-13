@@ -1561,7 +1561,7 @@ export class EditorViewElement extends LitElement {
 
   /** Shows another card of the script in the card tab (saving unsaved edits of the current one first). */
   private async _switchCard(tab: JsaTab, name: string): Promise<void> {
-    const next = name === tab.cards?.[0] ? undefined : name;
+    const next = name === `${tab.parentScript?.replace(/\.(js|ts)$/, '')}-card` ? undefined : name;
     if (next === tab.card) return;
     if (tab.isDirty && this._activeTabFilename === tab.filename) await this.saveActiveTab();
     if (tab.isDirty) {
@@ -1674,7 +1674,10 @@ export class EditorViewElement extends LitElement {
                 >
                   ${activeTab.cards.map(
                     (name) =>
-                      html`<option value=${name} ?selected=${name === (activeTab.card ?? activeTab.cards![0])}>
+                      html`<option
+                        value=${name}
+                        ?selected=${name === (activeTab.card ?? `${activeTab.parentScript?.replace(/\.(js|ts)$/, '')}-card`)}
+                      >
                         ${name}
                       </option>`
                   )}
