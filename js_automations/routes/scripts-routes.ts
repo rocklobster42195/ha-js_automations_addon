@@ -291,7 +291,7 @@ export = (
     const safeEditMeta = JSON.stringify({
       name: exposeMeta.name || scriptName,
       icon: exposeMeta.icon || 'mdi:eye-off-outline',
-    }).replace(/</g, '\u003c');
+    }).replace(/</g, String.fromCharCode(92) + 'u003c');
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
