@@ -76,6 +76,10 @@ Let an AI assistant work with your scripts. JS Automations is now an MCP server:
 - Scripts: `ha.update()`, `ha.register()`, `ha.call()`, `ha.fire()`, `ha.mqtt.publish()` and `ha.store.set()` accept data taken from `ha.persistent()`; before, such a value crashed the script with `DataCloneError: [object Array] could not be cloned`
 - Editor: `.ts` scripts no longer show "Cannot find module 'crypto'" or "Cannot find name 'Buffer'" — compact typings for `process`, `Buffer`, `require` and the `crypto`, `path`, `os`, `util` and `events` modules are included (a real `@types/node` installed with `@npm` replaces them). A script that declared `process` itself (`declare const process`) can drop that line
 - MCP: obvious placeholders such as `YOUR_TOKEN_HERE` or `<your token>` no longer trigger the "looks like credentials" warning
+- MCP: `get_entity` masks credential-like attributes (for example a camera's `access_token`) like every other read tool
+- MCP: `write_script` and `write_card` refuse text that carries more masked `'***'` values than the file has, so an assistant cannot write masked credentials back over the real ones
+- MCP: a bare name such as `helpers.ts` no longer overwrites a library with `write_script`; use `libraries/helpers.ts`. At the access level **Read + control + propose**, `delete_script` is refused instead of deleting at once
+- Cards: deleting a script no longer removes the cards of another script whose name starts with the same prefix and a hyphen (`garage.ts` and `garage-door.ts`); the `<` escape in the card preview metadata works now; the editor's card selector no longer saves the main card when a script has only further cards
 
 
 ---
