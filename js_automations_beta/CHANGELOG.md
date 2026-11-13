@@ -1,3 +1,20 @@
+## [3.2.0-beta.12] - 2026-11-13
+
+- docs: changelog for the review fixes
+- fix(editor): card selector maps the main card by name, not by list position
+- fix(cards): deleting a script keeps the cards of a hyphenated sibling script
+- fix(cards): really escape '<' in the card preview metadata
+- fix(mcp): refuse masked write-backs and library overwrites, no delete_script at level propose
+- fix(mcp): mask credential-like attributes in get_entity
+- chore: ignore docs/internal/ideas* and notes/
+- docs(mcp): show how the cocktail card grew in rounds, with a configurable option
+- fix(entities): the device_class icon note is an info line, not a warning
+- docs(mcp): add a "dashboard card from one prompt" example with a screenshot
+- docs(iobroker): map createState to ha.register, keep 0_userdata as ha.persistent
+- docs: hand-written beta.11 changelog entry
+
+---
+
 ## [3.2.0-beta.11] - 2026-11-12
 
 - MCP: new access level **Read + control + propose**. The assistant cannot change anything itself; `write_script`, `edit_script`, `write_card` and `edit_card` leave a **proposal**. A new file shows up greyed out in a block **Proposals** at the top of the script list, a change marks the row of the script. **Review** opens the diff (red = as it is now, green = proposed), **Apply** asks first and shows what changes, **Reject** takes a reason the assistant can read. A proposal that no longer fits because the file changed meanwhile is marked outdated at once. Proposals are kept in memory only (at most 20, 24 hours). See [Proposals](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/mcp.md#proposals-access-level-propose)
