@@ -37,7 +37,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "archiver": "^8.0.0",
     "blockly": "^11.2.2",
-    "dotenv": "^18.0.9",
+    "dotenv": "^18.0.10",
     "express": "^5.3.0",
     "home-assistant-js-websocket": "^9.8.1",
     "i18next": "^26.7.2",
@@ -50,7 +50,7 @@
     "socket.io": "^4.8.4",
     "typescript": "^6.0.3",
     "webdav": "^5.11.0",
-    "ws": "^8.22.1",
+    "ws": "^8.23.0",
     "yauzl": "^3.4.0",
     "zod": "^4.6.7"
   },
@@ -65,10 +65,10 @@
     "@types/sinon": "^22.0.2",
     "@types/ws": "^8.18.2",
     "@types/yauzl": "^3.4.0",
-    "@web/dev-server-esbuild": "^2.0.0",
-    "@web/test-runner": "^1.0.0",
-    "@web/test-runner-playwright": "^1.0.0",
-    "concurrently": "^10.0.4",
+    "@web/dev-server-esbuild": "^2.0.1",
+    "@web/test-runner": "^1.0.1",
+    "@web/test-runner-playwright": "^1.0.1",
+    "concurrently": "^10.0.7",
     "esbuild": "^0.28.2",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
@@ -76,7 +76,7 @@
     "monaco-editor": "^0.44.0",
     "nodemon": "^3.1.11",
     "playwright": "^1.65.0",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "sinon": "^22.1.0"
   }
 }
