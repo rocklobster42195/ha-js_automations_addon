@@ -62,6 +62,87 @@ const __jsa__ = (() => {
     _heartbeatInterval = setInterval(send, 3600000);
   }
 
+  // Users without admin rights may not use the HA event bus (fire_event, custom events). Their card actions
+  // go through the hidden "JSA Card Action" text entity; the answers come back in the attributes of the
+  // "JSA Card Action Result" sensor. Chosen automatically after the first "unauthorized" answer.
+  let _viaEntity = false;
+  const _waiting = new Map();
+  let _resultSub = null;
+  const _isUnauthorized = (err) => (err && err.code === 'unauthorized') || /unauthori[sz]ed/i.test((err && err.message) || String(err || ''));
+  function _findEntity(role) {
+    const states = (_hass && _hass.states) || {};
+    for (const id in states) {
+      const a = states[id] && states[id].attributes;
+      if (a && a.jsa_role === role) return id;
+    }
+    return null;
+  }
+  function _deliver(answers) {
+    if (!Array.isArray(answers)) return;
+    for (const a of answers) {
+      const w = a && _waiting.get(a.c);
+      if (!w) continue;
+      _waiting.delete(a.c);
+      clearTimeout(w.timer);
+      if (a.ok) w.resolve(a.r === undefined ? null : a.r);
+      else w.reject(new Error(a.e || 'Action failed'));
+    }
+  }
+  function _watchResults() {
+    if (_resultSub || !_conn) return;
+    const id = _findEntity('card_action_result');
+    if (!id) return;
+    _resultSub = _conn.subscribeMessage((msg) => {
+      const add = msg && msg.a && msg.a[id];
+      if (add && add.a) _deliver(add.a.answers);
+      const ch = msg && msg.c && msg.c[id];
+      if (ch && ch['+'] && ch['+'].a) _deliver(ch['+'].a.answers);
+    }, { type: 'subscribe_entities', entity_ids: [id] });
+    _resultSub.catch(() => { _resultSub = null; });
+  }
+  // A text value holds at most 255 characters: longer messages are sent as base64 pieces
+  function _sendViaEntity(obj) {
+    const textId = _findEntity('card_action');
+    if (!textId || !_hass) {
+      return Promise.reject(new Error('Card actions are not available for this user: MQTT is off in JS Automations or "Card actions for non-admin users" is switched off'));
+    }
+    const raw = JSON.stringify(obj);
+    const set = (value) => _hass.callService('text', 'set_value', { entity_id: textId, value });
+    if (raw.length <= 240) return set(raw);
+    const b64 = btoa(unescape(encodeURIComponent(raw)));
+    const size = 180;
+    const n = Math.ceil(b64.length / size);
+    let chain = Promise.resolve();
+    for (let i = 0; i < n; i++) {
+      const piece = b64.slice(i * size, (i + 1) * size);
+      chain = chain.then(() => set(JSON.stringify({ v: 1, c: obj.c, i, n, d: piece })));
+    }
+    return chain;
+  }
+  function _entityCall(scriptId, name, payload) {
+    _watchResults();
+    const c = Math.random().toString(36).slice(2);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        _waiting.delete(c);
+        reject(new Error('Action "' + name + '" timed out after 15s'));
+      }, 15000);
+      _waiting.set(c, { resolve, reject, timer });
+      _sendViaEntity({ v: 1, c, s: scriptId, a: name, p: payload }).catch((err) => {
+        _waiting.delete(c);
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+  function _reportCardError(script, message, line) {
+    if (!_hass) return;
+    const viaEntity = () => _sendViaEntity({ v: 1, k: 'err', c: Math.random().toString(36).slice(2), s: script, m: String(message).slice(0, 500), l: line || 0 }).catch(() => {});
+    if (_viaEntity) { viaEntity(); return; }
+    _hass.callWS({ type: 'fire_event', event_type: 'jsa_card_error', event_data: { script, message, line: line || 0 } })
+      .catch((err) => { if (_isUnauthorized(err)) { _viaEntity = true; viaEntity(); } });
+  }
+
   return {
     scriptId: '{{SCRIPT_ID}}',
     connect(hass) {
@@ -84,8 +165,10 @@ const __jsa__ = (() => {
       _startHeartbeat();
     },
     ready() { return Promise.resolve(); },
+    _reportCardError(script, message, line) { _reportCardError(script, message, line); },
     callAction(name, payload = {}) {
       if (!_conn || !_hass) return Promise.reject(new Error('__jsa__ not connected — call connect(hass) first'));
+      if (_viaEntity) return _entityCall(this.scriptId, name, payload);
       const conn = _conn;
       const hass = _hass;
       const scriptId = this.scriptId;
@@ -138,8 +221,18 @@ const __jsa__ = (() => {
             type: 'fire_event',
             event_type: 'jsa_action',
             event_data: { script: scriptId, action: name, payload, correlation_id: correlationId },
-          }).catch(() => {});
+          }).catch((err) => {
+            if (!_isUnauthorized(err)) return;
+            _viaEntity = true;
+            settle(() => _entityCall(scriptId, name, payload).then(resolve, reject));
+          });
         }, (err) => {
+          // No admin rights: switch to the entity way for the rest of this page
+          if (_isUnauthorized(err)) {
+            _viaEntity = true;
+            settle(() => _entityCall(scriptId, name, payload).then(resolve, reject));
+            return;
+          }
           settle(() => reject(new Error('subscription failed: ' + (err?.message || err))));
         });
       });
@@ -288,17 +381,13 @@ const __jsa__ = (() => {
   const _tag = '/jsa-cards/' + _sid + '-card.js';
   window.addEventListener('error', function(e) {
     if (!e.filename || !e.filename.includes(_tag) || !__jsa_hass__) return;
-    __jsa_hass__.callWS({ type: 'fire_event', event_type: 'jsa_card_error',
-      event_data: { script: _sid, message: e.message || 'Unknown error', line: e.lineno || 0 },
-    }).catch(function() {});
+    __jsa__._reportCardError(_sid, e.message || 'Unknown error', e.lineno || 0);
   });
   window.addEventListener('unhandledrejection', function(e) {
     var msg = String(e.reason && e.reason.message ? e.reason.message : e.reason || 'Unhandled rejection');
     var stack = (e.reason && e.reason.stack) || '';
     if ((!stack.includes(_tag) && !stack.includes(_sid + '-card')) || !__jsa_hass__) return;
-    __jsa_hass__.callWS({ type: 'fire_event', event_type: 'jsa_card_error',
-      event_data: { script: _sid, message: msg },
-    }).catch(function() {});
+    __jsa__._reportCardError(_sid, msg, 0);
   });
 })();
 `;

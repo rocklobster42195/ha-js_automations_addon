@@ -415,7 +415,9 @@
       "mqtt_autodetect_not_found": "Keine MQTT-Konfiguration in Home Assistant gefunden.",
       "mqtt_autodetect_password_hint": "Host und Port wurden übernommen. Bitte trage dein Passwort manuell ein.",
       "mqtt_autodetect_fallback": "Keine MQTT-Konfiguration in HA gefunden – core-mosquitto wurde als Vorschlag eingetragen. Bitte Zugangsdaten manuell eingeben.",
-      "mosquitto_hint": "<b>Mosquitto-Addon (HA):</b> Verwende <code>core-mosquitto</code> als Host.<br>Der Broker erwartet einen echten Home-Assistant-Benutzer als Zugangsdaten.<br>Empfehlung: Lege einen dedizierten MQTT-Nutzer an unter <b>Einstellungen → Personen → Benutzer hinzufügen</b>."
+      "mosquitto_hint": "<b>Mosquitto-Addon (HA):</b> Verwende <code>core-mosquitto</code> als Host.<br>Der Broker erwartet einen echten Home-Assistant-Benutzer als Zugangsdaten.<br>Empfehlung: Lege einen dedizierten MQTT-Nutzer an unter <b>Einstellungen → Personen → Benutzer hinzufügen</b>.",
+      "card_actions_non_admin": "Kartenaktionen für Nicht-Admins",
+      "card_actions_non_admin_desc": "Karten auf Dashboards von Home-Assistant-Nutzern ohne Admin-Rechte (zum Beispiel ein Wandtablet) können ihre Skript-Aktionen über die ausgeblendete Entität \"JSA Card Action\" auslösen. Den normalen Weg erlaubt Home Assistant nur Admins. Abschalten, wenn nur Admins Kartenaktionen auslösen sollen."
     },
     "webhook": {
       "external_url": "Externe URL",

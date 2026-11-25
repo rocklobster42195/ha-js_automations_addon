@@ -404,6 +404,14 @@ const settingsSchema: SettingSection[] = [
         type: 'mqtt-test',
         condition: { key: 'enabled', value: true },
       },
+      {
+        key: 'card_actions_non_admin',
+        label: 'settings.mqtt.card_actions_non_admin',
+        description: 'settings.mqtt.card_actions_non_admin_desc',
+        type: 'boolean',
+        default: true,
+        condition: { key: 'enabled', value: true },
+      },
     ],
   },
   {

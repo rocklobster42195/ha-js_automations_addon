@@ -1156,6 +1156,8 @@ ha.action('set-team', async ({ teamId }) => {
 
 > **Note:** `ha.action` handlers only exist while the script is running. If the script is stopped, calls to `__jsa__.callAction()` will time out after 10 seconds.
 
+> **Users without admin rights:** Home Assistant lets only admins use the event bus that `__jsa__.callAction()` normally uses. On dashboards of other users (for example a wall tablet signed in as a normal user) the card switches by itself to the hidden `text.jsa_card_action` entity and reads the answer from `sensor.jsa_card_action_result`. Nothing changes in your script or card. This needs MQTT and the setting **Settings → MQTT → Card actions for non-admin users** (on by default; switch it off if only admins should trigger card actions). Answers larger than about 12 KB come back as an error, and a call gives up after 15 seconds.
+
 ---
 
 ## Frontend / Card Assets (`ha.frontend`)

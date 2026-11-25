@@ -64,7 +64,7 @@ Simple triggers are often best left as YAML automations. Reach for JS Automation
 - **Deep HA API Access** — Jinja2 templates (`ha.renderTemplate()`), calendar and todo entities, label and floor registries, service response data (`returnResponse: true`), and the full HA event bus (`ha.onEvent()`, `ha.fireEvent()`).
 - **History & Computed Helpers (`ha.history`)** — Raw state history and long-term statistics, plus `trend()`, `derivative()`, `integral()`, `stats()`, `timeSince()` and `timeInState()` on HA entities or any data array.
 - **Global Libraries & Auto-NPM** — Write shared code once and `@include` it anywhere. npm packages listed in the script header are installed automatically.
-- **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()`. See the [Script Packs guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md).
+- **Script Packs** — Embed a Lovelace card directly inside a script: backend logic and dashboard card in one file, installed automatically and connected via `__jsa__.callAction()` (also on dashboards of users without admin rights, through MQTT). See the [Script Packs guide](https://github.com/rocklobster42195/ha-js_automations_addon/blob/main/docs/guide/card-packs.md).
 
 **Talking to the outside**
 

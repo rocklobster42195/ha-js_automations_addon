@@ -30,6 +30,7 @@ import SettingsManager from './settings-manager'; // Static-like module
 import workerManager from './worker-manager'; // Singleton module
 import MqttManager from './mqtt-manager';
 import WebhookManager from './webhook-manager';
+import { CardActionBridge, CARD_ACTION_COMMAND_TOPIC } from './card-action-bridge';
 import McpManager from './mcp-manager';
 import { McpActivityLog } from './mcp-activity-log';
 import { McpProtocol } from './mcp-protocol';
@@ -57,7 +58,7 @@ type SettingsManagerInstance = typeof SettingsManager;
 type WorkerManagerInstance = typeof workerManager;
 
 interface KernelSettings {
-  mqtt?: { enabled?: boolean };
+  mqtt?: { enabled?: boolean; card_actions_non_admin?: boolean };
   system?: { log_level?: string; default_throttle?: number };
   general?: { ui_language?: string };
   danger?: {
@@ -122,6 +123,7 @@ class Kernel extends EventEmitter {
   entityManager!: EntityManager;
   mqttManager!: MqttManager;
   webhookManager!: WebhookManager;
+  cardActionBridge!: CardActionBridge;
   mcpManager!: McpManager;
   mcpActivity!: McpActivityLog;
   mcpProtocol!: McpProtocol;
@@ -201,6 +203,15 @@ class Kernel extends EventEmitter {
       this.blocklyCompiler = new BlocklyCompiler(SCRIPTS_DIR, DIST_DIR);
       this.mqttManager = new MqttManager(this.settingsManager, this.logManager, this.haConnector);
       this.webhookManager = new WebhookManager(this.settingsManager, this.logManager, STORAGE_DIR);
+      this.cardActionBridge = new CardActionBridge({
+        mqtt: this.mqttManager,
+        enabled: () => (this.settingsManager.getSettings() as KernelSettings).mqtt?.card_actions_non_admin !== false,
+        callAction: (script, action, payload) => this.workerManager.callAction(script, action, payload ?? {}),
+        logCardError: (script, message, line) =>
+          this.logManager.add('error', script, '[Card] ' + message + (line ? ' (line ' + line + ')' : '')),
+        log: (level, message) => this.logManager.add(level, 'System', '[CardActions] ' + message),
+        hideEntities: (uniqueIds) => this._hideNewEntities(uniqueIds),
+      });
       this.mcpManager = new McpManager(this.settingsManager, this.logManager, STORAGE_DIR);
       this.mcpActivity = new McpActivityLog();
       this.mcpProposals = new McpProposalStore();
@@ -364,6 +375,39 @@ class Kernel extends EventEmitter {
    * Whether ha.store secrets should be encrypted: the add-on option / env override wins over the
    * in-app setting (Settings > Danger Zone), which defaults to off.
    */
+  /**
+   * Hides helper entities in HA right after HA created them (not later, so a user who shows them again keeps it).
+   * Runs a few seconds after the discovery so the registry entries exist.
+   */
+  _hideNewEntities(uniqueIds: string[]): void {
+    // MQTT usually connects before the HA connection is ready and HA needs a moment to create the entities,
+    // so try a few times. Only entities created in the last 15 minutes are hidden.
+    const attempt = async (left: number): Promise<void> => {
+      let pending = true;
+      try {
+        if (this.haConnector?.isReady) {
+          const reg = (await this.haConnector.getEntityRegistry()) as Array<{
+            entity_id: string;
+            unique_id?: string;
+            hidden_by?: string | null;
+            created_at?: number;
+          }>;
+          const ours = reg.filter((e) => e.unique_id && uniqueIds.includes(e.unique_id));
+          const fresh = Date.now() / 1000 - 15 * 60;
+          for (const e of ours) {
+            if (e.hidden_by || (typeof e.created_at === 'number' && e.created_at < fresh)) continue;
+            await this.haConnector.updateEntityRegistry(e.entity_id, { hidden_by: 'user' });
+          }
+          pending = ours.length < uniqueIds.length;
+        }
+      } catch (err) {
+        this.logManager.add('debug', 'System', `[CardActions] Could not hide helper entities: ${(err as Error).message}`);
+      }
+      if (pending && left > 0) setTimeout(() => attempt(left - 1), 20000);
+    };
+    setTimeout(() => attempt(5), 5000);
+  }
+
   _wantsStoreEncryption(settings: KernelSettings): boolean {
     return config.STORE_ENCRYPTION_OVERRIDE ?? settings.danger?.store_encryption === true;
   }
@@ -380,6 +424,15 @@ class Kernel extends EventEmitter {
       }
       this.storeManager?.setEncryption(this._wantsStoreEncryption(newSettings));
       this._updateWorkerManagerSettings(newSettings);
+      if (this.mqttManager?.isConnected) this.cardActionBridge?.publishDiscovery();
+    });
+
+    // Card actions of users without admin rights arrive as values of the "JSA Card Action" text entity
+    this.mqttManager.on('command', (cmd: { domain: string; scriptId: string; payload: string }) => {
+      if (`jsa/${cmd.domain}/${cmd.scriptId}/set` !== CARD_ACTION_COMMAND_TOPIC) return;
+      this.cardActionBridge.handleCommand(cmd.payload).catch((err: Error) =>
+        this.logManager.add('warn', 'System', `[CardActions] ${err.message}`)
+      );
     });
 
     // Forward NPM logs to the LogManager
@@ -427,6 +480,7 @@ class Kernel extends EventEmitter {
           );
         }
       }
+      if (status.connected) this.cardActionBridge?.publishDiscovery();
       if (status.connected) this._mqttEverConnected = true;
     });
 

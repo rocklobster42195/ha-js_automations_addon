@@ -414,7 +414,9 @@
       "mqtt_autodetect_not_found": "No MQTT configuration found in Home Assistant.",
       "mqtt_autodetect_password_hint": "Host and port have been imported. Please enter your password manually.",
       "mqtt_autodetect_fallback": "No MQTT configuration found in HA – core-mosquitto suggested as default. Please enter your credentials manually.",
-      "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>."
+      "mosquitto_hint": "<b>Mosquitto addon (HA):</b> Use <code>core-mosquitto</code> as host.<br>The broker requires a real Home Assistant user for authentication.<br>Recommended: Create a dedicated MQTT user at <b>Settings → People → Add User</b>.",
+      "card_actions_non_admin": "Card actions for non-admin users",
+      "card_actions_non_admin_desc": "Cards on dashboards of Home Assistant users without admin rights (for example a wall tablet) can run their script actions through the hidden \"JSA Card Action\" entity. Home Assistant gives the normal way only to admins. Switch off if only admins should be able to trigger card actions."
     },
     "webhook": {
       "external_url": "External URL",
