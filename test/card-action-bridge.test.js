@@ -73,7 +73,8 @@ test('chunked base64 message is assembled in any order (with umlauts)', async ()
   const size = 180;
   const n = Math.ceil(data.length / size);
   const pieces = [];
-  for (let i = 0; i < n; i++) pieces.push(JSON.stringify({ v: 1, c: 'ch', i, n, d: data.slice(i * size, (i + 1) * size) }));
+  for (let i = 0; i < n; i++)
+    pieces.push(JSON.stringify({ v: 1, c: 'ch', i, n, d: data.slice(i * size, (i + 1) * size) }));
   for (const p of pieces) assert.ok(p.length <= 255, 'piece fits into a text value');
   for (const p of pieces.reverse()) await bridge.handleCommand(p);
   assert.equal(calls.length, 1);

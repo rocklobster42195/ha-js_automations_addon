@@ -401,7 +401,11 @@ class Kernel extends EventEmitter {
           pending = ours.length < uniqueIds.length;
         }
       } catch (err) {
-        this.logManager.add('debug', 'System', `[CardActions] Could not hide helper entities: ${(err as Error).message}`);
+        this.logManager.add(
+          'debug',
+          'System',
+          `[CardActions] Could not hide helper entities: ${(err as Error).message}`
+        );
       }
       if (pending && left > 0) setTimeout(() => attempt(left - 1), 20000);
     };
@@ -430,9 +434,9 @@ class Kernel extends EventEmitter {
     // Card actions of users without admin rights arrive as values of the "JSA Card Action" text entity
     this.mqttManager.on('command', (cmd: { domain: string; scriptId: string; payload: string }) => {
       if (`jsa/${cmd.domain}/${cmd.scriptId}/set` !== CARD_ACTION_COMMAND_TOPIC) return;
-      this.cardActionBridge.handleCommand(cmd.payload).catch((err: Error) =>
-        this.logManager.add('warn', 'System', `[CardActions] ${err.message}`)
-      );
+      this.cardActionBridge
+        .handleCommand(cmd.payload)
+        .catch((err: Error) => this.logManager.add('warn', 'System', `[CardActions] ${err.message}`));
     });
 
     // Forward NPM logs to the LogManager

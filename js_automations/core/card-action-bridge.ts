@@ -114,7 +114,7 @@ export function pushAnswer(list: CardAnswer[], answer: CardAnswer, max = MAX_ANS
 /** Replaces a result that is too large for an HA attribute with an error answer. */
 export function limitAnswer(answer: CardAnswer, maxBytes = MAX_ANSWER_BYTES): CardAnswer {
   if (!answer.ok) return answer;
-  let size = 0;
+  let size: number;
   try {
     size = Buffer.byteLength(JSON.stringify(answer.r ?? null), 'utf8');
   } catch {
@@ -231,7 +231,11 @@ export class CardActionBridge {
   private publishAnswers(): void {
     const last = this.answers[this.answers.length - 1];
     // Retained: HA subscribes after the discovery and must still see the marker the card looks for
-    this.deps.mqtt.publish(RESULT_ATTR_TOPIC, { jsa_role: 'card_action_result', answers: this.answers }, { retain: true });
+    this.deps.mqtt.publish(
+      RESULT_ATTR_TOPIC,
+      { jsa_role: 'card_action_result', answers: this.answers },
+      { retain: true }
+    );
     this.deps.mqtt.publish(RESULT_STATE_TOPIC, last ? last.c : 'idle', { retain: true });
   }
 
