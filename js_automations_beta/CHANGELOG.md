@@ -1,3 +1,13 @@
+## [3.2.0-beta.13] - 2026-11-25
+
+- feat: card actions for users without admin rights via hidden MQTT text entity
+- build(ui): bundle i18next locally instead of loading it from a CDN
+- build(deps): npm audit fix for hono, fast-xml-parser and related transitive deps
+- build(deps): bump the minor-and-patch group with 7 updates (#41)
+- docs: curated beta.12 changelog
+
+---
+
 ## [3.2.0-beta.12] - 2026-11-13
 
 - MCP: `get_entity` masks credential-like attributes (for example a camera's `access_token`) like every other read tool
