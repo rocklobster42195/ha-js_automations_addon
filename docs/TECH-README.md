@@ -433,7 +433,9 @@ reusing the ORIGINAL correlation_id from step 1 — callId never leaves the back
 Card's __jsa__.connect(hass) listener matches correlation_id, resolves the Promise
 ```
 
-Pending `callAction()` calls are tracked in a Map on the card's `__jsa__` object; they resolve or reject after a **20-second** timeout (`card-manager.ts:94-96`).
+Pending `callAction()` calls are tracked in a Map on the card's `__jsa__` object; they resolve or reject after a **20-second** timeout (`card-manager.ts`, `callAction()`).
+
+Users without admin rights may not fire events or subscribe to `jsa_action_result`. After the first `unauthorized` answer the card uses a second path for the rest of the page: it writes `{v, c, s, a, p}` (or base64 pieces `{v, c, i, n, d}` above 240 characters) into the hidden MQTT text entity `text.jsa_card_action` with `text.set_value`, and waits up to **15 seconds** for its correlation id in the `answers` ring buffer (last 20) of `sensor.jsa_card_action_result`, read with `subscribe_entities`. Backend side: `core/card-action-bridge.ts` (assembly, dedup, 12 KB answer limit, card errors `{k: 'err'}` to the script log), switched by the setting `mqtt.card_actions_non_admin`.
 
 ### Trigger Path 2 — Button Entity
 
@@ -947,7 +949,7 @@ Card file = JSA_PREAMBLE(scriptId) + decodedCardSource
 The preamble implements:
 
 - **`__jsa__.connect(hass)`** — Subscribes to the `jsa_action_result` event on the HA WebSocket connection. Pending Promises are resolved via a `correlationId` Map.
-- **`__jsa__.callAction(name, payload)`** — Fires a `jsa_action` event on the HA event bus (`type: 'fire_event'`, `event_type: 'jsa_action'`). The script receives it via `ha.action()`. The result comes back as a `jsa_action_result` event and resolves the Promise. Timeout after 10 seconds.
+- **`__jsa__.callAction(name, payload)`** — Fires a `jsa_action` event on the HA event bus (`type: 'fire_event'`, `event_type: 'jsa_action'`). The script receives it via `ha.action()`. The result comes back as a `jsa_action_result` event and resolves the Promise. Timeout after 20 seconds. Without admin rights the card falls back to the MQTT text entity path described under Trigger Path 1.
 
 The `jsa_action` event contains `{ script, action, payload, correlation_id }`. WorkerManager dispatches it via subscriptions to the correct worker.
 

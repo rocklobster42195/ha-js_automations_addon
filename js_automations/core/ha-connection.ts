@@ -35,6 +35,7 @@ interface HistoryOptions {
 
 interface HistoryEntry {
   state: string;
+  /** Time of this record (last_updated: also set by attribute-only changes) */
   last_changed: string | undefined;
   attributes?: Record<string, unknown>;
 }
@@ -397,17 +398,17 @@ class HAConnector {
     );
     if (!result || typeof result !== 'object') return [];
     const entries: Record<string, any>[] = (result as Record<string, any>)[entityId] || [];
-    // HA returns timestamps as Unix floats (seconds) in minimal_response mode.
-    // Field names: state/last_changed/last_updated (full) or s/lc/lu (compact).
-    // last_changed may be absent when only last_updated changed — fall back to last_updated.
+    // HA answers in the compressed format: s (state), a (attributes), lu (last_updated) and lc (last_changed, only when it differs
+    // from lu), timestamps as Unix floats in seconds. The time of a record is last_updated: a row that only changed an attribute
+    // (e.g. a new climate setpoint while the state stays "heat") would otherwise carry the older last_changed of its state.
     const toIso = (ts: number | null | undefined): string | undefined =>
       ts != null ? new Date(ts * 1000).toISOString() : undefined;
     return entries.map((e) => {
-      const rawTs = e.last_changed ?? e.lc ?? e.last_updated ?? e.lu;
+      const rawTs = e.last_updated ?? e.lu ?? e.last_changed ?? e.lc;
       return {
         state: e.state ?? e.s,
         last_changed: typeof rawTs === 'number' ? toIso(rawTs) : rawTs,
-        ...(e.attributes ? { attributes: e.attributes } : {}),
+        ...((e.attributes ?? e.a) ? { attributes: e.attributes ?? e.a } : {}),
       };
     });
   }
