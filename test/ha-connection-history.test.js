@@ -7,7 +7,10 @@ function connector(result) {
   const ha = new HAConnector('http://localhost:8123', 'token', '/tmp');
   ha.isReady = true;
   ha.sent = [];
-  ha.sendCommand = async (type, payload) => { ha.sent.push({ type, payload }); return result; };
+  ha.sendCommand = async (type, payload) => {
+    ha.sent.push({ type, payload });
+    return result;
+  };
   return ha;
 }
 
@@ -29,7 +32,12 @@ test('getHistory maps the compressed format: attributes (a) and the record time 
 test('getHistory keeps the full format and minimal rows without attributes', async () => {
   const ha = connector({
     's.x': [
-      { state: '1', attributes: { unit: 'K' }, last_changed: '2026-11-25T10:00:00Z', last_updated: '2026-11-25T10:05:00Z' },
+      {
+        state: '1',
+        attributes: { unit: 'K' },
+        last_changed: '2026-11-25T10:00:00Z',
+        last_updated: '2026-11-25T10:05:00Z',
+      },
       { s: '2', lu: 1764065100 },
     ],
   });

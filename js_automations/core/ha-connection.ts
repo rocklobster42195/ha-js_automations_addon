@@ -408,7 +408,7 @@ class HAConnector {
       return {
         state: e.state ?? e.s,
         last_changed: typeof rawTs === 'number' ? toIso(rawTs) : rawTs,
-        ...(e.attributes ?? e.a ? { attributes: e.attributes ?? e.a } : {}),
+        ...((e.attributes ?? e.a) ? { attributes: e.attributes ?? e.a } : {}),
       };
     });
   }
